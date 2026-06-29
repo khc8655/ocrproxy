@@ -1,18 +1,24 @@
 """全局配置 — 从环境变量读取敏感信息"""
 import os
-import warnings
+import logging
 from pydantic_settings import BaseSettings
 from cryptography.fernet import Fernet
+
+logger = logging.getLogger("config")
+
+# 默认值常量 — 用于检测环境变量是否漏设
+_DEFAULT_ADMIN_PASSWORD = "admin123"
+_DEFAULT_PROXY_API_KEY = "change-me-proxy-key"
 
 
 class Settings(BaseSettings):
     model_config = {"env_prefix": "", "case_sensitive": True}
 
     # 面板访问的 admin 密码（私有空间）
-    ADMIN_PASSWORD: str = "admin123"
+    ADMIN_PASSWORD: str = _DEFAULT_ADMIN_PASSWORD
 
     # agent 调用 /v1/* 必须带的 key（自定义 key 鉴权）
-    PROXY_API_KEY: str = "change-me-proxy-key"
+    PROXY_API_KEY: str = _DEFAULT_PROXY_API_KEY
 
     # 加密数据库中存储的上游 Key 用的密钥（Fernet）
     # 生成方式: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -46,15 +52,38 @@ class Settings(BaseSettings):
     def fernet(self) -> Fernet:
         if self._fernet_instance is None:
             if not self.ENCRYPT_KEY:
-                warnings.warn(
-                    "ENCRYPT_KEY not set! Using ephemeral key — "
-                    "existing encrypted data will be unreadable after restart. "
-                    "Set ENCRYPT_KEY in production!"
+                raise RuntimeError(
+                    "ENCRYPT_KEY not set! Refusing to start. "
+                    "Generate one: python -c "
+                    "\"from cryptography.fernet import Fernet; "
+                    "print(Fernet.generate_key().decode())\""
                 )
-                self._fernet_instance = Fernet(Fernet.generate_key())
-            else:
-                self._fernet_instance = Fernet(self.ENCRYPT_KEY.encode())
+            self._fernet_instance = Fernet(self.ENCRYPT_KEY.encode())
         return self._fernet_instance
+
+
+def validate_runtime_config() -> None:
+    """启动时强制检查关键环境变量 — 漏设则拒绝启动。
+
+    在 main.py lifespan 启动阶段调用，避免静默降级。
+    """
+    if not settings.ENCRYPT_KEY:
+        raise RuntimeError(
+            "ENCRYPT_KEY not set! Refusing to start. "
+            "Generate one: python -c "
+            "\"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\""
+        )
+    if settings.ADMIN_PASSWORD == _DEFAULT_ADMIN_PASSWORD:
+        raise RuntimeError(
+            "ADMIN_PASSWORD is still the default 'admin123'! "
+            "Set ADMIN_PASSWORD env var to a strong custom value."
+        )
+    if settings.PROXY_API_KEY == _DEFAULT_PROXY_API_KEY:
+        raise RuntimeError(
+            "PROXY_API_KEY is still the default 'change-me-proxy-key'! "
+            "Set PROXY_API_KEY env var to a strong custom value."
+        )
 
 
 settings = Settings()

@@ -21,6 +21,27 @@ logger = logging.getLogger("scheduler")
 _key_semaphores: dict[int, asyncio.Semaphore] = {}
 _key_sem_lock = asyncio.Lock()
 
+# 全局复用 httpx.AsyncClient — 避免 TLS 重复握手 + 连接泄漏
+_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        async with _client_lock:
+            if _client is None or _client.is_closed:
+                _client = httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT_SEC)
+    return _client
+
+
+async def close_client():
+    """lifespan shutdown 时调用，优雅关闭连接池"""
+    global _client
+    if _client and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 
 async def _get_key_sem(key_id: int) -> asyncio.Semaphore:
     if key_id not in _key_semaphores:
@@ -85,39 +106,39 @@ async def schedule(
             t0 = time.monotonic()
             try:
                 method, url, headers, body = build_request(endpoint, decrypted, provider)
-                async with httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT_SEC) as client:
-                    if is_stream:
-                        async with client.stream(method, url, json=body, headers=headers) as resp:
-                            if resp.status_code in (429, 403) or resp.status_code >= 400:
-                                raw = await resp.aread()
-                                await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
-                                                   resp.status_code, raw.decode(errors="replace")[:500],
-                                                   int((time.monotonic()-t0)*1000))
-                                last_error = RuntimeError(f"upstream {resp.status_code}")
-                                continue
-                            _mark_success(db, c)
-                            _log(db, request_id, attempt, c, endpoint, key, provider,
-                                 "success", resp.status_code, None, int((time.monotonic()-t0)*1000))
-                            sr = await handle_stream(resp)
-                            sr.routed_via = f"{provider.name}/{key.label}"
-                            sr.fallback_attempts = attempt
-                            return sr
-                    else:
-                        resp = await client.request(method, url, json=body, headers=headers)
-                        elapsed = int((time.monotonic()-t0)*1000)
+                client = await get_client()
+                if is_stream:
+                    async with client.stream(method, url, json=body, headers=headers) as resp:
                         if resp.status_code in (429, 403) or resp.status_code >= 400:
+                            raw = await resp.aread()
                             await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
-                                               resp.status_code, resp.text[:500], elapsed)
+                                               resp.status_code, raw.decode(errors="replace")[:500],
+                                               int((time.monotonic()-t0)*1000))
                             last_error = RuntimeError(f"upstream {resp.status_code}")
                             continue
                         _mark_success(db, c)
                         _log(db, request_id, attempt, c, endpoint, key, provider,
-                             "success", resp.status_code, None, elapsed)
-                        return ScheduleResult(
-                            data=handle_response(resp.json()),
-                            routed_via=f"{provider.name}/{key.label}",
-                            fallback_attempts=attempt,
-                        )
+                             "success", resp.status_code, None, int((time.monotonic()-t0)*1000))
+                        sr = await handle_stream(resp)
+                        sr.routed_via = f"{provider.name}/{key.label}"
+                        sr.fallback_attempts = attempt
+                        return sr
+                else:
+                    resp = await client.request(method, url, json=body, headers=headers)
+                    elapsed = int((time.monotonic()-t0)*1000)
+                    if resp.status_code in (429, 403) or resp.status_code >= 400:
+                        await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
+                                           resp.status_code, resp.text[:500], elapsed)
+                        last_error = RuntimeError(f"upstream {resp.status_code}")
+                        continue
+                    _mark_success(db, c)
+                    _log(db, request_id, attempt, c, endpoint, key, provider,
+                         "success", resp.status_code, None, elapsed)
+                    return ScheduleResult(
+                        data=handle_response(resp.json()),
+                        routed_via=f"{provider.name}/{key.label}",
+                        fallback_attempts=attempt,
+                    )
 
             except httpx.RequestError as e:
                 elapsed = int((time.monotonic()-t0)*1000)

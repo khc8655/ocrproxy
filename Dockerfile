@@ -5,10 +5,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
-# 非 root 运行
-RUN useradd -m appuser && chown -R appuser:appuser /app
+# 非 root 运行 — 先建用户，COPY 时直接 chown，避免多一层
+RUN useradd -m appuser
+COPY --chown=appuser:appuser . .
 USER appuser
 
 EXPOSE 7860

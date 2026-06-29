@@ -1,15 +1,17 @@
 """主入口 — FastAPI app"""
 import logging
+import asyncio
 import secrets
 import time
 import json
+import hmac
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, Header, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pathlib import Path
 
-from app.core.config import settings
+from app.core.config import settings, validate_runtime_config
 from app.db.database import init_db
 from app.routers import proxy_router, admin_router, stats_router
 
@@ -21,6 +23,11 @@ logger = logging.getLogger("main")
 _SESSION_COOKIE = "llmproxy_admin"
 _sessions: dict[str, float] = {}
 _SESSION_TTL = 86400  # 1 天
+
+# ======== 登录限速 ========
+_login_fails: dict[str, list] = {}  # ip -> [timestamp, ...]
+_LOGIN_MAX_FAILS = 5
+_LOGIN_LOCK_SEC = 300
 
 
 def _make_session() -> str:
@@ -46,13 +53,30 @@ def _cleanup_expired_sessions():
         _sessions.pop(k, None)
 
 
+async def _session_gc_loop():
+    """后台任务：每小时清理一次过期会话"""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            _cleanup_expired_sessions()
+        except Exception as e:
+            logger.warning("session gc failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动前强制校验关键配置 — 漏设直接拒绝启动
+    validate_runtime_config()
     logger.info("Initializing database at %s", settings.DB_PATH)
     init_db()
-    logger.info("DB ready. Proxy API key auth: %s",
-                "ON" if settings.PROXY_API_KEY else "OFF (dev mode)")
+    logger.info("DB ready. Proxy API key auth: ON")
+    # 启动后台会话清理任务
+    gc_task = asyncio.create_task(_session_gc_loop())
     yield
+    gc_task.cancel()
+    # 关闭复用的 httpx client
+    from app.core.scheduler import close_client
+    await close_client()
 
 
 app = FastAPI(
@@ -105,14 +129,26 @@ async def index(request: Request):
 
 @app.post("/login", tags=["Auth"])
 async def login(request: Request):
-    _cleanup_expired_sessions()  # 每次登录时清理过期会话
+    _cleanup_expired_sessions()  # 顺手清理过期会话
+    ip = request.client.host if request.client else "unknown"
+
+    # 检查 IP 是否被锁定 — 5 分钟内失败 5 次则锁 5 分钟
+    fails = [t for t in _login_fails.get(ip, []) if t > time.time() - _LOGIN_LOCK_SEC]
+    if len(fails) >= _LOGIN_MAX_FAILS:
+        return Response(json.dumps({"ok": False, "msg": "尝试过多，已锁定 5 分钟"}),
+                        status_code=429, media_type="application/json")
+
     body = await request.json()
     pwd = body.get("password", "")
-    if pwd == settings.ADMIN_PASSWORD:
+    if hmac.compare_digest(pwd, settings.ADMIN_PASSWORD):
+        _login_fails.pop(ip, None)  # 成功 → 清空该 IP 的失败计数
         tok = _make_session()
+        secure = request.url.scheme == "https"
         resp = Response(json.dumps({"ok": True}))
-        resp.set_cookie(_SESSION_COOKIE, tok, httponly=True, max_age=_SESSION_TTL, samesite="lax")
+        resp.set_cookie(_SESSION_COOKIE, tok, httponly=True, secure=secure,
+                        max_age=_SESSION_TTL, samesite="lax")
         return resp
+    _login_fails.setdefault(ip, []).append(time.time())
     return Response(json.dumps({"ok": False, "msg": "密码错误"}), status_code=401,
                     media_type="application/json")
 

@@ -8,6 +8,7 @@ agent 调用时 model 字段直接传四类之一: ocr / embedding / reranker / 
   ocr        → 上游 /v1/chat/completions  (构造 vision 消息体)
 """
 import logging
+import hmac
 from urllib.parse import urljoin
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -29,7 +30,7 @@ def _verify_proxy_key(authorization: Optional[str]):
     token = None
     if authorization:
         token = authorization[7:].strip() if authorization.startswith("Bearer ") else authorization.strip()
-    if not token or token != expected:
+    if not token or not hmac.compare_digest(token, expected):
         raise HTTPException(401, "Invalid or missing proxy API key")
 
 
