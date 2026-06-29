@@ -1,5 +1,8 @@
 """主入口 — FastAPI app"""
 import logging
+import secrets
+import time
+import json
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, Header, Request, Response
@@ -13,6 +16,34 @@ from app.routers import proxy_router, admin_router, stats_router
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("main")
+
+# ======== 会话管理 (在中间件之前定义) ========
+_SESSION_COOKIE = "llmproxy_admin"
+_sessions: dict[str, float] = {}
+_SESSION_TTL = 86400  # 1 天
+
+
+def _make_session() -> str:
+    tok = secrets.token_urlsafe(24)
+    _sessions[tok] = time.time() + _SESSION_TTL
+    return tok
+
+
+def _check_session(token: Optional[str]) -> bool:
+    if not token or token not in _sessions:
+        return False
+    if _sessions[token] < time.time():
+        _sessions.pop(token, None)
+        return False
+    return True
+
+
+def _cleanup_expired_sessions():
+    """清理过期会话，防止内存泄漏"""
+    now = time.time()
+    expired = [k for k, v in _sessions.items() if v < now]
+    for k in expired:
+        _sessions.pop(k, None)
 
 
 @asynccontextmanager
@@ -64,43 +95,17 @@ async def healthz():
     return {"status": "ok"}
 
 
-# 会话 cookie 名
-_SESSION_COOKIE = "llmproxy_admin"
-# 简单会话存储: token → 有效期 (进程内, 重启后失效, 需重新登录)
-_sessions: dict[str, float] = {}
-_SESSION_TTL = 86400  # 1 天
-
-
-def _make_session() -> str:
-    import secrets, time
-    tok = secrets.token_urlsafe(24)
-    _sessions[tok] = time.time() + _SESSION_TTL
-    return tok
-
-
-def _check_session(token: Optional[str]) -> bool:
-    import time
-    if not token or token not in _sessions:
-        return False
-    if _sessions[token] < time.time():
-        _sessions.pop(token, None)
-        return False
-    return True
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    # 1. 先看 cookie 会话
     tok = request.cookies.get(_SESSION_COOKIE)
     if _check_session(tok):
         return HTMLResponse(_index_html())
-    # 2. 没有/失效 → 返回登录页 (200, 不是 401, 避免浏览器拦截)
     return HTMLResponse(_login_page())
 
 
 @app.post("/login", tags=["Auth"])
 async def login(request: Request):
-    import json
+    _cleanup_expired_sessions()  # 每次登录时清理过期会话
     body = await request.json()
     pwd = body.get("password", "")
     if pwd == settings.ADMIN_PASSWORD:

@@ -38,14 +38,6 @@ def _provider_url(db: Session, endpoint) -> str:
     return p.base_url if p else ""
 
 
-def _add_headers(response, sr: ScheduleResult):
-    """给响应加路由头"""
-    if isinstance(response, JSONResponse):
-        response.headers["X-Routed-Via"] = sr.routed_via
-        response.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
-    return response
-
-
 @router.get("/models")
 async def list_models(authorization: Optional[str] = Header(None),
                       db: Session = Depends(get_db)):

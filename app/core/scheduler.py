@@ -153,7 +153,11 @@ def _mark_success(db: Session, c: Candidate):
     c.cooldown_until = None
     c.last_success_at = _now()
     c.last_status = "success"
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("Failed to mark success: %s", e)
 
 
 async def _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
@@ -181,7 +185,11 @@ async def _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
         c.cooldown_until = now + timedelta(seconds=cooldown_sec)
 
     c.last_status = status_tag
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("Failed to update candidate status: %s", e)
 
     _log(db, request_id, attempt, c, endpoint, key, provider,
          status_tag, http_status, (error_text or "")[:500], elapsed_ms)
