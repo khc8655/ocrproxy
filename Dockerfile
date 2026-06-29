@@ -5,8 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 非 root 运行 — 先建用户，COPY 时直接 chown，避免多一层
-RUN useradd -m appuser
+# 非 root 运行 — 先建用户并预建可写目录
+RUN useradd -m appuser && mkdir -p /app/data && chown -R appuser:appuser /app
 COPY --chown=appuser:appuser . .
 USER appuser
 
