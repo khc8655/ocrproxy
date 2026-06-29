@@ -26,7 +26,7 @@ jobs:
       - name: Test container starts
         run: |
           docker run -d --name test-proxy \
-            -e ENCRYPT_KEY="dGVzdC10ZXN0LXRlc3QtdGVzdC10ZXN0LXRlc3QtdGVzdC0=" \
+            -e ENCRYPT_KEY="rXGY3aVOs22PNwwj69PudHmGM3fCloipuHl7tMDmeZY=" \
             -e PROXY_API_KEY="test-key" \
             -e ADMIN_PASSWORD="test-pass" \
             -p 7860:7860 \
