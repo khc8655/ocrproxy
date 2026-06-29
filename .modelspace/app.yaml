@@ -1,0 +1,25 @@
+# 魔搭创空间部署配置
+# 参考: https://www.modelscope.cn/docs/app-space/config
+
+app:
+  name: llm-proxy
+  description: 统一大模型中转服务 — 多Key轮询·自动故障切换·OpenAI兼容
+
+# Docker 部署模式
+runtime:
+  type: docker
+  dockerfile: Dockerfile
+
+# 暴露端口
+ports:
+  - 7860
+
+# 持久化存储 (SQLite 数据库)
+mounts:
+  - name: data
+    path: /app/data
+
+# 必须在创空间"环境变量"页面设置:
+# ENCRYPT_KEY   — Fernet加密密钥 (python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# PROXY_API_KEY — 代理API密钥 (python -c "import secrets; print(secrets.token_urlsafe(32))")
+# ADMIN_PASSWORD — 面板登录密码

@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  proxy:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # ===== 必改 (生产) =====
+      - ENCRYPT_KEY=
+      - PROXY_API_KEY=
+      - ADMIN_PASSWORD=
+      # ===== 可选 =====
+      - DB_PATH=/app/data/proxy.db
+      - MAX_CONCURRENCY_PER_KEY=5
+      - CIRCUIT_BREAK_THRESHOLD=3
+      - CIRCUIT_COOLDOWN_SEC=300
+      - COOLDOWN_429_SEC=60
+      - COOLDOWN_403_SEC=600
+      - UPSTREAM_TIMEOUT_SEC=120
+    restart: unless-stopped

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Proxy 管理面板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f7fa;color:#333}
+.header{background:linear-gradient(135deg,#1a73e8,#0d47a1);color:#fff;padding:18px 30px;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:22px}
+.container{max-width:1500px;margin:0 auto;padding:16px}
+.section{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.section h2{font-size:16px;margin-bottom:12px;color:#1a73e8;display:flex;align-items:center;gap:6px}
+.type-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:800px){.type-grid{grid-template-columns:1fr 1fr}}
+.type-card{border-radius:10px;padding:16px;border:1px solid #e8edf5;position:relative}
+.type-card h3{font-size:14px;margin-bottom:8px}
+.type-card .big{font-size:28px;font-weight:700}
+.type-card .sub{font-size:12px;color:#666;margin-top:4px}
+.type-ocr{background:#e3f2fd;border-color:#90caf9}.type-ocr .big{color:#1565c0}
+.type-embedding{background:#e8f5e9;border-color:#a5d6a7}.type-embedding .big{color:#2e7d32}
+.type-reranker{background:#fff3e0;border-color:#ffcc80}.type-reranker .big{color:#e65100}
+.type-chat{background:#f3e5f5;border-color:#ce93d8}.type-chat .big{color:#6a1b9a}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid #eef2f7}
+th{background:#f8faff;font-weight:600;color:#555;white-space:nowrap}
+tr:hover{background:#fafcff}
+.btn{display:inline-flex;align-items:center;gap:3px;padding:5px 12px;border-radius:5px;border:1px solid #d0d7e2;background:#fff;cursor:pointer;font-size:12px;color:#333;transition:.15s;white-space:nowrap}
+.btn:hover{background:#f0f4ff;border-color:#1a73e8}
+.btn-primary{background:#1a73e8;color:#fff;border-color:#1a73e8}
+.btn-primary:hover{background:#1557b0}
+.btn-danger{color:#d32f2f;border-color:#ffcdd2}
+.btn-danger:hover{background:#ffebee}
+.btn-sm{padding:3px 8px;font-size:11px}
+.btn-warn{color:#e65100;border-color:#ffe0b2}
+.btn-warn:hover{background:#fff3e0}
+.tabs{display:flex;gap:2px;margin-bottom:12px;flex-wrap:wrap}
+.tab{padding:6px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-size:13px;background:#eef2f7;color:#666;white-space:nowrap}
+.tab.active{background:#fff;color:#1a73e8;font-weight:600;border-bottom:2px solid #1a73e8}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:600}
+.badge-ocr{background:#e3f2fd;color:#1565c0}
+.badge-embedding{background:#e8f5e9;color:#2e7d32}
+.badge-reranker{background:#fff3e0;color:#e65100}
+.badge-chat{background:#f3e5f5;color:#6a1b9a}
+.form-group{margin-bottom:10px}
+.form-group label{display:block;font-size:12px;font-weight:600;margin-bottom:3px;color:#555}
+.form-group input,.form-group select{width:100%;padding:7px 10px;border:1px solid #d0d7e2;border-radius:5px;font-size:13px}
+.form-group input:focus{outline:2px solid #1a73e8;border-color:transparent}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){.form-row{grid-template-columns:1fr}}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:10px;max-width:640px;width:92%;max-height:85vh;overflow-y:auto;padding:20px}
+.modal h3{margin-bottom:12px;font-size:16px}
+.ok{color:#2e7d32}
+.err{color:#d32f2f}
+.muted{color:#999;font-size:11px}
+.cooldown{color:#e65100;font-size:11px}
+.provider-block{border:1px solid #e8edf5;border-radius:8px;margin-bottom:12px;overflow:hidden}
+.provider-header{background:#f8faff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.provider-header strong{font-size:14px}
+.provider-body{padding:10px 14px;border-top:1px solid #eef2f7}
+.dup{color:#d32f2f;font-size:11px;margin-left:4px}
+.trace-box{background:#f8faff;border:1px solid #e8edf5;border-radius:6px;padding:10px;margin-bottom:8px;font-size:12px}
+.trace-box .step{display:flex;gap:8px;margin-bottom:4px;align-items:center}
+.trace-box .step .arrow{color:#999}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔁 LLM Proxy 管理面板</h1>
+  <div style="font-size:12px;opacity:.8">
+    <span id="clockEl"></span>
+    <button class="btn btn-sm" style="margin-left:10px;opacity:.9" onclick="fetch('/logout').then(()=>location.reload())">退出</button>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ======== 四类统计 ======== -->
+<div class="section">
+  <h2>📊 统计概览 <span class="muted" id="statsPeriod">(最近 24h)</span></h2>
+  <div class="type-grid" id="typeGrid"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div><canvas id="chartType" height="160"></canvas></div>
+    <div><canvas id="chartDetail" height="160"></canvas></div>
+  </div>
+</div>
+
+<!-- ======== 标签 ======== -->
+<div class="section">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('providers')">📡 供应商 &amp; Key</div>
+    <div class="tab" onclick="switchTab('endpoints')">🧩 模型端点</div>
+    <div class="tab" onclick="switchTab('candidates')">🔀 候选序列</div>
+    <div class="tab" onclick="switchTab('traces')">🛤️ Fallback 链</div>
+    <div class="tab" onclick="switchTab('errors')">⚠️ 错误日志</div>
+  </div>
+
+  <!-- 供应商 & Key (合并) -->
+  <div id="tab-providers" class="tab-content active">
+    <div style="margin-bottom:10px"><button class="btn btn-primary" onclick="showProviderModal()">+ 新增供应商</button></div>
+    <div id="providerList"></div>
+  </div>
+
+  <!-- 模型端点 -->
+  <div id="tab-endpoints" class="tab-content">
+    <div style="margin-bottom:10px"><button class="btn btn-primary" onclick="showEndpointModal()">+ 新增端点</button></div>
+    <table><thead><tr><th>ID</th><th>供应商</th><th>类型</th><th>模型 ID</th><th>状态</th><th>操作</th></tr></thead><tbody id="epTb"></tbody></table>
+  </div>
+
+  <!-- 候选序列 (按类型分四块) -->
+  <div id="tab-candidates" class="tab-content">
+    <div style="margin-bottom:10px">
+      <button class="btn" onclick="api('/api/admin/candidates/reorder',{method:'POST'}).then(()=>refresh())">🔄 整理序号</button>
+      <span class="muted" style="margin-left:8px">候选在添加端点/Key时自动生成，这里只做删除和排序</span>
+    </div>
+    <div id="candidateBlocks"></div>
+  </div>
+
+  <!-- Fallback 链 -->
+  <div id="tab-traces" class="tab-content">
+    <div id="tracesBox"></div>
+  </div>
+
+  <!-- 错误日志 -->
+  <div id="tab-errors" class="tab-content">
+    <table><thead><tr><th>时间</th><th>请求ID</th><th>#</th><th>供应商</th><th>Key</th><th>类型</th><th>模型</th><th>状态</th><th>HTTP</th><th>错误</th></tr></thead><tbody id="errTb"></tbody></table>
+  </div>
+</div>
+
+</div>
+
+<!-- ======== Modal ======== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">新增</h3>
+    <div id="modalBody"></div>
+    <div style="margin-top:14px;display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let chartType, chartDetail;
+let modalMode='', modalId=null;
+let _providers=[], _keys=[], _endpoints=[], _candidates=[];
+
+const _headers=()=>({'Content-Type':'application/json'});
+async function api(url,opts={}){
+  const res=await fetch(url,{headers:_headers(),credentials:'same-origin',...opts});
+  if(!res.ok){const e=await res.json().catch(()=>({}));alert(e.detail||res.statusText);throw new Error(res.status)}
+  return res.json();
+}
+function badge(t){return `<span class="badge badge-${t}">${t}</span>`}
+function statusBadge(v){return v?'<span class="ok">✅</span>':'<span class="err">⛔</span>'}
+function fmtTime(d){return d?new Date(d).toLocaleString():'-'}
+function fmtCooldown(d){
+  if(!d)return '';
+  const diff=Math.max(0,Math.ceil((new Date(d)-new Date())/1000));
+  if(diff<=0)return '';
+  return diff<60?`⏳${diff}s`:`⏳${Math.floor(diff/60)}m${diff%60}s`;
+}
+function statusColor(s){
+  if(s==='success')return '#2e7d32';
+  if(s==='fail_429')return '#e65100';
+  if(s==='fail_403')return '#d32f2f';
+  if(s==='fail_5xx')return '#9c27b0';
+  if(s.startsWith('fail'))return '#d32f2f';
+  return '#999';
+}
+
+// ======== 统计 ========
+async function loadStats(){
+  const [sum,byType]=await Promise.all([
+    api('/api/stats/summary?hours=24'),
+    api('/api/stats/by-type?hours=24'),
+  ]);
+  // 四类卡片
+  const typeNames={ocr:'OCR',embedding:'Embedding',reranker:'Reranker',chat:'Chat'};
+  document.getElementById('typeGrid').innerHTML=byType.map(t=>{
+    const cls='type-'+t.model_type;
+    return `<div class="type-card ${cls}">
+      <h3>${typeNames[t.model_type]||t.model_type}</h3>
+      <div class="big">${t.total}</div>
+      <div class="sub">成功 ${t.success} · 429 ${t.fail_429} · 403 ${t.fail_403} · 成功率 ${(t.success_rate*100).toFixed(1)}%</div>
+      <div class="sub">平均 ${t.avg_ms}ms</div>
+    </div>`;
+  }).join('');
+
+  // 左图: 四类总量
+  const labels=byType.map(t=>typeNames[t.model_type]||t.model_type);
+  const succ=byType.map(t=>t.success);
+  const fail=byType.map(t=>t.total-t.success);
+  if(chartType)chartType.destroy();
+  chartType=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels,datasets:[{label:'成功',data:succ,backgroundColor:'#4caf50'},{label:'失败',data:fail,backgroundColor:'#f44336'}]},options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
+
+  // 右图: 失败细分
+  const f429=byType.map(t=>t.fail_429),f403=byType.map(t=>t.fail_403),f5xx=byType.map(t=>t.fail_5xx),fo=byType.map(t=>t.fail_other);
+  if(chartDetail)chartDetail.destroy();
+  chartDetail=new Chart(document.getElementById('chartDetail'),{type:'bar',data:{labels,datasets:[{label:'429',data:f429,backgroundColor:'#ff9800'},{label:'403',data:f403,backgroundColor:'#f44336'},{label:'5xx',data:f5xx,backgroundColor:'#9c27b0'},{label:'其他',data:fo,backgroundColor:'#999'}]},options:{responsive:true,plugins:{legend:{position:'top'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
+}
+
+// ======== 供应商 & Key (合并展示) ========
+async function loadProviders(){
+  _providers=await api('/api/admin/providers');
+  _keys=await api('/api/admin/keys');
+  const provMap=Object.fromEntries(_providers.map(p=>[p.id,p]));
+  // 检测同供应商下重复 key
+  const dupMap={};
+  const decMap={};
+  _keys.forEach(k=>{
+    const dk=k.provider_id+'_'+k.api_key_masked;
+    if(decMap[dk])dupMap[k.id]=dupMap[decMap[dk]]=true;
+    else decMap[dk]=k.id;
+  });
+
+  document.getElementById('providerList').innerHTML=_providers.map(p=>{
+    const pkeys=_keys.filter(k=>k.provider_id===p.id);
+    return `<div class="provider-block">
+      <div class="provider-header" onclick="toggleProvBody(${p.id})">
+        <span><strong>${p.name}</strong> <span class="muted">${p.base_url}</span> ${statusBadge(p.enabled)}</span>
+        <span>
+          <button class="btn btn-sm" onclick="event.stopPropagation();editProvider(${p.id})">✏️</button>
+          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showKeyModal(${p.id})">+ Key</button>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();delProvider(${p.id})">🗑️</button>
+        </span>
+      </div>
+      <div class="provider-body" id="provBody${p.id}">
+        ${pkeys.length?`<table><thead><tr><th>标签</th><th>Key (掩码)</th><th>状态</th><th>操作</th></tr></thead><tbody>
+          ${pkeys.map(k=>`<tr>
+            <td>${k.label}${dupMap[k.id]?'<span class="dup">⚠️重复</span>':''}</td>
+            <td style="font-size:12px">${k.api_key_masked}</td>
+            <td>${statusBadge(k.enabled)}</td>
+            <td><button class="btn btn-sm" onclick="editKey(${k.id})">✏️</button>
+                <button class="btn btn-sm btn-danger" onclick="delKey(${k.id})">🗑️</button></td>
+          </tr>`).join('')}
+        </tbody></table>`:'<p class="muted">暂无 Key，点击 + Key 添加</p>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleProvBody(id){const el=document.getElementById('provBody'+id);if(el)el.style.display=el.style.display==='none'?'':'none'}
+async function delProvider(id){if(!confirm('删除供应商及其所有 Key/端点/候选？'))return;await api(`/api/admin/providers/${id}`,{method:'DELETE'});refresh()}
+async function editProvider(id){const p=_providers.find(x=>x.id===id);if(p)showProviderModal(p)}
+async function delKey(id){if(!confirm('删除此 Key？'))return;await api(`/api/admin/keys/${id}`,{method:'DELETE'});refresh()}
+async function editKey(id){const k=_keys.find(x=>x.id===id);if(k)showKeyModal(k.provider_id,k)}
+
+// ======== 端点 ========
+async function loadEndpoints(){
+  _endpoints=await api('/api/admin/endpoints');
+  const provMap=Object.fromEntries(_providers.map(p=>[p.id,p.name]));
+  document.getElementById('epTb').innerHTML=_endpoints.map(e=>`<tr>
+    <td>${e.id}</td><td>${provMap[e.provider_id]||'?'}</td><td>${badge(e.model_type)}</td>
+    <td style="font-size:12px">${e.model_id}</td><td>${statusBadge(e.enabled)}</td>
+    <td><button class="btn btn-sm" onclick="editEndpoint(${e.id})">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="delEndpoint(${e.id})">🗑️</button></td>
+  </tr>`).join('');
+}
+async function delEndpoint(id){if(!confirm('删除此端点？'))return;await api(`/api/admin/endpoints/${id}`,{method:'DELETE'});refresh()}
+async function editEndpoint(id){const e=_endpoints.find(x=>x.id===id);if(e)showEndpointModal(e)}
+
+// ======== 候选 (按类型分四块) ========
+async function loadCandidates(){
+  _candidates=await api('/api/admin/candidates');
+  const typeNames={ocr:'OCR',embedding:'Embedding',reranker:'Reranker',chat:'Chat'};
+  const typeOrder=['ocr','embedding','reranker','chat'];
+  let html='';
+  for(const mt of typeOrder){
+    const items=_candidates.filter(c=>c.model_type===mt);
+    html+=`<div style="margin-bottom:16px">
+      <h3 style="font-size:14px;margin-bottom:6px;color:#1a73e8">${badge(mt)} ${typeNames[mt]} 候选序列</h3>
+      ${items.length?`<table><thead><tr><th>seq</th><th>供应商</th><th>Key</th><th>模型 ID</th><th>状态</th><th>最近状态</th><th>操作</th></tr></thead><tbody>
+        ${items.map(c=>{
+          const cd=fmtCooldown(c.cooldown_until);
+          const ls=c.last_status||'-';
+          const lsColor=statusColor(ls);
+          return `<tr>
+            <td><strong>${c.seq}</strong></td><td>${c.provider_name}</td><td>${c.key_label}</td>
+            <td style="font-size:12px">${c.model_id}</td><td>${statusBadge(c.enabled)}</td>
+            <td><span style="color:${lsColor};font-weight:600">${ls}</span>${cd?` <span class="cooldown">${cd}</span>`:''}</td>
+            <td>
+              <button class="btn btn-sm" onclick="moveCandidate(${c.id},'up')">⬆️</button>
+              <button class="btn btn-sm" onclick="moveCandidate(${c.id},'down')">⬇️</button>
+              <button class="btn btn-sm btn-warn" onclick="resetCandidate(${c.id})">🔄</button>
+              <button class="btn btn-sm btn-danger" onclick="delCandidate(${c.id})">🗑️</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>`:'<p class="muted">暂无候选</p>'}
+    </div>`;
+  }
+  document.getElementById('candidateBlocks').innerHTML=html;
+}
+async function delCandidate(id){if(!confirm('删除此候选？'))return;await api(`/api/admin/candidates/${id}`,{method:'DELETE'});refresh()}
+async function resetCandidate(id){await api(`/api/admin/candidates/${id}/reset`,{method:'POST'});refresh()}
+async function moveCandidate(id,dir){
+  const c=_candidates.find(x=>x.id===id);if(!c)return;
+  const same=_candidates.filter(x=>x.model_type===c.model_type).sort((a,b)=>a.seq-b.seq);
+  const idx=same.findIndex(x=>x.id===id);
+  if(dir==='up'&&idx>0){
+    await api(`/api/admin/candidates/${id}`,{method:'PUT',body:JSON.stringify({seq:same[idx-1].seq})});
+    await api(`/api/admin/candidates/${same[idx-1].id}`,{method:'PUT',body:JSON.stringify({seq:c.seq})});
+  }else if(dir==='down'&&idx<same.length-1){
+    await api(`/api/admin/candidates/${id}`,{method:'PUT',body:JSON.stringify({seq:same[idx+1].seq})});
+    await api(`/api/admin/candidates/${same[idx+1].id}`,{method:'PUT',body:JSON.stringify({seq:c.seq})});
+  }
+  refresh();
+}
+
+// ======== Fallback 链 ========
+async function loadTraces(){
+  const traces=await api('/api/stats/fallback-traces?limit=20');
+  if(!traces.length){document.getElementById('tracesBox').innerHTML='<p class="muted">暂无 fallback 记录</p>';return}
+  document.getElementById('tracesBox').innerHTML=traces.map(t=>`
+    <div class="trace-box">
+      <div style="font-weight:600;margin-bottom:6px">请求 ${t.request_id} (${t.attempts.length} 次尝试)</div>
+      ${t.attempts.map((a,i)=>`
+        <div class="step">
+          ${i>0?'<span class="arrow">→</span>':''}
+          <span>#${a.attempt}</span><span>${a.provider}/${a.key_label}</span>
+          <span style="font-size:11px">${a.model_id}</span>
+          <span style="color:${a.status==='success'?'#2e7d32':'#d32f2f'}">${a.status}${a.http_status?' ('+a.http_status+')':''}</span>
+          <span class="muted">${a.elapsed_ms}ms</span>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ======== 错误日志 ========
+async function loadErrors(){
+  const errs=await api('/api/stats/recent-errors?limit=60');
+  document.getElementById('errTb').innerHTML=errs.map(e=>`<tr>
+    <td class="muted">${fmtTime(e.time)}</td><td class="muted">${e.request_id}</td><td>${e.attempt}</td>
+    <td>${e.provider_name}</td><td>${e.key_label}</td><td>${badge(e.model_type)}</td>
+    <td style="font-size:11px">${e.model_id}</td>
+    <td class="err">${e.status}</td><td>${e.http_status||'-'}</td>
+    <td style="font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.error_msg||'-'}</td>
+  </tr>`).join('');
+}
+
+// ======== Modals ========
+function openModal(title){document.getElementById('modalTitle').textContent=title;document.getElementById('modalOverlay').classList.add('show')}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show');modalMode='';modalId=null}
+
+function showProviderModal(d){
+  modalMode='provider';modalId=d?d.id:null;
+  openModal(d?'编辑供应商':'新增供应商');
+  document.getElementById('modalBody').innerHTML=`
+    <div class="form-group"><label>名称</label><input id="f-name" value="${d?.name||''}" placeholder="siliconflow"></div>
+    <div class="form-group"><label>API 地址</label><input id="f-base_url" value="${d?.base_url||''}" placeholder="https://api.siliconflow.cn"></div>
+    <div class="form-group"><label>状态</label><select id="f-enabled"><option value="true" ${d?.enabled!==false?'selected':''}>启用</option><option value="false" ${d?.enabled===false?'selected':''}>禁用</option></select></div>`;
+}
+
+function showKeyModal(providerId, d){
+  modalMode='key';modalId=d?d.id:null;
+  const pname=_providers.find(p=>p.id===providerId)?.name||'';
+  openModal(d?`编辑 Key (${pname})`:`新增 Key (${pname})`);
+  document.getElementById('modalBody').innerHTML=`
+    <input type="hidden" id="f-provider_id" value="${providerId}">
+    <div class="form-group"><label>标签</label><input id="f-label" value="${d?.label||''}" placeholder="key1 / deepseek1"></div>
+    <div class="form-group"><label>API Key ${d?'(留空不修改)':''}</label><input id="f-api_key" type="password" placeholder="sk-xxx"></div>
+    <div class="form-group"><label>状态</label><select id="f-enabled"><option value="true" ${d?.enabled!==false?'selected':''}>启用</option><option value="false" ${d?.enabled===false?'selected':''}>禁用</option></select></div>`;
+}
+
+function showEndpointModal(d){
+  modalMode='endpoint';modalId=d?d.id:null;
+  const opts=_providers.map(p=>`<option value="${p.id}" ${d?.provider_id===p.id?'selected':''}>${p.name}</option>`).join('');
+  openModal(d?'编辑模型端点':'新增模型端点');
+  document.getElementById('modalBody').innerHTML=`
+    <div class="form-group"><label>供应商</label><select id="f-provider_id" ${d?'disabled':''}>${opts}</select></div>
+    <div class="form-group"><label>模型类型</label>
+      <select id="f-model_type" ${d?'disabled':''}>
+        <option value="ocr" ${d?.model_type==='ocr'?'selected':''}>OCR</option>
+        <option value="embedding" ${d?.model_type==='embedding'?'selected':''}>Embedding</option>
+        <option value="reranker" ${d?.model_type==='reranker'?'selected':''}>Reranker</option>
+        <option value="chat" ${d?.model_type==='chat'?'selected':''}>Chat</option>
+      </select></div>
+    <div class="form-group"><label>模型 ID (上游)</label><input id="f-model_id" value="${d?.model_id||''}" placeholder="deepseek-ai/DeepSeek-OCR"></div>
+    <div class="form-group"><label>状态</label><select id="f-enabled"><option value="true" ${d?.enabled!==false?'selected':''}>启用</option><option value="false" ${d?.enabled===false?'selected':''}>禁用</option></select></div>`;
+}
+
+// ======== 保存 ========
+async function saveModal(){
+  try{
+    if(modalMode==='provider'){
+      const body={name:v('f-name'),base_url:v('f-base_url'),enabled:v('f-enabled')==='true'};
+      if(!body.name||!body.base_url){alert('请填写完整');return}
+      if(modalId)await api(`/api/admin/providers/${modalId}`,{method:'PUT',body:JSON.stringify(body)});
+      else await api('/api/admin/providers',{method:'POST',body:JSON.stringify(body)});
+    }else if(modalMode==='key'){
+      const body={provider_id:+v('f-provider_id'),label:v('f-label'),api_key:v('f-api_key'),enabled:v('f-enabled')==='true'};
+      if(!modalId&&!body.api_key){alert('新增时必须填写 API Key');return}
+      if(!body.label){alert('请填写标签');return}
+      if(!body.api_key)delete body.api_key;
+      if(modalId)await api(`/api/admin/keys/${modalId}`,{method:'PUT',body:JSON.stringify(body)});
+      else await api('/api/admin/keys',{method:'POST',body:JSON.stringify(body)});
+    }else if(modalMode==='endpoint'){
+      const body={provider_id:+v('f-provider_id'),model_type:v('f-model_type'),model_id:v('f-model_id'),enabled:v('f-enabled')==='true'};
+      if(!body.model_id){alert('请填写模型 ID');return}
+      if(modalId)await api(`/api/admin/endpoints/${modalId}`,{method:'PUT',body:JSON.stringify(body)});
+      else await api('/api/admin/endpoints',{method:'POST',body:JSON.stringify(body)});
+    }
+    closeModal();refresh();
+  }catch(e){console.error(e)}
+}
+function v(id){const el=document.getElementById(id);return el?el.value:''}
+
+// ======== Tab ========
+const tabNames=['providers','endpoints','candidates','traces','errors'];
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  const idx=tabNames.indexOf(name);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+// ======== 刷新 ========
+async function refresh(){
+  await Promise.all([loadProviders(),loadEndpoints(),loadCandidates()]);
+  loadStats();loadTraces();loadErrors();
+}
+refresh();
+setInterval(()=>{loadCandidates();loadStats()},15000);
+setInterval(()=>{document.getElementById('clockEl').textContent=new Date().toLocaleTimeString()},1000);
+</script>
+</body>
+</html>

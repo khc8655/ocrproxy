@@ -1,0 +1,46 @@
+name: Build Docker Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: llm-proxy:test
+
+      - name: Test container starts
+        run: |
+          docker run -d --name test-proxy \
+            -e ENCRYPT_KEY="dGVzdC10ZXN0LXRlc3QtdGVzdC10ZXN0LXRlc3QtdGVzdC0=" \
+            -e PROXY_API_KEY="test-key" \
+            -e ADMIN_PASSWORD="test-pass" \
+            -p 7860:7860 \
+            llm-proxy:test
+          sleep 5
+          curl -f http://localhost:7860/healthz
+          docker stop test-proxy
+
+      - name: Push to GitHub Container Registry
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
