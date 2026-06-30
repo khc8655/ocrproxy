@@ -1,0 +1,26 @@
+name: Sync to ModelScope Studio
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # 支持在 Actions 页面手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 必须拉完整历史,镜像 push 才能成功
+
+      - name: Push to ModelScope
+        env:
+          MS_USERNAME: ${{ secrets.MS_USERNAME }}
+          MS_TOKEN: ${{ secrets.MS_TOKEN }}
+          MS_STUDIO_URL: ${{ secrets.MS_STUDIO_URL }}  # 如: www.modelscope.cn/studios/khc8655/llm-proxy.git
+        run: |
+          git config user.email "sync-bot@github.actions"
+          git config user.name "github-actions"
+          git remote add modelscope "https://${MS_USERNAME}:${MS_TOKEN}@${MS_STUDIO_URL}"
+          git push modelscope main --force
