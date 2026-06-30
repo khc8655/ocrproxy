@@ -126,6 +126,7 @@ async def schedule(
                 client = await get_client()
                 if is_stream:
                     async with client.stream(method, url, json=body, headers=headers) as resp:
+                        resp.encoding = 'utf-8'  # 同上, 防止中文响应 latin-1 解码失败
                         if resp.status_code in (429, 403) or resp.status_code >= 400:
                             raw = await resp.aread()
                             await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
@@ -142,6 +143,9 @@ async def schedule(
                         return sr
                 else:
                     resp = await client.request(method, url, json=body, headers=headers)
+                    # 强制 UTF-8: 上游可能不标 charset, httpx 会默认 latin-1,
+                    # 遇到中文响应就炸 (UnicodeEncodeError / JSONDecodeError)
+                    resp.encoding = 'utf-8'
                     elapsed = int((time.monotonic()-t0)*1000)
                     if resp.status_code in (429, 403) or resp.status_code >= 400:
                         await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
