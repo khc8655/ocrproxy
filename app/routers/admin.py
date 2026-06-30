@@ -7,11 +7,16 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+import httpx
+import logging
 
 from app.db.database import get_db
 from app.db.models import Provider, ProviderKey, ModelEndpoint, Candidate
 from app.core.crypto import encrypt_key, decrypt_key, mask_key
 from app.core.scheduler import regenerate_candidates_for_provider, reorder_candidates_seq
+from app.core.config import settings
+
+logger = logging.getLogger("admin")
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -86,6 +91,77 @@ def list_keys(db: Session = Depends(get_db)):
     return [KeyOut(id=r.id, provider_id=r.provider_id, label=r.label,
                    api_key_masked=mask_key(decrypt_key(r.encrypted_key)), enabled=r.enabled)
             for r in rows]
+
+
+class KeyTestIn(BaseModel):
+    """实测一个 Key 是否能调通上游 - 不写库, 仅做联通性验证"""
+    model_config = {"protected_namespaces": ()}
+    provider_id: int
+    api_key: str
+    # 可选: 不传则探 GET /v1/models, 传则探 POST /v1/chat/completions (用最便宜的 ping)
+    test_model: Optional[str] = None
+    timeout_sec: int = 10
+
+
+class KeyTestOut(BaseModel):
+    ok: bool
+    http_status: Optional[int] = None
+    msg: str
+    elapsed_ms: int = 0
+    models_count: Optional[int] = None
+
+
+@router.post("/keys/test", response_model=KeyTestOut)
+async def test_key(data: KeyTestIn, db: Session = Depends(get_db)):
+    """实测 Key 联通性 - 不写库.
+
+    用 GET {base_url}/v1/models 探活, 返回 200 视为成功.
+    部分上游(如硅基流动)无 /v1/models 端点, 此时会返回 404,
+    前端可提示用户"无法自动探活, 请选择跳过测试强制保存".
+    """
+    import time as _time
+    p = db.query(Provider).filter(Provider.id == data.provider_id).first()
+    if not p:
+        raise HTTPException(404, "Provider not found")
+    if not data.api_key.strip():
+        raise HTTPException(400, "api_key cannot be empty")
+    url = p.base_url.rstrip("/") + "/v1/models"
+    headers = {"Authorization": f"Bearer {data.api_key.strip()}"}
+    start = _time.time()
+    try:
+        async with httpx.AsyncClient(timeout=data.timeout_sec) as client:
+            r = await client.get(url, headers=headers)
+        elapsed = int((_time.time() - start) * 1000)
+        if r.status_code == 200:
+            count = None
+            try:
+                body = r.json()
+                if isinstance(body, dict) and isinstance(body.get("data"), list):
+                    count = len(body["data"])
+            except Exception:
+                pass
+            return KeyTestOut(ok=True, http_status=200,
+                              msg=f"联通成功 ({count} 个模型可见)" if count else "联通成功",
+                              elapsed_ms=elapsed, models_count=count)
+        if r.status_code in (401, 403):
+            return KeyTestOut(ok=False, http_status=r.status_code,
+                              msg=f"鉴权失败 ({r.status_code}) - Key 无效或已过期",
+                              elapsed_ms=elapsed)
+        if r.status_code == 404:
+            return KeyTestOut(ok=False, http_status=404,
+                              msg="上游无 /v1/models 端点 - 无法自动探活, 可选择跳过测试强制保存",
+                              elapsed_ms=elapsed)
+        return KeyTestOut(ok=False, http_status=r.status_code,
+                          msg=f"上游返回 HTTP {r.status_code}: {r.text[:200]}",
+                          elapsed_ms=elapsed)
+    except httpx.TimeoutException:
+        return KeyTestOut(ok=False, msg=f"上游超时 (> {data.timeout_sec}s)",
+                          elapsed_ms=int((_time.time() - start) * 1000))
+    except Exception as e:
+        logger.warning("Key test failed for provider=%s: %s", p.name, e)
+        return KeyTestOut(ok=False, msg=f"连接失败: {type(e).__name__}: {str(e)[:200]}",
+                          elapsed_ms=int((_time.time() - start) * 1000))
+
 
 @router.post("/keys", response_model=KeyOut)
 def create_key(data: KeyIn, db: Session = Depends(get_db)):
@@ -288,3 +364,98 @@ def reorder_all(db: Session = Depends(get_db)):
     for mt in ("ocr", "embedding", "reranker", "chat"):
         reorder_candidates_seq(db, mt)
     return {"ok": True}
+
+
+@router.post("/candidates/{cid}/move")
+def move_candidate(cid: int, dir: str, db: Session = Depends(get_db)):
+    """原子上下移 - 在单事务内交换两条候选的 seq
+
+    替代前端"两次 PUT 交换 seq"的旧实现 - 解决了快速连点 + 后台
+    setInterval 刷新导致的状态错乱.
+    """
+    if dir not in ("up", "down"):
+        raise HTTPException(400, "dir must be 'up' or 'down'")
+    c = db.query(Candidate).filter(Candidate.id == cid).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    # 同类型按 seq 升序排
+    siblings = (db.query(Candidate)
+                .filter(Candidate.model_type == c.model_type)
+                .order_by(Candidate.seq, Candidate.id).all())
+    idx = next((i for i, x in enumerate(siblings) if x.id == c.id), -1)
+    if idx < 0:
+        raise HTTPException(500, "Candidate not in its own model_type query result")
+    neighbor = None
+    if dir == "up" and idx > 0:
+        neighbor = siblings[idx - 1]
+    elif dir == "down" and idx < len(siblings) - 1:
+        neighbor = siblings[idx + 1]
+    if neighbor is None:
+        return {"ok": True, "moved": False, "reason": f"already at {'top' if dir == 'up' else 'bottom'}"}
+    # 原子交换 - 单事务一次 commit
+    c.seq, neighbor.seq = neighbor.seq, c.seq
+    db.commit()
+    return {"ok": True, "moved": True}
+
+
+# ======== Agent 接入信息 ========
+
+class AgentInfoOut(BaseModel):
+    """Agent 接入所需的配置信息 - 仅供已登录管理员查看"""
+    base_url: str
+    proxy_api_key: str  # 完整返回 - 已登录管理员可见, 用于复制接入
+    model_types: list
+    examples: dict
+
+
+@router.get("/agent-info", response_model=AgentInfoOut)
+def agent_info():
+    """返回 agent 接入此代理所需的全部配置.
+
+    用于面板"接入信息" tab 一键复制到 Cherry Studio / Cline / Continue 等客户端.
+    base_url 不在服务端固定 - 由前端拿到 location.origin 拼接 /v1.
+    这里返回相对路径占位符 "<ORIGIN>/v1", 前端替换.
+    """
+    return AgentInfoOut(
+        base_url="<ORIGIN>/v1",
+        proxy_api_key=settings.PROXY_API_KEY,
+        model_types=[
+            {"type": "ocr", "name": "OCR 文档识别", "desc": "调用时 model 字段填 'ocr'"},
+            {"type": "embedding", "name": "Embedding 向量化", "desc": "调用时 model 字段填 'embedding'"},
+            {"type": "reranker", "name": "Reranker 重排", "desc": "调用时 model 字段填 'reranker'"},
+            {"type": "chat", "name": "Chat 对话", "desc": "调用时 model 字段填 'chat'"},
+        ],
+        examples={
+            "openai_python": (
+                "from openai import OpenAI\n"
+                "client = OpenAI(\n"
+                "    base_url='<ORIGIN>/v1',\n"
+                "    api_key='<PROXY_API_KEY>',\n"
+                ")\n"
+                "resp = client.chat.completions.create(\n"
+                "    model='chat',  # 或 ocr / embedding / reranker\n"
+                "    messages=[{'role': 'user', 'content': 'hello'}],\n"
+                ")"
+            ),
+            "curl": (
+                "curl <ORIGIN>/v1/chat/completions \\\n"
+                "  -H 'Authorization: Bearer <PROXY_API_KEY>' \\\n"
+                "  -H 'Content-Type: application/json' \\\n"
+                "  -d '{\"model\":\"chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
+            ),
+            "cherry_studio": (
+                "在 Cherry Studio - 设置 - 模型服务 - 添加 - 选 OpenAI 兼容:\n"
+                "  API 地址: <ORIGIN>/v1\n"
+                "  API 密钥: <PROXY_API_KEY>\n"
+                "  模型: 手动添加 chat / embedding / reranker / ocr 任一"
+            ),
+            "cline": (
+                "在 Cline / Continue - 配置 OpenAI Compatible Provider:\n"
+                "  Base URL: <ORIGIN>/v1\n"
+                "  API Key: <PROXY_API_KEY>\n"
+                "  Model: chat"
+            ),
+        },
+    )
+
+

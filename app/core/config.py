@@ -24,8 +24,14 @@ class Settings(BaseSettings):
     # 生成方式: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     ENCRYPT_KEY: str = ""
 
-    # SQLite 路径
-    DB_PATH: str = "data/proxy.db"
+    # SQLite 路径 — 默认指向魔搭创空间的持久化卷 /mnt/workspace
+    # 本地开发时可通过 env DB_PATH=data/proxy.db 覆盖
+    # 注意: /mnt/workspace 在 build 时不存在, 仅运行时由平台挂载
+    DB_PATH: str = "/mnt/workspace/proxy.db"
+
+    # 挂载等待 - 创空间持久化卷可能需要几秒才完成挂载
+    # 启动时最多等待这么多秒, 检测目录可写
+    MOUNT_WAIT_SEC: int = 30
 
     # 单个上游 Key 的最大并发数
     MAX_CONCURRENCY_PER_KEY: int = 5

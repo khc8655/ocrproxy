@@ -26,28 +26,69 @@ jobs:
           load: true
           tags: llm-proxy:test
 
-      - name: Test container starts
+      - name: Test container starts and APIs work
         run: |
+          set -e
+          ADMIN_PWD="ci-admin-$RANDOM"
+          PROXY_KEY="ci-proxy-key-$RANDOM"
+
+          # 注意 DB_PATH 必须 override - 默认指向 /mnt/workspace (魔搭持久化卷),
+          # CI 容器里该目录不存在, 会让启动等 30 秒挂载. 改成 /app/data 避免.
           docker run -d --name test-proxy \
             -e ENCRYPT_KEY="rXGY3aVOs22PNwwj69PudHmGM3fCloipuHl7tMDmeZY=" \
-            -e PROXY_API_KEY="test-key" \
-            -e ADMIN_PASSWORD="test-pass" \
+            -e PROXY_API_KEY="$PROXY_KEY" \
+            -e ADMIN_PASSWORD="$ADMIN_PWD" \
+            -e DB_PATH="/app/data/proxy.db" \
+            -e MOUNT_WAIT_SEC=2 \
             -p 7860:7860 \
             llm-proxy:test
-          # 最多等 15 秒，每秒探一次；失败就 dump 容器日志
+
+          # --- 1. healthz ---
           for i in $(seq 1 15); do
             if curl -sf http://localhost:7860/healthz > /dev/null 2>&1; then
-              echo "✓ healthz OK after ${i}s"
-              docker stop test-proxy >/dev/null
-              exit 0
+              echo "✓ healthz OK after ${i}s"; break
             fi
             sleep 1
+            if [[ $i -eq 15 ]]; then
+              echo "✗ healthz 15s 内未就绪"
+              echo "=== docker logs ==="; docker logs test-proxy
+              docker stop test-proxy >/dev/null 2>&1 || true; exit 7
+            fi
           done
-          echo "✗ container did not become healthy in 15s"
-          echo "=== docker logs ==="
-          docker logs test-proxy
-          docker stop test-proxy >/dev/null 2>&1 || true
-          exit 7
+
+          # --- 2. /api/admin/* 未登录 401 ---
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:7860/api/admin/providers)
+          [[ "$code" == "401" ]] && echo "✓ admin 未登录 401" || { echo "✗ 期望 401, 实得 $code"; exit 8; }
+
+          # --- 3. 登录 ---
+          COOKIE=/tmp/cookie
+          code=$(curl -s -o /dev/null -w "%{http_code}" -c $COOKIE -X POST \
+            http://localhost:7860/login -H "Content-Type: application/json" \
+            -d "{\"password\":\"$ADMIN_PWD\"}")
+          [[ "$code" == "200" ]] && echo "✓ 登录 200" || { echo "✗ 登录失败: $code"; exit 9; }
+
+          # --- 4. agent-info 返回 PROXY_API_KEY ---
+          body=$(curl -s -b $COOKIE http://localhost:7860/api/admin/agent-info)
+          echo "$body" | grep -q "$PROXY_KEY" && echo "✓ agent-info 含 PROXY_API_KEY" \
+            || { echo "✗ agent-info 不含预期 key: $body"; exit 10; }
+
+          # --- 5. candidates/move 接口存在 (404 是因为没有 candidate, 不是路由缺失) ---
+          code=$(curl -s -o /dev/null -w "%{http_code}" -b $COOKIE -X POST \
+            "http://localhost:7860/api/admin/candidates/99999/move?dir=up")
+          [[ "$code" == "404" ]] && echo "✓ candidates/move 路由存在 (404=候选不存在,正常)" \
+            || { echo "✗ candidates/move 异常: $code"; exit 11; }
+
+          # --- 6. /v1/models 鉴权 ---
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $PROXY_KEY" \
+            http://localhost:7860/v1/models)
+          [[ "$code" == "200" ]] && echo "✓ /v1/models 正确 token 200" \
+            || { echo "✗ /v1/models 异常: $code"; exit 12; }
+
+          echo ""
+          echo "==========================================="
+          echo "  ✅ 所有 CI smoke 测试通过"
+          echo "==========================================="
+          docker stop test-proxy >/dev/null
 
       - name: Log in to GitHub Container Registry
         if: startsWith(github.ref, 'refs/tags/v')

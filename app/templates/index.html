@@ -68,6 +68,18 @@ tr:hover{background:#fafcff}
 .trace-box{background:#f8faff;border:1px solid #e8edf5;border-radius:6px;padding:10px;margin-bottom:8px;font-size:12px}
 .trace-box .step{display:flex;gap:8px;margin-bottom:4px;align-items:center}
 .trace-box .step .arrow{color:#999}
+.agent-card{border:1px solid #e8edf5;border-radius:8px;padding:14px;margin-bottom:12px;background:#fafcff}
+.agent-card h4{font-size:13px;margin-bottom:8px;color:#1a73e8}
+.agent-kv{display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;font-size:13px;margin-bottom:6px}
+.agent-kv label{color:#666;font-weight:600}
+.agent-kv .val{font-family:monospace;background:#fff;border:1px solid #e8edf5;border-radius:4px;padding:5px 8px;overflow-x:auto;white-space:nowrap}
+pre.agent-code{background:#1e1e1e;color:#d4d4d4;border-radius:6px;padding:12px;font-family:'Consolas','Monaco',monospace;font-size:12px;overflow-x:auto;position:relative;line-height:1.5}
+pre.agent-code .copy-btn{position:absolute;top:6px;right:6px;background:#3a3a3a;color:#ccc;border:none;padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer}
+pre.agent-code .copy-btn:hover{background:#555;color:#fff}
+.test-result{margin-top:8px;padding:8px 10px;border-radius:5px;font-size:12px;display:none}
+.test-result.ok{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;display:block}
+.test-result.fail{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;display:block}
+.test-result.running{background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;display:block}
 </style>
 </head>
 <body>
@@ -98,6 +110,7 @@ tr:hover{background:#fafcff}
     <div class="tab active" onclick="switchTab('providers')">📡 供应商 &amp; Key</div>
     <div class="tab" onclick="switchTab('endpoints')">🧩 模型端点</div>
     <div class="tab" onclick="switchTab('candidates')">🔀 候选序列</div>
+    <div class="tab" onclick="switchTab('agent')">🤖 接入信息</div>
     <div class="tab" onclick="switchTab('traces')">🛤️ Fallback 链</div>
     <div class="tab" onclick="switchTab('errors')">⚠️ 错误日志</div>
   </div>
@@ -121,6 +134,11 @@ tr:hover{background:#fafcff}
       <span class="muted" style="margin-left:8px">候选在添加端点/Key时自动生成，这里只做删除和排序</span>
     </div>
     <div id="candidateBlocks"></div>
+  </div>
+
+  <!-- Agent 接入信息 -->
+  <div id="tab-agent" class="tab-content">
+    <div id="agentBox"><p class="muted">加载中...</p></div>
   </div>
 
   <!-- Fallback 链 -->
@@ -302,17 +320,9 @@ async function loadCandidates(){
 async function delCandidate(id){if(!confirm('删除此候选？'))return;await api(`/api/admin/candidates/${id}`,{method:'DELETE'});refresh()}
 async function resetCandidate(id){await api(`/api/admin/candidates/${id}/reset`,{method:'POST'});refresh()}
 async function moveCandidate(id,dir){
-  const c=_candidates.find(x=>x.id===id);if(!c)return;
-  const same=_candidates.filter(x=>x.model_type===c.model_type).sort((a,b)=>a.seq-b.seq);
-  const idx=same.findIndex(x=>x.id===id);
-  if(dir==='up'&&idx>0){
-    await api(`/api/admin/candidates/${id}`,{method:'PUT',body:JSON.stringify({seq:same[idx-1].seq})});
-    await api(`/api/admin/candidates/${same[idx-1].id}`,{method:'PUT',body:JSON.stringify({seq:c.seq})});
-  }else if(dir==='down'&&idx<same.length-1){
-    await api(`/api/admin/candidates/${id}`,{method:'PUT',body:JSON.stringify({seq:same[idx+1].seq})});
-    await api(`/api/admin/candidates/${same[idx+1].id}`,{method:'PUT',body:JSON.stringify({seq:c.seq})});
-  }
-  refresh();
+  // 服务端原子交换 - 单次请求完成上下移, 避免快速连点 + 后台刷新导致的状态错乱
+  await api(`/api/admin/candidates/${id}/move?dir=${dir}`,{method:'POST'});
+  loadCandidates();
 }
 
 // ======== Fallback 链 ========
@@ -331,6 +341,85 @@ async function loadTraces(){
           <span class="muted">${a.elapsed_ms}ms</span>
         </div>`).join('')}
     </div>`).join('');
+}
+
+// ======== Agent 接入信息 ========
+async function loadAgentInfo(){
+  let info;
+  try{info=await api('/api/admin/agent-info')}
+  catch(e){document.getElementById('agentBox').innerHTML='<p class="err">加载失败</p>';return}
+  const origin=location.origin;
+  const baseUrl=info.base_url.replace('<ORIGIN>',origin);
+  const fullKey=info.proxy_api_key;
+  const maskedKey=fullKey.length>10?fullKey.slice(0,6)+'****'+fullKey.slice(-4):'****';
+  const subst=s=>s.replaceAll('<ORIGIN>',origin).replaceAll('<PROXY_API_KEY>',fullKey);
+
+  const modelRows=info.model_types.map(m=>`<div class="agent-kv">
+    <label>${m.name}</label>
+    <span class="val">${m.type}</span>
+    <button class="btn btn-sm" onclick="copyText('${m.type}')">📋</button>
+  </div>`).join('');
+
+  const codeBlock=(lang,code)=>{
+    const safe=subst(code).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<pre class="agent-code"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${safe}</pre>`;
+  };
+
+  document.getElementById('agentBox').innerHTML=`
+    <div class="agent-card">
+      <h4>🔌 接入凭证</h4>
+      <div class="agent-kv">
+        <label>API 地址</label>
+        <span class="val" id="agentBaseUrl">${baseUrl}</span>
+        <button class="btn btn-sm" onclick="copyText('${baseUrl}')">📋</button>
+      </div>
+      <div class="agent-kv">
+        <label>API Key</label>
+        <span class="val" id="agentKey" data-full="${fullKey}" data-masked="${maskedKey}">${maskedKey}</span>
+        <span><button class="btn btn-sm" onclick="toggleKey()" id="agentKeyToggle">👁️</button>
+        <button class="btn btn-sm" onclick="copyText('${fullKey}')">📋</button></span>
+      </div>
+    </div>
+
+    <div class="agent-card">
+      <h4>🎯 四个模型类型(model 字段值)</h4>
+      ${modelRows}
+      <p class="muted" style="margin-top:8px">调用时 model 字段直接填上面这 4 个值之一, 代理会根据候选序列自动选 key + 失败自动切换.</p>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 OpenAI Python SDK</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.openai_python))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.openai_python))}</pre>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 curl</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.curl))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.curl))}</pre>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 Cherry Studio 配置</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.cherry_studio))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.cherry_studio))}</pre>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 Cline / Continue 配置</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.cline))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.cline))}</pre>
+    </div>
+  `;
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escapeAttr(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function toggleKey(){
+  const el=document.getElementById('agentKey');const btn=document.getElementById('agentKeyToggle');
+  const full=el.dataset.full,masked=el.dataset.masked;
+  if(el.textContent===masked){el.textContent=full;btn.textContent='🙈'}
+  else{el.textContent=masked;btn.textContent='👁️'}
+}
+function copyText(text,btn){
+  navigator.clipboard.writeText(text).then(()=>{
+    if(btn){const orig=btn.textContent;btn.textContent='✓已复制';setTimeout(()=>btn.textContent=orig,1500)}
+  }).catch(e=>alert('复制失败: '+e.message));
 }
 
 // ======== 错误日志 ========
@@ -366,7 +455,14 @@ function showKeyModal(providerId, d){
     <input type="hidden" id="f-provider_id" value="${providerId}">
     <div class="form-group"><label>标签</label><input id="f-label" value="${d?.label||''}" placeholder="key1 / deepseek1"></div>
     <div class="form-group"><label>API Key ${d?'(留空不修改)':''}</label><input id="f-api_key" type="password" placeholder="sk-xxx"></div>
-    <div class="form-group"><label>状态</label><select id="f-enabled"><option value="true" ${d?.enabled!==false?'selected':''}>启用</option><option value="false" ${d?.enabled===false?'selected':''}>禁用</option></select></div>`;
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="f-skip_test" style="width:auto;margin:0">
+        <span>跳过实测 (上游无 /v1/models 端点时勾选)</span>
+      </label>
+    </div>
+    <div class="form-group"><label>状态</label><select id="f-enabled"><option value="true" ${d?.enabled!==false?'selected':''}>启用</option><option value="false" ${d?.enabled===false?'selected':''}>禁用</option></select></div>
+    <div id="key-test-result" class="test-result"></div>`;
 }
 
 function showEndpointModal(d){
@@ -398,6 +494,25 @@ async function saveModal(){
       const body={provider_id:+v('f-provider_id'),label:v('f-label'),api_key:v('f-api_key'),enabled:v('f-enabled')==='true'};
       if(!modalId&&!body.api_key){alert('新增时必须填写 API Key');return}
       if(!body.label){alert('请填写标签');return}
+      // 实测: 仅当用户填了新 key 且未勾选"跳过实测"时
+      const skipTest=document.getElementById('f-skip_test')?.checked;
+      const resultEl=document.getElementById('key-test-result');
+      if(body.api_key&&!skipTest){
+        resultEl.className='test-result running';
+        resultEl.textContent='⏳ 正在实测 Key 联通性...';
+        let testRes;
+        try{
+          testRes=await api('/api/admin/keys/test',{method:'POST',
+            body:JSON.stringify({provider_id:body.provider_id,api_key:body.api_key})});
+        }catch(e){resultEl.className='test-result fail';resultEl.textContent='❌ 测试接口调用失败';return}
+        if(!testRes.ok){
+          resultEl.className='test-result fail';
+          resultEl.textContent=`❌ ${testRes.msg} (${testRes.elapsed_ms}ms)`;
+          return;  // 不保存
+        }
+        resultEl.className='test-result ok';
+        resultEl.textContent=`✅ ${testRes.msg} (${testRes.elapsed_ms}ms) - 正在保存...`;
+      }
       if(!body.api_key)delete body.api_key;
       if(modalId)await api(`/api/admin/keys/${modalId}`,{method:'PUT',body:JSON.stringify(body)});
       else await api('/api/admin/keys',{method:'POST',body:JSON.stringify(body)});
@@ -413,7 +528,7 @@ async function saveModal(){
 function v(id){const el=document.getElementById(id);return el?el.value:''}
 
 // ======== Tab ========
-const tabNames=['providers','endpoints','candidates','traces','errors'];
+const tabNames=['providers','endpoints','candidates','agent','traces','errors'];
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
@@ -425,7 +540,7 @@ function switchTab(name){
 // ======== 刷新 ========
 async function refresh(){
   await Promise.all([loadProviders(),loadEndpoints(),loadCandidates()]);
-  loadStats();loadTraces();loadErrors();
+  loadStats();loadTraces();loadErrors();loadAgentInfo();
 }
 refresh();
 setInterval(()=>{loadCandidates();loadStats()},15000);
