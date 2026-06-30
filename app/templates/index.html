@@ -131,7 +131,7 @@ pre.agent-code .copy-btn:hover{background:#555;color:#fff}
   <div id="tab-candidates" class="tab-content">
     <div style="margin-bottom:10px">
       <button class="btn" onclick="api('/api/admin/candidates/reorder',{method:'POST'}).then(()=>refresh())">🔄 整理序号</button>
-      <span class="muted" style="margin-left:8px">候选在添加端点/Key时自动生成，这里只做删除和排序</span>
+      <span class="muted" style="margin-left:8px">候选自动生成. 直接在 seq 输入框改数字 (按 Tab 或 Enter 保存) 即可调整优先级 - 后端会自动重排. "整理序号" 让所有 seq 紧凑为 1,2,3...</span>
     </div>
     <div id="candidateBlocks"></div>
   </div>
@@ -295,34 +295,43 @@ async function loadCandidates(){
     const items=_candidates.filter(c=>c.model_type===mt);
     html+=`<div style="margin-bottom:16px">
       <h3 style="font-size:14px;margin-bottom:6px;color:#1a73e8">${badge(mt)} ${typeNames[mt]} 候选序列</h3>
-      ${items.length?`<table><thead><tr><th>seq</th><th>供应商</th><th>Key</th><th>模型 ID</th><th>状态</th><th>最近状态</th><th>操作</th></tr></thead><tbody>
+      ${items.length?`<table><thead><tr><th style="width:70px">seq</th><th>供应商</th><th>Key</th><th>模型 ID</th><th>状态</th><th>最近状态</th><th>操作</th></tr></thead><tbody>
         ${items.map(c=>{
           const cd=fmtCooldown(c.cooldown_until);
           const ls=c.last_status||'-';
           const lsColor=statusColor(ls);
           return `<tr>
-            <td><strong>${c.seq}</strong></td><td>${c.provider_name}</td><td>${c.key_label}</td>
+            <td><input type="number" min="1" value="${c.seq}" data-orig="${c.seq}" data-id="${c.id}"
+                  onchange="changeSeq(this)"
+                  style="width:55px;padding:3px 5px;border:1px solid #d0d7e2;border-radius:4px;font-size:13px;text-align:center"
+                  title="改数字按 Tab 或 Enter 保存"></td>
+            <td>${c.provider_name}</td><td>${c.key_label}</td>
             <td style="font-size:12px">${c.model_id}</td><td>${statusBadge(c.enabled)}</td>
             <td><span style="color:${lsColor};font-weight:600">${ls}</span>${cd?` <span class="cooldown">${cd}</span>`:''}</td>
             <td>
-              <button class="btn btn-sm" onclick="moveCandidate(${c.id},'up')">⬆️</button>
-              <button class="btn btn-sm" onclick="moveCandidate(${c.id},'down')">⬇️</button>
-              <button class="btn btn-sm btn-warn" onclick="resetCandidate(${c.id})">🔄</button>
+              <button class="btn btn-sm btn-warn" onclick="resetCandidate(${c.id})" title="清空冷却/失败计数">🔄 重置</button>
               <button class="btn btn-sm btn-danger" onclick="delCandidate(${c.id})">🗑️</button>
             </td>
           </tr>`;
         }).join('')}
-      </tbody></table>`:'<p class="muted">暂无候选</p>'}
+      </tbody></table>`:'<p class="muted">暂无候选 (在供应商下添加 Key + 在端点 tab 添加模型类型, 候选会自动生成)</p>'}
     </div>`;
   }
   document.getElementById('candidateBlocks').innerHTML=html;
 }
 async function delCandidate(id){if(!confirm('删除此候选？'))return;await api(`/api/admin/candidates/${id}`,{method:'DELETE'});refresh()}
 async function resetCandidate(id){await api(`/api/admin/candidates/${id}/reset`,{method:'POST'});refresh()}
-async function moveCandidate(id,dir){
-  // 服务端原子交换 - 单次请求完成上下移, 避免快速连点 + 后台刷新导致的状态错乱
-  await api(`/api/admin/candidates/${id}/move?dir=${dir}`,{method:'POST'});
-  loadCandidates();
+async function changeSeq(inputEl){
+  const id=+inputEl.dataset.id;
+  const orig=+inputEl.dataset.orig;
+  const newVal=parseInt(inputEl.value,10);
+  if(isNaN(newVal)||newVal<1){inputEl.value=orig;return}
+  if(newVal===orig)return;
+  try{
+    await api(`/api/admin/candidates/${id}`,{method:'PUT',body:JSON.stringify({seq:newVal})});
+    // 后端会重排所有同类型 seq, 重载一次即可看到新顺序
+    loadCandidates();
+  }catch(e){inputEl.value=orig}
 }
 
 // ======== Fallback 链 ========

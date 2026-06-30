@@ -31,6 +31,25 @@ ok(){ grn "✓ $*"; }
 [[ -f venv/bin/python ]] || fail "需要 ./venv (运行 python3 -m venv venv && pip install -r requirements.txt)"
 
 step "0. 启动 uvicorn (PORT=$PORT, DB=$DB)"
+
+# 0a. URL 拼接单元测试 - 必须先过, 否则后续不用试了
+DB_PATH=/tmp/dummy.db MOUNT_WAIT_SEC=1 venv/bin/python3 -c "
+import sys; sys.path.insert(0,'.')
+from app.routers.proxy import _join_upstream
+cases = [
+    ('https://api.siliconflow.cn',     'chat/completions', 'https://api.siliconflow.cn/v1/chat/completions'),
+    ('https://api.siliconflow.cn/',    'chat/completions', 'https://api.siliconflow.cn/v1/chat/completions'),
+    ('https://api.siliconflow.cn/v1',  'chat/completions', 'https://api.siliconflow.cn/v1/chat/completions'),
+    ('https://api.siliconflow.cn/v1/', 'chat/completions', 'https://api.siliconflow.cn/v1/chat/completions'),
+    ('https://example.com/v1',         'embeddings',       'https://example.com/v1/embeddings'),
+]
+for base, path, exp in cases:
+    got = _join_upstream(base, path)
+    assert got == exp, f'base={base} path={path} got={got} expected={exp}'
+print(f'  URL join: {len(cases)} 用例全过')
+" 2>&1 | grep -v "Persistent volume\|UserWarning\|protected namespace\|warnings.warn"
+ok "URL 拼接单元测试 ✓"
+
 ENCRYPT_KEY="$ENCRYPT_KEY" \
 PROXY_API_KEY="$PROXY_KEY" \
 ADMIN_PASSWORD="$ADMIN_PWD" \
@@ -112,8 +131,8 @@ body=$(API "$BASE/api/admin/candidates")
 count=$(echo "$body" | venv/bin/python -c "import json,sys;print(len(json.load(sys.stdin)))")
 [[ "$count" == "8" ]] && ok "候选数=8 ✓" || fail "期望 8, 实得 $count"
 
-# --- 11. 排序原子交换 ---
-step "11. 排序原子交换"
+# --- 11. 排序: PUT 改 seq, 后端重排所有同类型 ---
+step "11. 排序: 直接 PUT 改 seq 数值"
 pairs=$(echo "$body" | venv/bin/python -c "
 import json,sys
 rows=[r for r in json.load(sys.stdin) if r['model_type']=='ocr']
@@ -123,26 +142,52 @@ print(rows[0]['id'],rows[0]['seq'],rows[1]['id'],rows[1]['seq'])
 read id1 seq1 id2 seq2 <<<"$pairs"
 ok "初始: cand#$id1 seq=$seq1  cand#$id2 seq=$seq2"
 
-body=$(API -X POST "$BASE/api/admin/candidates/$id1/move?dir=down")
-echo "$body" | grep -q '"moved":true' && ok "move down 成功 ✓" || fail "$body"
+# 把 id1 的 seq 改成 id2 的 seq (=2), 后端应该把 id1 排在第2位, 原来第2位的 id2 让到第1位
+body=$(API -X PUT "$BASE/api/admin/candidates/$id1" -H "Content-Type: application/json" \
+  -d "{\"seq\":$seq2}")
+echo "$body" | grep -q "\"seq\":$seq2" && ok "PUT seq=$seq2 返回成功 ✓" || fail "$body"
 
 new=$(API "$BASE/api/admin/candidates" | venv/bin/python -c "
 import json,sys
-rows={r['id']:r['seq'] for r in json.load(sys.stdin)}
+rows={r['id']:r['seq'] for r in json.load(sys.stdin) if r['model_type']=='ocr'}
 print(rows.get($id1),rows.get($id2))
 ")
 read new1 new2 <<<"$new"
-[[ "$new1" == "$seq2" && "$new2" == "$seq1" ]] && ok "seq 已原子交换 ✓ ($id1: $seq1→$new1  $id2: $seq2→$new2)" || \
-  fail "交换异常: $id1=$new1 $id2=$new2"
+[[ "$new1" == "$seq2" && "$new2" == "$seq1" ]] && ok "后端重排 ✓ ($id1: $seq1→$new1  $id2: $seq2→$new2)" || \
+  fail "重排异常: $id1=$new1 $id2=$new2"
 
-API -X POST "$BASE/api/admin/candidates/$id1/move?dir=up" >/dev/null
+# 还原
+API -X PUT "$BASE/api/admin/candidates/$id1" -H "Content-Type: application/json" \
+  -d "{\"seq\":$seq1}" >/dev/null
 final=$(API "$BASE/api/admin/candidates" | venv/bin/python -c "
 import json,sys
-rows={r['id']:r['seq'] for r in json.load(sys.stdin)}
+rows={r['id']:r['seq'] for r in json.load(sys.stdin) if r['model_type']=='ocr'}
 print(rows.get($id1),rows.get($id2))
 ")
 read fin1 fin2 <<<"$final"
-[[ "$fin1" == "$seq1" && "$fin2" == "$seq2" ]] && ok "move up 还原 ✓" || fail "$id1=$fin1 $id2=$fin2"
+[[ "$fin1" == "$seq1" && "$fin2" == "$seq2" ]] && ok "还原成功 ✓" || fail "$id1=$fin1 $id2=$fin2"
+
+# 边界: 把 id1 改成 seq=999 (超出范围), 应被 clamp 到末位
+step "11b. 排序 clamp: seq 超出范围"
+total=$(API "$BASE/api/admin/candidates" | venv/bin/python -c "
+import json,sys
+print(len([r for r in json.load(sys.stdin) if r['model_type']=='ocr']))
+")
+API -X PUT "$BASE/api/admin/candidates/$id1" -H "Content-Type: application/json" \
+  -d "{\"seq\":999}" >/dev/null
+got=$(API "$BASE/api/admin/candidates" | venv/bin/python -c "
+import json,sys
+rows={r['id']:r['seq'] for r in json.load(sys.stdin) if r['model_type']=='ocr'}
+print(rows.get($id1))
+")
+[[ "$got" == "$total" ]] && ok "clamp 到末位 ✓ (seq=$got, 共 $total 条)" || fail "seq=$got 期望 $total"
+# 还原
+API -X PUT "$BASE/api/admin/candidates/$id1" -H "Content-Type: application/json" -d "{\"seq\":$seq1}" >/dev/null
+
+# 删除的 move 端点必须返回 404
+step "11c. 旧的 /move 端点应已移除"
+code=$(API -X POST "$BASE/api/admin/candidates/$id1/move?dir=up" -o /dev/null -w "%{http_code}")
+[[ "$code" == "404" || "$code" == "405" ]] && ok "旧 /move 端点已删除 (HTTP $code) ✓" || ylw "  /move 仍存在 (HTTP $code) - 不致命但应该删"
 
 # --- 12. /v1 鉴权 ---
 step "12. /v1/models 无 token → 401"

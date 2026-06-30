@@ -31,7 +31,13 @@ async def get_client() -> httpx.AsyncClient:
     if _client is None or _client.is_closed:
         async with _client_lock:
             if _client is None or _client.is_closed:
-                _client = httpx.AsyncClient(timeout=settings.UPSTREAM_TIMEOUT_SEC)
+                # connect 给 5s 上限避免 DNS / 网络问题挂太久; read 给完整超时
+                _client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(
+                        settings.UPSTREAM_TIMEOUT_SEC,
+                        connect=min(5.0, settings.UPSTREAM_TIMEOUT_SEC),
+                    )
+                )
     return _client
 
 
@@ -90,8 +96,19 @@ async def schedule(
 
     last_error = None
     attempt = 0
+    schedule_start = time.monotonic()
+    budget = settings.SCHEDULE_TOTAL_BUDGET_SEC
 
     for c, endpoint, key, provider in candidates:
+        # 总预算检查 - 留够时间给当前请求和响应序列化
+        elapsed_total = time.monotonic() - schedule_start
+        if elapsed_total >= budget:
+            logger.warning("schedule budget exceeded (%.1fs >= %ds), giving up. attempts=%d",
+                           elapsed_total, budget, attempt)
+            last_error = RuntimeError(
+                f"schedule budget {budget}s exceeded after {attempt} attempts"
+            )
+            break
         if not _is_available(c):
             continue
 
@@ -131,11 +148,20 @@ async def schedule(
                                            resp.status_code, resp.text[:500], elapsed)
                         last_error = RuntimeError(f"upstream {resp.status_code}")
                         continue
+                    # 上游可能 200 但返回非 JSON (网关错误页/HTML), 不算成功
+                    try:
+                        body_json = resp.json()
+                    except Exception as e:
+                        await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
+                                           resp.status_code,
+                                           f"non-JSON response: {resp.text[:300]}", elapsed)
+                        last_error = RuntimeError(f"upstream returned non-JSON: {e}")
+                        continue
                     _mark_success(db, c)
                     _log(db, request_id, attempt, c, endpoint, key, provider,
                          "success", resp.status_code, None, elapsed)
                     return ScheduleResult(
-                        data=handle_response(resp.json()),
+                        data=handle_response(body_json),
                         routed_via=f"{provider.name}/{key.label}",
                         fallback_attempts=attempt,
                     )

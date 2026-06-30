@@ -86,6 +86,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# 全局异常处理器 - 所有未捕获异常返回 JSON 而非 'Internal Server Error' 裸文本
+# 调试/客户端友好, 让 OpenAI SDK 等能解析错误体
+from fastapi.responses import JSONResponse as _JSONResp
+
+@app.exception_handler(Exception)
+async def _global_exc_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s: %s",
+                     request.method, request.url.path, exc)
+    return _JSONResp(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {str(exc)[:500]}"},
+    )
+
+
 app.include_router(proxy_router)
 app.include_router(admin_router)
 app.include_router(stats_router)

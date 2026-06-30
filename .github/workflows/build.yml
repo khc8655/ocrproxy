@@ -72,11 +72,12 @@ jobs:
           echo "$body" | grep -q "$PROXY_KEY" && echo "✓ agent-info 含 PROXY_API_KEY" \
             || { echo "✗ agent-info 不含预期 key: $body"; exit 10; }
 
-          # --- 5. candidates/move 接口存在 (404 是因为没有 candidate, 不是路由缺失) ---
-          code=$(curl -s -o /dev/null -w "%{http_code}" -b $COOKIE -X POST \
-            "http://localhost:7860/api/admin/candidates/99999/move?dir=up")
-          [[ "$code" == "404" ]] && echo "✓ candidates/move 路由存在 (404=候选不存在,正常)" \
-            || { echo "✗ candidates/move 异常: $code"; exit 11; }
+          # --- 5. PUT candidate seq 接口存在 (404 是因为没有 candidate, 不是路由缺失) ---
+          code=$(curl -s -o /dev/null -w "%{http_code}" -b $COOKIE -X PUT \
+            "http://localhost:7860/api/admin/candidates/99999" \
+            -H "Content-Type: application/json" -d '{"seq":1}')
+          [[ "$code" == "404" ]] && echo "✓ candidates PUT 路由存在 (404=候选不存在,正常)" \
+            || { echo "✗ candidates PUT 异常: $code"; exit 11; }
 
           # --- 6. /v1/models 鉴权 ---
           code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $PROXY_KEY" \

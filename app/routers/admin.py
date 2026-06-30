@@ -320,12 +320,33 @@ def list_candidates(db: Session = Depends(get_db)):
 
 @router.put("/candidates/{cid}", response_model=CandidateOut)
 def update_candidate(cid: int, data: CandidatePatch, db: Session = Depends(get_db)):
+    """更新候选 - 改 seq 时支持任意目标位置, 事务内重排所有同类型候选保持稳定顺序
+
+    用户在前端输入新 seq 后, 后端把目标 candidate 放到那个"位置", 其余候选
+    的 seq 顺序保持不变(以 (seq, id) 升序为基准). 这样:
+      - 输入框改数字 → 立即移动到对应位置
+      - 不会出现 seq 撞车 / 排序不稳定的问题
+    """
     c = db.query(Candidate).filter(Candidate.id == cid).first()
-    if not c: raise HTTPException(404, "Candidate not found")
-    # 改 seq 不自动 reorder — 排序交换需要两次 PUT 用原始 seq, reorder 会破坏交换
-    # 用户点"整理序号"按钮时才统一 reorder
-    for k, v in data.model_dump(exclude_unset=True).items():
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    patch = data.model_dump(exclude_unset=True)
+    new_seq = patch.pop("seq", None)
+    # 其它字段(enabled 等)正常 set
+    for k, v in patch.items():
         setattr(c, k, v)
+    # 处理 seq - 重排同类型所有候选, 保证 seq 1,2,3... 连续
+    if new_seq is not None and new_seq != c.seq:
+        siblings = (db.query(Candidate)
+                    .filter(Candidate.model_type == c.model_type,
+                            Candidate.id != c.id)
+                    .order_by(Candidate.seq.asc(), Candidate.id.asc()).all())
+        # 把目标位置 clamp 到 [1, len+1]
+        target = max(1, min(new_seq, len(siblings) + 1))
+        # 重排: 把 c 插到 target 位置 (1-based), 其余按原顺序填充
+        ordered = siblings[:target - 1] + [c] + siblings[target - 1:]
+        for i, x in enumerate(ordered, 1):
+            x.seq = i
     db.commit(); db.refresh(c)
     e = db.query(ModelEndpoint).filter(ModelEndpoint.id == c.endpoint_id).first()
     k = db.query(ProviderKey).filter(ProviderKey.id == c.key_id).first()
@@ -364,38 +385,6 @@ def reorder_all(db: Session = Depends(get_db)):
     for mt in ("ocr", "embedding", "reranker", "chat"):
         reorder_candidates_seq(db, mt)
     return {"ok": True}
-
-
-@router.post("/candidates/{cid}/move")
-def move_candidate(cid: int, dir: str, db: Session = Depends(get_db)):
-    """原子上下移 - 在单事务内交换两条候选的 seq
-
-    替代前端"两次 PUT 交换 seq"的旧实现 - 解决了快速连点 + 后台
-    setInterval 刷新导致的状态错乱.
-    """
-    if dir not in ("up", "down"):
-        raise HTTPException(400, "dir must be 'up' or 'down'")
-    c = db.query(Candidate).filter(Candidate.id == cid).first()
-    if not c:
-        raise HTTPException(404, "Candidate not found")
-    # 同类型按 seq 升序排
-    siblings = (db.query(Candidate)
-                .filter(Candidate.model_type == c.model_type)
-                .order_by(Candidate.seq, Candidate.id).all())
-    idx = next((i for i, x in enumerate(siblings) if x.id == c.id), -1)
-    if idx < 0:
-        raise HTTPException(500, "Candidate not in its own model_type query result")
-    neighbor = None
-    if dir == "up" and idx > 0:
-        neighbor = siblings[idx - 1]
-    elif dir == "down" and idx < len(siblings) - 1:
-        neighbor = siblings[idx + 1]
-    if neighbor is None:
-        return {"ok": True, "moved": False, "reason": f"already at {'top' if dir == 'up' else 'bottom'}"}
-    # 原子交换 - 单事务一次 commit
-    c.seq, neighbor.seq = neighbor.seq, c.seq
-    db.commit()
-    return {"ok": True, "moved": True}
 
 
 # ======== Agent 接入信息 ========

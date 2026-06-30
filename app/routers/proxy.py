@@ -9,7 +9,6 @@ agent 调用时 model 字段直接传四类之一: ocr / embedding / reranker / 
 """
 import logging
 import hmac
-from urllib.parse import urljoin
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -22,6 +21,23 @@ from app.core.scheduler import schedule, ScheduleResult
 
 logger = logging.getLogger("proxy")
 router = APIRouter(prefix="/v1", tags=["Proxy"])
+
+
+def _join_upstream(base_url: str, path: str) -> str:
+    """拼接上游 URL, 容错用户填写 base_url 的几种常见方式:
+
+    - https://api.siliconflow.cn        →  https://api.siliconflow.cn/v1/chat/completions
+    - https://api.siliconflow.cn/        →  同上
+    - https://api.siliconflow.cn/v1      →  https://api.siliconflow.cn/v1/chat/completions  (不重复加 /v1)
+    - https://api.siliconflow.cn/v1/     →  同上
+
+    path 形如 'chat/completions' 或 'embeddings' (无前导 /, 无 v1/ 前缀).
+    """
+    base = base_url.rstrip("/")
+    # 如果用户已经在 base_url 末尾带了 /v1, 不要再加一次
+    if base.endswith("/v1"):
+        return f"{base}/{path.lstrip('/')}"
+    return f"{base}/v1/{path.lstrip('/')}"
 
 
 def _verify_proxy_key(authorization: Optional[str],
@@ -113,7 +129,7 @@ async def chat_completions(request: Request,
 
     def build(ep, key, prov):
         out = dict(body); out["model"] = ep.model_id
-        url = urljoin(_provider_url(db, ep).rstrip("/") + "/", "v1/chat/completions")
+        url = _join_upstream(_provider_url(db, ep), "chat/completions")
         return "POST", url, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, out
 
     if is_stream:
@@ -153,7 +169,7 @@ async def embeddings(request: Request,
 
     def build(ep, key, prov):
         out = dict(body); out["model"] = ep.model_id
-        url = urljoin(_provider_url(db, ep).rstrip("/") + "/", "v1/embeddings")
+        url = _join_upstream(_provider_url(db, ep), "embeddings")
         return "POST", url, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, out
     try:
         sr = await schedule(db, "embedding", build, lambda r: r)
@@ -176,7 +192,7 @@ async def rerank(request: Request,
 
     def build(ep, key, prov):
         out = dict(body); out["model"] = ep.model_id
-        url = urljoin(_provider_url(db, ep).rstrip("/") + "/", "v1/rerank")
+        url = _join_upstream(_provider_url(db, ep), "rerank")
         return "POST", url, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, out
     try:
         sr = await schedule(db, "reranker", build, lambda r: r)
@@ -212,7 +228,7 @@ async def ocr(request: Request,
             ]}],
             "max_tokens": 4096, "stream": False,
         }
-        url = urljoin(_provider_url(db, ep).rstrip("/") + "/", "v1/chat/completions")
+        url = _join_upstream(_provider_url(db, ep), "chat/completions")
         return "POST", url, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, chat_body
     try:
         sr = await schedule(db, "ocr", build, lambda r: r)

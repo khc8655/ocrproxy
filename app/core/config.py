@@ -48,8 +48,13 @@ class Settings(BaseSettings):
     # 403 冷却时长（秒）—— 通常 Key 失效，冷却更久
     COOLDOWN_403_SEC: int = 600
 
-    # 上游请求超时（秒）
-    UPSTREAM_TIMEOUT_SEC: int = 120
+    # 上游单次请求超时（秒） — 调小避免吃掉魔搭网关 17s 硬超时预算
+    # connect 和 read 都用这个值; 总 fallback 预算见 SCHEDULE_TOTAL_BUDGET_SEC
+    UPSTREAM_TIMEOUT_SEC: int = 12
+
+    # 整体调度预算(秒) - 跑完这么久还没成功就放弃, 避免被 Envoy 17s 切断
+    # 留 2s buffer 给响应序列化
+    SCHEDULE_TOTAL_BUDGET_SEC: int = 15
 
     # Fernet 实例 (不存为 pydantic 字段)
     _fernet_instance: Fernet | None = None
