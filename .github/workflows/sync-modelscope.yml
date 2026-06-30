@@ -14,13 +14,14 @@ jobs:
         with:
           fetch-depth: 0  # 必须拉完整历史,镜像 push 才能成功
 
-      - name: Push to ModelScope
+      - name: Push main → modelscope master
         env:
           MS_USERNAME: ${{ secrets.MS_USERNAME }}
           MS_TOKEN: ${{ secrets.MS_TOKEN }}
-          MS_STUDIO_URL: ${{ secrets.MS_STUDIO_URL }}  # 如: www.modelscope.cn/studios/khc8655/llm-proxy.git
+          MS_STUDIO_URL: ${{ secrets.MS_STUDIO_URL }}  # 如: www.modelscope.cn/studios/khc8605/llmproxy.git
         run: |
           git config user.email "sync-bot@github.actions"
           git config user.name "github-actions"
           git remote add modelscope "https://${MS_USERNAME}:${MS_TOKEN}@${MS_STUDIO_URL}"
-          git push modelscope main --force
+          # 推到魔搭的 master 分支(魔搭创空间默认显示分支)
+          git push modelscope main:master
