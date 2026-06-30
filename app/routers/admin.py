@@ -426,34 +426,51 @@ def agent_info():
             {"type": "chat", "name": "Chat 对话", "desc": "调用时 model 字段填 'chat'"},
         ],
         examples={
+            "_note": (
+                "⚠️ 部署在魔搭创空间时, 平台网关会强占 Authorization 头, "
+                "导致标准 'Bearer Token' 方式失效. 必须改用 X-Api-Key 头 "
+                "或 ?api_key= query 参数. 本地/自托管部署无此问题, "
+                "三种方式都可用."
+            ),
             "openai_python": (
                 "from openai import OpenAI\n"
                 "client = OpenAI(\n"
                 "    base_url='<ORIGIN>/v1',\n"
-                "    api_key='<PROXY_API_KEY>',\n"
+                "    api_key='placeholder',  # SDK 必传字段, 实际不用\n"
+                "    default_headers={'X-Api-Key': '<PROXY_API_KEY>'},\n"
                 ")\n"
                 "resp = client.chat.completions.create(\n"
                 "    model='chat',  # 或 ocr / embedding / reranker\n"
                 "    messages=[{'role': 'user', 'content': 'hello'}],\n"
                 ")"
             ),
-            "curl": (
+            "curl_xapikey": (
+                "# 方式 1: X-Api-Key 头 (推荐 - 兼容魔搭网关)\n"
+                "curl <ORIGIN>/v1/chat/completions \\\n"
+                "  -H 'X-Api-Key: <PROXY_API_KEY>' \\\n"
+                "  -H 'Content-Type: application/json' \\\n"
+                "  -d '{\"model\":\"chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
+            ),
+            "curl_query": (
+                "# 方式 2: query 参数 (浏览器调试最方便)\n"
+                "curl '<ORIGIN>/v1/chat/completions?api_key=<PROXY_API_KEY>' \\\n"
+                "  -H 'Content-Type: application/json' \\\n"
+                "  -d '{\"model\":\"chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
+            ),
+            "curl_bearer": (
+                "# 方式 3: Bearer Token (仅自托管/非魔搭部署可用)\n"
                 "curl <ORIGIN>/v1/chat/completions \\\n"
                 "  -H 'Authorization: Bearer <PROXY_API_KEY>' \\\n"
                 "  -H 'Content-Type: application/json' \\\n"
                 "  -d '{\"model\":\"chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}'"
             ),
             "cherry_studio": (
-                "在 Cherry Studio - 设置 - 模型服务 - 添加 - 选 OpenAI 兼容:\n"
-                "  API 地址: <ORIGIN>/v1\n"
-                "  API 密钥: <PROXY_API_KEY>\n"
-                "  模型: 手动添加 chat / embedding / reranker / ocr 任一"
-            ),
-            "cline": (
-                "在 Cline / Continue - 配置 OpenAI Compatible Provider:\n"
-                "  Base URL: <ORIGIN>/v1\n"
-                "  API Key: <PROXY_API_KEY>\n"
-                "  Model: chat"
+                "Cherry Studio / Cline / Continue 等客户端只支持 Bearer Token,\n"
+                "在魔搭部署下无法直接接入. 解决方案二选一:\n"
+                "  A. 用本项目的 OpenAI Python SDK 写法间接调用\n"
+                "  B. 把本项目自托管到 VPS / Docker / 内网, 用 Bearer 直连\n"
+                "  C. 部分客户端支持 Base URL 带 query, 试试:\n"
+                "     <ORIGIN>/v1?api_key=<PROXY_API_KEY>"
             ),
         },
     )

@@ -366,6 +366,11 @@ async function loadAgentInfo(){
   };
 
   document.getElementById('agentBox').innerHTML=`
+    <div class="agent-card" style="background:#fff3e0;border-color:#ffcc80">
+      <h4 style="color:#e65100">⚠️ 部署环境注意</h4>
+      <p style="font-size:13px;line-height:1.6">${info.examples._note||''}</p>
+    </div>
+
     <div class="agent-card">
       <h4>🔌 接入凭证</h4>
       <div class="agent-kv">
@@ -388,23 +393,28 @@ async function loadAgentInfo(){
     </div>
 
     <div class="agent-card">
-      <h4>📜 OpenAI Python SDK</h4>
+      <h4>📜 OpenAI Python SDK (推荐)</h4>
       <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.openai_python))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.openai_python))}</pre>
     </div>
 
     <div class="agent-card">
-      <h4>📜 curl</h4>
-      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.curl))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.curl))}</pre>
+      <h4>📜 curl - X-Api-Key 头 (魔搭部署可用)</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.curl_xapikey||''))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.curl_xapikey||''))}</pre>
     </div>
 
     <div class="agent-card">
-      <h4>📜 Cherry Studio 配置</h4>
+      <h4>📜 curl - query 参数 (浏览器调试)</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.curl_query||''))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.curl_query||''))}</pre>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 curl - Bearer Token (仅自托管部署)</h4>
+      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.curl_bearer||''))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.curl_bearer||''))}</pre>
+    </div>
+
+    <div class="agent-card">
+      <h4>📜 Cherry Studio / Cline / Continue 说明</h4>
       <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.cherry_studio))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.cherry_studio))}</pre>
-    </div>
-
-    <div class="agent-card">
-      <h4>📜 Cline / Continue 配置</h4>
-      <pre class="agent-code" data-raw="${escapeAttr(subst(info.examples.cline))}"><button class="copy-btn" onclick="copyText(this.parentElement.dataset.raw,this)">复制</button>${escapeHtml(subst(info.examples.cline))}</pre>
     </div>
   `;
 }
