@@ -157,6 +157,19 @@ step "14. /v1/models 正确 token → 200"
 code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $PROXY_KEY" "$BASE/v1/models")
 [[ "$code" == "200" ]] && ok "200 ✓" || fail "$code"
 
+# --- 14b/14c. 新增: 备用鉴权方式 ---
+step "14b. /v1/models 用 X-Api-Key 头 → 200"
+code=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Api-Key: $PROXY_KEY" "$BASE/v1/models")
+[[ "$code" == "200" ]] && ok "200 ✓" || fail "$code"
+
+step "14c. /v1/models 用 ?api_key= query → 200"
+code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/v1/models?api_key=$PROXY_KEY")
+[[ "$code" == "200" ]] && ok "200 ✓" || fail "$code"
+
+step "14d. /v1/debug-headers 需要鉴权 - 用 query 形式访问"
+body=$(curl -s "$BASE/v1/debug-headers?api_key=$PROXY_KEY")
+echo "$body" | grep -q "expected_key_len" && ok "debug-headers 返回了诊断信息 ✓" || fail "debug-headers 异常: $body"
+
 # --- 15. DB 真的写到 env 路径 ---
 step "15. 验证 DB_PATH=$DB 生效"
 [[ -f "$DB" ]] && ok "$DB 存在 ✓" || fail "DB 未写到 env 指定路径"

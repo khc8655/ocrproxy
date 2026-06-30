@@ -24,14 +24,33 @@ logger = logging.getLogger("proxy")
 router = APIRouter(prefix="/v1", tags=["Proxy"])
 
 
-def _verify_proxy_key(authorization: Optional[str]):
+def _verify_proxy_key(authorization: Optional[str],
+                      x_api_key: Optional[str] = None,
+                      query_api_key: Optional[str] = None):
+    """校验 proxy api key, 支持 3 种传递方式:
+
+    1. Authorization: Bearer <key>     标准 OpenAI 兼容方式
+    2. X-Api-Key: <key>                自定义头, 魔搭/CDN 网关不动它
+    3. ?api_key=<key>                  query 参数, 浏览器调试方便
+
+    任一通过即放行. 解决: 部分网关(魔搭 EAS/阿里云 SLB)会改写或剥离
+    Authorization 头, 导致服务端收到的 token 跟环境变量不一致.
+    """
     expected = settings.PROXY_API_KEY
-    if not expected: return
-    token = None
+    if not expected:
+        return
+    candidates = []
     if authorization:
         token = authorization[7:].strip() if authorization.startswith("Bearer ") else authorization.strip()
-    if not token or not hmac.compare_digest(token, expected):
-        raise HTTPException(401, "Invalid or missing proxy API key")
+        candidates.append(token)
+    if x_api_key:
+        candidates.append(x_api_key.strip())
+    if query_api_key:
+        candidates.append(query_api_key.strip())
+    for tok in candidates:
+        if tok and hmac.compare_digest(tok, expected):
+            return  # 任一通过即放行
+    raise HTTPException(401, "Invalid or missing proxy API key")
 
 
 def _provider_url(db: Session, endpoint) -> str:
@@ -41,8 +60,10 @@ def _provider_url(db: Session, endpoint) -> str:
 
 @router.get("/models")
 async def list_models(authorization: Optional[str] = Header(None),
+                      x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+                      api_key: Optional[str] = None,
                       db: Session = Depends(get_db)):
-    _verify_proxy_key(authorization)
+    _verify_proxy_key(authorization, x_api_key, api_key)
     return {"object": "list", "data": [
         {"id": "ocr", "object": "model", "owned_by": "llm-proxy", "model_type": "ocr"},
         {"id": "embedding", "object": "model", "owned_by": "llm-proxy", "model_type": "embedding"},
@@ -51,11 +72,42 @@ async def list_models(authorization: Optional[str] = Header(None),
     ]}
 
 
+@router.get("/debug-headers")
+async def debug_headers(request: Request,
+                        authorization: Optional[str] = Header(None),
+                        x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+                        api_key: Optional[str] = None):
+    """调试端点 - 让运维看清服务端实际收到什么 header.
+
+    用法: GET /v1/debug-headers?api_key=<PROXY_API_KEY>
+    必须传正确的 api_key (走 query 不被网关改写) 才能访问.
+    返回的 expected_key_repr 用 repr() 包括引号 - 能看出有没有隐形空白.
+    """
+    _verify_proxy_key(authorization, x_api_key, api_key)
+    expected = settings.PROXY_API_KEY
+    return {
+        "authorization_header_present": authorization is not None,
+        "authorization_header_len": len(authorization) if authorization else 0,
+        "authorization_header_first10": authorization[:10] if authorization else None,
+        "x_api_key_present": x_api_key is not None,
+        "x_api_key_len": len(x_api_key) if x_api_key else 0,
+        "query_api_key_present": api_key is not None,
+        "expected_key_len": len(expected),
+        "expected_key_first6": expected[:6],
+        "expected_key_last4": expected[-4:],
+        "expected_key_repr": repr(expected),
+        "client_host": request.client.host if request.client else None,
+        "all_headers_keys": sorted(request.headers.keys()),
+    }
+
+
 @router.post("/chat/completions")
 async def chat_completions(request: Request,
                            authorization: Optional[str] = Header(None),
+                           x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+                           api_key: Optional[str] = None,
                            db: Session = Depends(get_db)):
-    _verify_proxy_key(authorization)
+    _verify_proxy_key(authorization, x_api_key, api_key)
     body = await request.json()
     is_stream = body.get("stream", False)
 
@@ -93,8 +145,10 @@ async def chat_completions(request: Request,
 @router.post("/embeddings")
 async def embeddings(request: Request,
                       authorization: Optional[str] = Header(None),
+                      x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+                      api_key: Optional[str] = None,
                       db: Session = Depends(get_db)):
-    _verify_proxy_key(authorization)
+    _verify_proxy_key(authorization, x_api_key, api_key)
     body = await request.json()
 
     def build(ep, key, prov):
@@ -114,8 +168,10 @@ async def embeddings(request: Request,
 @router.post("/rerank")
 async def rerank(request: Request,
                  authorization: Optional[str] = Header(None),
+                 x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+                 api_key: Optional[str] = None,
                  db: Session = Depends(get_db)):
-    _verify_proxy_key(authorization)
+    _verify_proxy_key(authorization, x_api_key, api_key)
     body = await request.json()
 
     def build(ep, key, prov):
@@ -135,8 +191,10 @@ async def rerank(request: Request,
 @router.post("/ocr")
 async def ocr(request: Request,
               authorization: Optional[str] = Header(None),
+              x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+              api_key: Optional[str] = None,
               db: Session = Depends(get_db)):
-    _verify_proxy_key(authorization)
+    _verify_proxy_key(authorization, x_api_key, api_key)
     body = await request.json()
     img_b64 = body.get("image_base64")
     img_url = body.get("image_url")
