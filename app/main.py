@@ -93,11 +93,13 @@ from fastapi.responses import JSONResponse as _JSONResp
 
 @app.exception_handler(Exception)
 async def _global_exc_handler(request: Request, exc: Exception):
+    import traceback as _tb
+    tb_str = ''.join(_tb.format_exception(type(exc), exc, exc.__traceback__))
     logger.exception("Unhandled exception on %s %s: %s",
                      request.method, request.url.path, exc)
     return _JSONResp(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {str(exc)[:500]}"},
+        content={"detail": f"{type(exc).__name__}: {str(exc)[:500]}", "traceback": tb_str[-2000:]},
     )
 
 
