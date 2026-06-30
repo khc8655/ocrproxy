@@ -2,10 +2,15 @@
 
 按 model_type 取候选, seq asc 排序, 跳过冷却/禁用, 失败按状态码冷却并切下一个,
 连续 3 次失败熔断 5 分钟, 记录 fallback 链到 UsageLog.
+
+注意: httpx 对无 charset 声明的响应默认 latin-1 解码, 遇到中文会炸.
+  所有响应体统一通过 resp.content (原始字节) + decode('utf-8') 处理,
+  绕过 httpx 的编码猜测.
 """
 import asyncio
 import time
 import uuid
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -126,11 +131,11 @@ async def schedule(
                 client = await get_client()
                 if is_stream:
                     async with client.stream(method, url, json=body, headers=headers) as resp:
-                        resp.encoding = 'utf-8'  # 同上, 防止中文响应 latin-1 解码失败
+                        # 流式: 用 aread() 拿原始字节, 自己 decode
                         if resp.status_code in (429, 403) or resp.status_code >= 400:
                             raw = await resp.aread()
                             await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
-                                               resp.status_code, raw.decode(errors="replace")[:500],
+                                               resp.status_code, raw.decode('utf-8', errors='replace')[:500],
                                                int((time.monotonic()-t0)*1000))
                             last_error = RuntimeError(f"upstream {resp.status_code}")
                             continue
@@ -143,22 +148,23 @@ async def schedule(
                         return sr
                 else:
                     resp = await client.request(method, url, json=body, headers=headers)
-                    # 强制 UTF-8: 上游可能不标 charset, httpx 会默认 latin-1,
-                    # 遇到中文响应就炸 (UnicodeEncodeError / JSONDecodeError)
-                    resp.encoding = 'utf-8'
                     elapsed = int((time.monotonic()-t0)*1000)
                     if resp.status_code in (429, 403) or resp.status_code >= 400:
+                        # 用原始字节解码, 绕过 httpx 的 latin-1 猜测
+                        err_text = resp.content[:500].decode('utf-8', errors='replace')
                         await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
-                                           resp.status_code, resp.text[:500], elapsed)
+                                           resp.status_code, err_text, elapsed)
                         last_error = RuntimeError(f"upstream {resp.status_code}")
                         continue
                     # 上游可能 200 但返回非 JSON (网关错误页/HTML), 不算成功
+                    # 用原始字节 + json.loads 绕过 httpx 编码猜测
                     try:
-                        body_json = resp.json()
+                        body_json = json.loads(resp.content)
                     except Exception as e:
+                        err_text = resp.content[:300].decode('utf-8', errors='replace')
                         await _handle_fail(db, request_id, attempt, c, endpoint, key, provider,
                                            resp.status_code,
-                                           f"non-JSON response: {resp.text[:300]}", elapsed)
+                                           f"non-JSON response: {err_text}", elapsed)
                         last_error = RuntimeError(f"upstream returned non-JSON: {e}")
                         continue
                     _mark_success(db, c)
