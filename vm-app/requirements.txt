@@ -1,0 +1,7 @@
+fastapi>=0.115.5
+uvicorn[standard]>=0.24.0
+httpx>=0.25.2
+pydantic>=2.11.0
+pydantic-settings>=2.1.0
+cryptography>=42.0.0
+python-dotenv>=1.0.0

@@ -1,0 +1,35 @@
+[Unit]
+Description=OCRProxy - Unified LLM Proxy Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ocrproxy
+Group=ocrproxy
+WorkingDirectory=/opt/ocrproxy
+EnvironmentFile=/opt/ocrproxy/.env
+ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ocrproxy/config
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

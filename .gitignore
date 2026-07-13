@@ -1,13 +1,23 @@
+# Python
 venv/
+.venv/
 __pycache__/
 *.pyc
-data/
-*.db
-*.db-wal
-*.db-shm
-.env
+*.pyo
 *.egg-info/
 dist/
 build/
-.venv/
+
+# Environment & secrets
+.env
+*.enc
+proxy_config
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
 .claude/

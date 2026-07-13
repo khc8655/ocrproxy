@@ -1,0 +1,14 @@
+# 敏感文件 - 永远不要提交到 git
+.env
+config/*.enc
+config/.install_secrets.json
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# 系统
+.DS_Store
+*.log

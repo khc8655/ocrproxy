@@ -1,0 +1,61 @@
+# ============================================================
+# OCRProxy Caddy 反向代理配置示例
+# 
+# 将以下配置添加到你的 Caddyfile 中（根据实际域名修改）
+# 假设你的域名是 ocrproxy.example.com
+# ============================================================
+
+ocrproxy.example.com {
+    # 反向代理所有请求到 ocrproxy 服务
+    reverse_proxy 127.0.0.1:8787 {
+        # 支持流式响应 (SSE)
+        flush_interval -1
+        
+        # 传输超时设置
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+            dial_timeout 10s
+        }
+    }
+
+    # 基本安全头
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        # 管理面板不允许被嵌入 iframe
+        Content-Security-Policy "frame-ancestors 'none'"
+    }
+
+    # 访问日志
+    log {
+        output file /var/log/caddy/ocrproxy.log {
+            roll_size 50MB
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# ============================================================
+# 如果你希望管理面板和 API 使用不同的域名/路径，可以这样配置：
+# ============================================================
+
+# api.example.com {
+#     # 仅暴露代理 API，不暴露管理面板
+#     @proxy path /v1/*
+#     reverse_proxy @proxy 127.0.0.1:8787
+#     
+#     # 健康检查
+#     @health path /health
+#     reverse_proxy @health 127.0.0.1:8787
+#     
+#     # 拒绝其他路径
+#     respond 404
+# }
+#
+# admin.example.com {
+#     # 管理面板 (建议增加 IP 白名单或额外的 Basic Auth)
+#     reverse_proxy 127.0.0.1:8787
+# }

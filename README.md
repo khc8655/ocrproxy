@@ -1,191 +1,179 @@
-# 🔁 LLM Proxy — 统一国内大模型中转服务
+# OCRProxy — 统一大模型中转与故障自动切换服务
 
-多 Key 轮询 · 自动故障切换 · OpenAI 兼容 · Web 管理面板
+提供 **Chat / Embedding / Reranker / OCR** 四类标准大模型能力的统一中转接口，支持多 Key 轮询、自动故障切换、熔断保护。部署在独立 VM 上，通过 Caddy 提供 HTTPS 入口。
 
-## 功能
+## 核心特性
 
-| 功能 | 说明 |
-|------|------|
-| **四类模型统一代理** | OCR / Embedding / Reranker / Chat，agent 一次配置即可使用 |
-| **多 Key 轮询** | 同一供应商挂多个 Key，按候选序列依次尝试 |
-| **自动故障切换** | 429→冷却60s切下一个，403→冷却10min切下一个 |
-| **熔断机制** | 连续3次失败→该Key熔断5分钟，面板可手动解冻 |
-| **OpenAI 兼容** | 响应原样透传上游，支持 stream，agent 无需改代码 |
-| **响应路由头** | `X-Routed-Via: siliconflow/key1` 标记实际走的供应商 |
-| **Fallback 链追踪** | 记录"依次尝试了A→B→C才成功"的完整链路 |
-| **Web 管理面板** | 供应商/Key/端点/候选管理 + 四类统计 + 错误日志 |
-| **Key 加密存储** | Fernet 对称加密存库，面板只显示掩码 |
-| **管理API鉴权** | Cookie 会话 + 中间件保护，未登录无法访问任何管理数据 |
-
-## 快速开始
-
-### 环境变量（必须设置，否则拒绝启动）
-
-三个环境变量**缺一不可**，使用默认值或漏设会直接 `RuntimeError` 拒绝启动：
-
-| 变量 | 作用 | 漏设/默认值后果 |
-|------|------|----------------|
-| `ENCRYPT_KEY` | Fernet 密钥，加密数据库中的上游 API Key | 漏设 → 启动报错；换值 → 旧数据全部解密失败 |
-| `PROXY_API_KEY` | agent 调用代理时的鉴权 key | 漏设 → 启动报错；否则任何人都能调你的上游 Key |
-| `ADMIN_PASSWORD` | 管理面板登录密码 | 漏设 → 启动报错；代码开源，默认密码等于没密码 |
-
-```bash
-# 1. 生成 Fernet 加密密钥（只执行一次，永久保存！换了旧数据全报废）
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# 2. 生成代理鉴权 key
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-
-# 3. 设置环境变量
-export ENCRYPT_KEY="第1步生成的Fernet密钥"
-export PROXY_API_KEY="第2步生成的代理密钥"
-export ADMIN_PASSWORD="你的强密码"
-```
-
-> ⚠️ **ENCRYPT_KEY 是主钥匙** — 拿到它 + DB 文件 = 拿到你所有上游 API Key。务必妥善保存，不要泄露。
-
-### 本地运行
-
-```bash
-git clone https://github.com/khc8655/ocrproxy.git
-cd ocrproxy
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 7860
-```
-
-浏览器打开 `http://localhost:7860`，输入 `ADMIN_PASSWORD` 登录面板。
-
-### Docker 运行
-
-```bash
-docker build -t llm-proxy .
-docker run -d -p 7860:7860 \
-  -v ./data:/app/data \
-  -e ENCRYPT_KEY="你的密钥" \
-  -e PROXY_API_KEY="你的代理密钥" \
-  -e ADMIN_PASSWORD="你的面板密码" \
-  llm-proxy
-```
-
-## 配置流程
-
-1. **供应商** → 新增供应商（如 `siliconflow`，填 API 地址）
-2. **Key** → 在供应商下添加 API Key（加密存储，面板只显示掩码）
-3. **模型端点** → 配置模型类型 + 上游模型 ID（候选自动生成）
-4. **候选序列** → 按 seq 排序，越小越优先（可⬆️⬇️调整）
-
-## Agent 调用方式
-
-| 端点 | 说明 |
-|------|------|
-| `POST /v1/chat/completions` | Chat（支持 stream） |
-| `POST /v1/embeddings` | Embedding |
-| `POST /v1/rerank` | Reranker（SiliconFlow 风格） |
-| `POST /v1/ocr` | OCR（接受 `image_base64` 或 `image_url`） |
-| `GET /v1/models` | 模型列表 |
-
-**请求必须带 `Authorization: Bearer <PROXY_API_KEY>`**
-
-### 示例
-
-```python
-import openai
-
-client = openai.OpenAI(
-    base_url="http://your-host:7860/v1",
-    api_key="your-proxy-api-key",
-)
-
-# Chat
-resp = client.chat.completions.create(
-    model="chat",
-    messages=[{"role": "user", "content": "你好"}],
-)
-
-# Embedding
-resp = client.embeddings.create(model="embedding", input="需要向量化的文本")
-```
-
-```python
-import httpx
-
-# OCR (base64)
-httpx.post("http://your-host:7860/v1/ocr", headers={"Authorization": "Bearer <key>"},
-    json={"model": "ocr", "image_base64": "..."})
-
-# OCR (URL)
-httpx.post("http://your-host:7860/v1/ocr", headers={"Authorization": "Bearer <key>"},
-    json={"model": "ocr", "image_url": "https://..."})
-
-# Reranker
-httpx.post("http://your-host:7860/v1/rerank", headers={"Authorization": "Bearer <key>"},
-    json={"model": "reranker", "query": "问题", "documents": ["文档1", "文档2"]})
-```
-
-## 调度策略
-
-```
-候选序列 (按 seq 升序):
-  OCR:   seq=1 siliconflow/key1 → seq=2 siliconflow/key2 → seq=3 step/key1
-  Embed: seq=1 siliconflow/key1
-  ...
-
-请求进来 → 按 seq 顺序尝试:
-  1. 命中 seq=1 → 成功? 返回 : 失败?
-  2. 429 → 该Key冷却60s, 切seq=2
-  3. 403 → 该Key冷却10min, 切seq=2
-  4. 连续3次失败 → 该Key熔断5min
-  5. 所有候选失败 → 返回503
-```
-
-## 魔搭创空间部署
-
-项目已包含 `Dockerfile` 和 `.modelspace/app.yaml`，在魔搭创空间创建应用时选择 Docker 部署即可。
-
-**必须在创空间的环境变量中设置（缺一不可，否则启动报错）：**
-
-| 变量 | 说明 | 生成方式 |
-|------|------|---------|
-| `ENCRYPT_KEY` | Fernet 加密密钥（保护数据库中的上游Key） | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
-| `PROXY_API_KEY` | 代理API密钥（agent调用时带） | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
-| `ADMIN_PASSWORD` | 管理面板登录密码（不能用默认值） | 自定义强密码 |
-
-> ⚠️ `ENCRYPT_KEY` 换值会导致数据库中所有已加密的上游 Key 解密失败，需在面板重新填入。部署后请妥善保存此值。
-
-## 安全设计
-
-- **启动强制校验** — ENCRYPT_KEY / PROXY_API_KEY / ADMIN_PASSWORD 漏设或使用默认值，直接 RuntimeError 拒绝启动
-- **管理API鉴权** — Cookie 会话 + 中间件保护，未登录返回 401
-- **登录限速** — 同 IP 连续 5 次密码错误后锁定 5 分钟，防止暴力破解
-- **时序安全比较** — 密码和 key 比较使用 `hmac.compare_digest`，防止时序攻击
-- **Cookie 安全** — HttpOnly + SameSite=Lax，HTTPS 时自动启用 Secure
-- **Key 加密存储** — Fernet 对称加密存 SQLite，面板只显示掩码
-- **代理鉴权** — `/v1/*` 必须带 `Authorization: Bearer <PROXY_API_KEY>`，否则 401
-- **无宽松 CORS**，无路径穿越
-- **敏感信息不硬编码** — 全部从环境变量读取
+- **统一接口**：`/v1/chat/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/ocr` 标准 API，兼容 OpenAI SDK
+- **多 Key 轮询**：按候选序列轮询多个上游 Key，支持优先级排序与拖拽调整
+- **故障自动切换**：429 冷却 60s、403 冷却 10min、5xx 冷却 30s，连续失败 3 次触发熔断
+- **并发控制**：每个 Key 独立并发限制（默认 5），防止打崩上游配额
+- **超时预算**：单次请求超时 + 总调度预算，避免级联超时
+- **Chat 快速模式**：自动禁用推理思考、强制非流式，单次请求从 30-60s 降至 2-5s
+- **延迟感知路由**（可选）：根据历史延迟自动排序候选节点
+- **Web 管理面板**：可视化配置供应商、Key、路由优先级，实时统计监控
+- **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
+- **安全加固**：systemd 沙箱隔离、SSRF 防护、常量时间密钥比较
 
 ## 项目结构
 
 ```
-app/
-├── main.py              # FastAPI 入口 + 鉴权中间件
-├── core/
-│   ├── config.py        # 环境变量配置
-│   ├── crypto.py        # Fernet 加解密
-│   └── scheduler.py     # 调度引擎 + 候选自动生成
-├── db/
-│   ├── database.py      # SQLAlchemy + SQLite
-│   └── models.py        # Provider / Key / Endpoint / Candidate / UsageLog
-├── routers/
-│   ├── proxy.py         # OpenAI 兼容代理 (含 stream + 路由头)
-│   ├── admin.py         # 管理 CRUD
-│   └── stats.py         # 统计 + Fallback 链
-└── templates/
-    └── index.html       # Web 管理面板
+ocrproxy/
+├── vm-app/                        # VM 部署版本（生产环境）
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                # FastAPI 应用入口
+│   │   ├── scheduler.py           # 故障转移调度器
+│   │   ├── config_store.py        # 加密配置存储
+│   │   ├── stats.py               # 内存统计模块
+│   │   ├── auth.py                # 鉴权工具
+│   │   ├── proxy_routes.py        # 代理路由 /v1/*
+│   │   └── admin_routes.py        # 管理路由 /api/admin/*
+│   ├── static/
+│   │   └── admin.html             # 管理面板（SPA）
+│   ├── client/
+│   │   ├── proxy_client.py        # Python 客户端封装
+│   │   └── example.py             # 使用示例
+│   ├── config/
+│   │   └── proxy_config.enc       # 加密配置文件（运行时生成）
+│   ├── scripts/
+│   │   └── init_config.py         # 配置初始化脚本
+│   ├── install.sh                 # 一键安装脚本
+│   ├── ocrproxy.service           # systemd 服务模板
+│   ├── Caddyfile.example          # Caddy 反向代理配置示例
+│   ├── requirements.txt
+│   └── README.md                  # 详细部署文档
+├── .gitignore
+└── README.md                      # 本文件
 ```
 
-## License
+## 快速部署
 
-MIT
+### 1. 上传到 VM
+
+```bash
+scp -r vm-app/ root@your-server:/tmp/ocrproxy-install
+```
+
+### 2. 一键安装
+
+```bash
+ssh root@your-server
+cd /tmp/ocrproxy-install
+sudo bash install.sh
+```
+
+安装脚本自动完成：创建系统用户、Python 虚拟环境、生成加密密钥、配置 systemd 服务并启动。
+
+### 3. 配置 Caddy 反向代理
+
+```
+your-domain.com {
+    reverse_proxy 127.0.0.1:8787 {
+        flush_interval -1
+    }
+}
+```
+
+```bash
+sudo systemctl reload caddy
+```
+
+### 4. 访问管理面板
+
+打开 `https://your-domain.com/`，使用安装时生成的 `ADMIN_PASSWORD` 登录。
+
+## 接口调用
+
+### Chat 对话
+```bash
+curl -X POST https://your-domain.com/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "chat", "messages": [{"role": "user", "content": "你好"}]}'
+```
+
+### Embedding 向量
+```bash
+curl -X POST https://your-domain.com/v1/embeddings \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "embedding", "input": "需要向量化的文本"}'
+```
+
+### Reranker 重排
+```bash
+curl -X POST https://your-domain.com/v1/rerank \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "reranker", "query": "查询文本", "documents": ["文档1", "文档2"]}'
+```
+
+### OCR 识别
+```bash
+curl -X POST https://your-domain.com/v1/ocr \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"image_base64": "iVBORw0KGgo...", "prompt": "请识别图片中的所有文字内容"}'
+```
+
+### Python SDK (OpenAI 兼容)
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your_proxy_api_key",
+    base_url="https://your-domain.com/v1"
+)
+
+completion = client.chat.completions.create(
+    model="chat",
+    messages=[{"role": "user", "content": "你好"}],
+    stream=True
+)
+for chunk in completion:
+    print(chunk.choices[0].delta.content, end="")
+```
+
+## 运维管理
+
+```bash
+systemctl status ocrproxy       # 查看服务状态
+journalctl -u ocrproxy -f       # 实时日志
+systemctl restart ocrproxy      # 重启服务
+curl http://127.0.0.1:8787/health  # 健康检查
+```
+
+## 配置 JSON 结构
+
+管理面板保存的配置 JSON 结构：
+
+```json
+{
+  "upstream_timeout": 12,
+  "upstream_timeout_chat": 120,
+  "upstream_timeout_ocr": 60,
+  "schedule_total_budget": 15,
+  "max_concurrency_per_key": 5,
+  "cooldown_duration": 30,
+  "cooldown_429_sec": 60,
+  "cooldown_403_sec": 600,
+  "chat_fast_mode": false,
+  "chat_fast_timeout": 30,
+  "latency_based_routing": false,
+  "providers": {
+    "siliconflow": {
+      "base_url": "https://api.siliconflow.cn",
+      "keys": { "KeyA": "sk-xxxx" }
+    }
+  },
+  "candidates": {
+    "chat": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"}],
+    "embedding": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-m3"}],
+    "reranker": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-reranker-v2-m3"}],
+    "ocr": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-OCR"}]
+  }
+}
+```
+
+更多细节请参考 [vm-app/README.md](vm-app/README.md)。
