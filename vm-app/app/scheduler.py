@@ -7,6 +7,7 @@ import time
 import logging
 import asyncio
 import json
+import gc
 import httpx
 from typing import Optional, Any, Callable, Dict
 from dataclasses import dataclass
@@ -14,6 +15,10 @@ from dataclasses import dataclass
 from . import stats
 
 logger = logging.getLogger("scheduler")
+
+# GC counter — run gc.collect() every N requests to mitigate memory fragmentation
+_gc_counter = 0
+_GC_INTERVAL = 50
 
 
 class AllCandidatesFailedError(Exception):
@@ -128,6 +133,11 @@ async def schedule(
     Core scheduler logic. Iterates candidates, runs failover logic, cooldown, and budget check.
     Records stats directly to in-memory stats module.
     """
+    global _gc_counter
+    _gc_counter += 1
+    if _gc_counter % _GC_INTERVAL == 0:
+        gc.collect()
+
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
@@ -380,6 +390,10 @@ async def schedule(
                f"Please retry in a few seconds.")
         last_status_code = 503
         last_err_body = json.dumps({"detail": msg})
+    # Periodic GC to mitigate Python memory fragmentation from large response bodies
+    if _gc_counter % _GC_INTERVAL == 0:
+        gc.collect()
+
     raise AllCandidatesFailedError(
         msg,
         last_status_code=last_status_code,

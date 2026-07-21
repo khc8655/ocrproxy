@@ -15,6 +15,11 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
+# Memory limits (prevents Python heap fragmentation from accumulating)
+MemoryHigh=384M
+MemoryMax=512M
+MemorySwapMax=0
+
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
