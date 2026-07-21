@@ -8,6 +8,8 @@ import logging
 import asyncio
 import json
 import gc
+import ctypes
+import ctypes.util
 import httpx
 from typing import Optional, Any, Callable, Dict
 from dataclasses import dataclass
@@ -16,9 +18,34 @@ from . import stats
 
 logger = logging.getLogger("scheduler")
 
-# GC counter — run gc.collect() every N requests to mitigate memory fragmentation
-_gc_counter = 0
-_GC_INTERVAL = 50
+# ── Memory reclamation helper ────────────────────────────────────────
+# Python's gc.collect() only reclaims Python objects; it does NOT persuade
+# glibc's ptmalloc2 to return freed heap pages to the OS.  On Linux we can
+# call libc.malloc_trim(0) which tells the allocator to release the top-most
+# freed chunk back to the kernel via madvise(MADV_DONTNEED).  Combined with
+# MALLOC_ARENA_MAX=2 (set in the systemd unit) this keeps RSS flat even under
+# large OCR base64 payloads.
+_libc = None
+try:
+    _libc_path = ctypes.util.find_library("c")
+    if _libc_path:
+        _libc = ctypes.CDLL(_libc_path)
+        _libc.malloc_trim.argtypes = [ctypes.c_size_t]
+        _libc.malloc_trim.restype = ctypes.c_int
+except Exception:
+    pass  # non-Linux platforms or missing libc — silently skip
+
+
+def _reclaim_memory():
+    """Run gc.collect() then malloc_trim(0) to return freed heap to the OS.
+    Called after large-payload requests (OCR, large chat responses) rather
+    than on a blind counter, so the cost is paid only when it matters."""
+    gc.collect()
+    if _libc is not None:
+        try:
+            _libc.malloc_trim(0)
+        except Exception:
+            pass
 
 
 class AllCandidatesFailedError(Exception):
@@ -133,11 +160,6 @@ async def schedule(
     Core scheduler logic. Iterates candidates, runs failover logic, cooldown, and budget check.
     Records stats directly to in-memory stats module.
     """
-    global _gc_counter
-    _gc_counter += 1
-    if _gc_counter % _GC_INTERVAL == 0:
-        gc.collect()
-
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
@@ -266,6 +288,11 @@ async def schedule(
                         )
                     else:
                         resp_data = resp.json()
+                        # OCR / vision responses can be large; release the
+                        # httpx response buffer and reclaim heap pages.
+                        if model_type == "ocr":
+                            await resp.aclose()
+                            _reclaim_memory()
                         return ScheduleResult(
                             data=resp_data,
                             routed_via=routed_via,
@@ -390,10 +417,6 @@ async def schedule(
                f"Please retry in a few seconds.")
         last_status_code = 503
         last_err_body = json.dumps({"detail": msg})
-    # Periodic GC to mitigate Python memory fragmentation from large response bodies
-    if _gc_counter % _GC_INTERVAL == 0:
-        gc.collect()
-
     raise AllCandidatesFailedError(
         msg,
         last_status_code=last_status_code,

@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart OCRProxy service
+After=ocrproxy.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart ocrproxy.service

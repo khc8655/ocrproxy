@@ -9,15 +9,24 @@ User=ocrproxy
 Group=ocrproxy
 WorkingDirectory=/opt/ocrproxy
 EnvironmentFile=/opt/ocrproxy/.env
+# MALLOC_ARENA_MAX=2: glibc ptmalloc2 creates up to 8×cores arenas by default,
+# each holding freed memory that is never returned to the OS.  For a single-
+# worker async server this causes RSS to grow monotonically under large
+# payloads (e.g. OCR base64 images).  Capping to 2 arenas eliminates the
+# fragmentation at the source — no need to limit request body size.
+Environment=MALLOC_ARENA_MAX=2
 ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Memory limits (prevents Python heap fragmentation from accumulating)
-MemoryHigh=384M
-MemoryMax=512M
+# Memory limits (system has 1.6 GB total).
+# MemoryHigh=768M gives enough headroom for OCR base64 payloads while still
+# triggering kernel reclaim pressure before OOM.  MemoryMax=1024M is the hard
+# ceiling — the process gets killed rather than the whole machine OOMing.
+MemoryHigh=768M
+MemoryMax=1024M
 MemorySwapMax=0
 
 # Security hardening

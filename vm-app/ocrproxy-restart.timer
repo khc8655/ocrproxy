@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily restart of OCRProxy to release accumulated heap
+
+[Timer]
+# Restart at 04:00 every day — low-traffic window.
+OnCalendar=*-*-* 04:00:00
+# If the machine was off at 04:00, run immediately on next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
