@@ -18,6 +18,25 @@ from . import stats
 
 logger = logging.getLogger("scheduler")
 
+# ── Global concurrency limiter ───────────────────────────────────────
+# Caps the total number of in-flight upstream requests across ALL keys and
+# model types.  This is the backpressure valve for burst ingestion scenarios
+# (e.g. knowledge-base batch OCR) where the client fires dozens of concurrent
+# requests.  Without this, each request's base64 payload accumulates in the
+# Python heap and can OOM a 1.6 GB VM.
+#
+# The limit is intentionally generous (30) — it only kicks in during true
+# bursts, not normal traffic.  Excess requests get 503 + Retry-After.
+_GLOBAL_MAX_CONCURRENCY = 30
+_global_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_global_semaphore() -> asyncio.Semaphore:
+    global _global_semaphore
+    if _global_semaphore is None:
+        _global_semaphore = asyncio.Semaphore(_GLOBAL_MAX_CONCURRENCY)
+    return _global_semaphore
+
 # ── Memory reclamation helper ────────────────────────────────────────
 # Python's gc.collect() only reclaims Python objects; it does NOT persuade
 # glibc's ptmalloc2 to return freed heap pages to the OS.  On Linux we can
@@ -130,7 +149,11 @@ async def get_client(connect_timeout: float, read_timeout: float) -> httpx.Async
         if _client is None:
             _client = httpx.AsyncClient(
                 timeout=httpx.Timeout(300.0, connect=5.0),
-                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+                limits=httpx.Limits(
+                    max_connections=40,
+                    max_keepalive_connections=10,
+                    keepalive_expiry=30.0,
+                ),
             )
         return _client
 
@@ -240,7 +263,11 @@ async def schedule(
         logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id}")
 
         cand_start = time.time()
-        async with sem:
+        # Acquire BOTH the per-key semaphore and the global semaphore.
+        # The global cap prevents memory exhaustion during burst ingestion
+        # (e.g. dozens of concurrent OCR base64 payloads).
+        global_sem = _get_global_semaphore()
+        async with sem, global_sem:
             # Build request arguments (method, url, headers, json_body)
             method, url, headers, body = build_request(cand, api_key, base_url)
 

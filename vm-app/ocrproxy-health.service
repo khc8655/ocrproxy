@@ -1,0 +1,6 @@
+[Unit]
+Description=OCRProxy health-check watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ocrproxy/scripts/health-check.sh

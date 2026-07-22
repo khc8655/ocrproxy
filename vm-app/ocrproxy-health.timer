@@ -1,0 +1,11 @@
+[Unit]
+Description=OCRProxy health-check watchdog
+After=ocrproxy.service
+
+[Timer]
+# Check every 60s, starting 30s after boot.
+OnBootSec=30
+OnUnitActiveSec=60
+
+[Install]
+WantedBy=timers.target

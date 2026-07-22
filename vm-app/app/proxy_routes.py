@@ -258,7 +258,20 @@ async def ocr(request: Request):
         return JSONResponse(status_code=400, content={"detail": "Must provide image_base64 or image_url"})
 
     prompt = body.get("prompt", "请识别图片中的所有文字内容，返回纯文本。")
-    img = img_url if img_url else f"data:{'image/jpeg' if img_b64.startswith('/9j/') else 'image/png'};base64,{img_b64}"
+
+    # Build the data-URL once and reuse the same string reference in every
+    # failover attempt.  Python's string interning means all dict references
+    # to `img` point to the same underlying buffer — no per-attempt copy.
+    if img_url:
+        img = img_url
+    else:
+        mime = "image/jpeg" if img_b64.startswith("/9j/") else "image/png"
+        img = f"data:{mime};base64,{img_b64}"
+
+    # Release the original body dict early so its copy of the base64 string
+    # can be GC'd before the upstream request is sent.  After this point only
+    # `img` and `prompt` are needed.
+    del body
 
     config = await get_config()
 

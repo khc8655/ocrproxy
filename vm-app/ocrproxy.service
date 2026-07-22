@@ -15,7 +15,7 @@ EnvironmentFile=/opt/ocrproxy/.env
 # payloads (e.g. OCR base64 images).  Capping to 2 arenas eliminates the
 # fragmentation at the source — no need to limit request body size.
 Environment=MALLOC_ARENA_MAX=2
-ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1
+ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
 Restart=always
 RestartSec=5
 StandardOutput=journal
