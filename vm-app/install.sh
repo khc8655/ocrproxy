@@ -95,6 +95,7 @@ info "Step 3/8: 创建目录结构..."
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/config"
 mkdir -p "$INSTALL_DIR/static"
+mkdir -p "$INSTALL_DIR/scripts"
 
 # 复制应用文件
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -106,7 +107,8 @@ cp -r "$SCRIPT_DIR/static/"* "$INSTALL_DIR/static/" 2>/dev/null || true
 # 复制 requirements.txt
 cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
 # 复制 scripts 目录
-cp -r "$SCRIPT_DIR/scripts" "$INSTALL_DIR/" 2>/dev/null || true
+cp -r "$SCRIPT_DIR/scripts/"* "$INSTALL_DIR/scripts/" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
 
 ok "应用文件已复制到 $INSTALL_DIR"
 
@@ -217,11 +219,19 @@ User=${SERVICE_NAME}
 Group=${SERVICE_NAME}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 1
+# Cap glibc malloc arenas to 2 — eliminates heap fragmentation from
+# large OCR base64 payloads on low-memory VMs.
+Environment=MALLOC_ARENA_MAX=2
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 1 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+
+# Memory limits (tune for your VM size)
+MemoryHigh=768M
+MemoryMax=1024M
+MemorySwapMax=0
 
 # Security hardening
 NoNewPrivileges=true
@@ -242,11 +252,59 @@ RestrictSUIDSGID=true
 WantedBy=multi-user.target
 EOF
 
-# 重新加载 systemd 并启动服务
+# 健康检查定时器（每 60s 检测假死并自动重启）
+cat > /etc/systemd/system/${SERVICE_NAME}-health.service << EOF
+[Unit]
+Description=OCRProxy health-check watchdog
+
+[Service]
+Type=oneshot
+ExecStart=${INSTALL_DIR}/scripts/health-check.sh
+EOF
+
+cat > /etc/systemd/system/${SERVICE_NAME}-health.timer << EOF
+[Unit]
+Description=OCRProxy health-check watchdog
+After=${SERVICE_NAME}.service
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=60
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# 每日凌晨 04:00 重启定时器
+cat > /etc/systemd/system/${SERVICE_NAME}-restart.service << EOF
+[Unit]
+Description=Restart OCRProxy service
+After=${SERVICE_NAME}.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart ${SERVICE_NAME}.service
+EOF
+
+cat > /etc/systemd/system/${SERVICE_NAME}-restart.timer << EOF
+[Unit]
+Description=Daily restart of OCRProxy to release accumulated heap
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# 重新加载 systemd 并启动服务和定时器
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}
+systemctl enable --now ${SERVICE_NAME}-health.timer
+systemctl enable --now ${SERVICE_NAME}-restart.timer
 
-ok "systemd 服务已配置并设为开机自启"
+ok "systemd 服务、健康检查、定时重启已配置并设为开机自启"
 
 # ============================================================
 # Step 8: 启动服务并验证
@@ -284,9 +342,10 @@ echo "============================================================"
 echo -e "${GREEN}  安装完成！${NC}"
 echo "============================================================"
 echo ""
-echo "服务状态:   systemctl status ${SERVICE_NAME}"
-echo "服务日志:   journalctl -u ${SERVICE_NAME} -f"
-echo "重启服务:   systemctl restart ${SERVICE_NAME}"
+echo "服务状态:       systemctl status ${SERVICE_NAME}"
+echo "服务日志:       journalctl -u ${SERVICE_NAME} -f"
+echo "重启服务:       systemctl restart ${SERVICE_NAME}"
+echo "健康检查定时器: systemctl list-timers ${SERVICE_NAME}-*"
 echo ""
 echo "------------------------------------------------------------"
 echo "  本地地址:   http://127.0.0.1:${APP_PORT}"
