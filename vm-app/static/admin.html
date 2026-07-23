@@ -726,8 +726,13 @@ function renderProviders() {
       rowsHtml = kLabels.map(label => {
         const val = kObj[label];
         const masked = val.length > 10 ? val.substring(0,6) + "****" + val.slice(-4) : "****";
-        const nk = name + ":" + label;
-        const ns = cStatus[nk];
+        // Status is now keyed by provider:key:type — scan all types
+        // and show the most recent entry for this key.
+        const prefix = name + ":" + label + ":";
+        let ns = null;
+        for (const [k, v] of Object.entries(cStatus)) {
+          if (k.startsWith(prefix) && (!ns || v.time > ns.time)) ns = v;
+        }
         let badge = '<span class="badge badge-neutral">未调用</span>';
         let timeStr = "";
         if (ns) {
@@ -862,8 +867,13 @@ async function saveKeyWithCheck() {
 async function testKey(provName, label) {
   const val = state.config.providers[provName].keys[label];
   const url = state.config.providers[provName].base_url;
-  const nk = provName + ":" + label;
-  const lastStatus = (state.stats && state.stats.candidates_status && state.stats.candidates_status[nk]) || null;
+  // Status is now keyed by provider:key:type — find latest across all types.
+  const prefix = provName + ":" + label + ":";
+  const cStatus = (state.stats && state.stats.candidates_status) || {};
+  let lastStatus = null;
+  for (const [k, v] of Object.entries(cStatus)) {
+    if (k.startsWith(prefix) && (!lastStatus || v.time > lastStatus.time)) lastStatus = v;
+  }
   showToast("正在验证 Key 鉴权...", "success");
   try {
     const r = await fetch("/api/admin/verify-key", { method: "POST", headers: getHeaders(), body: JSON.stringify({ base_url: url, api_key: val }) });
@@ -913,7 +923,7 @@ function renderRouting() {
     </td></tr>`;
 
     list.forEach((item, i) => {
-      const nk = item.provider + ":" + item.key;
+      const nk = item.provider + ":" + item.key + ":" + cat.id;
       const ns = cStatus[nk];
       let badge = '<span class="badge badge-neutral">未调用</span>';
       let timeStr = "—";

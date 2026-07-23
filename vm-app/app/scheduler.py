@@ -351,15 +351,20 @@ async def schedule(
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
                 # --- Cooldown logic ---
-                # 4xx client errors (400, 404, 422, etc.) are caused by the REQUEST,
-                # not by the key/provider.  Putting the key in cooldown would
-                # "poison" it for unrelated future requests.
-                # Only apply cooldown for:
-                #   401/403  – auth/permission issues (key problem)
-                #   429      – rate limiting (key problem)
-                #   5xx      – server errors (provider problem)
+                # Most providers return 400 not only for malformed requests but
+                # also for account/subscription issues (e.g. StepFun returns
+                # 400 "you have no active step plan subscription").  Without
+                # cooldown, bad keys get retried on EVERY request, generating
+                # endless 400s and wasting failover budget.
+                #
+                # Cooldown policy:
+                #   400      – short cooldown (10s); covers subscription/key issues
+                #   401/403  – auth failure, longer cooldown
+                #   429      – rate limiting
+                #   5xx      – server error
+                #   404/422  – request-level, no cooldown (won't repeat)
                 should_cooldown = (
-                    status_code in (401, 403, 429)
+                    status_code in (400, 401, 403, 429)
                     or status_code >= 500
                 )
 
@@ -372,6 +377,8 @@ async def schedule(
                         cd_sec = cooldown_429
                     elif status_code == 403:
                         cd_sec = cooldown_403
+                    elif status_code == 400:
+                        cd_sec = 10.0  # short cooldown for 400
                     elif status_code >= 500:
                         cd_sec = cooldown_5xx
 
@@ -382,8 +389,7 @@ async def schedule(
 
                     _cooldown_until[cand_id] = time.time() + cd_sec
                 else:
-                    # Client-side 4xx (400, 404, 422 …): do NOT penalise the key.
-                    # Reset consecutive failures since this isn't a key problem.
+                    # 404/422 etc.: request-level errors, don't penalise key.
                     _consecutive_failures[cand_id] = 0
 
             except httpx.ReadTimeout as e:

@@ -80,10 +80,13 @@ def record(
             t_stats["5xx"] += 1
 
         # Record candidate node's last request status
+        # Key includes type_name so that a key used for both chat and ocr
+        # has independent status entries instead of overwriting each other.
         if provider and key:
-            node_key = f"{provider}:{key}"
+            node_key = f"{provider}:{key}:{type_name}"
             _stats["candidates_status"][node_key] = {
                 "status": code,
+                "type": type_name,
                 "time": int(time.time() * 1000)
             }
 
