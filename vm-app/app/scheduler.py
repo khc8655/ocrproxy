@@ -350,6 +350,22 @@ async def schedule(
                 stats.record(model_type, status_code, cand_latency,
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
+                # --- Early exit for content-moderation 400s ---
+                # If the upstream rejected the content (not the key), trying
+                # other candidates with the same model/content is futile —
+                # they'll likely also reject it.  Short-circuit to save budget
+                # and avoid wasting 15 API calls on the same bad image.
+                if status_code == 400 and last_err_body:
+                    body_lower = last_err_body.lower()
+                    _is_content_moderation = any(kw in body_lower for kw in [
+                        "sensitive", "content", "moderation", "inappropriate",
+                        "data_inspection", "safety", "policy", "violation",
+                    ])
+                    if _is_content_moderation and not _400_is_key_issue:
+                        logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
+                        errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                        break
+
                 # --- Cooldown logic ---
                 # 400 is ambiguous: it can mean either a request-level problem
                 # (e.g. content moderation, bad image) or a key/account problem
@@ -459,7 +475,14 @@ async def schedule(
 
     # If all candidates failed or were skipped
     if errors:
-        msg = f"All candidates failed: {'; '.join(errors)}"
+        # Truncate error list to avoid oversized responses when many
+        # candidates fail (e.g. 15 candidates × 500 chars each = 7.5KB).
+        # Keep the first 5 and summarise the rest.
+        if len(errors) > 5:
+            summary = f" (and {len(errors) - 5} more errors)"
+            msg = f"All candidates failed: {'; '.join(errors[:5])}{summary}"
+        else:
+            msg = f"All candidates failed: {'; '.join(errors)}"
     else:
         # All candidates were skipped (e.g. in cooldown) – no actual request
         # was attempted, so there is no upstream status/body to forward.
@@ -471,5 +494,5 @@ async def schedule(
         msg,
         last_status_code=last_status_code,
         last_response_body=last_err_body,
-        errors=errors,
+        errors=errors[:5],  # cap list size in the exception object
     )

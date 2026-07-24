@@ -129,9 +129,13 @@ async def chat_completions(request: Request):
         chat_timeout = float(config.get("upstream_timeout_chat", 120))
     config = dict(config)  # shallow copy to avoid mutating cached config
     config["upstream_timeout"] = chat_timeout
+    # Budget must allow at least 3 failover attempts, but also scale with
+    # the number of candidates so that 15 candidates aren't cut off after
+    # just 2 timeouts.
+    chat_candidates = len(config.get("candidates", {}).get("chat", []))
     config["schedule_total_budget"] = max(
         float(config.get("schedule_total_budget", 15)),
-        chat_timeout * 2,  # allow at least 2 failover attempts
+        chat_timeout * min(3, chat_candidates),  # at least 3 attempts, capped
     )
 
     def build_request(cand, api_key, upstream_base_url):
@@ -296,8 +300,11 @@ async def ocr(request: Request):
     ocr_timeout = float(config.get("upstream_timeout_ocr", 60))
     config_copy = dict(config)
     config_copy["upstream_timeout"] = ocr_timeout
+    # Budget scales with candidate count: allow at least 3 failover attempts.
+    ocr_candidates = len(config.get("candidates", {}).get("ocr", []))
     config_copy["schedule_total_budget"] = max(
-        float(config_copy.get("schedule_total_budget", 15)), ocr_timeout + 5
+        float(config_copy.get("schedule_total_budget", 15)),
+        ocr_timeout * min(3, ocr_candidates),
     )
 
     try:
