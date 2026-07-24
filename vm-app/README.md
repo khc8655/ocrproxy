@@ -8,7 +8,10 @@
 
 - **统一接口**：`/v1/chat/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/ocr` 标准 API，兼容 OpenAI SDK
 - **多 Key 轮询**：按候选序列轮询多个上游 Key，支持拖拽调整优先级
-- **故障自动切换**：429 冷却 60s、403 冷却 10min、5xx 冷却 30s，连续失败 3 次触发熔断（300s）
+- **故障自动切换**：429 冷却 60s、403 冷却 10min、5xx 冷却 30s；400 智能区分 Key/账户问题（冷却 10s）与内容审核（不冷却），连续失败 3 次触发熔断（300s）
+- **内容审核提前退出**：检测到内容审核 400 时跳过剩余候选，避免对同一图片重复调用浪费配额
+- **Per-Type 状态分离**：同一 Key 用于 chat 和 OCR 时，后台状态统计按模型类型独立记录，互不覆盖
+- **预算自适应**：故障转移总预算随候选数量自动扩展，确保至少 3 次切换尝试
 - **延迟感知路由**（可选）：根据历史延迟自动排序候选节点，默认关闭以保持与 UI 配置顺序一致
 - **Chat 快速模式**：自动禁用推理思考、强制非流式，单次请求从 30-60s 降至 2-5s
 
@@ -157,6 +160,23 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 | `ocrproxy-health.timer` | timer | 每 60s 健康检查，假死自动重启 |
 | `ocrproxy-restart.timer` | timer | 每日 04:00 定时重启 |
 
+### 冷却与熔断策略
+
+调度器根据上游响应状态码执行差异化冷却，避免对正常 Key 的误判和过度惩罚：
+
+| 状态码 | 场景 | 冷却时间 | 说明 |
+|--------|------|----------|------|
+| 429 | 限流 | 60s | 配置项 `cooldown_429_sec` |
+| 403 | 鉴权失败 | 600s | 配置项 `cooldown_403_sec` |
+| 5xx | 服务端错误 | 30s | 配置项 `cooldown_duration` |
+| 400（Key 问题） | 订阅过期、余额不足、Key 无效 | 10s | 通过错误体关键词识别（subscription/billing/quota 等） |
+| 400（内容审核） | 敏感图片、违规内容 | 不冷却 | 请求级问题，不惩罚 Key；且**提前退出**不再尝试其他候选 |
+| 404 / 422 | 请求格式错误 | 不冷却 | 请求级问题 |
+| ReadTimeout | 模型推理慢 | 2s | 不计入熔断，保持 Key 可用 |
+| ConnectTimeout | 网络问题 | 5s | 短冷却 + 延迟降权 |
+
+连续失败达到 `circuit_break_threshold`（默认 3 次）触发熔断，冷却时间提升至 `circuit_cooldown_sec`（默认 300s）。
+
 ### 内存管理机制
 
 本服务针对 2 核 / 1.6 GB 低配 VM 优化，采用多层内存安全策略：
@@ -272,7 +292,7 @@ vm-app/
 | `upstream_timeout` | 12 | 通用上游超时（秒） |
 | `upstream_timeout_chat` | 120 | Chat 模型超时（秒），推理模型需要更长时间 |
 | `upstream_timeout_ocr` | 60 | OCR / 视觉模型超时（秒） |
-| `schedule_total_budget` | 15 | 总故障转移预算（秒），超时后停止尝试更多候选 |
+| `schedule_total_budget` | 15 | 总故障转移预算（秒），超时后停止尝试更多候选。实际值会随候选数量自适应扩展（至少保证 3 次切换尝试） |
 | `max_concurrency_per_key` | 5 | 每个 Key 的最大并发请求数 |
 | `cooldown_duration` | 30 | 5xx 及其他错误冷却时间（秒） |
 | `cooldown_429_sec` | 60 | 429 限流冷却时间（秒） |
@@ -297,6 +317,16 @@ journalctl -u ocrproxy --no-pager -n 50
 cat /opt/ocrproxy/.env | grep ENCRYPT_KEY
 # 如需重新生成配置
 sudo -u ocrproxy /opt/ocrproxy/venv/bin/python /opt/ocrproxy/scripts/init_config.py
+```
+
+### 候选状态显示异常（同一 Key chat/OCR 状态互相覆盖）
+
+已修复：统计 Key 格式为 `provider:key:type`，同一 Key 在 chat 和 OCR 下的状态独立记录。如果仍出现覆盖，确认部署的是最新代码：
+
+```bash
+# 检查 stats.py 中的 node_key 格式
+grep node_key /opt/ocrproxy/app/stats.py
+# 应输出: node_key = f"{provider}:{key}:{type_name}"
 ```
 
 ### 内存持续增长
