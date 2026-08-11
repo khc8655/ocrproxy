@@ -28,7 +28,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("ocrproxy")
 
-app = FastAPI(title="OCRProxy VM", version="2.0.0")
+app = FastAPI(title="OCRProxy VM", version="3.0.0")
 
 # Mount routers
 # Proxy routes at /v1/* (and /api/v1/* for transparent routing)

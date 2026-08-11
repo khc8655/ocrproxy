@@ -1,8 +1,21 @@
 # OCRProxy VM 版 — 统一大模型中转与故障自动切换服务
 
-提供 **Chat / Embedding / Reranker / OCR** 四类标准大模型能力的统一中转接口，支持多 Key 轮询、自动故障切换、熔断保护。专为低配 VM（2 核 / 1.6 GB）设计，在突发高并发入库场景下保持内存安全。
+提供 **Chat / Embedding / Reranker / OCR** 四类标准大模型能力的统一中转接口，支持多 Key 轮询、自动故障切换、熔断保护。同时提供 **Agent 模式**——Agent 直接使用真实模型名调用标准 OpenAI 接口，429/500 自动切换到同一模型的其他供应商。专为低配 VM（2 核 / 1.6 GB）设计，在突发高并发入库场景下保持内存安全。
 
 ## 核心特性
+
+### 双模式路由
+
+本服务支持两种路由模式，共用同一组 `/v1/*` 接口：
+
+| 模式 | 触发方式 | 行为 |
+|------|----------|------|
+| **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用该类型的全部候选轮询，chat 默认禁用思考，支持快速模式 |
+| **Agent 模式** | `model` 为真实模型名（如 `deepseek-ai/DeepSeek-V3`） | 仅路由到匹配该模型的候选，429/500 自动切换到同模型的其他供应商 |
+
+- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）
+- **Agent 模式故障切换**：同一模型配置在多个供应商/Key 下时，429/500 自动切换到下一个
+- **KB 入库模式**：chat 始终禁用思考（`reasoning_effort=low` + `enable_thinking=false`），可选快速模式（强制非流式 + 短超时）
 
 ### 路由与故障转移
 
@@ -13,7 +26,6 @@
 - **Per-Type 状态分离**：同一 Key 用于 chat 和 OCR 时，后台状态统计按模型类型独立记录，互不覆盖
 - **预算自适应**：故障转移总预算随候选数量自动扩展，确保至少 3 次切换尝试
 - **延迟感知路由**（可选）：根据历史延迟自动排序候选节点，默认关闭以保持与 UI 配置顺序一致
-- **Chat 快速模式**：自动禁用推理思考、强制非流式，单次请求从 30-60s 降至 2-5s
 
 ### 并发与内存安全
 
@@ -76,7 +88,9 @@ sudo systemctl reload caddy
 
 ## 接口调用
 
-### Chat 对话
+### Chat — KB 入库模式（虚拟别名）
+
+适用于知识库批量入库。默认禁用思考，开启 `chat_fast_mode` 时强制非流式 + 短超时：
 
 ```bash
 curl -X POST https://your-domain.com/v1/chat/completions \
@@ -84,6 +98,26 @@ curl -X POST https://your-domain.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "chat", "messages": [{"role": "user", "content": "你好"}]}'
 ```
+
+### Chat — Agent 模式（真实模型名）
+
+Agent 直接使用配置的真实模型名，完全透明，429/500 自动切换：
+
+```bash
+curl -X POST https://your-domain.com/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "deepseek-ai/DeepSeek-V3", "messages": [{"role": "user", "content": "你好"}], "stream": true}'
+```
+
+### 查看可用模型
+
+```bash
+curl https://your-domain.com/v1/models \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY"
+```
+
+返回所有真实模型名（Agent 模式用）+ 虚拟别名（KB 模式用）。
 
 ### Embedding 向量
 
@@ -267,7 +301,7 @@ vm-app/
   "cooldown_403_sec": 600,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "chat_fast_mode": false,
+  "chat_fast_mode": false,      # 仅 KB 模式生效：强制非流式 + 短超时
   "chat_fast_timeout": 30,
   "latency_based_routing": false,
   "providers": {
@@ -277,7 +311,10 @@ vm-app/
     }
   },
   "candidates": {
-    "chat": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"}],
+    "chat": [
+      {"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"},
+      {"provider": "stepfun", "key": "KeyB", "model": "deepseek-ai/DeepSeek-V3"}
+    ],
     "embedding": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-m3"}],
     "reranker": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-reranker-v2-m3"}],
     "ocr": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-OCR"}]
@@ -299,8 +336,8 @@ vm-app/
 | `cooldown_403_sec` | 600 | 403 鉴权失败冷却时间（秒） |
 | `circuit_break_threshold` | 3 | 连续失败次数阈值，触发熔断 |
 | `circuit_cooldown_sec` | 300 | 熔断冷却时间（秒） |
-| `chat_fast_mode` | false | Chat 快速模式：禁用推理、强制非流式 |
-| `chat_fast_timeout` | 30 | 快速模式超时（秒） |
+| `chat_fast_mode` | false | KB 模式专用：强制非流式 + 使用 `chat_fast_timeout` 超时。Agent 模式不受影响 |
+| `chat_fast_timeout` | 30 | KB 快速模式超时（秒），仅在 `chat_fast_mode=true` 时生效 |
 | `latency_based_routing` | false | 延迟感知路由：按历史延迟自动排序候选 |
 
 ## 故障排查

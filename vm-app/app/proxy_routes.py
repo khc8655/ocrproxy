@@ -1,6 +1,17 @@
 """
 Proxy API routes: /v1/chat/completions, /v1/embeddings, /v1/rerank, /v1/ocr, /v1/models, /v1/reload
-Ported from EdgeOne cloud-functions/[[...all]].py.
+
+Two routing modes:
+  1. KB ingestion mode (virtual alias): model="chat"/"embedding"/"reranker"/"ocr"
+     - Uses all candidates of that type in configured order
+     - Disables thinking/reasoning by default (chat)
+     - Supports fast mode (force non-stream, shorter timeout)
+
+  2. Agent mode (real model name): model="<actual model name from config>"
+     - Filters candidates to those matching the requested model name
+     - Fully transparent: passes through all request parameters untouched
+     - Failover on 429/500 to other providers with the same model
+     - Standard OpenAI-compatible interface
 
 Chat relay optimisations:
   - Deep-copy request body to prevent cross-request mutation in concurrent scenarios.
@@ -25,6 +36,12 @@ from .scheduler import schedule, AllCandidatesFailedError
 from .auth import verify_proxy_auth
 
 router = APIRouter(prefix="/v1")
+
+# Virtual model aliases used for KB ingestion mode.
+# When a client sends one of these as the model name, the proxy uses ALL
+# candidates of the corresponding type and applies KB-specific settings
+# (e.g. disable thinking).  Any other model name triggers agent mode.
+VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
 
 
 def _join_upstream(base_url: str, path: str) -> str:
@@ -57,16 +74,68 @@ def _error_response(exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+def _model_not_found_response(model_name: str) -> JSONResponse:
+    """Return an OpenAI-compatible model-not-found error."""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "message": f"The model '{model_name}' does not exist or is not configured.",
+                "type": "invalid_request_error",
+                "param": "model",
+                "code": "model_not_found",
+            }
+        },
+    )
+
+
+def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
+    """Scale the failover budget with candidate count, ensuring at least 3 attempts."""
+    return max(
+        float(config.get("schedule_total_budget", 15)),
+        timeout * min(3, max(candidate_count, 1)),
+    )
+
+
 @router.get("/models")
 async def list_models(request: Request):
+    """List all available models.
+
+    Returns both real model names (for agent mode) and virtual aliases
+    (for KB ingestion mode).  Real models are collected from all candidate
+    types — each unique model name appears once.
+    """
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
-    return {"object": "list", "data": [
-        {"id": "ocr", "object": "model", "owned_by": "llm-proxy", "model_type": "ocr"},
-        {"id": "embedding", "object": "model", "owned_by": "llm-proxy", "model_type": "embedding"},
-        {"id": "reranker", "object": "model", "owned_by": "llm-proxy", "model_type": "reranker"},
-        {"id": "chat", "object": "model", "owned_by": "llm-proxy", "model_type": "chat"},
-    ]}
+
+    config = await get_config()
+
+    # Collect all unique model names from all candidate types
+    real_models: set[str] = set()
+    for _type_name, cands in config.get("candidates", {}).items():
+        for cand in cands:
+            model_id = cand.get("model")
+            if model_id:
+                real_models.add(model_id)
+
+    data = []
+    # Real models (for agents) — sorted for consistent ordering
+    for model_id in sorted(real_models):
+        data.append({
+            "id": model_id,
+            "object": "model",
+            "owned_by": "llm-proxy",
+        })
+    # Virtual aliases (for KB ingestion)
+    for alias in ["chat", "embedding", "reranker", "ocr"]:
+        data.append({
+            "id": alias,
+            "object": "model",
+            "owned_by": "llm-proxy",
+            "model_type": alias,
+        })
+
+    return {"object": "list", "data": data}
 
 
 @router.post("/reload")
@@ -87,56 +156,72 @@ async def reload_config(request: Request):
         return JSONResponse(status_code=500, content={"error": f"Failed to reload config: {e}"})
 
 
+# ── Chat completions ────────────────────────────────────────────────
+
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body = await request.json()
+    model_name = body.get("model", "")
     is_stream = body.get("stream", False)
     config = await get_config()
 
-    # ── Fast mode (batch / summarisation) ──────────────────────────
-    # When chat_fast_mode is enabled the proxy:
-    #   1. Actively disables reasoning/thinking across all known provider
-    #      parameter styles – saves 10-60s per request.
-    #   2. Forces stream=false – the client gets a single JSON response
-    #      instead of SSE chunks, which is more efficient for batch.
-    #   3. Uses a shorter timeout (chat_fast_timeout, default 30s).
-    fast_mode = bool(config.get("chat_fast_mode", False))
-    if fast_mode:
-        # Actively inject disable-reasoning parameters across all known
-        # provider styles.  Unknown parameters are silently ignored by
-        # OpenAI-compatible APIs, so it's safe to include them all.
-        # NOTE: StepFun only supports low/medium/high (no "none"), so we
-        # use "low" which cuts reasoning tokens by ~56%.
+    all_chat_candidates = config.get("candidates", {}).get("chat", [])
+
+    if model_name == "chat":
+        # ── KB ingestion mode ──────────────────────────────────────
+        # Always disable thinking/reasoning for KB ingestion — this is
+        # batch processing where reasoning adds latency without value.
         body["reasoning_effort"] = "low"            # StepFun / OpenAI style
-        body["enable_thinking"] = False             # Qwen3 / SenseNova style
-        body["chat_template_kwargs"] = {            # vLLM / SiliconFlow style
+        body["enable_thinking"] = False              # Qwen3 / SenseNova style
+        body["chat_template_kwargs"] = {             # vLLM / SiliconFlow style
             "enable_thinking": False,
         }
-        # Force non-stream
-        if is_stream:
-            body["stream"] = False
-            is_stream = False
 
-    # Chat / reasoning models (e.g. DeepSeek-R1) need much longer timeouts
-    # than the default 12s.  In fast mode we use a shorter timeout since
-    # there is no reasoning step.
-    if fast_mode:
-        chat_timeout = float(config.get("chat_fast_timeout", 30))
+        fast_mode = bool(config.get("chat_fast_mode", False))
+        if fast_mode:
+            # Force non-stream for batch efficiency
+            if is_stream:
+                body["stream"] = False
+                is_stream = False
+            chat_timeout = float(config.get("chat_fast_timeout", 30))
+        else:
+            chat_timeout = float(config.get("upstream_timeout_chat", 120))
+
+        candidates_list = all_chat_candidates
+
+    elif model_name in VIRTUAL_ALIASES:
+        # Other virtual aliases are not valid for chat endpoint
+        return _model_not_found_response(model_name)
+
     else:
+        # ── Agent mode (real model name) ──────────────────────────
+        # Filter chat candidates to those matching the requested model.
+        # This enables failover: if multiple providers/keys have the same
+        # model configured, the scheduler will try them in order and
+        # switch on 429/500.
+        candidates_list = [c for c in all_chat_candidates if c.get("model") == model_name]
+
+        if not candidates_list:
+            return _model_not_found_response(model_name)
+
+        # Agent mode: don't modify the request body at all.
+        # Use the standard chat timeout.
         chat_timeout = float(config.get("upstream_timeout_chat", 120))
+
+    if not candidates_list:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"message": "No chat candidates configured", "type": "server_error"}},
+        )
+
+    # Build config copy with overridden settings
     config = dict(config)  # shallow copy to avoid mutating cached config
     config["upstream_timeout"] = chat_timeout
-    # Budget must allow at least 3 failover attempts, but also scale with
-    # the number of candidates so that 15 candidates aren't cut off after
-    # just 2 timeouts.
-    chat_candidates = len(config.get("candidates", {}).get("chat", []))
-    config["schedule_total_budget"] = max(
-        float(config.get("schedule_total_budget", 15)),
-        chat_timeout * min(3, chat_candidates),  # at least 3 attempts, capped
-    )
+    config["schedule_total_budget"] = _scale_budget(config, chat_timeout, len(candidates_list))
+    config["candidates"] = {"chat": candidates_list}
 
     def build_request(cand, api_key, upstream_base_url):
         # Deep-copy to isolate nested objects (messages, tools, etc.) across
@@ -190,13 +275,38 @@ async def chat_completions(request: Request):
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
 
+# ── Embeddings ──────────────────────────────────────────────────────
+
 @router.post("/embeddings")
 async def embeddings(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body = await request.json()
+    model_name = body.get("model", "")
     config = await get_config()
+
+    all_emb_candidates = config.get("candidates", {}).get("embedding", [])
+
+    if model_name == "embedding":
+        # KB mode: use all embedding candidates
+        candidates_list = all_emb_candidates
+    elif model_name in VIRTUAL_ALIASES:
+        return _model_not_found_response(model_name)
+    else:
+        # Agent mode: filter by model name
+        candidates_list = [c for c in all_emb_candidates if c.get("model") == model_name]
+        if not candidates_list:
+            return _model_not_found_response(model_name)
+
+    if not candidates_list:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"message": "No embedding candidates configured", "type": "server_error"}},
+        )
+
+    config = dict(config)
+    config["candidates"] = {"embedding": candidates_list}
 
     def build_request(cand, api_key, upstream_base_url):
         out = copy.deepcopy(body)
@@ -220,13 +330,38 @@ async def embeddings(request: Request):
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
 
+# ── Reranker ────────────────────────────────────────────────────────
+
 @router.post("/rerank")
 async def rerank(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body = await request.json()
+    model_name = body.get("model", "")
     config = await get_config()
+
+    all_rerank_candidates = config.get("candidates", {}).get("reranker", [])
+
+    if model_name == "reranker":
+        # KB mode: use all reranker candidates
+        candidates_list = all_rerank_candidates
+    elif model_name in VIRTUAL_ALIASES:
+        return _model_not_found_response(model_name)
+    else:
+        # Agent mode: filter by model name
+        candidates_list = [c for c in all_rerank_candidates if c.get("model") == model_name]
+        if not candidates_list:
+            return _model_not_found_response(model_name)
+
+    if not candidates_list:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"message": "No reranker candidates configured", "type": "server_error"}},
+        )
+
+    config = dict(config)
+    config["candidates"] = {"reranker": candidates_list}
 
     def build_request(cand, api_key, upstream_base_url):
         out = copy.deepcopy(body)
@@ -249,6 +384,8 @@ async def rerank(request: Request):
     except Exception as e:
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
+
+# ── OCR (KB only — not a standard OpenAI endpoint) ──────────────────
 
 @router.post("/ocr")
 async def ocr(request: Request):
@@ -298,17 +435,13 @@ async def ocr(request: Request):
 
     # OCR / vision models need a longer timeout than chat
     ocr_timeout = float(config.get("upstream_timeout_ocr", 60))
-    config_copy = dict(config)
-    config_copy["upstream_timeout"] = ocr_timeout
-    # Budget scales with candidate count: allow at least 3 failover attempts.
+    config = dict(config)
+    config["upstream_timeout"] = ocr_timeout
     ocr_candidates = len(config.get("candidates", {}).get("ocr", []))
-    config_copy["schedule_total_budget"] = max(
-        float(config_copy.get("schedule_total_budget", 15)),
-        ocr_timeout * min(3, ocr_candidates),
-    )
+    config["schedule_total_budget"] = _scale_budget(config, ocr_timeout, ocr_candidates)
 
     try:
-        sr = await schedule(config_copy, "ocr", build_request)
+        sr = await schedule(config, "ocr", build_request)
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
