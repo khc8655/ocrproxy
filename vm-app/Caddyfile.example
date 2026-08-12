@@ -1,61 +1,79 @@
 # ============================================================
-# OCRProxy Caddy 反向代理配置示例
-# 
-# 将以下配置添加到你的 Caddyfile 中（根据实际域名修改）
-# 假设你的域名是 ocrproxy.example.com
+# Caddy 配置示例 — 网站与 OCRProxy 完全分离
+#
+# 端口 80：个人主页（纯静态，备案要求）
+# 端口 9090：OCRProxy API 代理（独立服务）
 # ============================================================
 
-ocrproxy.example.com {
-    # 反向代理所有请求到 ocrproxy 服务
-    reverse_proxy 127.0.0.1:8787 {
-        # 支持流式响应 (SSE)
-        flush_interval -1
-        
-        # 传输超时设置
-        transport http {
-            read_timeout 300s
-            write_timeout 300s
-            dial_timeout 10s
-        }
-    }
+# ── 端口 80：个人主页（纯静态）─────────────────────────────
+:80 {
+    root * /var/www/ocrproxy
 
-    # 基本安全头
+    file_server {
+        browse false
+    }
+    try_files {path} /index.html
+
     header {
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
-        # 管理面板不允许被嵌入 iframe
-        Content-Security-Policy "frame-ancestors 'none'"
+        X-XSS-Protection "1; mode=block"
+        Server ""
     }
 
-    # 访问日志
+    log {
+        output file /var/log/caddy/site.log {
+            roll_size 10MB
+            roll_keep 3
+        }
+        format json
+    }
+}
+
+# ── 端口 9090：OCRProxy API 代理 ───────────────────────────
+:9090 {
+    reverse_proxy 127.0.0.1:8787 {
+        flush_interval -1
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Server ""
+    }
+
     log {
         output file /var/log/caddy/ocrproxy.log {
-            roll_size 50MB
-            roll_keep 5
+            roll_size 10MB
+            roll_keep 3
         }
         format json
     }
 }
 
 # ============================================================
-# 如果你希望管理面板和 API 使用不同的域名/路径，可以这样配置：
+# EdgeOne 场景：EdgeOne 处理 HTTPS，回源到本机
+# - 主域名 → 回源到 80 端口（静态首页）
+# - API 域名/路径 → 回源到 9090 端口（OCRProxy）
 # ============================================================
 
-# api.example.com {
-#     # 仅暴露代理 API，不暴露管理面板
-#     @proxy path /v1/*
-#     reverse_proxy @proxy 127.0.0.1:8787
-#     
-#     # 健康检查
-#     @health path /health
-#     reverse_proxy @health 127.0.0.1:8787
-#     
-#     # 拒绝其他路径
-#     respond 404
+# ============================================================
+# 直连 HTTPS 场景：域名直接解析到本机
+# 取消注释并替换 your-domain.com
+# ============================================================
+
+# your-domain.com {
+#     root * /var/www/ocrproxy
+#     file_server { browse false }
+#     try_files {path} /index.html
 # }
 #
-# admin.example.com {
-#     # 管理面板 (建议增加 IP 白名单或额外的 Basic Auth)
-#     reverse_proxy 127.0.0.1:8787
+# api.your-domain.com {
+#     reverse_proxy 127.0.0.1:8787 {
+#         flush_interval -1
+#     }
 # }
