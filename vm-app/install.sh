@@ -67,10 +67,11 @@ if [[ "$PY_OK" != "1" ]]; then
     error "Python 版本过低，需要 ${PYTHON_MIN_VERSION} 或更高版本"
 fi
 
-# 检查 pip 和 venv
-if ! python3 -m venv --help &> /dev/null; then
+# 检查 pip 和 venv（Ubuntu 24.04 需要 python3.X-venv 才有 ensurepip）
+if ! python3 -c "import ensurepip" &> /dev/null; then
     info "安装 python3-venv..."
-    apt-get update -qq && apt-get install -y -qq python3-venv python3-pip
+    PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    apt-get update -qq && apt-get install -y -qq "python${PY_VER}-venv" python3-pip
 fi
 
 ok "系统环境检查通过"

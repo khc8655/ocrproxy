@@ -12,6 +12,8 @@ build/
 .env
 *.enc
 proxy_config
+*.pem
+tx_khc.pem
 
 # OS
 .DS_Store
