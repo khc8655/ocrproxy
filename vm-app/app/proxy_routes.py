@@ -135,17 +135,18 @@ async def list_models(request: Request):
 
     config = await get_config()
 
-    # Only expose real Agent models from the dedicated agent_models list.
+    # Only expose real Agent models from the dedicated agent_models map
+    # (model-centric schema: {name: {keys: [...], upstream_model?}}).
     # KB ingestion virtual aliases (chat/embedding/reranker/ocr) are NOT
     # advertised here — ingestion tools configure them directly via examples.
-    real_models: set[str] = set()
-    for cand in config.get("agent_models", []):
-        model_id = cand.get("model")
-        if model_id:
-            real_models.add(model_id)
+    agent_models = config.get("agent_models") or {}
+    if isinstance(agent_models, dict):
+        real_models = set(agent_models.keys())
+    else:  # defensive: un-migrated flat list
+        real_models = {c.get("model") for c in agent_models if c.get("model")}
 
     data = []
-    for model_id in sorted(real_models):
+    for model_id in sorted(m for m in real_models if m):
         data.append({
             "id": model_id,
             "object": "model",
@@ -219,16 +220,31 @@ async def chat_completions(request: Request):
 
     else:
         # ── Agent mode (real model name) ──────────────────────────
-        # Route from the DEDICATED agent_models list (independent from the
-        # KB-ingestion chat candidates).  If multiple provider/key entries
-        # carry the same model, the scheduler tries them in order and
-        # switches on 429/500.
-        candidates_list = [c for c in config.get("agent_models", []) if c.get("model") == model_name]
+        # Model-centric routing: agent_models[model_name] is the entity, and
+        # its ordered key bindings expand into the scheduler candidate list.
+        # Each binding may carry its own upstream_model override; the
+        # model-level value (defaulting to the public name) applies otherwise.
+        agent_models = config.get("agent_models") or {}
+        entry = agent_models.get(model_name) if isinstance(agent_models, dict) else None
+        if not entry:
+            return _model_not_found_response(model_name)
+
+        default_upstream = entry.get("upstream_model") or model_name
+        candidates_list = []
+        for b in entry.get("keys", []):
+            if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
+                continue
+            candidates_list.append({
+                "provider": b["provider"],
+                "key": b["key"],
+                "model": b.get("upstream_model") or default_upstream,
+            })
 
         if not candidates_list:
             return _model_not_found_response(model_name)
 
-        # Agent mode: don't modify the request body at all.
+        # Agent mode: don't modify the request body except the model rewrite
+        # (public name -> upstream id when they differ).
         # Use the standard chat timeout.
         chat_timeout = float(config.get("upstream_timeout_chat", 120))
 

@@ -71,15 +71,21 @@ def build_config(per_key_limit: int = 5) -> dict:
             "deadstream": provider("deadstream", 1),
             "mod": provider("mod", 1),
         },
-        # Dedicated agent routing list (v3.2 schema): broken candidate FIRST,
-        # healthy second — exercising failover through agent_models.
-        "agent_models": [
-            {"provider": "dead429", "key": "k1", "model": "m429-agent"},
-            {"provider": "mockA", "key": "k1", "model": "m429-agent"},
-            {"provider": "deadstream", "key": "k1", "model": "deadstream-agent"},
-            {"provider": "mockA", "key": "k2", "model": "deadstream-agent"},
-            {"provider": "mod", "key": "k1", "model": "moderation-agent"},
-        ],
+        # Model-centric agent routing (v3.3 schema): broken key FIRST,
+        # healthy second — exercising failover through the ordered key list.
+        "agent_models": {
+            "m429-agent": {"keys": [
+                {"provider": "dead429", "key": "k1"},
+                {"provider": "mockA", "key": "k1"},
+            ]},
+            "deadstream-agent": {"keys": [
+                {"provider": "deadstream", "key": "k1"},
+                {"provider": "mockA", "key": "k2"},
+            ]},
+            "moderation-agent": {"keys": [
+                {"provider": "mod", "key": "k1"},
+            ]},
+        },
         "candidates": {
             "chat": [
                 # healthy KB-mode candidates FIRST: KB mode (model="chat") uses

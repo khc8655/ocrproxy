@@ -61,6 +61,36 @@ def _get_fernet() -> Fernet:
     return Fernet(key.encode() if isinstance(key, str) else key)
 
 
+def _migrate_agent_models(config: dict) -> bool:
+    """v3.2 -> v3.3 schema migration: agent_models becomes model-centric.
+
+    Old (flat, key-centric list — one row per key binding):
+        [{"provider": "sensenova", "key": "小号", "model": "deepseek-v4-flash"}, ...]
+    New (dict keyed by public model name; keys are an ordered list inside):
+        {"deepseek-v4-flash": {"keys": [{"provider": "sensenova", "key": "小号"},
+                                         ...],
+                               "upstream_model": "optional-id-override"}}
+
+    Returns True when the config was modified."""
+    am = config.get("agent_models")
+    if not isinstance(am, list):
+        return False
+    grouped: dict = {}
+    for entry in am:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("model")
+        if not name:
+            continue
+        binding = {"provider": entry["provider"], "key": entry["key"]}
+        upstream = entry.get("upstream_model")
+        if upstream and upstream != name:
+            binding["upstream_model"] = upstream
+        grouped.setdefault(name, {"keys": []})["keys"].append(binding)
+    config["agent_models"] = grouped
+    return True
+
+
 def load_from_disk() -> dict:
     """Load and decrypt config from disk."""
     config_file = _get_config_file()
@@ -74,13 +104,23 @@ def load_from_disk() -> dict:
         with open(config_file, "rb") as f:
             encrypted_data = f.read()
         decrypted = fernet.decrypt(encrypted_data)
-        return json.loads(decrypted.decode("utf-8"))
+        config = json.loads(decrypted.decode("utf-8"))
     except InvalidToken:
         raise RuntimeError(
             "Failed to decrypt config file. ENCRYPT_KEY may be incorrect or corrupted."
         )
     except json.JSONDecodeError:
         raise RuntimeError("Config file contains invalid JSON after decryption.")
+
+    # One-way schema migration; persist immediately so the encrypted file
+    # converges to the current schema after the first read.
+    if _migrate_agent_models(config):
+        try:
+            save_to_disk(config)
+            logger.info("agent_models migrated to model-centric schema and persisted.")
+        except Exception as e:  # non-fatal: in-memory shape is already correct
+            logger.warning("agent_models migration could not be persisted: %s", e)
+    return config
 
 
 def save_to_disk(config: dict) -> None:
