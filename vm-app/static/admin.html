@@ -55,7 +55,7 @@
       background: var(--bg-secondary);
     }
     .login-box {
-      width: 380px; padding: 40px; background: var(--bg-base);
+      width: 380px; max-width: calc(100vw - 32px); padding: 40px; background: var(--bg-base);
       border: 1px solid var(--border-1); border-radius: var(--radius-16);
       box-shadow: 0 8px 30px rgba(0,0,0,0.06);
     }
@@ -146,6 +146,34 @@
     .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
     @media (max-width: 1024px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ── Narrow windows / mobile ─────────────────────────────
+       The fixed 220px sidebar squeezed the content area to ~200px on
+       phones, wrapping every table cell ("未调用" broke into vertical
+       lines) and tripling row heights.  Below 900px the sidebar becomes
+       a top bar with a horizontally scrollable nav, and tables get a
+       min-width so they scroll horizontally instead of wrapping. */
+    @media (max-width: 900px) {
+      .app { flex-direction: column; }
+      .sidebar {
+        position: static; width: 100%; min-width: 0; height: auto;
+        flex-direction: row; align-items: center; gap: 0;
+        border-right: none; border-bottom: 1px solid var(--border-1);
+      }
+      .sidebar-logo { padding: 12px 16px; border-bottom: none; white-space: nowrap; }
+      .sidebar-nav {
+        flex: 1; flex-direction: row; align-items: center;
+        overflow-x: auto; padding: 8px 12px; gap: 4px;
+      }
+      .nav-item { white-space: nowrap; flex-shrink: 0; padding: 6px 10px; }
+      .sidebar-footer { border-top: none; border-left: 1px solid var(--border-1); padding: 8px 12px; }
+      .sidebar-footer .info .role { display: none; }
+      .main { margin-left: 0; }
+      .table-wrap table { min-width: 640px; }
+    }
+    /* Cells never wrap vertically: badges ("未调用"), buttons and model IDs
+       stay on one line; narrow containers scroll horizontally instead. */
+    .table-wrap th, .table-wrap td { white-space: nowrap; }
 
     /* ── Metric Card ── */
     .metric-card { padding: 20px; display: flex; align-items: flex-start; gap: 16px; }
@@ -500,13 +528,9 @@
             </div>
           </div>
           <div class="card settings-card">
-            <h3><svg class="ic" aria-hidden="true" style="color:var(--status-warning);"><use href="#fa-bolt"/></svg> Chat 快速模式</h3>
+            <h3><svg class="ic" aria-hidden="true" style="color:var(--status-warning);"><use href="#fa-bolt"/></svg> KB 入库快速模式</h3>
             <div class="settings-row">
-              <label class="checkbox-group">
-                <input type="checkbox" id="settingFastMode">
-                <span>启用快速模式（批量入库 / 文档总结）</span>
-              </label>
-              <span class="hint">自动禁用推理思考、强制非流式、使用短超时。单次请求从 30-60s 降至 2-5s</span>
+              <span class="hint">知识库虚拟模型 <b>chat</b> 固定启用快速模式：自动禁用推理思考、强制非流式（此行为已内置，无需开关）。Agent 真实模型不受影响。</span>
             </div>
             <div class="settings-row">
               <label class="form-label">快速模式超时 (chat_fast_timeout)</label>
@@ -1358,7 +1382,6 @@ function renderSettings() {
   set("settingCooldown429", c.cooldown_429_sec);
   set("settingCooldown403", c.cooldown_403_sec);
   setChk("settingLatencyRouting", c.latency_based_routing);
-  setChk("settingFastMode", c.chat_fast_mode);
   set("settingFastTimeout", c.chat_fast_timeout);
 }
 
@@ -1373,7 +1396,6 @@ function saveSettings() {
   c.cooldown_429_sec = Number(document.getElementById("settingCooldown429").value) || 60;
   c.cooldown_403_sec = Number(document.getElementById("settingCooldown403").value) || 600;
   c.latency_based_routing = document.getElementById("settingLatencyRouting").checked;
-  c.chat_fast_mode = document.getElementById("settingFastMode").checked;
   c.chat_fast_timeout = Number(document.getElementById("settingFastTimeout").value) || 30;
   showToast("参数已暂存，请点击右上角「保存并重载」生效", "success");
   triggerChange();
