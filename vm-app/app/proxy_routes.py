@@ -135,29 +135,21 @@ async def list_models(request: Request):
 
     config = await get_config()
 
-    # Collect all unique model names from all candidate types
+    # Only expose real Agent models from the dedicated agent_models list.
+    # KB ingestion virtual aliases (chat/embedding/reranker/ocr) are NOT
+    # advertised here — ingestion tools configure them directly via examples.
     real_models: set[str] = set()
-    for _type_name, cands in config.get("candidates", {}).items():
-        for cand in cands:
-            model_id = cand.get("model")
-            if model_id:
-                real_models.add(model_id)
+    for cand in config.get("agent_models", []):
+        model_id = cand.get("model")
+        if model_id:
+            real_models.add(model_id)
 
     data = []
-    # Real models (for agents) — sorted for consistent ordering
     for model_id in sorted(real_models):
         data.append({
             "id": model_id,
             "object": "model",
             "owned_by": "llm-proxy",
-        })
-    # Virtual aliases (for KB ingestion)
-    for alias in ["chat", "embedding", "reranker", "ocr"]:
-        data.append({
-            "id": alias,
-            "object": "model",
-            "owned_by": "llm-proxy",
-            "model_type": alias,
         })
 
     return {"object": "list", "data": data}
@@ -227,11 +219,11 @@ async def chat_completions(request: Request):
 
     else:
         # ── Agent mode (real model name) ──────────────────────────
-        # Filter chat candidates to those matching the requested model.
-        # This enables failover: if multiple providers/keys have the same
-        # model configured, the scheduler will try them in order and
-        # switch on 429/500.
-        candidates_list = [c for c in all_chat_candidates if c.get("model") == model_name]
+        # Route from the DEDICATED agent_models list (independent from the
+        # KB-ingestion chat candidates).  If multiple provider/key entries
+        # carry the same model, the scheduler tries them in order and
+        # switches on 429/500.
+        candidates_list = [c for c in config.get("agent_models", []) if c.get("model") == model_name]
 
         if not candidates_list:
             return _model_not_found_response(model_name)
