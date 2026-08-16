@@ -4,11 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Proxy 控制台</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- defer: chart.js is only used for dashboard charts; loading it without
-       defer blocks the whole page (including the login form) whenever the
-       CDN is slow — a recurring problem for mainland users. -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <link rel="stylesheet" href="/static/vendor/fontawesome/all.min.css">
+  <!-- Self-hosted chart.js: public CDNs (jsdelivr/cdnjs) hang frequently in
+       mainland China and used to block the whole page, including login. -->
+  <script defer src="/static/vendor/chartjs/chart.umd.js"></script>
   <style>
     /* ── Design Tokens (from opendesign TraeWork system) ── */
     :root {
