@@ -10,12 +10,12 @@
 
 | 模式 | 触发方式 | 行为 |
 |------|----------|------|
-| **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用该类型的全部候选轮询，chat 默认禁用思考，支持快速模式 |
+| **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用该类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） |
 | **Agent 模式** | `model` 为真实模型名（如 `deepseek-ai/DeepSeek-V3`） | 仅路由到匹配该模型的候选，429/500 自动切换到同模型的其他供应商 |
 
 - **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）
 - **Agent 模式故障切换**：同一模型配置在多个供应商/Key 下时，429/500 自动切换到下一个
-- **KB 入库模式**：chat 始终禁用思考（`reasoning_effort=low` + `enable_thinking=false`），可选快速模式（强制非流式 + 短超时）
+- **KB 入库模式**：chat 始终禁用思考（`reasoning_effort=low` + `enable_thinking=false`）且**始终快速**（强制非流式 + `chat_fast_timeout` 短超时）——批量入库无需交互式流式与推理，已写死、无开关
 
 ### 路由与故障转移
 
@@ -114,7 +114,7 @@ ssh -i $KEY $VM '
 
 ### Chat — KB 入库模式（虚拟别名）
 
-适用于知识库批量入库。默认禁用思考，开启 `chat_fast_mode` 时强制非流式 + 短超时：
+适用于知识库批量入库。禁用思考（`reasoning_effort=low` + `enable_thinking=false`），**始终**强制非流式 + 短超时（`chat_fast_timeout`，默认 30s）——已写死，无需任何开关：
 
 ```bash
 curl -X POST https://your-domain.com/v1/chat/completions \
@@ -353,8 +353,7 @@ vm-app/
   "cooldown_403_sec": 600,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "chat_fast_mode": false,      # 仅 KB 模式生效：强制非流式 + 短超时
-  "chat_fast_timeout": 30,
+  "chat_fast_timeout": 30,      # KB 模式写死快速：非流式 + 此超时（无 chat_fast_mode 开关）
   "latency_based_routing": false,
   "providers": {
     "siliconflow": {
@@ -390,8 +389,7 @@ vm-app/
 | `cooldown_403_sec` | 600 | 403 鉴权失败冷却时间（秒） |
 | `circuit_break_threshold` | 3 | 连续失败次数阈值，触发熔断 |
 | `circuit_cooldown_sec` | 300 | 熔断冷却时间（秒） |
-| `chat_fast_mode` | false | KB 模式专用：强制非流式 + 使用 `chat_fast_timeout` 超时。Agent 模式不受影响 |
-| `chat_fast_timeout` | 30 | KB 快速模式超时（秒），仅在 `chat_fast_mode=true` 时生效 |
+| `chat_fast_timeout` | 30 | KB chat 模式超时（秒）。KB 模式**始终**非流式 + 此超时（写死，无 `chat_fast_mode` 开关）；Agent 模式不受影响 |
 | `latency_based_routing` | false | 延迟感知路由：按历史延迟自动排序候选 |
 
 ## 故障排查

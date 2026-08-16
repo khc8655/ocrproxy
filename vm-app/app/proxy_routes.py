@@ -5,7 +5,7 @@ Two routing modes:
   1. KB ingestion mode (virtual alias): model="chat"/"embedding"/"reranker"/"ocr"
      - Uses all candidates of that type in configured order
      - Disables thinking/reasoning by default (chat)
-     - Supports fast mode (force non-stream, shorter timeout)
+     - Always fast: non-stream + short timeout (batch processing, hard-coded)
 
   2. Agent mode (real model name): model="<actual model name from config>"
      - Filters candidates to those matching the requested model name
@@ -210,15 +210,14 @@ async def chat_completions(request: Request):
             "enable_thinking": False,
         }
 
-        fast_mode = bool(config.get("chat_fast_mode", False))
-        if fast_mode:
-            # Force non-stream for batch efficiency
-            if is_stream:
-                body["stream"] = False
-                is_stream = False
-            chat_timeout = float(config.get("chat_fast_timeout", 30))
-        else:
-            chat_timeout = float(config.get("upstream_timeout_chat", 120))
+        # KB ingestion is batch processing: always fast & non-streaming.
+        # Answers are summary fragments consumed by the ingestion pipeline,
+        # not interactive chat — streaming adds SSE parsing overhead and
+        # thinking adds latency without value.  Hard-coded, no config switch.
+        if is_stream:
+            body["stream"] = False
+            is_stream = False
+        chat_timeout = float(config.get("chat_fast_timeout", 30))
 
         candidates_list = all_chat_candidates
 

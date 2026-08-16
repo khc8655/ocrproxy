@@ -13,7 +13,7 @@
 - **Per-Type 状态分离**：同一 Key 用于 chat 和 OCR 时，状态统计按模型类型独立记录
 - **预算自适应**：故障转移总预算随候选数量自动扩展，确保至少 3 次切换尝试
 - **延迟感知路由**（可选）：根据历史延迟自动排序候选节点
-- **Chat 快速模式**：自动禁用推理思考、强制非流式，单次请求从 30-60s 降至 2-5s
+- **Chat 快速模式**：KB 入库 chat **始终**禁用推理思考、强制非流式（写死，无需配置），单次请求从 30-60s 降至 2-5s；Agent 模式则完全透传（含工具调用）
 - **内存安全**：MALLOC_ARENA_MAX=2 + malloc_trim + 全局并发限制 + 假死自动重启
 - **Web 管理面板**：可视化配置供应商、Key、路由优先级，实时统计监控
 - **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
@@ -177,8 +177,7 @@ systemctl list-timers ocrproxy-*       # 查看定时器
   "cooldown_403_sec": 600,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "chat_fast_mode": false,
-  "chat_fast_timeout": 30,
+  "chat_fast_timeout": 30,   # KB chat 写死快速：非流式 + 此超时（无 chat_fast_mode 开关）
   "latency_based_routing": false,
   "providers": {
     "siliconflow": {
