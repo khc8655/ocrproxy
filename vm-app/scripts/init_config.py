@@ -85,8 +85,16 @@ def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
     tmp_file = config_file + '.tmp'
     with open(tmp_file, 'wb') as f:
         f.write(encrypted)
+        f.flush()
+        os.fsync(f.fileno())
     os.chmod(tmp_file, 0o600)
     os.rename(tmp_file, config_file)
+    # fsync the directory so the rename survives a power loss
+    dir_fd = os.open(config_dir, os.O_DIRECTORY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
     print(f"  [✓] 加密配置文件已创建: {config_file}")
 
 

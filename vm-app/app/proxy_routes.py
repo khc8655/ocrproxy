@@ -25,15 +25,20 @@ Chat relay optimisations:
 """
 import copy
 import json
-import re
 import urllib.parse
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from .config_store import get_config, clear_cache
-from .scheduler import schedule, AllCandidatesFailedError
+from .scheduler import (
+    schedule,
+    AllCandidatesFailedError,
+    GlobalOverloadError,
+    reset_runtime_state,
+)
 from .auth import verify_proxy_auth
+from .upstream import join_upstream
 
 router = APIRouter(prefix="/v1")
 
@@ -42,19 +47,6 @@ router = APIRouter(prefix="/v1")
 # candidates of the corresponding type and applies KB-specific settings
 # (e.g. disable thinking).  Any other model name triggers agent mode.
 VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
-
-
-def _join_upstream(base_url: str, path: str) -> str:
-    """Build upstream URL, handling version paths automatically.
-
-    Detects /v1, /v2, /v3, etc. at the end of base_url and does NOT
-    append an extra /v1 in that case.  This supports providers like
-    Volcano Engine (huoshan) whose base_url ends with /api/v3.
-    """
-    base = base_url.rstrip("/")
-    if re.search(r"/v\d+$", base):
-        return f"{base}/{path.lstrip('/')}"
-    return f"{base}/v1/{path.lstrip('/')}"
 
 
 def _error_response(exc: Exception) -> JSONResponse:
@@ -74,6 +66,21 @@ def _error_response(exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+def _overloaded_response(exc: GlobalOverloadError) -> JSONResponse:
+    """503 + Retry-After for burst traffic that exceeds the global concurrency cap."""
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": str(max(1, round(exc.retry_after)))},
+        content={
+            "error": {
+                "message": str(exc),
+                "type": "server_error",
+                "code": "server_overloaded",
+            }
+        },
+    )
+
+
 def _model_not_found_response(model_name: str) -> JSONResponse:
     """Return an OpenAI-compatible model-not-found error."""
     return JSONResponse(
@@ -90,11 +97,13 @@ def _model_not_found_response(model_name: str) -> JSONResponse:
 
 
 def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
-    """Scale the failover budget with candidate count, ensuring at least 3 attempts."""
-    return max(
-        float(config.get("schedule_total_budget", 15)),
-        timeout * min(3, max(candidate_count, 1)),
-    )
+    """Scale the failover budget with candidate count, ensuring at least 3 attempts.
+
+    Hard cap at 180s: without it agent mode computes 120s × 3 = 360s, which
+    exceeds typical client-side timeouts — the failover would be paid for but
+    never observed.  An explicitly configured schedule_total_budget always wins."""
+    computed = min(180.0, timeout * min(3, max(candidate_count, 1)))
+    return max(float(config.get("schedule_total_budget", 15)), computed)
 
 
 @router.get("/models")
@@ -145,11 +154,14 @@ async def reload_config(request: Request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     clear_cache()
+    # Also clear cooldowns / circuit breakers / latency history so the
+    # reloaded config starts from a clean slate (e.g. after fixing a key).
+    reset_runtime_state()
     try:
         config = await get_config()
         return {
             "status": "ok",
-            "message": "Configuration reloaded successfully.",
+            "message": "Configuration reloaded successfully; runtime state (cooldowns/circuit breakers) cleared.",
             "providers": list(config.get("providers", {}).keys())
         }
     except Exception as e:
@@ -228,7 +240,7 @@ async def chat_completions(request: Request):
         # concurrent requests that may share the same cached body dict.
         out = copy.deepcopy(body)
         out["model"] = cand["model"]
-        url = _join_upstream(upstream_base_url, "chat/completions")
+        url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -236,11 +248,17 @@ async def chat_completions(request: Request):
         return "POST", url, headers, out
 
     if is_stream:
-        async def handle_stream(resp: httpx.Response):
+        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
+            # first_chunk + remainder come from the scheduler, which pre-read
+            # one chunk to verify the stream actually delivers data — replay
+            # the chunk, then continue the SAME live iterator.
             async def event_generator():
                 try:
-                    async for chunk in resp.aiter_bytes():
-                        yield chunk
+                    if first_chunk:
+                        yield first_chunk
+                    if remainder is not None:
+                        async for chunk in remainder:
+                            yield chunk
                 finally:
                     await resp.aclose()
             return StreamingResponse(
@@ -260,6 +278,8 @@ async def chat_completions(request: Request):
             return sr.stream_resp
         except AllCandidatesFailedError as e:
             return _error_response(e)
+        except GlobalOverloadError as e:
+            return _overloaded_response(e)
         except Exception as e:
             return JSONResponse(status_code=503, content={"detail": str(e)})
 
@@ -271,6 +291,8 @@ async def chat_completions(request: Request):
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
+    except GlobalOverloadError as e:
+        return _overloaded_response(e)
     except Exception as e:
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
@@ -305,13 +327,19 @@ async def embeddings(request: Request):
             content={"error": {"message": "No embedding candidates configured", "type": "server_error"}},
         )
 
+    # Embeddings of large document batches routinely take longer than the
+    # global default (12s) — one timeout would burn the whole failover
+    # budget and the remaining keys would never be tried.
+    emb_timeout = float(config.get("upstream_timeout_embedding", 60))
     config = dict(config)
+    config["upstream_timeout"] = emb_timeout
+    config["schedule_total_budget"] = _scale_budget(config, emb_timeout, len(candidates_list))
     config["candidates"] = {"embedding": candidates_list}
 
     def build_request(cand, api_key, upstream_base_url):
         out = copy.deepcopy(body)
         out["model"] = cand["model"]
-        url = _join_upstream(upstream_base_url, "embeddings")
+        url = join_upstream(upstream_base_url, "embeddings")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -326,6 +354,8 @@ async def embeddings(request: Request):
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
+    except GlobalOverloadError as e:
+        return _overloaded_response(e)
     except Exception as e:
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
@@ -360,13 +390,18 @@ async def rerank(request: Request):
             content={"error": {"message": "No reranker candidates configured", "type": "server_error"}},
         )
 
+    # Rerank requests can also be slow on long candidate lists — same
+    # per-type timeout + budget treatment as embeddings.
+    rerank_timeout = float(config.get("upstream_timeout_rerank", 30))
     config = dict(config)
+    config["upstream_timeout"] = rerank_timeout
+    config["schedule_total_budget"] = _scale_budget(config, rerank_timeout, len(candidates_list))
     config["candidates"] = {"reranker": candidates_list}
 
     def build_request(cand, api_key, upstream_base_url):
         out = copy.deepcopy(body)
         out["model"] = cand["model"]
-        url = _join_upstream(upstream_base_url, "rerank")
+        url = join_upstream(upstream_base_url, "rerank")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -381,6 +416,8 @@ async def rerank(request: Request):
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
+    except GlobalOverloadError as e:
+        return _overloaded_response(e)
     except Exception as e:
         return JSONResponse(status_code=503, content={"detail": str(e)})
 
@@ -409,10 +446,10 @@ async def ocr(request: Request):
         mime = "image/jpeg" if img_b64.startswith("/9j/") else "image/png"
         img = f"data:{mime};base64,{img_b64}"
 
-    # Release the original body dict early so its copy of the base64 string
-    # can be GC'd before the upstream request is sent.  After this point only
-    # `img` and `prompt` are needed.
+    # Release the original body dict and the raw base64/url locals early so
+    # only `img` and `prompt` keep the payload alive during failover attempts.
     del body
+    del img_b64, img_url
 
     config = await get_config()
 
@@ -426,7 +463,7 @@ async def ocr(request: Request):
             "max_tokens": 4096,
             "stream": False,
         }
-        url = _join_upstream(upstream_base_url, "chat/completions")
+        url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -448,5 +485,7 @@ async def ocr(request: Request):
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
+    except GlobalOverloadError as e:
+        return _overloaded_response(e)
     except Exception as e:
         return JSONResponse(status_code=503, content={"detail": str(e)})

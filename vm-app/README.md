@@ -203,13 +203,22 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 | 429 | 限流 | 60s | 配置项 `cooldown_429_sec` |
 | 403 | 鉴权失败 | 600s | 配置项 `cooldown_403_sec` |
 | 5xx | 服务端错误 | 30s | 配置项 `cooldown_duration` |
+| 200 + 空流 | 上游返回 200 但不发任何字节 | 5s | 判定为故障，自动切换下一候选 |
 | 400（Key 问题） | 订阅过期、余额不足、Key 无效 | 10s | 通过错误体关键词识别（subscription/billing/quota 等） |
-| 400（内容审核） | 敏感图片、违规内容 | 不冷却 | 请求级问题，不惩罚 Key；且**提前退出**不再尝试其他候选 |
+| 400（内容审核） | 敏感图片、违规内容 | 不冷却 | 请求级问题，不惩罚 Key；且**提前退出**不再尝试其他候选（仅匹配明确信号：content_filter / data_inspection / moderation / 中文"审核/敏感/违规"等） |
 | 404 / 422 | 请求格式错误 | 不冷却 | 请求级问题 |
-| ReadTimeout | 模型推理慢 | 2s | 不计入熔断，保持 Key 可用 |
-| ConnectTimeout | 网络问题 | 5s | 短冷却 + 延迟降权 |
+| ReadTimeout | 模型推理慢 | 2s | 不计入熔断，保持 Key 可用（stats 记为 599） |
+| ConnectTimeout | 网络问题 | 5s | 短冷却 + 延迟降权（stats 记为 598） |
 
 连续失败达到 `circuit_break_threshold`（默认 3 次）触发熔断，冷却时间提升至 `circuit_cooldown_sec`（默认 300s）。
+
+其他调度行为（v3.1）：
+
+- **全局过载快速失败**：全局并发上限 30 饱和时，新请求最多排队 2s，超限返回 `503 + Retry-After`（`code=server_overloaded`），不会无限排队占用内存。
+- **排队时间计入预算**：在 Key 信号量上的排队等待消耗故障切换总预算，预算耗尽的请求不再发往上游。
+- **预算封顶 180s**：agent 模式的故障切换总预算硬上限 180s（显式配置的 `schedule_total_budget` 优先）。
+- **embedding / rerank 独立超时**：`upstream_timeout_embedding`（默认 60s）、`upstream_timeout_rerank`（默认 30s），并按候选数扩展预算 —— 修复了此前沿用全局 12s 超时导致一次超时就耗尽 15s 预算、其余 Key 永远轮不到的问题。
+- **配置热更新即时生效**：管理面板修改 `max_concurrency_per_key` 或增删 Key 后立即生效（无需重启）；配置变化时自动清理已删除 Key 的冷却/熔断/延迟状态。`POST /v1/reload` 会额外清空全部运行时状态。
 
 ### 内存管理机制
 
@@ -217,15 +226,17 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 ```
 请求进入
-  → 全局 semaphore(30)           # 背压：最多 30 个并发上游请求
-  → per-key semaphore(5)         # 单 Key 限流
-  → OCR 完成后 del body          # 立即释放原始请求体
-  → gc.collect() + malloc_trim   # 归还堆页给内核
-  → MALLOC_ARENA_MAX=2           # 源头消除 glibc 碎片
-  → MemoryHigh=768M              # 内核回收压力
-  → MemoryMax=1024M              # 硬上限 OOM Kill
-  → health-check (60s)           # 假死自动重启
-  → daily restart (04:00)        # 兜底清零
+  → Caddy request_body max_size(25MB)  # 解析前拒绝超大请求
+  → uvicorn --limit-concurrency 150     # 连接层背压
+  → 全局 semaphore(30, 2s 快速失败)    # 背压：最多 30 个并发上游请求，超限 503+Retry-After
+  → per-key semaphore(5)               # 单 Key 限流（排队时间计入预算）
+  → OCR 完成后 del body/img_b64        # 立即释放原始请求体
+  → gc.collect() + malloc_trim         # 归还堆页给内核
+  → MALLOC_ARENA_MAX=2                 # 源头消除 glibc 碎片
+  → MemoryHigh=768M                    # 内核回收压力
+  → MemoryMax=1024M                    # 硬上限 OOM Kill
+  → health-check (60s)                 # 假死自动重启
+  → daily restart (04:00)              # 兜底清零
 ```
 
 ### 资源占用参考
@@ -243,13 +254,25 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 | 安全措施 | 说明 |
 |---------|------|
-| 配置加密 | 所有 API Key 使用 Fernet 对称加密存储，磁盘上无明文 |
+| 配置加密 | 所有 API Key 使用 Fernet 对称加密存储，磁盘上无明文；写入带 fsync 原子落盘 |
 | 文件权限 | `.env` 和配置文件权限 600，仅服务用户可读 |
 | 系统用户 | 服务运行在专用 `ocrproxy` 系统用户下，无登录权限 |
 | systemd 沙箱 | NoNewPrivileges、ProtectSystem、ProtectHome 等 |
 | SSRF 防护 | Key 验证接口阻止访问内网/本地/元数据地址 |
 | 时序攻击防护 | 密钥比较使用 `hmac.compare_digest` 常量时间比较 |
-| 仅本地监听 | 服务监听 127.0.0.1，外部访问必须经过 Caddy (HTTPS) |
+| 仅本地监听 | 服务监听 127.0.0.1，外部访问必须经过 Caddy |
+| 请求体大小限制 | Caddy `request_body max_size 25MB` + uvicorn `--limit-concurrency 150` |
+
+> ⚠️ 若 9090 端口以明文 HTTP 直接暴露公网，`PROXY_API_KEY` 会以明文传输。建议：绑定域名启用 TLS（见 Caddyfile.example）、安全组限制来源 IP、或全部流量走 EdgeOne HTTPS 回源。
+
+### 本地压测
+
+`scripts/load_test.py` 配合 `scripts/mock_upstream.py` 可在本地完整验证调度行为与内存表现（429 切换、空流切换、内容审核早退、过载快速失败、配置热更新、RSS 平台期）：
+
+```bash
+python -m venv venv && venv/bin/pip install -r requirements.txt
+venv/bin/python scripts/load_test.py
+```
 
 ## 目录结构
 
@@ -259,21 +282,24 @@ vm-app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI 应用入口
 │   ├── scheduler.py          # 故障转移调度器（含全局并发控制、内存回收）
-│   ├── config_store.py       # 加密配置存储
+│   ├── config_store.py       # 加密配置存储（带版本号，供状态清理）
 │   ├── stats.py              # 内存统计模块
 │   ├── auth.py               # 鉴权工具
+│   ├── upstream.py           # 上游 URL 拼接（共享工具）
 │   ├── proxy_routes.py       # 代理路由 /v1/*
 │   └── admin_routes.py       # 管理路由 /api/admin/*
 ├── static/
 │   └── admin.html            # 管理面板（SPA）
+├── scripts/
+│   ├── init_config.py        # 安装时初始化密钥与配置
+│   ├── health-check.sh       # systemd timer 健康检查
+│   ├── mock_upstream.py      # 本地压测用模拟上游
+│   └── load_test.py          # 本地行为/内存压测
 ├── client/
 │   ├── proxy_client.py       # Python 客户端封装
 │   └── example.py            # 使用示例
 ├── config/
 │   └── proxy_config.enc      # 加密配置文件（运行时生成）
-├── scripts/
-│   ├── init_config.py        # 配置初始化脚本
-│   └── health-check.sh       # 健康检查脚本（systemd timer 调用）
 ├── install.sh                # 一键安装脚本
 ├── ocrproxy.service          # systemd 服务模板
 ├── ocrproxy-health.service   # 健康检查服务
@@ -294,6 +320,8 @@ vm-app/
   "upstream_timeout": 12,
   "upstream_timeout_chat": 120,
   "upstream_timeout_ocr": 60,
+  "upstream_timeout_embedding": 60,
+  "upstream_timeout_rerank": 30,
   "schedule_total_budget": 15,
   "max_concurrency_per_key": 5,
   "cooldown_duration": 30,
@@ -329,7 +357,9 @@ vm-app/
 | `upstream_timeout` | 12 | 通用上游超时（秒） |
 | `upstream_timeout_chat` | 120 | Chat 模型超时（秒），推理模型需要更长时间 |
 | `upstream_timeout_ocr` | 60 | OCR / 视觉模型超时（秒） |
-| `schedule_total_budget` | 15 | 总故障转移预算（秒），超时后停止尝试更多候选。实际值会随候选数量自适应扩展（至少保证 3 次切换尝试） |
+| `upstream_timeout_embedding` | 60 | Embedding 超时（秒），大批量文档入库需要更长时间 |
+| `upstream_timeout_rerank` | 30 | Reranker 超时（秒），长候选列表重排需要更长时间 |
+| `schedule_total_budget` | 15 | 总故障转移预算（秒），超时后停止尝试更多候选。实际值会随候选数量自适应扩展（至少保证 3 次切换尝试，硬上限 180s；排队等待同样计入预算） |
 | `max_concurrency_per_key` | 5 | 每个 Key 的最大并发请求数 |
 | `cooldown_duration` | 30 | 5xx 及其他错误冷却时间（秒） |
 | `cooldown_429_sec` | 60 | 429 限流冷却时间（秒） |

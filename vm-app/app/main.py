@@ -4,6 +4,7 @@ ocrproxy VM 版本主应用入口
 """
 import os
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -28,7 +29,18 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("ocrproxy")
 
-app = FastAPI(title="OCRProxy VM", version="3.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not os.environ.get("PROXY_API_KEY"):
+        logger.warning("PROXY_API_KEY is not set — every /v1 request will be rejected with 401.")
+    yield
+    # Clean up resources on shutdown.
+    await close_client()
+    logger.info("OCRProxy shutdown complete.")
+
+
+app = FastAPI(title="OCRProxy VM", version="3.1.0", lifespan=lifespan)
 
 # Mount routers
 # Proxy routes at /v1/* (and /api/v1/* for transparent routing)
@@ -72,13 +84,6 @@ async def health_check():
             status_code=503,
             content={"status": "error", "detail": str(e)}
         )
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up resources on shutdown."""
-    await close_client()
-    logger.info("OCRProxy shutdown complete.")
 
 
 if __name__ == "__main__":

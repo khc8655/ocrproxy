@@ -15,6 +15,7 @@ from typing import Optional, Any, Callable, Dict
 from dataclasses import dataclass
 
 from . import stats
+from .config_store import get_config_version
 
 logger = logging.getLogger("scheduler")
 
@@ -26,8 +27,12 @@ logger = logging.getLogger("scheduler")
 # Python heap and can OOM a 1.6 GB VM.
 #
 # The limit is intentionally generous (30) — it only kicks in during true
-# bursts, not normal traffic.  Excess requests get 503 + Retry-After.
+# bursts, not normal traffic.  Requests that cannot acquire it within
+# _GLOBAL_QUEUE_TIMEOUT_SEC fail fast with 503 + Retry-After instead of
+# queueing unboundedly (a queued request keeps its parsed body on the heap,
+# which defeats the cap's purpose).
 _GLOBAL_MAX_CONCURRENCY = 30
+_GLOBAL_QUEUE_TIMEOUT_SEC = 2.0
 _global_semaphore: Optional[asyncio.Semaphore] = None
 
 
@@ -81,11 +86,30 @@ class AllCandidatesFailedError(Exception):
         self.errors = errors or []
 
 
+class GlobalOverloadError(Exception):
+    """Raised when the global concurrency cap is saturated and the bounded
+    queue wait timed out.  The proxy layer converts this to 503 +
+    Retry-After so burst clients back off instead of hanging."""
+    def __init__(self, retry_after: float = _GLOBAL_QUEUE_TIMEOUT_SEC):
+        super().__init__(
+            f"The proxy is at its global concurrency limit "
+            f"({_GLOBAL_MAX_CONCURRENCY} in-flight upstream requests). "
+            f"Retry after {retry_after:.0f}s."
+        )
+        self.retry_after = retry_after
+
+
 # Module-level in-memory state (persists across requests on the same instance)
 _cooldown_until: Dict[str, float] = {}
 _consecutive_failures: Dict[str, int] = {}
 _semaphores: Dict[str, asyncio.Semaphore] = {}
+_semaphore_limits: Dict[str, int] = {}
 _sem_lock = asyncio.Lock()
+
+# Config-version tracking: entries in the dicts above are pruned whenever the
+# encrypted config changes on disk (removed keys/providers leave no residue,
+# and a changed max_concurrency_per_key takes effect without a restart).
+_last_config_version: int = -1
 
 # Latency tracking for smart candidate ordering
 # cand_id -> list of recent latencies (seconds)
@@ -134,13 +158,12 @@ def _sort_candidates_by_latency(candidates: list) -> list:
     return sorted(candidates, key=lambda c: (_get_avg_latency(get_candidate_id(c)), candidates.index(c)))
 
 
-async def get_client(connect_timeout: float, read_timeout: float) -> httpx.AsyncClient:
+async def get_client() -> httpx.AsyncClient:
     """Get or create the global async HTTP client.
 
-    The client is created with a generous read timeout (300s) so that
-    slow endpoints (OCR, vision models) don't time out at the client level.
-    Per-request timeouts are enforced via httpx.Timeout on individual
-    build_request/send calls when needed.
+    The client uses a generous total timeout (300s); per-request timeouts are
+    enforced via httpx.Timeout on individual requests, so this default never
+    short-circuits a slow endpoint.
     """
     global _client
     if _client is not None:
@@ -166,10 +189,83 @@ async def close_client():
 
 
 async def get_key_semaphore(key_id: str, limit: int) -> asyncio.Semaphore:
+    """Get (or recreate) the per-key semaphore.
+
+    The limit is tracked per key so that changing max_concurrency_per_key in
+    the admin panel takes effect without a service restart.  Recreating a
+    semaphore that has waiters briefly over-subscribes the old limit — an
+    acceptable trade-off for a manual config change."""
     async with _sem_lock:
-        if key_id not in _semaphores:
-            _semaphores[key_id] = asyncio.Semaphore(limit)
-        return _semaphores[key_id]
+        existing = _semaphores.get(key_id)
+        if existing is None or _semaphore_limits.get(key_id) != limit:
+            existing = asyncio.Semaphore(limit)
+            _semaphores[key_id] = existing
+            _semaphore_limits[key_id] = limit
+        return existing
+
+
+def _prune_runtime_state(config: dict):
+    """Drop scheduler state for candidates/keys no longer present in config.
+
+    Called automatically whenever the config version changes (disk reload or
+    admin save).  Without this, removed keys leave cooldown/circuit-breaker/
+    latency entries behind forever, and a changed max_concurrency_per_key
+    would keep living in the already-created semaphore objects.
+    """
+    global _last_config_version
+    valid_cand_ids = set()
+    valid_key_ids = set()
+    for cands in config.get("candidates", {}).values():
+        for cand in cands:
+            try:
+                valid_cand_ids.add(get_candidate_id(cand))
+                valid_key_ids.add(f"{cand['provider']}:{cand['key']}")
+            except KeyError:
+                continue
+    for state in (_cooldown_until, _consecutive_failures, _latency_history):
+        for k in list(state.keys()):
+            if k not in valid_cand_ids:
+                del state[k]
+    for k in list(_semaphores.keys()):
+        if k not in valid_key_ids:
+            del _semaphores[k]
+            _semaphore_limits.pop(k, None)
+    _last_config_version = get_config_version()
+
+
+def reset_runtime_state():
+    """Clear ALL runtime scheduling state (cooldowns, circuit breakers,
+    latency history, per-key semaphores).
+
+    Used by POST /v1/reload to give a freshly reloaded config a clean slate.
+    In-flight requests keep references to the old semaphore objects, so the
+    effective per-key limit may briefly double — acceptable for a manual
+    ops action."""
+    _cooldown_until.clear()
+    _consecutive_failures.clear()
+    _latency_history.clear()
+    _semaphores.clear()
+    _semaphore_limits.clear()
+
+
+async def _peek_first_chunk(resp: httpx.Response):
+    """Read the first chunk of a streaming response WITHOUT consuming the
+    stream iterator.
+
+    Returns (first_chunk, remainder_iterator, error_message).  The remainder
+    iterator is the SAME generator the response was being iterated with —
+    calling resp.aiter_bytes() again after a partial iteration would raise
+    StreamConsumed, so the live generator is handed back for the eventual
+    StreamingResponse to continue from."""
+    gen = resp.aiter_bytes()
+    try:
+        async for chunk in gen:
+            # returning from inside `async for` does NOT close the generator;
+            # keeping this reference alive keeps the stream resumable
+            return chunk, gen, None
+    except httpx.HTTPError as e:
+        return b"", None, f"stream broke before first byte ({type(e).__name__}: {e})"
+    return b"", None, None  # stream ended with zero bytes
 
 
 async def schedule(
@@ -186,6 +282,12 @@ async def schedule(
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
+
+    # Prune stale runtime state (cooldowns, semaphores, ...) when the config
+    # changed on disk — near-zero cost thanks to the version check.
+    v = get_config_version()
+    if v != _last_config_version:
+        _prune_runtime_state(config)
 
     # Smart ordering: when latency_based_routing is enabled, sort candidates
     # by recent average latency so the fastest provider is tried first.
@@ -218,7 +320,7 @@ async def schedule(
     last_status_code = None
     last_err_body = None
 
-    client = await get_client(min(5.0, upstream_timeout_sec), upstream_timeout_sec)
+    client = await get_client()
     # Per-request timeout: use a separate httpx.Timeout so that OCR (which
     # passes a longer upstream_timeout via config override) gets more time.
     req_timeout = httpx.Timeout(upstream_timeout_sec, connect=min(5.0, upstream_timeout_sec))
@@ -263,15 +365,31 @@ async def schedule(
         logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id}")
 
         cand_start = time.time()
-        # Acquire BOTH the per-key semaphore and the global semaphore.
+        # Acquire the per-key semaphore (queueing here preserves agent-mode
+        # behaviour), then the GLOBAL semaphore with a short bounded wait.
         # The global cap prevents memory exhaustion during burst ingestion
-        # (e.g. dozens of concurrent OCR base64 payloads).
+        # (e.g. dozens of concurrent OCR base64 payloads).  When it is
+        # saturated we fail FAST with 503 + Retry-After instead of queueing
+        # unboundedly — a queued request keeps its parsed body on the heap,
+        # which defeats the cap's purpose.
         global_sem = _get_global_semaphore()
-        async with sem, global_sem:
-            # Build request arguments (method, url, headers, json_body)
-            method, url, headers, body = build_request(cand, api_key, base_url)
-
+        await sem.acquire()
+        try:
             try:
+                await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
+            except asyncio.TimeoutError:
+                raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
+            # Budget re-check AFTER queueing: time spent waiting on the key
+            # semaphore counts toward the total failover budget — otherwise a
+            # long-queued request would still fire upstream long after its
+            # budget (and usually its client's patience) expired.
+            if time.time() - start_time >= total_budget_sec:
+                errors.append(f"budget_exhausted_after_{time.time() - start_time:.2f}s (queue wait)")
+                break
+            try:
+                # Build request arguments (method, url, headers, json_body)
+                method, url, headers, body = build_request(cand, api_key, base_url)
+
                 if is_stream:
                     req = client.build_request(method, url, headers=headers, json=body)
                     req.extensions["timeout"] = {
@@ -288,6 +406,28 @@ async def schedule(
 
                 # Success path (2xx)
                 if 200 <= status_code < 300:
+                    # For streams, peek the first chunk BEFORE committing to
+                    # this candidate.  Some providers return HTTP 200 and then
+                    # close the stream without sending a byte (or die with a
+                    # protocol error) — treat that as a failure and fail over
+                    # instead of handing the client a dead stream.
+                    first_chunk = b""
+                    remainder = None
+                    if is_stream:
+                        first_chunk, remainder, peek_err = await _peek_first_chunk(resp)
+                        if not first_chunk:
+                            await resp.aclose()
+                            reason = peek_err or "stream closed without sending any data"
+                            err_msg = f"{cand_id} returned HTTP 200 but {reason}"
+                            logger.warning(err_msg)
+                            errors.append(err_msg)
+                            cand_latency = time.time() - cand_start
+                            stats.record(model_type, 502, cand_latency,
+                                         provider=provider_name, key=key_label, error_msg=err_msg)
+                            # Short cooldown — likely a transient provider glitch
+                            _cooldown_until[cand_id] = time.time() + 5.0
+                            continue
+
                     _consecutive_failures[cand_id] = 0
                     _cooldown_until[cand_id] = 0.0
 
@@ -302,14 +442,27 @@ async def schedule(
 
                     if is_stream:
                         if handle_stream:
-                            stream_result = await handle_stream(resp)
+                            stream_result = await handle_stream(resp, first_chunk, remainder)
                             return ScheduleResult(
                                 stream_resp=stream_result,
                                 routed_via=routed_via,
                                 fallback_attempts=attempt_seq - 1
                             )
+                        # No handle_stream provided: hand back an async
+                        # generator that replays the prefetched chunk and
+                        # continues the live stream (internal callers always
+                        # pass handle_stream for streams).
+                        async def _fallback_gen(first=first_chunk, rem=remainder, r=resp):
+                            try:
+                                if first:
+                                    yield first
+                                if rem is not None:
+                                    async for chunk in rem:
+                                        yield chunk
+                            finally:
+                                await r.aclose()
                         return ScheduleResult(
-                            stream_resp=resp,
+                            stream_resp=_fallback_gen(),
                             routed_via=routed_via,
                             fallback_attempts=attempt_seq - 1
                         )
@@ -350,41 +503,14 @@ async def schedule(
                 stats.record(model_type, status_code, cand_latency,
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
-                # --- Early exit for content-moderation 400s ---
-                # If the upstream rejected the content (not the key), trying
-                # other candidates with the same model/content is futile —
-                # they'll likely also reject it.  Short-circuit to save budget
-                # and avoid wasting 15 API calls on the same bad image.
-                if status_code == 400 and last_err_body:
-                    body_lower = last_err_body.lower()
-                    _is_content_moderation = any(kw in body_lower for kw in [
-                        "sensitive", "content", "moderation", "inappropriate",
-                        "data_inspection", "safety", "policy", "violation",
-                    ])
-                    if _is_content_moderation and not _400_is_key_issue:
-                        logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
-                        errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
-                        break
-
-                # --- Cooldown logic ---
-                # 400 is ambiguous: it can mean either a request-level problem
-                # (e.g. content moderation, bad image) or a key/account problem
-                # (e.g. "no active subscription").  We only cooldown 400s that
-                # are clearly key/account issues — identified by the error body.
-                # Content-moderation 400s must NOT be cooled down because they
-                # are specific to the request content and won't repeat for
-                # different requests.
-                #
-                # Cooldown policy:
-                #   400 (key issue)  – short cooldown (10s)
-                #   400 (content)    – no cooldown (request-specific)
-                #   401/403          – auth failure, longer cooldown
-                #   429              – rate limiting
-                #   5xx              – server error
-                #   404/422          – request-level, no cooldown
-
-                # Check if 400 is a key/account problem (vs content moderation)
+                # --- Classify 400s BEFORE the early-exit check below ---
+                # The classification used to be computed after the code that
+                # referenced it, causing an UnboundLocalError on the first
+                # content-moderation 400: the error fell into the generic
+                # exception handler, wrongly cooling the key down and feeding
+                # the circuit breaker.
                 _400_is_key_issue = False
+                _is_content_moderation = False
                 if status_code == 400 and last_err_body:
                     body_lower = last_err_body.lower()
                     # Key/account/subscription problems that repeat across requests
@@ -394,6 +520,44 @@ async def schedule(
                         "payment", "plan", "insufficient",
                     ]):
                         _400_is_key_issue = True
+                    elif any(kw in body_lower for kw in [
+                        # Deliberately narrow: a bare "content" would also
+                        # match "messages content too long", which other
+                        # providers may well accept — killing legitimate
+                        # failover.  Chinese variants included because several
+                        # CN providers localise error bodies.
+                        "content_filter", "content management", "content moderation",
+                        "data_inspection", "moderation", "sensitive", "inappropriate",
+                        "pornograph", "审核", "敏感", "违规",
+                    ]):
+                        _is_content_moderation = True
+
+                # --- Early exit for content-moderation 400s ---
+                # If the upstream rejected the content (not the key), trying
+                # other candidates with the same content is futile — they'll
+                # likely also reject it.  Short-circuit to save budget and
+                # avoid wasting 15 API calls on the same bad image.
+                if _is_content_moderation:
+                    logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
+                    errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                    break
+
+                # --- Cooldown logic ---
+                # 400 is ambiguous: it can mean either a request-level problem
+                # (e.g. content moderation, bad image) or a key/account problem
+                # (e.g. "no active subscription").  Only 400s that are clearly
+                # key/account issues — identified by the error body — are
+                # cooled down.  Content-moderation 400s must NOT be cooled
+                # down because they are specific to the request content and
+                # won't repeat for different requests.
+                #
+                # Cooldown policy:
+                #   400 (key issue)  – short cooldown (10s)
+                #   400 (content)    – no cooldown (request-specific)
+                #   401/403          – auth failure, longer cooldown
+                #   429              – rate limiting
+                #   5xx              – server error
+                #   404/422          – request-level, no cooldown
 
                 should_cooldown = (
                     (status_code == 400 and _400_is_key_issue)
@@ -439,7 +603,9 @@ async def schedule(
                 errors.append(err_msg)
 
                 cand_latency = time.time() - cand_start
-                stats.record(model_type, 500, cand_latency,
+                # 599 = pseudo-code for client-side read timeout: keeps the 5xx
+                # bucket in stats but stays distinguishable from real upstream 5xx.
+                stats.record(model_type, 599, cand_latency,
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
             except httpx.ConnectTimeout as e:
@@ -452,7 +618,8 @@ async def schedule(
                 errors.append(err_msg)
 
                 cand_latency = time.time() - cand_start
-                stats.record(model_type, 500, cand_latency,
+                # 598 = pseudo-code for connect timeout (network issue, not upstream 5xx)
+                stats.record(model_type, 598, cand_latency,
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
             except Exception as e:
@@ -472,6 +639,11 @@ async def schedule(
                 cand_latency = time.time() - cand_start
                 stats.record(model_type, 500, cand_latency,
                              provider=provider_name, key=key_label, error_msg=err_msg)
+
+            finally:
+                global_sem.release()
+        finally:
+            sem.release()
 
     # If all candidates failed or were skipped
     if errors:

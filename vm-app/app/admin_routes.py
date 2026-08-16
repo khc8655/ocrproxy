@@ -4,13 +4,13 @@ Ported from EdgeOne edge-functions/api/admin/*.js.
 """
 import ipaddress
 import socket
-import re
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from urllib.parse import urlparse
 
 from .config_store import get_config, save_config
+from .upstream import join_upstream
 from . import stats
 from .auth import verify_admin_auth
 
@@ -235,14 +235,6 @@ async def verify_key_endpoint(request: Request):
         })
 
 
-def _join_upstream(base_url: str, path: str) -> str:
-    """Build upstream URL, handling version paths automatically."""
-    base = base_url.rstrip("/")
-    if re.search(r"/v\d+$", base):
-        return f"{base}/{path.lstrip('/')}"
-    return f"{base}/v1/{path.lstrip('/')}"
-
-
 @router.post("/test-candidate")
 async def test_candidate_endpoint(request: Request):
     """Test a specific candidate route by sending a minimal request."""
@@ -272,7 +264,7 @@ async def test_candidate_endpoint(request: Request):
         return JSONResponse(content={"success": False, "error": f"Key '{key_label}' not found"})
 
     base_url = provider.get("base_url", "")
-    url = _join_upstream(base_url, "chat/completions")
+    url = join_upstream(base_url, "chat/completions")
 
     # Build minimal test request based on type
     if cand_type in ("chat", "ocr"):
@@ -283,10 +275,10 @@ async def test_candidate_endpoint(request: Request):
             "stream": False,
         }
     elif cand_type == "embedding":
-        url = _join_upstream(base_url, "embeddings")
+        url = join_upstream(base_url, "embeddings")
         test_body = {"model": model, "input": "test"}
     elif cand_type == "reranker":
-        url = _join_upstream(base_url, "rerank")
+        url = join_upstream(base_url, "rerank")
         test_body = {"model": model, "query": "test", "documents": ["a"]}
     else:
         test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}

@@ -32,7 +32,18 @@
 }
 
 # ── 端口 9090：OCRProxy API 代理 ───────────────────────────
+# ⚠ 安全提示：此站点当前为明文 HTTP。经 http://IP:9090 直连时，
+# PROXY_API_KEY / ADMIN_PASSWORD 会以明文穿越公网。建议任选其一：
+#   1. 绑定域名启用 TLS（参考本文件底部的直连 HTTPS 场景）；
+#   2. 腾讯云安全组将 9090 限制到你自己的出口 IP；
+#   3. 全部流量走 EdgeOne HTTPS 回源。
 :9090 {
+    # 限制请求体大小：OCR base64 通常 <10MB，25MB 已留足余量。
+    # 在解析进 Python 堆之前就拒绝超大请求，保护 1.6GB 小内存 VM。
+    request_body {
+        max_size 25MB
+    }
+
     reverse_proxy 127.0.0.1:8787 {
         flush_interval -1
         header_up X-Real-IP {remote_host}
