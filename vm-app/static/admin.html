@@ -404,19 +404,56 @@
       <div id="panel-access" class="panel">
         <div class="card" style="padding:24px;max-width:800px;margin-bottom:24px;">
           <h3 class="chart-title" style="margin-bottom:16px;"><svg class="ic" aria-hidden="true"><use href="#fa-link"/></svg> 服务基础信息</h3>
-          <table style="margin-bottom:24px;">
+          <table style="margin-bottom:8px;">
             <tr><td style="width:140px;font-weight:600;color:var(--text-tertiary);border:none;padding:8px 0;">Base URL</td><td id="guideBaseUrl" style="font-family:var(--font-mono);color:var(--text-brand);border:none;padding:8px 0;">—</td><td style="border:none;"><button class="btn-icon" onclick="copyText(document.getElementById('guideBaseUrl').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg></button></td></tr>
             <tr><td style="font-weight:600;color:var(--text-tertiary);border:none;padding:8px 0;">API Key</td><td style="font-family:var(--font-mono);border:none;padding:8px 0;">Bearer &lt;your_proxy_api_key&gt;</td><td style="border:none;"></td></tr>
           </table>
-          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-code"/></svg> Python SDK</h3>
+          <div style="font-size:0.78rem;color:var(--text-tertiary);margin-bottom:20px;">
+            <svg class="ic" aria-hidden="true"><use href="#fa-circle-info"/></svg>
+            <b>model 填真实模型名</b>（见下方列表）走 Agent 中转：完全透传（工具调用 / 流式 / 思考等级全部原样转发），同模型多 Key 自动轮询。
+          </div>
+        </div>
+
+        <div class="card" style="padding:24px;max-width:800px;margin-bottom:24px;">
+          <h3 class="chart-title" style="margin-bottom:8px;"><svg class="ic" aria-hidden="true"><use href="#fa-server"/></svg> Agent 接入（真实模型名）</h3>
+          <div style="font-size:0.78rem;color:var(--text-tertiary);margin-bottom:12px;">当前可用模型：<span id="guideAgentModels" style="font-family:var(--font-mono);color:var(--text-brand);">—</span></div>
+          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-code"/></svg> Python SDK (openclaw / OpenAI 兼容客户端)</h3>
           <div class="code-block" style="margin-bottom:20px;">
             <button class="copy-btn" onclick="copyText(document.getElementById('pyCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
             <pre id="pyCode"></pre>
           </div>
-          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-terminal"/></svg> cURL</h3>
+          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-terminal"/></svg> cURL（含工具调用 + 流式）</h3>
           <div class="code-block">
             <button class="copy-btn" onclick="copyText(document.getElementById('curlCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
             <pre id="curlCode"></pre>
+          </div>
+        </div>
+
+        <div class="card" style="padding:24px;max-width:800px;">
+          <h3 class="chart-title" style="margin-bottom:8px;"><svg class="ic" aria-hidden="true"><use href="#fa-layer-group"/></svg> 知识库入库接入（4 个虚拟模型）</h3>
+          <div style="font-size:0.78rem;color:var(--text-tertiary);margin-bottom:16px;">
+            <svg class="ic" aria-hidden="true"><use href="#fa-circle-info"/></svg>
+            KB 入库使用固定别名 <b>chat / embedding / reranker / ocr</b> —— 它们<b>不会出现在 /v1/models 列表中</b>（该接口只返回 Agent 真实模型），直接按下例填写即可。代理自动：多供应商大并发轮询、429/500 切换、chat 自动禁思考并强制非流式。
+          </div>
+          <h3 class="chart-title" style="margin-bottom:12px;">① Chat 摘要（model="chat"）</h3>
+          <div class="code-block" style="margin-bottom:16px;">
+            <button class="copy-btn" onclick="copyText(document.getElementById('kbChatCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
+            <pre id="kbChatCode"></pre>
+          </div>
+          <h3 class="chart-title" style="margin-bottom:12px;">② Embedding 向量（model="embedding"）</h3>
+          <div class="code-block" style="margin-bottom:16px;">
+            <button class="copy-btn" onclick="copyText(document.getElementById('kbEmbCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
+            <pre id="kbEmbCode"></pre>
+          </div>
+          <h3 class="chart-title" style="margin-bottom:12px;">③ Reranker 重排（model="reranker"，/v1/rerank）</h3>
+          <div class="code-block" style="margin-bottom:16px;">
+            <button class="copy-btn" onclick="copyText(document.getElementById('kbRerankCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
+            <pre id="kbRerankCode"></pre>
+          </div>
+          <h3 class="chart-title" style="margin-bottom:12px;">④ OCR 识图（model="ocr"，/v1/ocr）</h3>
+          <div class="code-block">
+            <button class="copy-btn" onclick="copyText(document.getElementById('kbOcrCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
+            <pre id="kbOcrCode"></pre>
           </div>
         </div>
       </div>
@@ -545,6 +582,9 @@
     <div class="form-group"><label class="form-label">上游模型 ID</label><input type="text" id="candModelInput" class="form-control" placeholder="如 deepseek-ai/DeepSeek-V3"></div>
     <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveCandidate()">保存</button></div>
 
+  </div>
+</div>
+
 <div class="modal-overlay" id="agentModelModal">
   <div class="modal-box">
     <h3 class="modal-title" id="agentModelModalTitle">新增 Agent 模型</h3>
@@ -553,8 +593,6 @@
     <div class="form-group"><label class="form-label">绑定 Key 标签（可多选，自动轮询）</label><div id="agentKeyList" class="cand-key-list"></div></div>
     <div class="form-group"><label class="form-label">模型 ID</label><input type="text" id="agentModelInput" class="form-control" placeholder="如 deepseek-ai/DeepSeek-V3"></div>
     <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('agentModelModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveAgentModel()">保存</button></div>
-  </div>
-</div>
   </div>
 </div>
 
@@ -1222,25 +1260,62 @@ async function testCandidate(cat, i) {
 // ═══════════════════════════════════════════════════════════
 function updateAccessGuide() {
   const base = window.location.origin + "/v1";
+  const agentModels = [...new Set((state.config.agent_models || []).map(m => m.model))].filter(Boolean);
+  const demoModel = agentModels[0] || "<agent模型名>";
   document.getElementById("guideBaseUrl").innerText = base;
+  document.getElementById("guideAgentModels").innerText = agentModels.length ? agentModels.join("、") : "（未配置，请先在「Agent 模型」页添加）";
   document.getElementById("pyCode").innerText = `from openai import OpenAI
 
 client = OpenAI(
-    api_key="your_proxy_api_key",
+    api_key="your_proxy_api_key",   # 面板的 PROXY_API_KEY
     base_url="${base}"
 )
 
+# model 填真实模型名（多 Key 自动轮询），其余参数原样透传：
+# tools / tool_choice / stream / reasoning_effort / enable_thinking 等均可直接使用
 completion = client.chat.completions.create(
-    model="chat",
+    model="${demoModel}",
     messages=[{"role": "user", "content": "你好"}],
+    tools=[{"type": "function", "function": {
+        "name": "get_weather",
+        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}
+    }}],
     stream=True
 )
 for chunk in completion:
-    print(chunk.choices[0].delta.content, end="")`;
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")`;
   document.getElementById("curlCode").innerText = `curl -X POST "${base}/chat/completions" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "chat", "messages": [{"role": "user", "content": "Hi!"}]}'`;
+  -d '{
+    "model": "${demoModel}",
+    "messages": [{"role": "user", "content": "北京天气?"}],
+    "tools": [{"type": "function", "function": {"name": "get_weather",
+      "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}}}],
+    "stream": true
+  }'`;
+  document.getElementById("kbChatCode").innerText = `# 知识库摘要：model 固定填 "chat"（不在 /v1/models 列表中，属预期）
+# 代理自动：多供应商轮询 + 429/500 切换 + 禁思考 + 强制非流式
+curl -X POST "${base}/chat/completions" \\
+  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "chat", "messages": [{"role": "user", "content": "总结以下段落..."}]}'`;
+  document.getElementById("kbEmbCode").innerText = `# 向量化：model 固定填 "embedding"（同样不在 /v1/models 中）
+curl -X POST "${base}/embeddings" \\
+  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "embedding", "input": ["文本1", "文本2"]}'`;
+  document.getElementById("kbRerankCode").innerText = `# 重排：model 固定填 "reranker"，端点是 /v1/rerank
+curl -X POST "${base}/rerank" \\
+  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "reranker", "query": "查询词", "documents": ["候选1", "候选2"]}'`;
+  document.getElementById("kbOcrCode").innerText = `# 识图：model 固定填 "ocr"，端点是 /v1/ocr，传 base64 或图片 URL
+curl -X POST "${base}/ocr" \\
+  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"image_base64": "<图片base64，不含 data: 前缀>", "prompt": "识别图中所有文字"}'`;
 }
 
 function renderAccess() { /* guide updated in loadAllData */ }
