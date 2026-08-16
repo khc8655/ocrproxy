@@ -291,14 +291,23 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 > ⚠️ 若 9090 端口以明文 HTTP 直接暴露公网，`PROXY_API_KEY` 会以明文传输。建议：绑定域名启用 TLS（见 Caddyfile.example）、安全组限制来源 IP、或全部流量走 EdgeOne HTTPS 回源。
 
-### 本地压测
+### 本地 / 线上测试套件
 
-`scripts/load_test.py` 配合 `scripts/mock_upstream.py` 可在本地完整验证调度行为与内存表现（429 切换、空流切换、内容审核早退、过载快速失败、配置热更新、RSS 平台期）：
+`scripts/mock_upstream.py` 提供可控的模拟上游（按 API key / 请求体切换 429、空流、内容审核、工具调用、SSE 回显等行为），两套测试基于它运行：
+
+**`scripts/agent_test.py` — Agent 中转专项（14 项）**：`/v1/models` 仅含 agent_models；KB 模式强制禁思考+非流式；未知模型 404；**思考等级全量参数透传**（reasoning_effort / enable_thinking / chat_template_kwargs / thinking / temperature / top_p / seed / stop / logprobs 等逐字段比对）；工具调用（JSON + 流式 tool_calls 增量）；流式 SSE 与直连上游**逐字节一致**（含 reasoning_content）；429 / 空流故障切换；**中转效率基准**（RTT 开销、TTFB 开销、30 并发流保真）。
+
+**`scripts/load_test.py` — KB 调度回归（9 项）**：429 切换、空流切换、内容审核早退（仅 1 次上游调用）、KB 注入、过载快速失败（503+Retry-After）、配置热更新、状态清理、3 轮大并发 OCR 内存验证。
 
 ```bash
 python -m venv venv && venv/bin/pip install -r requirements.txt
-venv/bin/python scripts/load_test.py
+venv/bin/python scripts/agent_test.py   # Agent 中转专项
+venv/bin/python scripts/load_test.py    # KB 调度回归
+# VM 线上运行（测试实例使用独立端口 8788/9911 与隔离配置，不影响生产）：
+sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/agent_test.py
 ```
+
+参考实测（腾讯云 VM，2026-08）：Agent 套件 14/14、KB 套件 9/9 全部通过；中转开销 RTT p50 ≈ 3ms、流式首字节开销 ≈ 3ms；3 轮 120 并发大 OCR 后 RSS 稳定 70MB（无泄漏）；真实供应商端到端验证 tool_calls 与 reasoning_content 流式透传正常。
 
 ## 目录结构
 
@@ -319,8 +328,9 @@ vm-app/
 ├── scripts/
 │   ├── init_config.py        # 安装时初始化密钥与配置
 │   ├── health-check.sh       # systemd timer 健康检查
-│   ├── mock_upstream.py      # 本地压测用模拟上游
-│   └── load_test.py          # 本地行为/内存压测
+│   ├── mock_upstream.py      # 测试用模拟上游（可控故障/SSE/工具调用回显）
+│   ├── agent_test.py         # Agent 中转专项测试（透传/工具/流式/效率）
+│   └── load_test.py          # KB 调度回归 + 内存压测
 ├── client/
 │   ├── proxy_client.py       # Python 客户端封装
 │   └── example.py            # 使用示例
