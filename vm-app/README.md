@@ -10,11 +10,13 @@
 
 | 模式 | 触发方式 | 行为 |
 |------|----------|------|
-| **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用该类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） |
-| **Agent 模式** | `model` 为真实模型名（如 `deepseek-ai/DeepSeek-V3`） | 仅路由到匹配该模型的候选，429/500 自动切换到同模型的其他供应商 |
+| **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） |
+| **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**独立配置节 `agent_models`** 路由到匹配该模型的候选，429/500 自动切换到同模型的其他供应商 |
 
 - **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）
-- **Agent 模式故障切换**：同一模型配置在多个供应商/Key 下时，429/500 自动切换到下一个
+- **Agent 模式故障切换**：同一模型在 `agent_models` 配置多个供应商/Key 时，429/500 自动切换到下一个
+- **独立管理**：`agent_models`（Agent 中转）与 `candidates`（知识库 4 个虚拟模型）完全分离，管理面板有独立「Agent 模型」Tab
+- **`/v1/models` 只返回 `agent_models` 的真实模型**，不包含 4 个虚拟别名（知识库工具的示例代码直接写死虚拟名，无需从列表获取）
 - **KB 入库模式**：chat 始终禁用思考（`reasoning_effort=low` + `enable_thinking=false`）且**始终快速**（强制非流式 + `chat_fast_timeout` 短超时）——批量入库无需交互式流式与推理，已写死、无开关
 
 ### 路由与故障转移
@@ -369,7 +371,11 @@ vm-app/
     "embedding": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-m3"}],
     "reranker": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-reranker-v2-m3"}],
     "ocr": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-OCR"}]
-  }
+  },
+  "agent_models": [
+    {"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"},
+    {"provider": "stepfun", "key": "KeyB", "model": "deepseek-ai/DeepSeek-V3"}
+  ]
 }
 ```
 

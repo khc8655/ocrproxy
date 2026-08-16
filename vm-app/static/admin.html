@@ -238,7 +238,7 @@
     .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 
     /* ── Toast ── */
-    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 6000; display: flex; flex-direction: column; gap: 8px; }
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 12px 20px; background: var(--bg-base); border: 1px solid var(--border-1);
       border-radius: var(--radius-8); box-shadow: 0 4px 16px rgba(0,0,0,0.08);
@@ -292,14 +292,14 @@
   .ic-spin { animation: ic-spin 1s linear infinite; }
   @keyframes ic-spin { to { transform: rotate(360deg); } }
 </style>
-<svg xmlns="http://www.w3.org/2000/svg" style="display:none"><symbol id="fa-arrow-down" viewBox="0 0 384 512"><path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></symbol><symbol id="fa-arrow-up" viewBox="0 0 384 512"><path d="M214.6 41.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 141.2V448c0 17.7 14.3 32 32 32s32-14.3 32-32V141.2L329.4 246.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z"/></symbol><symbol id="fa-arrows-rotate" viewBox="0 0 512 512"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H336c-17.7 0-32 14.3-32 32s14.3 32 32 32H463.5c0 0 0 0 0 0h.4c17.7 0 32-14.3 32-32V64c0-17.7-14.3-32-32-32s-32 14.3-32 32v51.2L414.4 97.6c-87.5-87.5-229.3-87.5-316.8 0C73.2 122 55.6 150.7 44.8 181.4c-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.5zM39 289.3c-5 1.5-9.8 4.2-13.7 8.2c-4 4-6.7 8.8-8.1 14c-.3 1.2-.6 2.5-.8 3.8c-.3 1.7-.4 3.4-.4 5.1V448c0 17.7 14.3 32 32 32s32-14.3 32-32V396.9l17.6 17.5 0 0c87.5 87.4 229.3 87.4 316.7 0c24.4-24.4 42.1-53.1 52.9-83.7c5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0l-.1-.1L125.6 352H176c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.4c-1.6 0-3.2 .1-4.8 .3s-3.1 .5-4.6 1z"/></symbol><symbol id="fa-bolt" viewBox="0 0 448 512"><path d="M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288H175.5L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7H272.5L349.4 44.6z"/></symbol><symbol id="fa-chevron-down" viewBox="0 0 512 512"><path d="M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z"/></symbol><symbol id="fa-circle-check" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></symbol><symbol id="fa-circle-exclamation" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24V264c0 13.3-10.7 24-24 24s-24-10.7-24-24V152c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></symbol><symbol id="fa-circle-info" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></symbol><symbol id="fa-clock" viewBox="0 0 512 512"><path d="M256 0a256 256 0 1 1 0 512A256 256 0 1 1 256 0zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></symbol><symbol id="fa-code" viewBox="0 0 640 512"><path d="M392.8 1.2c-17-4.9-34.7 5-39.6 22l-128 448c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l128-448c4.9-17-5-34.7-22-39.6zm80.6 120.1c-12.5 12.5-12.5 32.8 0 45.3L562.7 256l-89.4 89.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l112-112c12.5-12.5 12.5-32.8 0-45.3l-112-112c-12.5-12.5-32.8-12.5-45.3 0zm-306.7 0c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3l112 112c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256l89.4-89.4c12.5-12.5 12.5-32.8 0-45.3z"/></symbol><symbol id="fa-copy" viewBox="0 0 512 512"><path d="M272 0H396.1c12.7 0 24.9 5.1 33.9 14.1l67.9 67.9c9 9 14.1 21.2 14.1 33.9V336c0 26.5-21.5 48-48 48H272c-26.5 0-48-21.5-48-48V48c0-26.5 21.5-48 48-48zM48 128H192v64H64V448H256V416h64v48c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V176c0-26.5 21.5-48 48-48z"/></symbol><symbol id="fa-flask" viewBox="0 0 448 512"><path d="M288 0H160 128C110.3 0 96 14.3 96 32s14.3 32 32 32V196.8c0 11.8-3.3 23.5-9.5 33.5L10.3 406.2C3.6 417.2 0 429.7 0 442.6C0 480.9 31.1 512 69.4 512H378.6c38.3 0 69.4-31.1 69.4-69.4c0-12.8-3.6-25.4-10.3-36.4L329.5 230.4c-6.2-10.1-9.5-21.7-9.5-33.5V64c17.7 0 32-14.3 32-32s-14.3-32-32-32H288zM192 196.8V64h64V196.8c0 23.7 6.6 46.9 19 67.1L309.5 320h-171L173 263.9c12.4-20.2 19-43.4 19-67.1z"/></symbol><symbol id="fa-floppy-disk" viewBox="0 0 448 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32H288c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></symbol><symbol id="fa-key" viewBox="0 0 512 512"><path d="M336 352c97.2 0 176-78.8 176-176S433.2 0 336 0S160 78.8 160 176c0 18.7 2.9 36.8 8.3 53.7L7 391c-4.5 4.5-7 10.6-7 17v80c0 13.3 10.7 24 24 24h80c13.3 0 24-10.7 24-24V448h40c13.3 0 24-10.7 24-24V384h40c6.4 0 12.5-2.5 17-7l33.3-33.3c16.9 5.4 35 8.3 53.7 8.3zM376 96a40 40 0 1 1 0 80 40 40 0 1 1 0-80z"/></symbol><symbol id="fa-layer-group" viewBox="0 0 576 512"><path d="M264.5 5.2c14.9-6.9 32.1-6.9 47 0l218.6 101c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 149.8C37.4 145.8 32 137.3 32 128s5.4-17.9 13.9-21.8L264.5 5.2zM476.9 209.6l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 277.8C37.4 273.8 32 265.3 32 256s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2zm-152 198.2l152-70.2 53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 405.8C37.4 401.8 32 393.3 32 384s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0z"/></symbol><symbol id="fa-link" viewBox="0 0 640 512"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"/></symbol><symbol id="fa-list-ol" viewBox="0 0 512 512"><path d="M24 56c0-13.3 10.7-24 24-24H80c13.3 0 24 10.7 24 24V176h16c13.3 0 24 10.7 24 24s-10.7 24-24 24H40c-13.3 0-24-10.7-24-24s10.7-24 24-24H56V80H48C34.7 80 24 69.3 24 56zM86.7 341.2c-6.5-7.4-18.3-6.9-24 1.2L51.5 357.9c-7.7 10.8-22.7 13.3-33.5 5.6s-13.3-22.7-5.6-33.5l11.1-15.6c23.7-33.2 72.3-35.6 99.2-4.9c21.3 24.4 20.8 60.9-1.1 84.7L86.8 432H120c13.3 0 24 10.7 24 24s-10.7 24-24 24H32c-9.5 0-18.2-5.6-22-14.4s-2.1-18.9 4.3-25.9l72-78c5.3-5.8 5.4-14.6 .3-20.5zM224 64H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32zm0 160H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32zm0 160H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></symbol><symbol id="fa-pen" viewBox="0 0 512 512"><path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/></symbol><symbol id="fa-plus" viewBox="0 0 448 512"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/></symbol><symbol id="fa-right-from-bracket" viewBox="0 0 512 512"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></symbol><symbol id="fa-rotate-right" viewBox="0 0 512 512"><path d="M463.5 224H472c13.3 0 24-10.7 24-24V72c0-9.7-5.8-18.5-14.8-22.2s-19.3-1.7-26.2 5.2L413.4 96.6c-87.6-86.5-228.7-86.2-315.8 1c-87.5 87.5-87.5 229.3 0 316.8s229.3 87.5 316.8 0c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0c-62.5 62.5-163.8 62.5-226.3 0s-62.5-163.8 0-226.3c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2s12.5 14.8 22.2 14.8H463.5z"/></symbol><symbol id="fa-spinner" viewBox="0 0 512 512"><path d="M304 48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zm0 416a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM48 304a48 48 0 1 0 0-96 48 48 0 1 0 0 96zm464-48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM142.9 437A48 48 0 1 0 75 369.1 48 48 0 1 0 142.9 437zm0-294.2A48 48 0 1 0 75 75a48 48 0 1 0 67.9 67.9zM369.1 437A48 48 0 1 0 437 369.1 48 48 0 1 0 369.1 437z"/></symbol><symbol id="fa-terminal" viewBox="0 0 576 512"><path d="M9.4 86.6C-3.1 74.1-3.1 53.9 9.4 41.4s32.8-12.5 45.3 0l192 192c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L178.7 256 9.4 86.6zM256 416H544c17.7 0 32 14.3 32 32s-14.3 32-32 32H256c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></symbol><symbol id="fa-trash-can" viewBox="0 0 448 512"><path d="M135.2 17.7C140.6 6.8 151.7 0 163.8 0H284.2c12.1 0 23.2 6.8 28.6 17.7L320 32h96c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 96 0 81.7 0 64S14.3 32 32 32h96l7.2-14.3zM32 128H416V448c0 35.3-28.7 64-64 64H96c-35.3 0-64-28.7-64-64V128zm96 64c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16z"/></symbol><symbol id="fa-user" viewBox="0 0 448 512"><path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/></symbol></svg>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none"><symbol id="fa-arrow-down" viewBox="0 0 384 512"><path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></symbol><symbol id="fa-arrow-up" viewBox="0 0 384 512"><path d="M214.6 41.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 141.2V448c0 17.7 14.3 32 32 32s32-14.3 32-32V141.2L329.4 246.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z"/></symbol><symbol id="fa-arrows-rotate" viewBox="0 0 512 512"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H336c-17.7 0-32 14.3-32 32s14.3 32 32 32H463.5c0 0 0 0 0 0h.4c17.7 0 32-14.3 32-32V64c0-17.7-14.3-32-32-32s-32 14.3-32 32v51.2L414.4 97.6c-87.5-87.5-229.3-87.5-316.8 0C73.2 122 55.6 150.7 44.8 181.4c-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.5zM39 289.3c-5 1.5-9.8 4.2-13.7 8.2c-4 4-6.7 8.8-8.1 14c-.3 1.2-.6 2.5-.8 3.8c-.3 1.7-.4 3.4-.4 5.1V448c0 17.7 14.3 32 32 32s32-14.3 32-32V396.9l17.6 17.5 0 0c87.5 87.4 229.3 87.4 316.7 0c24.4-24.4 42.1-53.1 52.9-83.7c5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0l-.1-.1L125.6 352H176c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.4c-1.6 0-3.2 .1-4.8 .3s-3.1 .5-4.6 1z"/></symbol><symbol id="fa-bolt" viewBox="0 0 448 512"><path d="M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288H175.5L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7H272.5L349.4 44.6z"/></symbol><symbol id="fa-bug" viewBox="0 0 512 512"><path d="M256 0c53 0 96 43 96 96v3.6c0 15.7-12.7 28.4-28.4 28.4H188.4c-15.7 0-28.4-12.7-28.4-28.4V96c0-53 43-96 96-96zM41.4 105.4c12.5-12.5 32.8-12.5 45.3 0l64 64c.7 .7 1.3 1.4 1.9 2.1c14.2-7.3 30.4-11.4 47.5-11.4H312c17.1 0 33.2 4.1 47.5 11.4c.6-.7 1.2-1.4 1.9-2.1l64-64c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-64 64c-.7 .7-1.4 1.3-2.1 1.9c6.2 12 10.1 25.3 11.1 39.5H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H416c0 24.6-5.5 47.8-15.4 68.6c2.2 1.3 4.2 2.9 6 4.8l64 64c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0l-63.1-63.1c-24.5 21.8-55.8 36.2-90.3 39.6V240c0-8.8-7.2-16-16-16s-16 7.2-16 16V479.2c-34.5-3.4-65.8-17.8-90.3-39.6L86.6 502.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l64-64c1.9-1.9 3.9-3.4 6-4.8C101.5 367.8 96 344.6 96 320H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H96.3c1.1-14.1 5-27.5 11.1-39.5c-.7-.6-1.4-1.2-2.1-1.9l-64-64c-12.5-12.5-12.5-32.8 0-45.3z"/></symbol><symbol id="fa-chart-line" viewBox="0 0 512 512"><path d="M64 64c0-17.7-14.3-32-32-32S0 46.3 0 64V400c0 44.2 35.8 80 80 80H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H80c-8.8 0-16-7.2-16-16V64zm406.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L320 210.7l-57.4-57.4c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L240 221.3l57.4 57.4c12.5 12.5 32.8 12.5 45.3 0l128-128z"/></symbol><symbol id="fa-chevron-down" viewBox="0 0 512 512"><path d="M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z"/></symbol><symbol id="fa-circle-check" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/></symbol><symbol id="fa-circle-exclamation" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24V264c0 13.3-10.7 24-24 24s-24-10.7-24-24V152c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></symbol><symbol id="fa-circle-info" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></symbol><symbol id="fa-clock" viewBox="0 0 512 512"><path d="M256 0a256 256 0 1 1 0 512A256 256 0 1 1 256 0zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></symbol><symbol id="fa-code" viewBox="0 0 640 512"><path d="M392.8 1.2c-17-4.9-34.7 5-39.6 22l-128 448c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l128-448c4.9-17-5-34.7-22-39.6zm80.6 120.1c-12.5 12.5-12.5 32.8 0 45.3L562.7 256l-89.4 89.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l112-112c12.5-12.5 12.5-32.8 0-45.3l-112-112c-12.5-12.5-32.8-12.5-45.3 0zm-306.7 0c-12.5-12.5-32.8-12.5-45.3 0l-112 112c-12.5 12.5-12.5 32.8 0 45.3l112 112c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256l89.4-89.4c12.5-12.5 12.5-32.8 0-45.3z"/></symbol><symbol id="fa-copy" viewBox="0 0 512 512"><path d="M272 0H396.1c12.7 0 24.9 5.1 33.9 14.1l67.9 67.9c9 9 14.1 21.2 14.1 33.9V336c0 26.5-21.5 48-48 48H272c-26.5 0-48-21.5-48-48V48c0-26.5 21.5-48 48-48zM48 128H192v64H64V448H256V416h64v48c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V176c0-26.5 21.5-48 48-48z"/></symbol><symbol id="fa-flask" viewBox="0 0 448 512"><path d="M288 0H160 128C110.3 0 96 14.3 96 32s14.3 32 32 32V196.8c0 11.8-3.3 23.5-9.5 33.5L10.3 406.2C3.6 417.2 0 429.7 0 442.6C0 480.9 31.1 512 69.4 512H378.6c38.3 0 69.4-31.1 69.4-69.4c0-12.8-3.6-25.4-10.3-36.4L329.5 230.4c-6.2-10.1-9.5-21.7-9.5-33.5V64c17.7 0 32-14.3 32-32s-14.3-32-32-32H288zM192 196.8V64h64V196.8c0 23.7 6.6 46.9 19 67.1L309.5 320h-171L173 263.9c12.4-20.2 19-43.4 19-67.1z"/></symbol><symbol id="fa-floppy-disk" viewBox="0 0 448 512"><path d="M64 32C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32H288c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32V128zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></symbol><symbol id="fa-key" viewBox="0 0 512 512"><path d="M336 352c97.2 0 176-78.8 176-176S433.2 0 336 0S160 78.8 160 176c0 18.7 2.9 36.8 8.3 53.7L7 391c-4.5 4.5-7 10.6-7 17v80c0 13.3 10.7 24 24 24h80c13.3 0 24-10.7 24-24V448h40c13.3 0 24-10.7 24-24V384h40c6.4 0 12.5-2.5 17-7l33.3-33.3c16.9 5.4 35 8.3 53.7 8.3zM376 96a40 40 0 1 1 0 80 40 40 0 1 1 0-80z"/></symbol><symbol id="fa-layer-group" viewBox="0 0 576 512"><path d="M264.5 5.2c14.9-6.9 32.1-6.9 47 0l218.6 101c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 149.8C37.4 145.8 32 137.3 32 128s5.4-17.9 13.9-21.8L264.5 5.2zM476.9 209.6l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 277.8C37.4 273.8 32 265.3 32 256s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2zm-152 198.2l152-70.2 53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 405.8C37.4 401.8 32 393.3 32 384s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0z"/></symbol><symbol id="fa-link" viewBox="0 0 640 512"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"/></symbol><symbol id="fa-list-ol" viewBox="0 0 512 512"><path d="M24 56c0-13.3 10.7-24 24-24H80c13.3 0 24 10.7 24 24V176h16c13.3 0 24 10.7 24 24s-10.7 24-24 24H40c-13.3 0-24-10.7-24-24s10.7-24 24-24H56V80H48C34.7 80 24 69.3 24 56zM86.7 341.2c-6.5-7.4-18.3-6.9-24 1.2L51.5 357.9c-7.7 10.8-22.7 13.3-33.5 5.6s-13.3-22.7-5.6-33.5l11.1-15.6c23.7-33.2 72.3-35.6 99.2-4.9c21.3 24.4 20.8 60.9-1.1 84.7L86.8 432H120c13.3 0 24 10.7 24 24s-10.7 24-24 24H32c-9.5 0-18.2-5.6-22-14.4s-2.1-18.9 4.3-25.9l72-78c5.3-5.8 5.4-14.6 .3-20.5zM224 64H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32zm0 160H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32zm0 160H480c17.7 0 32 14.3 32 32s-14.3 32-32 32H224c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></symbol><symbol id="fa-network-wired" viewBox="0 0 640 512"><path d="M256 64H384v64H256V64zM240 0c-26.5 0-48 21.5-48 48v96c0 26.5 21.5 48 48 48h48v32H32c-17.7 0-32 14.3-32 32s14.3 32 32 32h96v32H80c-26.5 0-48 21.5-48 48v96c0 26.5 21.5 48 48 48H240c26.5 0 48-21.5 48-48V368c0-26.5-21.5-48-48-48H192V288H448v32H400c-26.5 0-48 21.5-48 48v96c0 26.5 21.5 48 48 48H560c26.5 0 48-21.5 48-48V368c0-26.5-21.5-48-48-48H512V288h96c17.7 0 32-14.3 32-32s-14.3-32-32-32H352V192h48c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48H240zM96 448V384H224v64H96zm320-64H544v64H416V384z"/></symbol><symbol id="fa-pen" viewBox="0 0 512 512"><path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/></symbol><symbol id="fa-plus" viewBox="0 0 448 512"><path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/></symbol><symbol id="fa-right-from-bracket" viewBox="0 0 512 512"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></symbol><symbol id="fa-rotate-right" viewBox="0 0 512 512"><path d="M463.5 224H472c13.3 0 24-10.7 24-24V72c0-9.7-5.8-18.5-14.8-22.2s-19.3-1.7-26.2 5.2L413.4 96.6c-87.6-86.5-228.7-86.2-315.8 1c-87.5 87.5-87.5 229.3 0 316.8s229.3 87.5 316.8 0c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0c-62.5 62.5-163.8 62.5-226.3 0s-62.5-163.8 0-226.3c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2s12.5 14.8 22.2 14.8H463.5z"/></symbol><symbol id="fa-server" viewBox="0 0 512 512"><path d="M64 32C28.7 32 0 60.7 0 96v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm48 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0zM64 288c-35.3 0-64 28.7-64 64v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V352c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm56 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0z"/></symbol><symbol id="fa-shuffle" viewBox="0 0 512 512"><path d="M403.8 34.4c12-5 25.7-2.2 34.9 6.9l64 64c6 6 9.4 14.1 9.4 22.6s-3.4 16.6-9.4 22.6l-64 64c-9.2 9.2-22.9 11.9-34.9 6.9s-19.8-16.6-19.8-29.6V160H352c-10.1 0-19.6 4.7-25.6 12.8L284 229.3 244 176l31.2-41.6C293.3 110.2 321.8 96 352 96h32V64c0-12.9 7.8-24.6 19.8-29.6zM164 282.7L204 336l-31.2 41.6C154.7 401.8 126.2 416 96 416H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H96c10.1 0 19.6-4.7 25.6-12.8L164 282.7zm274.6 188c-9.2 9.2-22.9 11.9-34.9 6.9s-19.8-16.6-19.8-29.6V416H352c-30.2 0-58.7-14.2-76.8-38.4L121.6 172.8c-6-8.1-15.5-12.8-25.6-12.8H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H96c30.2 0 58.7 14.2 76.8 38.4L326.4 339.2c6 8.1 15.5 12.8 25.6 12.8h32V320c0-12.9 7.8-24.6 19.8-29.6s25.7-2.2 34.9 6.9l64 64c6 6 9.4 14.1 9.4 22.6s-3.4 16.6-9.4 22.6l-64 64z"/></symbol><symbol id="fa-sliders" viewBox="0 0 512 512"><path d="M0 416c0 17.7 14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384c-17.7 0-32 14.3-32 32zm128 0a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM320 256a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32-80c-32.8 0-61 19.7-73.3 48L32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48zM192 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm73.3-64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64z"/></symbol><symbol id="fa-spinner" viewBox="0 0 512 512"><path d="M304 48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zm0 416a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM48 304a48 48 0 1 0 0-96 48 48 0 1 0 0 96zm464-48a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM142.9 437A48 48 0 1 0 75 369.1 48 48 0 1 0 142.9 437zm0-294.2A48 48 0 1 0 75 75a48 48 0 1 0 67.9 67.9zM369.1 437A48 48 0 1 0 437 369.1 48 48 0 1 0 369.1 437z"/></symbol><symbol id="fa-terminal" viewBox="0 0 576 512"><path d="M9.4 86.6C-3.1 74.1-3.1 53.9 9.4 41.4s32.8-12.5 45.3 0l192 192c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L178.7 256 9.4 86.6zM256 416H544c17.7 0 32 14.3 32 32s-14.3 32-32 32H256c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></symbol><symbol id="fa-trash-can" viewBox="0 0 448 512"><path d="M135.2 17.7C140.6 6.8 151.7 0 163.8 0H284.2c12.1 0 23.2 6.8 28.6 17.7L320 32h96c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 96 0 81.7 0 64S14.3 32 32 32h96l7.2-14.3zM32 128H416V448c0 35.3-28.7 64-64 64H96c-35.3 0-64-28.7-64-64V128zm96 64c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16z"/></symbol><symbol id="fa-user" viewBox="0 0 448 512"><path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/></symbol></svg>
 </head>
 <body>
 
 <!-- ── Login ── -->
 <div id="loginOverlay" class="login-overlay" style="display:none;">
   <div class="login-box">
-    <div class="login-logo"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></div>
+    <div class="login-logo"><svg class="ic" aria-hidden="true"><use href="#fa-layer-group"/></svg></div>
     <h2>LLM Proxy</h2>
     <p class="sub">管理控制台</p>
     <div class="form-group">
@@ -307,9 +307,8 @@
       <input type="password" id="loginKeyInput" class="form-control" placeholder="输入 API Key..." onkeydown="if(event.key==='Enter')handleLogin()">
     </div>
     <button class="btn btn-primary" id="loginBtn" style="width:100%;" onclick="handleLogin()">
-      <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 授权进入
+      <svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> 授权进入
     </button>
-    <div id="loginError" class="login-error" style="display:none; color:var(--status-error); font-size:0.85rem; margin-top:12px; text-align:center;"></div>
   </div>
 </div>
 
@@ -318,17 +317,17 @@
   <!-- Sidebar -->
   <div class="sidebar">
     <div class="sidebar-logo">
-      <div class="icon"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></div>
+      <div class="icon"><svg class="ic" aria-hidden="true"><use href="#fa-layer-group"/></svg></div>
       <span class="name">LLM Proxy</span>
     </div>
     <nav class="sidebar-nav" id="sidebarNav"></nav>
     <div class="sidebar-footer">
-      <div class="avatar"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></div>
+      <div class="avatar"><svg class="ic" aria-hidden="true"><use href="#fa-user"/></svg></div>
       <div class="info">
         <span class="name">管理员</span>
         <span class="role">已登录</span>
       </div>
-      <button class="logout" onclick="handleLogout()" title="退出"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
+      <button class="logout" onclick="handleLogout()" title="退出"><svg class="ic" aria-hidden="true"><use href="#fa-right-from-bracket"/></svg></button>
     </div>
   </div>
 
@@ -341,13 +340,13 @@
       </div>
       <div class="topbar-actions">
         <div class="save-indicator" id="saveIndicator">
-          <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 有未保存的更改
+          <svg class="ic" aria-hidden="true"><use href="#fa-circle-exclamation"/></svg> 有未保存的更改
           <button class="btn btn-secondary btn-sm" onclick="discardChanges()">放弃</button>
           <button class="btn btn-primary btn-sm pulse" onclick="saveAndReload()">
-            <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 保存并重载
+            <svg class="ic" aria-hidden="true"><use href="#fa-arrows-rotate"/></svg> 保存并重载
           </button>
         </div>
-        <button class="btn-icon" onclick="loadAllData()" title="刷新"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
+        <button class="btn-icon" onclick="loadAllData()" title="刷新"><svg class="ic" aria-hidden="true"><use href="#fa-rotate-right"/></svg></button>
       </div>
     </header>
 
@@ -366,45 +365,57 @@
           </div>
         </div>
         <div style="display:flex;justify-content:flex-end;">
-          <button class="btn btn-danger btn-sm" onclick="resetStats()"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 重置统计</button>
+          <button class="btn btn-danger btn-sm" onclick="resetStats()"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg> 重置统计</button>
         </div>
       </div>
 
       <!-- Panel: Providers -->
       <div id="panel-providers" class="panel">
         <div style="margin-bottom:16px;">
-          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 新增供应商</button>
+          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="ic" aria-hidden="true"><use href="#fa-plus"/></svg> 新增供应商</button>
         </div>
         <div id="providersList"></div>
         <div style="margin-top:12px;font-size:0.78rem;color:var(--text-tertiary);">
-          <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 「调用状态」来源于实际代理请求结果。点击 <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 仅验证 Key 鉴权有效性，不代表模型可正常调用。
+          <svg class="ic" aria-hidden="true"><use href="#fa-circle-info"/></svg> 「调用状态」来源于实际代理请求结果。点击 <svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> 仅验证 Key 鉴权有效性，不代表模型可正常调用。
         </div>
       </div>
 
       <!-- Panel: Routing -->
       <div id="panel-routing" class="panel">
         <div style="margin-bottom:16px;">
-          <button class="btn btn-primary btn-sm" onclick="openCandidateModal()"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 新增候选路由</button>
+          <button class="btn btn-primary btn-sm" onclick="openCandidateModal()"><svg class="ic" aria-hidden="true"><use href="#fa-plus"/></svg> 新增候选路由</button>
         </div>
         <div id="candidatesContainer"></div>
+      </div>
+
+      <!-- Panel: Agent Models -->
+      <div id="panel-agent" class="panel">
+        <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+          <button class="btn btn-primary btn-sm" onclick="openAgentModelModal()"><svg class="ic" aria-hidden="true"><use href="#fa-plus"/></svg> 添加 Agent 模型</button>
+          <span style="font-size:0.78rem;color:var(--text-tertiary);">同模型多 Key 自动轮询（429/500 切换）</span>
+        </div>
+        <div id="agentModelContainer"></div>
+        <div style="margin-top:8px;font-size:0.78rem;color:var(--text-tertiary);">
+          <svg class="ic" aria-hidden="true"><use href="#fa-circle-info"/></svg> 此配置独立于知识库的 4 个虚拟模型（chat / embedding / reranker / ocr）。Agent 调用真实模型名时请求完全透传（含工具调用、流式）。
+        </div>
       </div>
 
       <!-- Panel: Access -->
       <div id="panel-access" class="panel">
         <div class="card" style="padding:24px;max-width:800px;margin-bottom:24px;">
-          <h3 class="chart-title" style="margin-bottom:16px;"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 服务基础信息</h3>
+          <h3 class="chart-title" style="margin-bottom:16px;"><svg class="ic" aria-hidden="true"><use href="#fa-link"/></svg> 服务基础信息</h3>
           <table style="margin-bottom:24px;">
-            <tr><td style="width:140px;font-weight:600;color:var(--text-tertiary);border:none;padding:8px 0;">Base URL</td><td id="guideBaseUrl" style="font-family:var(--font-mono);color:var(--text-brand);border:none;padding:8px 0;">—</td><td style="border:none;"><button class="btn-icon" onclick="copyText(document.getElementById('guideBaseUrl').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-regular"/></svg></button></td></tr>
+            <tr><td style="width:140px;font-weight:600;color:var(--text-tertiary);border:none;padding:8px 0;">Base URL</td><td id="guideBaseUrl" style="font-family:var(--font-mono);color:var(--text-brand);border:none;padding:8px 0;">—</td><td style="border:none;"><button class="btn-icon" onclick="copyText(document.getElementById('guideBaseUrl').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg></button></td></tr>
             <tr><td style="font-weight:600;color:var(--text-tertiary);border:none;padding:8px 0;">API Key</td><td style="font-family:var(--font-mono);border:none;padding:8px 0;">Bearer &lt;your_proxy_api_key&gt;</td><td style="border:none;"></td></tr>
           </table>
-          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> Python SDK</h3>
+          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-code"/></svg> Python SDK</h3>
           <div class="code-block" style="margin-bottom:20px;">
-            <button class="copy-btn" onclick="copyText(document.getElementById('pyCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-regular"/></svg> 复制</button>
+            <button class="copy-btn" onclick="copyText(document.getElementById('pyCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
             <pre id="pyCode"></pre>
           </div>
-          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> cURL</h3>
+          <h3 class="chart-title" style="margin-bottom:12px;"><svg class="ic" aria-hidden="true"><use href="#fa-terminal"/></svg> cURL</h3>
           <div class="code-block">
-            <button class="copy-btn" onclick="copyText(document.getElementById('curlCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-regular"/></svg> 复制</button>
+            <button class="copy-btn" onclick="copyText(document.getElementById('curlCode').innerText)"><svg class="ic" aria-hidden="true"><use href="#fa-copy"/></svg> 复制</button>
             <pre id="curlCode"></pre>
           </div>
         </div>
@@ -423,7 +434,7 @@
           </div>
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end;">
-          <button class="btn btn-danger btn-sm" onclick="resetStats()"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 重置统计与日志</button>
+          <button class="btn btn-danger btn-sm" onclick="resetStats()"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg> 重置统计与日志</button>
         </div>
       </div>
 
@@ -452,7 +463,7 @@
             </div>
           </div>
           <div class="card settings-card">
-            <h3><svg class="ic" aria-hidden="true" style="color:var(--status-warning);"><use href="#fa-solid"/></svg> Chat 快速模式</h3>
+            <h3><svg class="ic" aria-hidden="true" style="color:var(--status-warning);"><use href="#fa-bolt"/></svg> Chat 快速模式</h3>
             <div class="settings-row">
               <label class="checkbox-group">
                 <input type="checkbox" id="settingFastMode">
@@ -491,7 +502,7 @@
               <input type="number" id="settingCooldown403" class="form-control" placeholder="默认 600 秒">
             </div>
           </div>
-          <button class="btn btn-primary" onclick="saveSettings()"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 保存参数</button>
+          <button class="btn btn-primary" onclick="saveSettings()"><svg class="ic" aria-hidden="true"><use href="#fa-floppy-disk"/></svg> 保存参数</button>
         </div>
       </div>
     </div>
@@ -515,11 +526,11 @@
     <div class="form-group"><label class="form-label">标签 (如 爸爸, 常用1)</label><input type="text" id="keyLabelInput" class="form-control" placeholder="方便标记所有者..."></div>
     <div class="form-group"><label class="form-label">API Key 明文</label><input type="text" id="keyValueInput" class="form-control" placeholder="sk-..."></div>
     <div class="info-note" style="margin-bottom:12px;">
-      <svg class="ic" aria-hidden="true" style="color:var(--text-brand);margin-right:4px;"><use href="#fa-solid"/></svg>
+      <svg class="ic" aria-hidden="true" style="color:var(--text-brand);margin-right:4px;"><use href="#fa-circle-info"/></svg>
       连通性校验仅验证 Key 鉴权有效性（GET /v1/models），不代表模型可正常调用。实际请求可能因限流(429)或服务异常(500)而失败。请前往「候选路由」使用「探活」功能测试模型实际可用性。
     </div>
     <div class="form-group"><label class="checkbox-group"><input type="checkbox" id="keySkipCheck"><span>跳过连通性校验</span></label></div>
-    <div id="keySpinner" style="display:none;align-items:center;gap:8px;font-size:0.8rem;color:var(--text-tertiary);margin-bottom:10px;"><svg class="ic ic-spin" aria-hidden="true" style="color:var(--bg-brand);"><use href="#fa-solid"/></svg> 正在验证连通...</div>
+    <div id="keySpinner" style="display:none;align-items:center;gap:8px;font-size:0.8rem;color:var(--text-tertiary);margin-bottom:10px;"><svg class="ic ic-spin" aria-hidden="true" style="color:var(--bg-brand);"><use href="#fa-spinner"/></svg> 正在验证连通...</div>
     <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('keyModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveKeyWithCheck()">保存并校验</button></div>
   </div>
 </div>
@@ -533,6 +544,17 @@
     <div class="form-group"><label class="form-label">绑定 Key 标签（可多选）</label><div id="candKeyList" class="cand-key-list"></div></div>
     <div class="form-group"><label class="form-label">上游模型 ID</label><input type="text" id="candModelInput" class="form-control" placeholder="如 deepseek-ai/DeepSeek-V3"></div>
     <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveCandidate()">保存</button></div>
+
+<div class="modal-overlay" id="agentModelModal">
+  <div class="modal-box">
+    <h3 class="modal-title" id="agentModelModalTitle">新增 Agent 模型</h3>
+    <input type="hidden" id="agentEditIdx">
+    <div class="form-group"><label class="form-label">所属供应商</label><select id="agentProviderSelect" class="form-control" onchange="updateAgentKeyOptions()"></select></div>
+    <div class="form-group"><label class="form-label">绑定 Key 标签（可多选，自动轮询）</label><div id="agentKeyList" class="cand-key-list"></div></div>
+    <div class="form-group"><label class="form-label">模型 ID</label><input type="text" id="agentModelInput" class="form-control" placeholder="如 deepseek-ai/DeepSeek-V3"></div>
+    <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('agentModelModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveAgentModel()">保存</button></div>
+  </div>
+</div>
   </div>
 </div>
 
@@ -547,6 +569,7 @@ const navItems = [
   { id: "dashboard", label: "统计概览", icon: "chart-line", title: "统计概览", sub: "API Key 中转服务管理面板" },
   { id: "providers", label: "供应商 & Key", icon: "network-wired", title: "供应商管理", sub: "管理 API 供应商和密钥" },
   { id: "routing", label: "候选路由", icon: "shuffle", title: "候选路由管理", sub: "管理 4 类模型的候选路由与优先级" },
+  { id: "agent", label: "Agent 模型", icon: "server", title: "Agent 模型中转", sub: "独立管理 agent 直连的真实模型（多 Key 轮询）" },
   { id: "access", label: "接入指南", icon: "code", title: "接入指南", sub: "获取调用示例，快速接入" },
   { id: "logs", label: "错误日志", icon: "bug", title: "错误日志", sub: "最近 50 条请求错误记录" },
   { id: "settings", label: "系统设置", icon: "sliders", title: "系统设置", sub: "全局参数配置" },
@@ -578,7 +601,7 @@ function showApp() { document.getElementById("loginOverlay").style.display = "no
 
 function renderSidebar() {
   document.getElementById("sidebarNav").innerHTML = navItems.map(n =>
-    `<button class="nav-item ${state.activeTab === n.id ? "active" : ""}" onclick="switchTab('${n.id}')"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg><span>${n.label}</span></button>`
+    `<button class="nav-item ${state.activeTab === n.id ? "active" : ""}" onclick="switchTab('${n.id}')"><svg class="ic" aria-hidden="true"><use href="#fa-${n.icon}"/></svg><span>${n.label}</span></button>`
   ).join("");
 }
 
@@ -596,7 +619,7 @@ function switchTab(tabId) {
 function renderActivePanel() {
   if (!state.config) return;
   document.getElementById("saveIndicator").classList.toggle("show", state.hasChanges);
-  const fn = { dashboard: renderDashboard, providers: renderProviders, routing: renderRouting, logs: renderLogs, settings: renderSettings, access: renderAccess }[state.activeTab];
+  const fn = { dashboard: renderDashboard, providers: renderProviders, routing: renderRouting, agent: renderAgentModels, logs: renderLogs, settings: renderSettings, access: renderAccess }[state.activeTab];
   if (fn) fn();
 }
 
@@ -605,22 +628,17 @@ function renderActivePanel() {
 // ═══════════════════════════════════════════════════════════
 async function handleLogin() {
   const key = document.getElementById("loginKeyInput").value.trim();
-  const errEl = document.getElementById("loginError");
-  if (errEl) errEl.style.display = "none";
-  if (!key) { if (errEl) { errEl.textContent = "请输入管理员密钥"; errEl.style.display = "block"; } return; }
+  if (!key) return;
   const btn = document.getElementById("loginBtn");
-  btn.disabled = true; btn.innerHTML = '<svg class="ic ic-spin" aria-hidden="true"><use href="#fa-solid"/></svg> 验证中...';
+  btn.disabled = true; btn.innerHTML = '<svg class="ic ic-spin" aria-hidden="true"><use href="#fa-spinner"/></svg> 验证中...';
   try {
     const r = await fetch("/api/admin/config", { headers: { "Authorization": "Bearer " + key } });
     if (r.ok) {
       state.apiKey = key; sessionStorage.setItem("admin_api_key", key);
       showApp(); showToast("登录成功", "success"); loadAllData();
-    } else {
-      if (errEl) { errEl.textContent = "密钥校验失败，请检查 API Key"; errEl.style.display = "block"; }
-      showToast("密钥校验失败", "error");
-    }
-  } catch(e) { if (errEl) { errEl.textContent = "连接失败: " + e.message; errEl.style.display = "block"; } showToast("连接失败: " + e.message, "error"); }
-  btn.disabled = false; btn.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 授权进入';
+    } else { showToast("密钥校验失败", "error"); }
+  } catch(e) { showToast("连接失败: " + e.message, "error"); }
+  btn.disabled = false; btn.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> 授权进入';
 }
 
 function handleLogout() {
@@ -673,14 +691,14 @@ function renderDashboard() {
     const rate = total > 0 ? ((s.success / total) * 100).toFixed(1) : "0.0";
     const avg = total > 0 ? (s.total_latency / total * 1000).toFixed(0) : "0";
     return `<div class="card metric-card">
-      <div class="metric-icon" style="background:${t.surface};color:${t.color};"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></div>
+      <div class="metric-icon" style="background:${t.surface};color:${t.color};"><svg class="ic" aria-hidden="true"><use href="#fa-${t.icon}"/></svg></div>
       <div style="flex:1;min-width:0;">
         <div class="metric-label">${t.name} 请求</div>
         <div class="metric-value">${total.toLocaleString()}<span class="unit">次</span></div>
         <div class="metric-sub" style="color:${rate >= 95 ? "var(--status-success)" : rate >= 80 ? "var(--status-alert)" : "var(--status-error)"};">
-          <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 成功率 ${rate}%
+          <svg class="ic" aria-hidden="true"><use href="#fa-circle-check"/></svg> 成功率 ${rate}%
         </div>
-        <div class="metric-sub" style="color:var(--text-tertiary);"><svg class="ic" aria-hidden="true"><use href="#fa-regular"/></svg> 平均 ${avg}ms</div>
+        <div class="metric-sub" style="color:var(--text-tertiary);"><svg class="ic" aria-hidden="true"><use href="#fa-clock"/></svg> 平均 ${avg}ms</div>
       </div>
     </div>`;
   }).join("");
@@ -768,9 +786,9 @@ function renderProviders() {
           <td style="font-family:var(--font-mono);color:var(--text-tertiary);">${esc(masked)}</td>
           <td>${badge}${timeStr}</td>
           <td style="text-align:right;">
-            <button class="btn-icon" onclick="testKey('${esc(name)}','${esc(label)}')" title="鉴权验证"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon" onclick="editKey('${esc(name)}','${esc(label)}')" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon danger" onclick="deleteKey('${esc(name)}','${esc(label)}')" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
+            <button class="btn-icon" onclick="testKey('${esc(name)}','${esc(label)}')" title="鉴权验证"><svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg></button>
+            <button class="btn-icon" onclick="editKey('${esc(name)}','${esc(label)}')" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg></button>
+            <button class="btn-icon danger" onclick="deleteKey('${esc(name)}','${esc(label)}')" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
           </td>
         </tr>`;
       }).join("");
@@ -778,14 +796,14 @@ function renderProviders() {
     return `<div class="card provider-card">
       <div class="provider-header" onclick="toggleProvider('${esc(name)}')">
         <div class="left">
-          <svg class="ic chevron" aria-hidden="true" id="chev-${esc(name)}"><use href="#fa-solid"/></svg>
+          <svg class="ic chevron" aria-hidden="true" id="chev-${esc(name)}"><use href="#fa-chevron-down"/></svg>
           <span class="provider-name">${esc(name)}</span>
           <span class="provider-url">${esc(prov.base_url || "")}</span>
         </div>
         <div style="display:flex;gap:6px;" onclick="event.stopPropagation();">
-          <button class="btn-icon" onclick="editProvider('${esc(name)}')" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-          <button class="btn-icon danger" onclick="deleteProvider('${esc(name)}')" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-          <button class="btn btn-secondary btn-sm" onclick="openAddKey('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> Key</button>
+          <button class="btn-icon" onclick="editProvider('${esc(name)}')" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg></button>
+          <button class="btn-icon danger" onclick="deleteProvider('${esc(name)}')" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
+          <button class="btn btn-secondary btn-sm" onclick="openAddKey('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> Key</button>
         </div>
       </div>
       <div class="provider-body" id="body-${esc(name)}">
@@ -964,11 +982,11 @@ function renderRouting() {
         <td style="width:110px;font-size:0.72rem;color:var(--text-tertiary);">${timeStr}</td>
         <td style="width:170px;text-align:right;">
           <div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;">
-            <button class="btn-icon" onclick="moveCandidate('${cat.id}',${i},-1)" ${i===0?'disabled':''} title="上移"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon" onclick="moveCandidate('${cat.id}',${i},1)" ${i===list.length-1?'disabled':''} title="下移"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon" onclick="editCandidate('${cat.id}',${i})" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon" onclick="testCandidate('${cat.id}',${i})" title="探活"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
-            <button class="btn-icon danger" onclick="deleteCandidate('${cat.id}',${i})" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg></button>
+            <button class="btn-icon" onclick="moveCandidate('${cat.id}',${i},-1)" ${i===0?'disabled':''} title="上移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-up"/></svg></button>
+            <button class="btn-icon" onclick="moveCandidate('${cat.id}',${i},1)" ${i===list.length-1?'disabled':''} title="下移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-down"/></svg></button>
+            <button class="btn-icon" onclick="editCandidate('${cat.id}',${i})" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg></button>
+            <button class="btn-icon" onclick="testCandidate('${cat.id}',${i})" title="探活"><svg class="ic" aria-hidden="true"><use href="#fa-flask"/></svg></button>
+            <button class="btn-icon danger" onclick="deleteCandidate('${cat.id}',${i})" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
           </div>
         </td>
       </tr>`;
@@ -998,8 +1016,8 @@ function renderRouting() {
     </div>
   </div>
   <div style="margin-top:8px;font-size:0.78rem;color:var(--text-tertiary);">
-    <svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 共 ${totalNodes} 个节点。状态来源于实际调用结果，「探活」可发起测试请求。
-    ${latencyOn ? '<br><span style="color:var(--status-warning);"><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 延迟感知路由已开启：实际调用顺序将根据历史延迟自动调整。</span>' : '<br><svg class="ic" aria-hidden="true"><use href="#fa-solid"/></svg> 严格配置顺序：按上方列表从上到下依次调用。'}
+    <svg class="ic" aria-hidden="true"><use href="#fa-circle-info"/></svg> 共 ${totalNodes} 个节点。状态来源于实际调用结果，「探活」可发起测试请求。
+    ${latencyOn ? '<br><span style="color:var(--status-warning);"><svg class="ic" aria-hidden="true"><use href="#fa-bolt"/></svg> 延迟感知路由已开启：实际调用顺序将根据历史延迟自动调整。</span>' : '<br><svg class="ic" aria-hidden="true"><use href="#fa-list-ol"/></svg> 严格配置顺序：按上方列表从上到下依次调用。'}
   </div>`;
 }
 
@@ -1055,13 +1073,125 @@ function saveCandidate() {
   const editIdx = document.getElementById("candEditIdx").value;
   if (!state.config.candidates[cat]) state.config.candidates[cat] = [];
   if (editCat && editIdx !== "") {
-    // 编辑模式：第一个勾选项覆盖原位置，其余追加
     state.config.candidates[editCat][parseInt(editIdx)] = { provider, key: selected[0], model };
     for (let i = 1; i < selected.length; i++) state.config.candidates[editCat].push({ provider, key: selected[i], model });
   } else {
     for (const k of selected) state.config.candidates[cat].push({ provider, key: k, model });
   }
   closeModal("candidateModal"); triggerChange();
+}
+
+// ── Agent 模型中转（独立配置，与知识库 4 个虚拟模型分离）──
+function renderAgentModels() {
+  const cStatus = (state.stats && state.stats.candidates_status) || {};
+  const list = state.config.agent_models || [];
+  const container = document.getElementById("agentModelContainer");
+  if (!list.length) {
+    container.innerHTML = `<div class="card" style="padding:40px;text-align:center;color:var(--text-tertiary);">尚未配置 Agent 模型中转。一个模型可绑定多个 Key 自动轮询（429/500 自动切换）。</div>`;
+    return;
+  }
+  const rows = list.map((item, i) => {
+    const nk = item.provider + ":" + item.key + ":" + item.model;
+    const ns = cStatus[nk];
+    let badge = '<span class="badge badge-neutral">未调用</span>';
+    let timeStr = "—";
+    if (ns) {
+      if (ns.status === 200) badge = '<span class="badge badge-success">200</span>';
+      else if (ns.status === 429) badge = '<span class="badge badge-alert">429</span>';
+      else badge = '<span class="badge badge-error">' + ns.status + '</span>';
+      timeStr = formatRelativeTime(ns.time);
+    }
+    return `<tr>
+      <td style="width:36px;font-weight:600;color:var(--text-brand);">#${i+1}</td>
+      <td style="width:130px;font-weight:500;">${esc(item.provider)}</td>
+      <td style="width:80px;"><span class="badge badge-neutral">${esc(item.key)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.model)}">${esc(item.model)}</td>
+      <td style="width:70px;">${badge}</td>
+      <td style="width:110px;font-size:0.72rem;color:var(--text-tertiary);">${timeStr}</td>
+      <td style="width:170px;text-align:right;">
+        <div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;">
+          <button class="btn-icon" onclick="moveAgentModel(${i},-1)" ${i===0?'disabled':''} title="上移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-up"/></svg></button>
+          <button class="btn-icon" onclick="moveAgentModel(${i},1)" ${i===list.length-1?'disabled':''} title="下移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-down"/></svg></button>
+          <button class="btn-icon" onclick="editAgentModel(${i})" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg></button>
+          <button class="btn-icon" onclick="testAgentModel(${i})" title="探活"><svg class="ic" aria-hidden="true"><use href="#fa-flask"/></svg></button>
+          <button class="btn-icon danger" onclick="deleteAgentModel(${i})" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+  container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">
+    <div class="table-wrap"><table style="table-layout:fixed;">
+      <thead><tr>
+        <th style="width:36px;">#</th><th style="width:130px;">供应商</th><th style="width:80px;">Key</th><th>模型 ID</th>
+        <th style="width:70px;">状态</th><th style="width:110px;">最近探测</th><th style="width:170px;text-align:right;">操作</th>
+      </tr></thead><tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function openAgentModelModal() {
+  document.getElementById("agentModelModalTitle").innerText = "新增 Agent 模型";
+  document.getElementById("agentEditIdx").value = "";
+  populateAgentDropdowns();
+  document.getElementById("agentModelInput").value = "";
+  openModal("agentModelModal");
+}
+function populateAgentDropdowns() {
+  const provSelect = document.getElementById("agentProviderSelect");
+  const providers = Object.keys(state.config.providers || {});
+  provSelect.innerHTML = providers.length ? providers.map(p => `<option value="${p}">${p}</option>`).join("") : "<option value=''>请先添加供应商</option>";
+  updateAgentKeyOptions();
+}
+function updateAgentKeyOptions() {
+  const provName = document.getElementById("agentProviderSelect").value;
+  const keyList = document.getElementById("agentKeyList");
+  if (!provName || !state.config.providers[provName]) { keyList.innerHTML = "<div class='cand-key-empty'>—</div>"; return; }
+  const keys = Object.keys(state.config.providers[provName].keys || {});
+  keyList.innerHTML = keys.length ? keys.map(k => `<label class="checkbox-group"><input type="checkbox" value="${esc(k)}">${esc(k)}</label>`).join("") : "<div class='cand-key-empty'>此供应商下暂无 Key</div>";
+}
+function editAgentModel(index) {
+  const item = state.config.agent_models[index];
+  document.getElementById("agentModelModalTitle").innerText = "编辑 Agent 模型";
+  document.getElementById("agentEditIdx").value = index;
+  populateAgentDropdowns();
+  document.getElementById("agentProviderSelect").value = item.provider;
+  updateAgentKeyOptions();
+  document.querySelectorAll("#agentKeyList input[type=checkbox]").forEach(b => b.checked = (b.value === item.key));
+  document.getElementById("agentModelInput").value = item.model;
+  openModal("agentModelModal");
+}
+function saveAgentModel() {
+  const provider = document.getElementById("agentProviderSelect").value;
+  const model = document.getElementById("agentModelInput").value.trim();
+  const selected = Array.from(document.querySelectorAll("#agentKeyList input[type=checkbox]:checked")).map(b => b.value);
+  if (!provider || selected.length === 0 || !model) { showToast("请填写完整并勾选至少一个 Key", "error"); return; }
+  if (!state.config.agent_models) state.config.agent_models = [];
+  const editIdx = document.getElementById("agentEditIdx").value;
+  if (editIdx !== "") {
+    state.config.agent_models[parseInt(editIdx)] = { provider, key: selected[0], model };
+    for (let i = 1; i < selected.length; i++) state.config.agent_models.push({ provider, key: selected[i], model });
+  } else {
+    for (const k of selected) state.config.agent_models.push({ provider, key: k, model });
+  }
+  closeModal("agentModelModal"); triggerChange(); renderAgentModels();
+}
+function moveAgentModel(i, dir) {
+  const list = state.config.agent_models; const t = i + dir;
+  if (!list || t < 0 || t >= list.length) return;
+  [list[i], list[t]] = [list[t], list[i]]; triggerChange(); renderAgentModels();
+}
+function deleteAgentModel(i) {
+  if (!confirm("确认删除该 Agent 模型路由?")) return;
+  state.config.agent_models.splice(i, 1); triggerChange(); renderAgentModels();
+}
+async function testAgentModel(i) {
+  const item = state.config.agent_models[i];
+  try {
+    const r = await fetch("/api/admin/test-candidate", { method: "POST", headers: getHeaders(), body: JSON.stringify({ ...item, type: "chat" }) });
+    const d = await r.json();
+    if (d.success) showToast("探活成功", "success"); else showToast("探活失败: " + (d.error || d.status || ""), "error");
+  } catch(e) { showToast("探活异常: " + e.message, "error"); }
+  loadAllData();
 }
 
 function moveCandidate(cat, i, dir) {
@@ -1186,7 +1316,7 @@ function showToast(msg, type) {
   t.className = "toast";
   const icon = type === "success" ? "fa-circle-check" : "fa-circle-exclamation";
   const color = type === "success" ? "var(--status-success)" : "var(--status-error)";
-  t.innerHTML = `<svg class="ic" style="color:${color};"><use href="#${icon}"/></svg><span>${esc(msg)}</span>`;
+  t.innerHTML = `<svg class="ic ${icon}" aria-hidden="true" style="color:${color};"><use href="#fa-circle-exclamation"/></svg><span>${esc(msg)}</span>`;
   c.appendChild(t);
   setTimeout(() => t.classList.add("show"), 10);
   setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 3000);
