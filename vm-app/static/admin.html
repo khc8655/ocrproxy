@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Proxy 控制台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <!-- defer: chart.js is only used for dashboard charts; loading it without
+       defer blocks the whole page (including the login form) whenever the
+       CDN is slow — a recurring problem for mainland users. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
   <style>
     /* ── Design Tokens (from opendesign TraeWork system) ── */
     :root {
@@ -558,6 +561,9 @@ function formatRelativeTime(ms) { if (!ms) return "—"; const diff = Date.now()
       else { showLogin(); }
     }).catch(() => showLogin());
   } else { showLogin(); }
+  // Re-render once all deferred scripts (chart.js) have finished loading, so
+  // charts appear even when the CDN is slower than the first dashboard render.
+  window.addEventListener("load", () => { if (state.config) renderActivePanel(); });
 })();
 
 function showLogin() { document.getElementById("loginOverlay").style.display = "flex"; document.getElementById("appMain").style.display = "none"; }
@@ -676,6 +682,10 @@ function renderCharts(types) {
   const e429 = types.map(t => (state.stats[t.key] || {})["429"] || 0);
   const e403 = types.map(t => (state.stats[t.key] || {})["403"] || 0);
   const e5xx = types.map(t => (state.stats[t.key] || {})["5xx"] || 0);
+
+  // Chart.js may still be loading (defer) or may have failed to load from the
+  // CDN — skip chart rendering instead of breaking the whole dashboard.
+  if (typeof Chart === "undefined") return;
 
   if (state.charts.t) state.charts.t.destroy();
   state.charts.t = new Chart(document.getElementById("throughputChart"), {
