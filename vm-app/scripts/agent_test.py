@@ -80,17 +80,30 @@ def build_config() -> dict:
             "deadstream": provider("deadstream", 1),
             "deadstream2": provider("deadstream2", 1),
         },
-        # Dedicated agent routing list (mirrors the v3.2 config schema)
-        "agent_models": [
-            {"provider": "dead429", "key": "k1", "model": "agent-main"},
-            {"provider": "mockA", "key": "k1", "model": "agent-main"},
-            {"provider": "deadstream", "key": "k1", "model": "agent-stream"},
-            {"provider": "mockA", "key": "k2", "model": "agent-stream"},
-            {"provider": "deadstream2", "key": "k1", "model": "agent-fail"},
-            {"provider": "mockB", "key": "k3", "model": "agent-fail"},
-            {"provider": "mockB", "key": "k1", "model": "deepseek-mock"},
-            {"provider": "mockB", "key": "k2", "model": "deepseek-mock"},
-        ],
+        # Model-centric agent routing (v3.3 schema): the model is the entity,
+        # keys are an ordered list inside it. deepseek-mock also exercises the
+        # upstream_model rewrite (public name != upstream id).
+        "agent_models": {
+            "agent-main": {"keys": [
+                {"provider": "dead429", "key": "k1"},
+                {"provider": "mockA", "key": "k1"},
+            ]},
+            "agent-stream": {"keys": [
+                {"provider": "deadstream", "key": "k1"},
+                {"provider": "mockA", "key": "k2"},
+            ]},
+            "agent-fail": {"keys": [
+                {"provider": "deadstream2", "key": "k1"},
+                {"provider": "mockB", "key": "k3"},
+            ]},
+            "deepseek-mock": {
+                "upstream_model": "deepseek-mock-real",
+                "keys": [
+                    {"provider": "mockB", "key": "k1"},
+                    {"provider": "mockB", "key": "k2"},
+                ],
+            },
+        },
         "candidates": {
             "chat": [{"provider": "mockA", "key": "k3", "model": "kb-chat-model"}],
             "embedding": [{"provider": "mockA", "key": "k4", "model": "mock-emb"}],
@@ -202,9 +215,11 @@ async def main():
             }
             r = await c.post(f"{API}/chat/completions", headers=H, json=req_body)
             echo = r.json().get("echo", {})
-            expect = {k: v for k, v in req_body.items() if k != "messages"}
+            expect = {k: v for k, v in req_body.items() if k != "messages" and k != "model"}
             bad = {k: (echo.get(k), v) for k, v in expect.items() if echo.get(k) != v}
             check("4. all params pass through byte-identical", r.status_code == 200 and not bad, f"diff={bad}")
+            check("4b. upstream_model rewrite (public->upstream id)",
+                  echo.get("model") == "deepseek-mock-real", f"echo.model={echo.get('model')}")
 
             r = await c.post(f"{API}/chat/completions", headers=H,
                              json={"model": "agent-stream", "messages": [{"role": "user", "content": "hi"}],
@@ -321,6 +336,36 @@ async def main():
                 p.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 p.kill()
+
+    print("\n== 15. v3.2 flat-list -> v3.3 model-centric migration ==")
+    code = (
+        "import sys, asyncio, json, tempfile, os\n"
+        f"sys.path.insert(0, {str(REPO)!r})\n"
+        "from cryptography.fernet import Fernet\n"
+        "from app import config_store\n"
+        "d = tempfile.mkdtemp()\n"
+        "os.environ['ENCRYPT_KEY'] = Fernet.generate_key().decode()\n"
+        "os.environ['CONFIG_DIR'] = d\n"
+        "old = {'providers': {'p': {'base_url': 'http://x', 'keys': {'k1': 'a', 'k2': 'b'}}},\n"
+        "       'agent_models': [\n"
+        "           {'provider': 'p', 'key': 'k1', 'model': 'm-a'},\n"
+        "           {'provider': 'p', 'key': 'k2', 'model': 'm-a'},\n"
+        "           {'provider': 'p', 'key': 'k1', 'model': 'm-b'}]}\n"
+        "asyncio.run(config_store.save_config(old))\n"
+        "config_store.clear_cache()\n"
+        "cfg = asyncio.run(config_store.get_config())\n"
+        "am = cfg['agent_models']\n"
+        "assert isinstance(am, dict), 'must be dict after migration'\n"
+        "assert list(am.keys()) == ['m-a', 'm-b'], list(am.keys())\n"
+        "assert [b['key'] for b in am['m-a']['keys']] == ['k1', 'k2'], 'order preserved'\n"
+        "# persisted to disk in migrated form\n"
+        "on_disk = config_store.load_from_disk()\n"
+        "assert isinstance(on_disk['agent_models'], dict), 'disk copy migrated too'\n"
+        "print('MIGRATION_OK')\n"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO))
+    check("15. flat list migrates to dict + persists", "MIGRATION_OK" in out.stdout,
+          (out.stdout.strip() + out.stderr.strip()[-300:])[:300])
 
     print(f"\n===== {len(PASSED)} passed, {len(FAILED)} failed =====")
     if FAILED:

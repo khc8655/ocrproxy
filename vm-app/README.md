@@ -11,7 +11,7 @@
 | 模式 | 触发方式 | 行为 |
 |------|----------|------|
 | **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） |
-| **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**独立配置节 `agent_models`** 路由到匹配该模型的候选，429/500 自动切换到同模型的其他供应商 |
+| **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**模型为主的 `agent_models` 字典**取该模型的 Key 列表按序调用，429/500 自动切换下一个 Key；支持 `upstream_model` 上游 ID 重写 |
 
 - **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）
 - **Agent 模式故障切换**：同一模型在 `agent_models` 配置多个供应商/Key 时，429/500 自动切换到下一个
@@ -295,7 +295,7 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 `scripts/mock_upstream.py` 提供可控的模拟上游（按 API key / 请求体切换 429、空流、内容审核、工具调用、SSE 回显等行为），两套测试基于它运行：
 
-**`scripts/agent_test.py` — Agent 中转专项（14 项）**：`/v1/models` 仅含 agent_models；KB 模式强制禁思考+非流式；未知模型 404；**思考等级全量参数透传**（reasoning_effort / enable_thinking / chat_template_kwargs / thinking / temperature / top_p / seed / stop / logprobs 等逐字段比对）；工具调用（JSON + 流式 tool_calls 增量）；流式 SSE 与直连上游**逐字节一致**（含 reasoning_content）；429 / 空流故障切换；**中转效率基准**（RTT 开销、TTFB 开销、30 并发流保真）。
+**`scripts/agent_test.py` — Agent 中转专项（16 项）**：`/v1/models` 仅含 agent_models；KB 模式强制禁思考+非流式；未知模型 404；**思考等级全量参数透传**（reasoning_effort / enable_thinking / chat_template_kwargs / thinking / temperature / top_p / seed / stop / logprobs 等逐字段比对）；工具调用（JSON + 流式 tool_calls 增量）；流式 SSE 与直连上游**逐字节一致**（含 reasoning_content）；429 / 空流故障切换；**upstream_model 公共名→上游 ID 重写**；**v3.2→v3.3 配置自动迁移**；**中转效率基准**（RTT 开销、TTFB 开销、30 并发流保真）。
 
 **`scripts/load_test.py` — KB 调度回归（9 项）**：429 切换、空流切换、内容审核早退（仅 1 次上游调用）、KB 注入、过载快速失败（503+Retry-After）、配置热更新、状态清理、3 轮大并发 OCR 内存验证。
 
@@ -382,12 +382,19 @@ vm-app/
     "reranker": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-reranker-v2-m3"}],
     "ocr": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-OCR"}]
   },
-  "agent_models": [
-    {"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"},
-    {"provider": "stepfun", "key": "KeyB", "model": "deepseek-ai/DeepSeek-V3"}
-  ]
+  "agent_models": {
+    "deepseek-ai/DeepSeek-V3": {
+      "upstream_model": "deepseek-ai/DeepSeek-V3",
+      "keys": [
+        {"provider": "siliconflow", "key": "KeyA"},
+        {"provider": "stepfun", "key": "KeyB"}
+      ]
+    }
+  }
 }
 ```
+
+> **v3.3 起为模型为主（model-centric）结构**：模型名是字典键（即 agent 调用时填写的 `model`），Key 绑定列表是它的属性——「创建一个模型，绑定哪些 Key」。`upstream_model` 可选（默认同模型名），用于对外模型名与上游实际 ID 不同的场景。旧的扁平列表（`[{"provider","key","model"}]`）在配置加载时**自动迁移并持久化**，无需手工处理。`candidates`（知识库 4 类）保持按类型的扁平有序池——KB 语义就是「该类任务的可用节点池，池内故意混用不同模型」。
 
 ### 配置项说明
 

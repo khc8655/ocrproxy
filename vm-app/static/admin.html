@@ -612,10 +612,9 @@
 <div class="modal-overlay" id="agentModelModal">
   <div class="modal-box">
     <h3 class="modal-title" id="agentModelModalTitle">新增 Agent 模型</h3>
-    <input type="hidden" id="agentEditIdx">
-    <div class="form-group"><label class="form-label">所属供应商</label><select id="agentProviderSelect" class="form-control" onchange="updateAgentKeyOptions()"></select></div>
-    <div class="form-group"><label class="form-label">绑定 Key 标签（可多选，自动轮询）</label><div id="agentKeyList" class="cand-key-list"></div></div>
-    <div class="form-group"><label class="form-label">模型 ID</label><input type="text" id="agentModelInput" class="form-control" placeholder="如 deepseek-ai/DeepSeek-V3"></div>
+    <div class="form-group"><label class="form-label">模型名（agent 调用时填写）</label><input type="text" id="agentEditName" class="form-control" placeholder="如 deepseek-v4-flash"></div>
+    <div class="form-group"><label class="form-label">上游模型 ID（可选，默认与模型名相同）</label><input type="text" id="agentUpstreamInput" class="form-control" placeholder="留空 = 与模型名相同；跨供应商 ID 不同时填写"></div>
+    <div class="form-group"><label class="form-label">绑定 Key（可多选，自动轮询）</label><select id="agentProviderSelect" class="form-control" onchange="updateAgentKeyOptions()"></select><div id="agentKeyList" class="cand-key-list"></div></div>
     <div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal('agentModelModal')">取消</button><button class="btn btn-primary btn-sm" onclick="saveAgentModel()">保存</button></div>
   </div>
 </div>
@@ -1146,56 +1145,74 @@ function saveCandidate() {
 // ── Agent 模型中转（独立配置，与知识库 4 个虚拟模型分离）──
 function renderAgentModels() {
   const cStatus = (state.stats && state.stats.candidates_status) || {};
-  const list = state.config.agent_models || [];
+  const models = state.config.agent_models || {};
   const container = document.getElementById("agentModelContainer");
-  if (!list.length) {
-    container.innerHTML = `<div class="card" style="padding:40px;text-align:center;color:var(--text-tertiary);">尚未配置 Agent 模型中转。一个模型可绑定多个 Key 自动轮询（429/500 自动切换）。</div>`;
+  const names = Object.keys(models);
+  if (!names.length) {
+    container.innerHTML = `<div class="card" style="padding:40px;text-align:center;color:var(--text-tertiary);">尚未配置 Agent 模型。创建一个模型并绑定多个 Key，即可自动轮询（429/500 切换）。</div>`;
     return;
   }
-  const rows = list.map((item, i) => {
-    const nk = item.provider + ":" + item.key + ":" + item.model;
-    const ns = cStatus[nk];
-    let badge = '<span class="badge badge-neutral">未调用</span>';
-    let timeStr = "—";
-    if (ns) {
-      if (ns.status === 200) badge = '<span class="badge badge-success">200</span>';
-      else if (ns.status === 429) badge = '<span class="badge badge-alert">429</span>';
-      else badge = '<span class="badge badge-error">' + ns.status + '</span>';
-      timeStr = formatRelativeTime(ns.time);
-    }
-    return `<tr>
-      <td style="width:36px;font-weight:600;color:var(--text-brand);">#${i+1}</td>
-      <td style="width:130px;font-weight:500;">${esc(item.provider)}</td>
-      <td style="width:80px;"><span class="badge badge-neutral">${esc(item.key)}</span></td>
-      <td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.model)}">${esc(item.model)}</td>
-      <td style="width:70px;">${badge}</td>
-      <td style="width:110px;font-size:0.72rem;color:var(--text-tertiary);">${timeStr}</td>
-      <td style="width:170px;text-align:right;">
-        <div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;">
-          <button class="btn-icon" onclick="moveAgentModel(${i},-1)" ${i===0?'disabled':''} title="上移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-up"/></svg></button>
-          <button class="btn-icon" onclick="moveAgentModel(${i},1)" ${i===list.length-1?'disabled':''} title="下移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-down"/></svg></button>
-          <button class="btn-icon" onclick="editAgentModel(${i})" title="编辑"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg></button>
-          <button class="btn-icon" onclick="testAgentModel(${i})" title="探活"><svg class="ic" aria-hidden="true"><use href="#fa-flask"/></svg></button>
-          <button class="btn-icon danger" onclick="deleteAgentModel(${i})" title="删除"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
+  container.innerHTML = names.map(name => {
+    const entry = models[name] || {};
+    const upstream = entry.upstream_model || name;
+    const keyRows = (entry.keys || []).map((b, i) => {
+      const nk = b.provider + ":" + b.key + ":chat";
+      const ns = cStatus[nk];
+      let badge = '<span class="badge badge-neutral">未调用</span>';
+      let timeStr = "—";
+      if (ns) {
+        if (ns.status === 200) badge = '<span class="badge badge-success">200</span>';
+        else if (ns.status === 429) badge = '<span class="badge badge-alert">429</span>';
+        else badge = '<span class="badge badge-error">' + ns.status + '</span>';
+        timeStr = formatRelativeTime(ns.time);
+      }
+      const upBadge = b.upstream_model && b.upstream_model !== name
+        ? ' <span class="badge badge-brand" title="该 Key 使用独立上游模型 ID">' + esc(b.upstream_model) + '</span>' : '';
+      return `<tr>
+        <td style="width:36px;font-weight:600;color:var(--text-brand);">#${i+1}</td>
+        <td style="width:140px;font-weight:500;">${esc(b.provider)}</td>
+        <td style="width:110px;"><span class="badge badge-neutral">${esc(b.key)}</span>${upBadge}</td>
+        <td style="width:70px;">${badge}</td>
+        <td style="width:110px;font-size:0.72rem;color:var(--text-tertiary);">${timeStr}</td>
+        <td style="width:170px;text-align:right;">
+          <div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;">
+            <button class="btn-icon" onclick="moveAgentKey('${esc(name)}',${i},-1)" ${i===0?'disabled':''} title="上移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-up"/></svg></button>
+            <button class="btn-icon" onclick="moveAgentKey('${esc(name)}',${i},1)" ${i===(entry.keys||[]).length-1?'disabled':''} title="下移"><svg class="ic" aria-hidden="true"><use href="#fa-arrow-down"/></svg></button>
+            <button class="btn-icon" onclick="testAgentKey('${esc(name)}',${i})" title="探活"><svg class="ic" aria-hidden="true"><use href="#fa-flask"/></svg></button>
+            <button class="btn-icon danger" onclick="deleteAgentKey('${esc(name)}',${i})" title="移除 Key"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg></button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+    const upstreamNote = upstream !== name
+      ? `<span class="badge badge-brand" title="默认上游模型 ID">上游: ${esc(upstream)}</span>` : "";
+    return `<div class="card" style="padding:16px 20px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          <svg class="ic" aria-hidden="true" style="color:var(--text-brand);"><use href="#fa-server"/></svg>
+          <span style="font-family:var(--font-mono);font-weight:600;font-size:0.95rem;">${esc(name)}</span>
+          ${upstreamNote}
+          <span class="hint" style="white-space:nowrap;">${(entry.keys||[]).length} 个 Key</span>
         </div>
-      </td>
-    </tr>`;
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="editAgentModel('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg> 编辑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAgentModel('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg> 删除模型</button>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin:0;"><table style="table-layout:fixed;">
+        <thead><tr><th style="width:36px;">#</th><th style="width:140px;">供应商</th><th style="width:110px;">Key</th><th style="width:70px;">状态</th><th style="width:110px;">最近探测</th><th style="width:170px;text-align:right;">操作</th></tr></thead>
+        <tbody>${keyRows}</tbody>
+      </table></div>
+    </div>`;
   }).join("");
-  container.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">
-    <div class="table-wrap"><table style="table-layout:fixed;">
-      <thead><tr>
-        <th style="width:36px;">#</th><th style="width:130px;">供应商</th><th style="width:80px;">Key</th><th>模型 ID</th>
-        <th style="width:70px;">状态</th><th style="width:110px;">最近探测</th><th style="width:170px;text-align:right;">操作</th>
-      </tr></thead><tbody>${rows}</tbody>
-    </table></div>
-  </div>`;
 }
 
 function openAgentModelModal() {
   document.getElementById("agentModelModalTitle").innerText = "新增 Agent 模型";
-  document.getElementById("agentEditIdx").value = "";
+  document.getElementById("agentEditName").readOnly = false;
+  document.getElementById("agentEditName").value = "";
+  document.getElementById("agentUpstreamInput").value = "";
   populateAgentDropdowns();
-  document.getElementById("agentModelInput").value = "";
   openModal("agentModelModal");
 }
 function populateAgentDropdowns() {
@@ -1211,47 +1228,80 @@ function updateAgentKeyOptions() {
   const keys = Object.keys(state.config.providers[provName].keys || {});
   keyList.innerHTML = keys.length ? keys.map(k => `<label class="checkbox-group"><input type="checkbox" value="${esc(k)}">${esc(k)}</label>`).join("") : "<div class='cand-key-empty'>此供应商下暂无 Key</div>";
 }
-function editAgentModel(index) {
-  const item = state.config.agent_models[index];
+function editAgentModel(name) {
+  const entry = (state.config.agent_models || {})[name];
+  if (!entry) return;
   document.getElementById("agentModelModalTitle").innerText = "编辑 Agent 模型";
-  document.getElementById("agentEditIdx").value = index;
+  document.getElementById("agentEditName").value = name;
+  document.getElementById("agentEditName").readOnly = true;
+  document.getElementById("agentUpstreamInput").value = entry.upstream_model || "";
+  // check every key belonging to ANY provider of this model
+  const provSet = {};
+  (entry.keys || []).forEach(b => { provSet[b.provider + ":" + b.key] = true; });
+  const firstProvider = (entry.keys || [])[0] ? entry.keys[0].provider : null;
   populateAgentDropdowns();
-  document.getElementById("agentProviderSelect").value = item.provider;
+  if (firstProvider) document.getElementById("agentProviderSelect").value = firstProvider;
   updateAgentKeyOptions();
-  document.querySelectorAll("#agentKeyList input[type=checkbox]").forEach(b => b.checked = (b.value === item.key));
-  document.getElementById("agentModelInput").value = item.model;
+  // keys of other providers get appended as extra groups
+  const keyList = document.getElementById("agentKeyList");
+  const otherProviders = [...new Set((entry.keys || []).map(b => b.provider))];
+  for (const p of otherProviders.slice(1)) {
+    const group = document.createElement("div");
+    group.style.marginTop = "8px";
+    group.innerHTML = `<div class="form-label" style="margin:4px 0;">${esc(p)}</div>` +
+      Object.keys((state.config.providers[p] || {}).keys || {}).map(k =>
+        `<label class="checkbox-group"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}">${esc(k)}</label>`).join("");
+    keyList.appendChild(group);
+  }
+  document.querySelectorAll("#agentKeyList input[type=checkbox]").forEach(b => {
+    const p = b.dataset.provider || document.getElementById("agentProviderSelect").value;
+    b.checked = !!provSet[p + ":" + b.value];
+  });
   openModal("agentModelModal");
 }
 function saveAgentModel() {
-  const provider = document.getElementById("agentProviderSelect").value;
-  const model = document.getElementById("agentModelInput").value.trim();
-  const selected = Array.from(document.querySelectorAll("#agentKeyList input[type=checkbox]:checked")).map(b => b.value);
-  if (!provider || selected.length === 0 || !model) { showToast("请填写完整并勾选至少一个 Key", "error"); return; }
-  if (!state.config.agent_models) state.config.agent_models = [];
-  const editIdx = document.getElementById("agentEditIdx").value;
-  if (editIdx !== "") {
-    state.config.agent_models[parseInt(editIdx)] = { provider, key: selected[0], model };
-    for (let i = 1; i < selected.length; i++) state.config.agent_models.push({ provider, key: selected[i], model });
-  } else {
-    for (const k of selected) state.config.agent_models.push({ provider, key: k, model });
-  }
+  const name = document.getElementById("agentEditName").value.trim();
+  const upstream = document.getElementById("agentUpstreamInput").value.trim();
+  const provName = document.getElementById("agentProviderSelect").value;
+  if (!name) { showToast("请填写模型名", "error"); return; }
+  const bindings = [];
+  document.querySelectorAll("#agentKeyList input[type=checkbox]:checked").forEach(b => {
+    bindings.push({ provider: b.dataset.provider || provName, key: b.value });
+  });
+  if (!bindings.length) { showToast("请勾选至少一个 Key", "error"); return; }
+  if (!state.config.agent_models) state.config.agent_models = {};
+  const entry = { keys: bindings };
+  if (upstream && upstream !== name) entry.upstream_model = upstream;
+  state.config.agent_models[name] = entry;
+  document.getElementById("agentEditName").readOnly = false;
   closeModal("agentModelModal"); triggerChange(); renderAgentModels();
 }
-function moveAgentModel(i, dir) {
-  const list = state.config.agent_models; const t = i + dir;
-  if (!list || t < 0 || t >= list.length) return;
-  [list[i], list[t]] = [list[t], list[i]]; triggerChange(); renderAgentModels();
+function moveAgentKey(name, i, dir) {
+  const keys = ((state.config.agent_models || {})[name] || {}).keys;
+  const t = i + dir;
+  if (!keys || t < 0 || t >= keys.length) return;
+  [keys[i], keys[t]] = [keys[t], keys[i]]; triggerChange(); renderAgentModels();
 }
-function deleteAgentModel(i) {
-  if (!confirm("确认删除该 Agent 模型路由?")) return;
-  state.config.agent_models.splice(i, 1); triggerChange(); renderAgentModels();
+function deleteAgentKey(name, i) {
+  const entry = (state.config.agent_models || {})[name];
+  if (!entry || !entry.keys) return;
+  entry.keys.splice(i, 1);
+  if (!entry.keys.length) delete state.config.agent_models[name]; // empty model -> drop it
+  triggerChange(); renderAgentModels();
 }
-async function testAgentModel(i) {
-  const item = state.config.agent_models[i];
+function deleteAgentModel(name) {
+  if (!confirm(`确认删除模型「${name}」及其全部 Key 绑定?`)) return;
+  delete state.config.agent_models[name]; triggerChange(); renderAgentModels();
+}
+async function testAgentKey(name, i) {
+  const entry = (state.config.agent_models || {})[name];
+  const b = entry && entry.keys && entry.keys[i];
+  if (!b) return;
+  const model = b.upstream_model || entry.upstream_model || name;
   try {
-    const r = await fetch("/api/admin/test-candidate", { method: "POST", headers: getHeaders(), body: JSON.stringify({ ...item, type: "chat" }) });
+    const r = await fetch("/api/admin/test-candidate", { method: "POST", headers: getHeaders(), body: JSON.stringify({ provider: b.provider, key: b.key, model, type: "chat" }) });
     const d = await r.json();
-    if (d.success) showToast("探活成功", "success"); else showToast("探活失败: " + (d.error || d.status || ""), "error");
+    if (d.success) showToast(`探活成功 (${model})`, "success"); else showToast("探活失败: " + (d.error || d.status || ""), "error");
   } catch(e) { showToast("探活异常: " + e.message, "error"); }
   loadAllData();
 }
