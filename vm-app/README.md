@@ -86,6 +86,30 @@ sudo systemctl reload caddy
 
 打开 `https://your-domain.com/`，使用安装时生成的 `ADMIN_PASSWORD` 登录。
 
+### 更新已部署的 VM（从本机发布）
+
+代码通过 rsync 发布到 VM（保留 `config/`、`.env`、`venv/`），随后更新 systemd 单元并重启：
+
+```bash
+KEY=~/path/to/key.pem
+VM=ubuntu@your-server
+
+# 1. 同步代码到暂存目录并安装（排除运行时数据）
+rsync -az -e "ssh -i $KEY" --exclude __pycache__ \
+  app scripts static requirements.txt README.md install.sh \
+  ocrproxy*.service ocrproxy*.timer Caddyfile.example client \
+  $VM:/tmp/deploy-staging/
+ssh -i $KEY $VM '
+  sudo rsync -a --delete --exclude venv --exclude .env --exclude config \
+       /tmp/deploy-staging/ /opt/ocrproxy/
+  sudo chown -R ocrproxy:ocrproxy /opt/ocrproxy
+  sudo cp /tmp/deploy-staging/ocrproxy.service /etc/systemd/system/ocrproxy.service
+  sudo systemctl daemon-reload && sudo systemctl restart ocrproxy
+  curl -sf http://127.0.0.1:8787/health'
+```
+
+> systemd 单元变更（如 `--limit-concurrency`）必须先 `daemon-reload` 再 restart；Caddyfile 的 `request_body max_size` 等站点变更需 `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`。改完配置后可执行 `sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/load_test.py` 在 VM 上跑完整回归（9 项行为 + 内存验证）。
+
 ## 接口调用
 
 ### Chat — KB 入库模式（虚拟别名）

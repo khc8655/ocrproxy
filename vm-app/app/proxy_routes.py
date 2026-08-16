@@ -106,6 +106,22 @@ def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     return max(float(config.get("schedule_total_budget", 15)), computed)
 
 
+async def _parse_json_body(request: Request):
+    """Parse the request JSON body, returning (body, error_response).
+
+    Aborted uploads (e.g. Caddy rejecting an oversized body mid-stream) raise
+    ClientDisconnect inside starlette — without this guard every such request
+    dumps a full traceback into the journal."""
+    try:
+        return await request.json(), None
+    except Exception:
+        return None, JSONResponse(
+            status_code=400,
+            content={"error": {"message": "Invalid JSON body or aborted upload",
+                               "type": "invalid_request_error"}},
+        )
+
+
 @router.get("/models")
 async def list_models(request: Request):
     """List all available models.
@@ -175,7 +191,9 @@ async def chat_completions(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body = await request.json()
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
     model_name = body.get("model", "")
     is_stream = body.get("stream", False)
     config = await get_config()
@@ -304,7 +322,9 @@ async def embeddings(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body = await request.json()
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
     model_name = body.get("model", "")
     config = await get_config()
 
@@ -367,7 +387,9 @@ async def rerank(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body = await request.json()
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
     model_name = body.get("model", "")
     config = await get_config()
 
@@ -429,7 +451,9 @@ async def ocr(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body = await request.json()
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
     img_b64 = body.get("image_base64")
     img_url = body.get("image_url")
     if not img_b64 and not img_url:
