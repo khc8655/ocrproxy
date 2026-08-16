@@ -50,8 +50,14 @@ app.include_router(proxy_router, prefix="/api")
 # Admin routes at /api/admin/*
 app.include_router(admin_router)
 
-# Serve admin panel
+# Serve admin panel + self-hosted vendor assets (font-awesome, chart.js).
+# Vendor files are immutable per version — allow browser caching; the HTML
+# itself is sent with Cache-Control: no-cache so panel updates are picked up
+# on the next regular refresh instead of living in heuristic cache for days.
 STATIC_DIR = Path(__file__).parent.parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+_NO_CACHE_HTML_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
 
 
 @app.get("/")
@@ -59,7 +65,8 @@ async def admin_page():
     """Serve the admin panel HTML."""
     admin_file = STATIC_DIR / "admin.html"
     if admin_file.exists():
-        return FileResponse(str(admin_file), media_type="text/html")
+        return FileResponse(str(admin_file), media_type="text/html",
+                            headers=_NO_CACHE_HTML_HEADERS)
     return JSONResponse(status_code=404, content={"error": "Admin panel not found"})
 
 
