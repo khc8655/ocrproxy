@@ -71,18 +71,20 @@ def build_config(per_key_limit: int = 5) -> dict:
             "deadstream": provider("deadstream", 1),
             "mod": provider("mod", 1),
         },
+        # Dedicated agent routing list (v3.2 schema): broken candidate FIRST,
+        # healthy second — exercising failover through agent_models.
+        "agent_models": [
+            {"provider": "dead429", "key": "k1", "model": "m429-agent"},
+            {"provider": "mockA", "key": "k1", "model": "m429-agent"},
+            {"provider": "deadstream", "key": "k1", "model": "deadstream-agent"},
+            {"provider": "mockA", "key": "k2", "model": "deadstream-agent"},
+            {"provider": "mod", "key": "k1", "model": "moderation-agent"},
+        ],
         "candidates": {
             "chat": [
                 # healthy KB-mode candidates FIRST: KB mode (model="chat") uses
-                # ALL candidates in order, so the broken agent-mode test
-                # entries below must not be reached before a healthy hit.
+                # ALL candidates in order.
                 {"provider": "mockB", "key": "k1", "model": "gpt-mock"},
-                # failover chains: broken candidate FIRST, healthy second
-                {"provider": "dead429", "key": "k1", "model": "m429-agent"},
-                {"provider": "mockA", "key": "k1", "model": "m429-agent"},
-                {"provider": "deadstream", "key": "k1", "model": "deadstream-agent"},
-                {"provider": "mockA", "key": "k2", "model": "deadstream-agent"},
-                {"provider": "mod", "key": "k1", "model": "moderation-agent"},
             ],
             "embedding": [{"provider": "mockA", "key": "k3", "model": "mock-emb"}],
             "reranker": [{"provider": "mockA", "key": "k4", "model": "mock-rerank"}],
@@ -164,7 +166,7 @@ async def main():
 
             print("\n== 2. dead-stream (200 + 0 bytes) failover ==")
             r, buf = await req(client, "deadstream-agent", stream=True)
-            check("dead stream -> failover success", r.status_code == 200 and b"hello" in buf,
+            check("dead stream -> failover success", r.status_code == 200 and b"[DONE]" in buf,
                   f"status={r.status_code} attempts={r.headers.get('X-Fallback-Attempts')} bytes={len(buf)}")
 
             print("\n== 3. content-moderation 400 early exit ==")
