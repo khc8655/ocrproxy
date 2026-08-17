@@ -1349,7 +1349,7 @@ async function testCandidate(cat, i) {
 // ═══════════════════════════════════════════════════════════
 function updateAccessGuide() {
   const base = window.location.origin + "/v1";
-  const agentModels = [...new Set((state.config.agent_models || []).map(m => m.model))].filter(Boolean);
+  const agentModels = Object.keys(state.config.agent_models || {});
   const demoModel = agentModels[0] || "<agent模型名>";
   document.getElementById("guideBaseUrl").innerText = base;
   document.getElementById("guideAgentModels").innerText = agentModels.length ? agentModels.join("、") : "（未配置，请先在「Agent 模型」页添加）";
