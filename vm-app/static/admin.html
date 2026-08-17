@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Proxy 控制台</title>
-  <!-- Self-hosted chart.js: public CDNs (jsdelivr/cdnjs) hang frequently in
-       mainland China and used to block the whole page, including login. -->
-  <script defer src="/static/vendor/chartjs/chart.umd.js"></script>
   <style>
     /* ── Design Tokens (from opendesign TraeWork system) ── */
     :root {
@@ -187,7 +184,6 @@
     .metric-sub { font-size: 0.78rem; display: flex; align-items: center; gap: 4px; margin-top: 6px; }
 
     /* ── Chart ── */
-    .chart-card { padding: 20px; }
     .chart-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
 
     /* ── Table ── */
@@ -266,7 +262,7 @@
     .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 
     /* ── Toast ── */
-    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 6000; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 12px 20px; background: var(--bg-base); border: 1px solid var(--border-1);
       border-radius: var(--radius-8); box-shadow: 0 4px 16px rgba(0,0,0,0.08);
@@ -332,11 +328,12 @@
     <p class="sub">管理控制台</p>
     <div class="form-group">
       <label class="form-label">管理员密钥</label>
-      <input type="password" id="loginKeyInput" class="form-control" placeholder="输入 API Key..." onkeydown="if(event.key==='Enter')handleLogin()">
+      <input type="password" id="loginKeyInput" class="form-control" placeholder="输入 API Key..." onkeydown="if(event.key==='Enter')handleLogin()" oninput="clearLoginError()">
     </div>
     <button class="btn btn-primary" id="loginBtn" style="width:100%;" onclick="handleLogin()">
       <svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> 授权进入
     </button>
+    <div id="loginError" style="display:none;margin-top:12px;padding:8px 12px;border-radius:var(--radius-8);background:var(--status-error-surface);color:var(--status-error);font-size:0.82rem;text-align:center;"></div>
   </div>
 </div>
 
@@ -383,13 +380,13 @@
       <div id="panel-dashboard" class="panel active">
         <div class="grid-4" id="metricsGrid"></div>
         <div class="grid-2">
-          <div class="card chart-card">
-            <h3 class="chart-title">请求吞吐量趋势</h3>
-            <div style="height:260px;"><canvas id="throughputChart"></canvas></div>
+          <div class="card" style="padding:20px;">
+            <h3 class="chart-title">请求量分布</h3>
+            <div id="miniThroughput"></div>
           </div>
-          <div class="card chart-card">
+          <div class="card" style="padding:20px;">
             <h3 class="chart-title">响应状态码分布</h3>
-            <div style="height:260px;"><canvas id="statusChart"></canvas></div>
+            <div id="miniStatus"></div>
           </div>
         </div>
         <div style="display:flex;justify-content:flex-end;">
@@ -625,7 +622,7 @@
 // ═══════════════════════════════════════════════════════════
 // State
 // ═══════════════════════════════════════════════════════════
-const state = { apiKey: sessionStorage.getItem("admin_api_key") || "", config: null, stats: null, activeTab: "dashboard", hasChanges: false, charts: {} };
+const state = { apiKey: sessionStorage.getItem("admin_api_key") || "", config: null, stats: null, activeTab: "dashboard", hasChanges: false };
 const navItems = [
   { id: "dashboard", label: "统计概览", icon: "chart-line", title: "统计概览", sub: "API Key 中转服务管理面板" },
   { id: "providers", label: "供应商 & Key", icon: "network-wired", title: "供应商管理", sub: "管理 API 供应商和密钥" },
@@ -652,9 +649,6 @@ function formatRelativeTime(ms) { if (!ms) return "—"; const diff = Date.now()
       else { showLogin(); }
     }).catch(() => showLogin());
   } else { showLogin(); }
-  // Re-render once all deferred scripts (chart.js) have finished loading, so
-  // charts appear even when the CDN is slower than the first dashboard render.
-  window.addEventListener("load", () => { if (state.config) renderActivePanel(); });
 })();
 
 function showLogin() { document.getElementById("loginOverlay").style.display = "flex"; document.getElementById("appMain").style.display = "none"; }
@@ -689,17 +683,28 @@ function renderActivePanel() {
 // ═══════════════════════════════════════════════════════════
 async function handleLogin() {
   const key = document.getElementById("loginKeyInput").value.trim();
-  if (!key) return;
+  if (!key) { showLoginError("请输入管理员密钥"); return; }
   const btn = document.getElementById("loginBtn");
+  clearLoginError();
   btn.disabled = true; btn.innerHTML = '<svg class="ic ic-spin" aria-hidden="true"><use href="#fa-spinner"/></svg> 验证中...';
   try {
     const r = await fetch("/api/admin/config", { headers: { "Authorization": "Bearer " + key } });
     if (r.ok) {
       state.apiKey = key; sessionStorage.setItem("admin_api_key", key);
+      clearLoginError();
       showApp(); showToast("登录成功", "success"); loadAllData();
-    } else { showToast("密钥校验失败", "error"); }
-  } catch(e) { showToast("连接失败: " + e.message, "error"); }
+    } else { showLoginError("密钥校验失败，请检查后重试"); }
+  } catch(e) { showLoginError("连接失败: " + e.message); }
   btn.disabled = false; btn.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#fa-key"/></svg> 授权进入';
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById("loginError");
+  el.textContent = msg; el.style.display = "block";
+}
+function clearLoginError() {
+  const el = document.getElementById("loginError");
+  el.textContent = ""; el.style.display = "none";
 }
 
 function handleLogout() {
@@ -763,39 +768,49 @@ function renderDashboard() {
       </div>
     </div>`;
   }).join("");
-  renderCharts(types);
+  renderMiniCharts(types);
 }
 
-function renderCharts(types) {
-  const labels = types.map(t => t.name);
+function renderMiniCharts(types) {
   const totals = types.map(t => (state.stats[t.key] || {}).count || 0);
   const success = types.map(t => (state.stats[t.key] || {}).success || 0);
   const e429 = types.map(t => (state.stats[t.key] || {})["429"] || 0);
   const e403 = types.map(t => (state.stats[t.key] || {})["403"] || 0);
   const e5xx = types.map(t => (state.stats[t.key] || {})["5xx"] || 0);
 
-  // Chart.js may still be loading (defer) or may have failed to load from the
-  // CDN — skip chart rendering instead of breaking the whole dashboard.
-  if (typeof Chart === "undefined") return;
+  const max = Math.max(...totals, 1);
+  document.getElementById("miniThroughput").innerHTML = types.map((t, i) => {
+    const v = totals[i];
+    const pct = (v / max * 100).toFixed(1);
+    return `<div style="display:flex;align-items:center;gap:10px;margin:10px 0;">
+      <div style="width:78px;font-size:0.82rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.name}</div>
+      <div style="flex:1;height:14px;background:var(--bg-secondary);border-radius:7px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${t.color};border-radius:7px;transition:width .3s;"></div>
+      </div>
+      <div style="width:64px;text-align:right;font-size:0.82rem;font-family:var(--font-mono);color:var(--text-default);">${v.toLocaleString()}</div>
+    </div>`;
+  }).join("");
 
-  if (state.charts.t) state.charts.t.destroy();
-  state.charts.t = new Chart(document.getElementById("throughputChart"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: "请求量", data: totals, backgroundColor: ["rgba(37,99,235,0.5)","rgba(254,169,0,0.5)","rgba(64,176,139,0.5)","rgba(226,121,0,0.5)"], borderColor: ["#2563EB","#FEA900","#15A877","#E27900"], borderWidth: 1, borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: { color: "#737373" } }, x: { ticks: { color: "#737373" } } } }
-  });
-
-  if (state.charts.s) state.charts.s.destroy();
-  state.charts.s = new Chart(document.getElementById("statusChart"), {
-    type: "bar",
-    data: { labels, datasets: [
-      { label: "成功 (200)", data: success, backgroundColor: "#15A877" },
-      { label: "频控 (429)", data: e429, backgroundColor: "#FEA900" },
-      { label: "鉴权 (403)", data: e403, backgroundColor: "#E8463A" },
-      { label: "服务错误 (5xx)", data: e5xx, backgroundColor: "#A1A1A1" },
-    ]},
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: "#737373" } } }, scales: { y: { stacked: true, grid: { color: "rgba(0,0,0,0.04)" }, ticks: { color: "#737373" } }, x: { stacked: true, ticks: { color: "#737373" } } } }
-  });
+  const succ = success.reduce((a, b) => a + b, 0);
+  const c429 = e429.reduce((a, b) => a + b, 0);
+  const c403 = e403.reduce((a, b) => a + b, 0);
+  const c5xx = e5xx.reduce((a, b) => a + b, 0);
+  const tot = succ + c429 + c403 + c5xx || 1;
+  const seg = [
+    { label: "成功 (200)", v: succ, c: "#15A877" },
+    { label: "频控 (429)", v: c429, c: "#FEA900" },
+    { label: "鉴权 (403)", v: c403, c: "#E8463A" },
+    { label: "服务错误 (5xx)", v: c5xx, c: "#A1A1A1" },
+  ];
+  document.getElementById("miniStatus").innerHTML = `
+    <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--bg-secondary);margin-bottom:14px;">
+      ${seg.map(s => `<div style="width:${(s.v / tot * 100).toFixed(1)}%;background:${s.c};" title="${s.label}: ${s.v}"></div>`).join("")}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;">
+      ${seg.map(s => `<div style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);">
+        <span style="width:10px;height:10px;border-radius:3px;background:${s.c};display:inline-block;"></span>${s.label}
+        <span style="font-family:var(--font-mono);color:var(--text-default);">${s.v.toLocaleString()}</span></div>`).join("")}
+    </div>`;
 }
 
 async function resetStats() {
