@@ -190,6 +190,7 @@ async def chat_completions(request: Request):
     model_name = body.get("model", "")
     is_stream = body.get("stream", False)
     config = await get_config()
+    kb_force_no_reasoning = False
 
     all_chat_candidates = config.get("candidates", {}).get("chat", [])
 
@@ -197,11 +198,12 @@ async def chat_completions(request: Request):
         # ── KB ingestion mode ──────────────────────────────────────
         # Always disable thinking/reasoning for KB ingestion — this is
         # batch processing where reasoning adds latency without value.
-        body["reasoning_effort"] = "low"            # StepFun / OpenAI style
-        body["enable_thinking"] = False              # Qwen3 / SenseNova style
-        body["chat_template_kwargs"] = {             # vLLM / SiliconFlow style
-            "enable_thinking": False,
-        }
+        # Inject only params the target upstreams actually accept, per
+        # provider (applied in build_request): sensenova -> reasoning_effort
+        # "none" (thinking truly off), stepfun -> "low" (lowest tier).
+        # enable_thinking / chat_template_kwargs are Qwen/vLLM style and
+        # ignored by both sensenova and stepfun — removed.
+        kb_force_no_reasoning = True
 
         # KB ingestion is batch processing: always fast & non-streaming.
         # Answers are summary fragments consumed by the ingestion pipeline,
@@ -265,6 +267,12 @@ async def chat_completions(request: Request):
         # concurrent requests that may share the same cached body dict.
         out = copy.deepcopy(body)
         out["model"] = cand["model"]
+        # KB-only, config-style processing: disable thinking per upstream.
+        if kb_force_no_reasoning:
+            if cand.get("provider") == "sensenova":
+                out["reasoning_effort"] = "none"
+            elif cand.get("provider") == "stepfun":
+                out["reasoning_effort"] = "low"
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
