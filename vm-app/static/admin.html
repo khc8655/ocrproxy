@@ -1167,7 +1167,7 @@ function renderAgentModels() {
     container.innerHTML = `<div class="card" style="padding:40px;text-align:center;color:var(--text-tertiary);">尚未配置 Agent 模型。创建一个模型并绑定多个 Key，即可自动轮询（429/500 切换）。</div>`;
     return;
   }
-  container.innerHTML = names.map(name => {
+  container.innerHTML = names.map((name, i) => {
     const entry = models[name] || {};
     const upstream = entry.upstream_model || name;
     const keyRows = (entry.keys || []).map((b, i) => {
@@ -1210,6 +1210,7 @@ function renderAgentModels() {
           <span class="hint" style="white-space:nowrap;">${(entry.keys||[]).length} 个 Key</span>
         </div>
         <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="testAgentModelAll('${esc(name)}')" title="并发探活该模型绑定的全部 Key"><svg class="ic" aria-hidden="true"><use href="#fa-flask"/></svg> 探活全部</button>
           <button class="btn btn-secondary btn-sm" onclick="editAgentModel('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-pen"/></svg> 编辑</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAgentModel('${esc(name)}')"><svg class="ic" aria-hidden="true"><use href="#fa-trash-can"/></svg> 删除模型</button>
         </div>
@@ -1218,6 +1219,7 @@ function renderAgentModels() {
         <thead><tr><th style="width:36px;">#</th><th style="width:140px;">供应商</th><th style="width:110px;">Key</th><th style="width:70px;">状态</th><th style="width:110px;">最近探测</th><th style="width:170px;text-align:right;">操作</th></tr></thead>
         <tbody>${keyRows}</tbody>
       </table></div>
+      <div id="agentProbeResult-${i}" style="display:none;margin-top:10px;"></div>
     </div>`;
   }).join("");
 }
@@ -1319,6 +1321,24 @@ async function testAgentKey(name, i) {
     if (d.success) showToast(`探活成功 (${model})`, "success"); else showToast("探活失败: " + (d.error || d.status || ""), "error");
   } catch(e) { showToast("探活异常: " + e.message, "error"); }
   loadAllData();
+}
+
+async function testAgentModelAll(name) {
+  const idx = Object.keys(state.config.agent_models || {}).indexOf(name);
+  const box = document.getElementById("agentProbeResult-" + idx);
+  const render = (html) => { if (box) { box.innerHTML = html; box.style.display = html ? "block" : "none"; } };
+  render('<div style="padding:10px;background:#f5f5f5;border-radius:8px;font-size:0.8rem;color:#737373;">正在并发探活全部 Key...</div>');
+  try {
+    const r = await fetch("/api/admin/test-agent-model", { method: "POST", headers: getHeaders(), body: JSON.stringify({ model: name }) });
+    const d = await r.json();
+    if (!d.results) { render('<div style="padding:10px;color:#e8463a;font-size:0.8rem;">' + esc(d.error || "接口异常") + '</div>'); return; }
+    const chips = d.results.map(res => {
+      if (res.ok) return '<span class="badge badge-success" title="' + esc(res.error || "") + '">' + esc(res.provider) + "/" + esc(res.key) + ' ✓ ' + res.status + ' ' + (res.latency_ms / 1000).toFixed(1) + 's</span>';
+      return '<span class="badge badge-error" title="' + esc(res.error || "") + '">' + esc(res.provider) + "/" + esc(res.key) + ' ✗ ' + (res.status || "—") + ' ' + ((res.latency_ms || 0) / 1000).toFixed(1) + 's</span>';
+    }).join(" ");
+    render('<div style="margin-bottom:6px;font-size:0.8rem;font-weight:600;color:#262626;">探活结果: <span style="color:' + (d.ok === d.total ? '#15a877' : (d.ok > 0 ? '#d97706' : '#e8463a')) + '">' + d.ok + "/" + d.total + '</span> 可用 <span style="color:#a3a3a3;font-weight:400;">(' + esc(d.checked_at || "") + ')</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>');
+    loadAllData();
+  } catch(e) { render('<div style="padding:10px;color:#e8463a;font-size:0.8rem;">探活异常: ' + esc(e.message) + '</div>'); }
 }
 
 function moveCandidate(cat, i, dir) {
