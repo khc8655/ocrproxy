@@ -2,8 +2,10 @@
 Admin API routes: config CRUD, stats, verify-key.
 Ported from EdgeOne edge-functions/api/admin/*.js.
 """
+import asyncio
 import ipaddress
 import socket
+import time
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -318,3 +320,87 @@ async def test_candidate_endpoint(request: Request):
         return JSONResponse(content={"success": False, "error": f"连接失败: {e}"})
     except Exception as e:
         return JSONResponse(content={"success": False, "error": f"测试失败: {e}"})
+
+
+@router.post("/test-agent-model")
+async def test_agent_model_endpoint(request: Request):
+    """Probe ALL keys bound to an agent model in parallel.
+
+    Unlike /test-candidate (single candidate), this checks every key binding of
+    an agent model and reports per-key health — so a model that is "reachable
+    but throttled" (429 quota/TPM exhausted, 503 busy) becomes immediately
+    visible instead of silently failing over during real traffic.
+    """
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    name = body.get("model")
+    if not name:
+        return JSONResponse(status_code=400, content={"error": "Missing model name"})
+
+    config = await get_config()
+    entry = config.get("agent_models", {}).get(name)
+    if not entry:
+        return JSONResponse(status_code=404, content={"error": f"Agent model '{name}' not found"})
+
+    bindings = entry.get("keys") or []
+    providers = config.get("providers", {})
+    sem = asyncio.Semaphore(5)
+
+    async def probe(b):
+        provider = providers.get(b.get("provider"))
+        if not provider:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": None, "error": "Provider not found"}
+        api_key = provider.get("keys", {}).get(b.get("key"))
+        if not api_key:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": None, "error": "Key not found"}
+        model = b.get("upstream_model") or entry.get("upstream_model") or name
+        url = join_upstream(provider.get("base_url", ""), "chat/completions")
+        payload = {"model": model, "messages": [{"role": "user", "content": "Hi"}],
+                   "max_tokens": 1, "stream": False}
+        start = time.time()
+        try:
+            async with sem:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
+                    resp = await client.post(url, headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    }, json=payload)
+            latency_ms = int((time.time() - start) * 1000)
+            ok = 200 <= resp.status_code < 300
+            if ok:
+                stats.record("chat", resp.status_code, 0.0,
+                             provider=b.get("provider"), key=b.get("key"))
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": ok,
+                    "status": resp.status_code, "latency_ms": latency_ms,
+                    "error": None if ok else resp.text[:200]}
+        except httpx.ReadTimeout:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": int((time.time() - start) * 1000),
+                    "error": "上游超时 (20s)"}
+        except httpx.ConnectError as e:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": int((time.time() - start) * 1000),
+                    "error": f"连接失败: {e}"}
+        except Exception as e:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": int((time.time() - start) * 1000),
+                    "error": f"异常: {e}"}
+
+    results = await asyncio.gather(*[probe(b) for b in bindings]) if bindings else []
+    ok_count = sum(1 for r in results if r.get("ok"))
+    return JSONResponse(content={
+        "success": ok_count > 0,
+        "model": name,
+        "total": len(results),
+        "ok": ok_count,
+        "results": results,
+        "checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
