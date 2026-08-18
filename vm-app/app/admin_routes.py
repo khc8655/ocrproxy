@@ -190,7 +190,7 @@ async def verify_key_endpoint(request: Request):
         formatted_url = base_url.rstrip("/")
         models_url = f"{formatted_url}/v1/models"
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             resp = await client.get(models_url, headers={
                 "Authorization": f"Bearer {api_key}",
                 "User-Agent": "ocrproxy-verifier/1.0"
@@ -286,7 +286,7 @@ async def test_candidate_endpoint(request: Request):
         test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0), follow_redirects=False) as client:
             resp = await client.post(url, headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -368,7 +368,7 @@ async def test_agent_model_endpoint(request: Request):
         start = time.time()
         try:
             async with sem:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0), follow_redirects=False) as client:
                     resp = await client.post(url, headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",

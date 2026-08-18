@@ -155,7 +155,10 @@ def _sort_candidates_by_latency(candidates: list) -> list:
     Candidates with no data keep their original relative order but
     are placed after those with known latency.
     """
-    return sorted(candidates, key=lambda c: (_get_avg_latency(get_candidate_id(c)), candidates.index(c)))
+    return [c for _, c in sorted(
+        enumerate(candidates),
+        key=lambda item: (_get_avg_latency(get_candidate_id(item[1])), item[0])
+    )]
 
 
 async def get_client() -> httpx.AsyncClient:
@@ -173,8 +176,8 @@ async def get_client() -> httpx.AsyncClient:
             _client = httpx.AsyncClient(
                 timeout=httpx.Timeout(300.0, connect=5.0),
                 limits=httpx.Limits(
-                    max_connections=40,
-                    max_keepalive_connections=10,
+                    max_connections=80,
+                    max_keepalive_connections=20,
                     keepalive_expiry=30.0,
                 ),
             )

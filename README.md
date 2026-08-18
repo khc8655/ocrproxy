@@ -17,7 +17,8 @@
 - **内存安全**：MALLOC_ARENA_MAX=2 + malloc_trim + 全局并发限制 + 假死自动重启
 - **Web 管理面板**：可视化配置供应商、Key、路由优先级，实时统计监控
 - **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
-- **安全加固**：systemd 沙箱隔离、SSRF 防护、常量时间密钥比较
+- **角色权限隔离**：`/api/admin/*` 严格限制为 `ADMIN_PASSWORD`，普通 `PROXY_API_KEY` 无法越权访问管理接口
+- **安全加固**：systemd 沙箱隔离、SSRF 防护（DNS Rebinding 校验与 302 重定向拦截）、常量时间密钥比较
 
 ## 项目结构
 

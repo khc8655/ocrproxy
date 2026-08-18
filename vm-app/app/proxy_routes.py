@@ -273,6 +273,8 @@ async def chat_completions(request: Request):
                 out["reasoning_effort"] = "none"
             elif cand.get("provider") == "stepfun":
                 out["reasoning_effort"] = "low"
+            else:
+                out["reasoning_effort"] = "none"
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -482,7 +484,19 @@ async def ocr(request: Request):
     if img_url:
         img = img_url
     else:
-        mime = "image/jpeg" if img_b64.startswith("/9j/") else "image/png"
+        # Detect MIME from magic bytes in base64 prefix
+        if img_b64.startswith("/9j/"):
+            mime = "image/jpeg"
+        elif img_b64.startswith("iVBORw0KGgo"):
+            mime = "image/png"
+        elif img_b64.startswith("UklGR"):
+            mime = "image/webp"
+        elif img_b64.startswith("R0lGOD"):
+            mime = "image/gif"
+        elif img_b64.startswith("Qk"):
+            mime = "image/bmp"
+        else:
+            mime = "image/png"
         img = f"data:{mime};base64,{img_b64}"
 
     # Release the original body dict and the raw base64/url locals early so
