@@ -5,8 +5,14 @@
 # scenario where the process is alive (so Restart=on-failure doesn't
 # trigger) but stuck in GC thrashing or cgroup memory pressure.
 
-timeout 10 curl -sf http://127.0.0.1:8787/health > /dev/null 2>&1
+PORT=8787
+if [ -f /opt/ocrproxy/.env ]; then
+    ENV_PORT=$(grep -oP 'APP_PORT=\K\d+' /opt/ocrproxy/.env 2>/dev/null)
+    [ -n "$ENV_PORT" ] && PORT=$ENV_PORT
+fi
+
+timeout 10 curl -sf http://127.0.0.1:${PORT}/health > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-    logger -t ocrproxy-health "Health check FAILED — restarting ocrproxy.service"
+    logger -t ocrproxy-health "Health check FAILED on port ${PORT} — restarting ocrproxy.service"
     systemctl restart ocrproxy.service
 fi

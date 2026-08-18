@@ -56,14 +56,25 @@ def _error_response(exc: Exception) -> JSONResponse:
         if exc.last_response_body:
             try:
                 body = json.loads(exc.last_response_body)
-                return JSONResponse(status_code=status, content=body)
+                if isinstance(body, dict) and "error" in body:
+                    return JSONResponse(status_code=status, content=body)
+                elif isinstance(body, dict):
+                    msg = body.get("message") or body.get("detail") or "Upstream error"
+                    return JSONResponse(
+                        status_code=status,
+                        content={"error": {"message": str(msg), "code": str(status)}},
+                    )
             except (json.JSONDecodeError, TypeError):
                 pass
         return JSONResponse(
             status_code=status,
-            content={"detail": str(exc), "errors": exc.errors},
+            content={"error": {"message": str(exc), "code": "all_candidates_failed"}},
         )
-    return JSONResponse(status_code=503, content={"detail": str(exc)})
+    logger.error("Unhandled proxy error: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=503,
+        content={"error": {"message": "Service temporarily unavailable. Please retry later.", "code": "service_unavailable"}},
+    )
 
 
 def _overloaded_response(exc: GlobalOverloadError) -> JSONResponse:
@@ -100,10 +111,14 @@ def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     """Scale the failover budget with candidate count, ensuring at least 3 attempts.
 
     Hard cap at 180s: without it agent mode computes 120s × 3 = 360s, which
-    exceeds typical client-side timeouts — the failover would be paid for but
-    never observed.  An explicitly configured schedule_total_budget always wins."""
-    computed = min(180.0, timeout * min(3, max(candidate_count, 1)))
-    return max(float(config.get("schedule_total_budget", 15)), computed)
+    exceeds typical client-side timeouts. An explicitly configured schedule_total_budget wins."""
+    try:
+        explicit = float(config.get("schedule_total_budget", 0))
+    except (ValueError, TypeError):
+        explicit = 0.0
+    if explicit > 0:
+        return explicit
+    return min(180.0, timeout * min(3, max(candidate_count, 1)))
 
 
 async def _parse_json_body(request: Request):
@@ -212,7 +227,10 @@ async def chat_completions(request: Request):
         if is_stream:
             body["stream"] = False
             is_stream = False
-        chat_timeout = float(config.get("chat_fast_timeout", 30))
+        try:
+            chat_timeout = max(1.0, float(config.get("chat_fast_timeout", 30)))
+        except (ValueError, TypeError):
+            chat_timeout = 30.0
 
         candidates_list = all_chat_candidates
 
@@ -248,7 +266,10 @@ async def chat_completions(request: Request):
         # Agent mode: don't modify the request body except the model rewrite
         # (public name -> upstream id when they differ).
         # Use the standard chat timeout.
-        chat_timeout = float(config.get("upstream_timeout_chat", 120))
+        try:
+            chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+        except (ValueError, TypeError):
+            chat_timeout = 120.0
 
     if not candidates_list:
         return JSONResponse(
@@ -257,7 +278,7 @@ async def chat_completions(request: Request):
         )
 
     # Build config copy with overridden settings
-    config = dict(config)  # shallow copy to avoid mutating cached config
+    config = copy.deepcopy(config)
     config["upstream_timeout"] = chat_timeout
     config["schedule_total_budget"] = _scale_budget(config, chat_timeout, len(candidates_list))
     config["candidates"] = {"chat": candidates_list}
@@ -316,7 +337,7 @@ async def chat_completions(request: Request):
         except GlobalOverloadError as e:
             return _overloaded_response(e)
         except Exception as e:
-            return JSONResponse(status_code=503, content={"detail": str(e)})
+            return _error_response(e)
 
     try:
         sr = await schedule(config, "chat", build_request)
@@ -329,7 +350,7 @@ async def chat_completions(request: Request):
     except GlobalOverloadError as e:
         return _overloaded_response(e)
     except Exception as e:
-        return JSONResponse(status_code=503, content={"detail": str(e)})
+        return _error_response(e)
 
 
 # ── Embeddings ──────────────────────────────────────────────────────
@@ -367,8 +388,12 @@ async def embeddings(request: Request):
     # Embeddings of large document batches routinely take longer than the
     # global default (12s) — one timeout would burn the whole failover
     # budget and the remaining keys would never be tried.
-    emb_timeout = float(config.get("upstream_timeout_embedding", 60))
-    config = dict(config)
+    try:
+        emb_timeout = max(1.0, float(config.get("upstream_timeout_embedding", 60)))
+    except (ValueError, TypeError):
+        emb_timeout = 60.0
+
+    config = copy.deepcopy(config)
     config["upstream_timeout"] = emb_timeout
     config["schedule_total_budget"] = _scale_budget(config, emb_timeout, len(candidates_list))
     config["candidates"] = {"embedding": candidates_list}
@@ -394,7 +419,7 @@ async def embeddings(request: Request):
     except GlobalOverloadError as e:
         return _overloaded_response(e)
     except Exception as e:
-        return JSONResponse(status_code=503, content={"detail": str(e)})
+        return _error_response(e)
 
 
 # ── Reranker ────────────────────────────────────────────────────────
@@ -431,8 +456,12 @@ async def rerank(request: Request):
 
     # Rerank requests can also be slow on long candidate lists — same
     # per-type timeout + budget treatment as embeddings.
-    rerank_timeout = float(config.get("upstream_timeout_rerank", 30))
-    config = dict(config)
+    try:
+        rerank_timeout = max(1.0, float(config.get("upstream_timeout_rerank", 30)))
+    except (ValueError, TypeError):
+        rerank_timeout = 30.0
+
+    config = copy.deepcopy(config)
     config["upstream_timeout"] = rerank_timeout
     config["schedule_total_budget"] = _scale_budget(config, rerank_timeout, len(candidates_list))
     config["candidates"] = {"reranker": candidates_list}
@@ -458,7 +487,7 @@ async def rerank(request: Request):
     except GlobalOverloadError as e:
         return _overloaded_response(e)
     except Exception as e:
-        return JSONResponse(status_code=503, content={"detail": str(e)})
+        return _error_response(e)
 
 
 # ── OCR (KB only — not a standard OpenAI endpoint) ──────────────────
@@ -474,7 +503,14 @@ async def ocr(request: Request):
     img_b64 = body.get("image_base64")
     img_url = body.get("image_url")
     if not img_b64 and not img_url:
-        return JSONResponse(status_code=400, content={"detail": "Must provide image_base64 or image_url"})
+        return JSONResponse(status_code=400, content={"error": {"message": "Must provide image_base64 or image_url", "code": "missing_image"}})
+
+    # Payload size guard: max 20MB base64 (approx 15MB binary)
+    if img_b64 and len(img_b64) > 20 * 1024 * 1024:
+        return JSONResponse(
+            status_code=413,
+            content={"error": {"message": "Image payload too large (max 20MB base64)", "code": "payload_too_large"}}
+        )
 
     prompt = body.get("prompt", "请识别图片中的所有文字内容，返回纯文本。")
 
@@ -495,6 +531,10 @@ async def ocr(request: Request):
             mime = "image/gif"
         elif img_b64.startswith("Qk"):
             mime = "image/bmp"
+        elif img_b64.startswith("SUkq") or img_b64.startswith("TU0A"):
+            mime = "image/tiff"
+        elif img_b64.startswith("AAAA") or "ftypheic" in img_b64[:40] or "ftypavif" in img_b64[:40]:
+            mime = "image/heic"
         else:
             mime = "image/png"
         img = f"data:{mime};base64,{img_b64}"
@@ -524,8 +564,12 @@ async def ocr(request: Request):
         return "POST", url, headers, chat_body
 
     # OCR / vision models need a longer timeout than chat
-    ocr_timeout = float(config.get("upstream_timeout_ocr", 60))
-    config = dict(config)
+    try:
+        ocr_timeout = max(1.0, float(config.get("upstream_timeout_ocr", 60)))
+    except (ValueError, TypeError):
+        ocr_timeout = 60.0
+
+    config = copy.deepcopy(config)
     config["upstream_timeout"] = ocr_timeout
     ocr_candidates = len(config.get("candidates", {}).get("ocr", []))
     config["schedule_total_budget"] = _scale_budget(config, ocr_timeout, ocr_candidates)
@@ -541,4 +585,4 @@ async def ocr(request: Request):
     except GlobalOverloadError as e:
         return _overloaded_response(e)
     except Exception as e:
-        return JSONResponse(status_code=503, content={"detail": str(e)})
+        return _error_response(e)

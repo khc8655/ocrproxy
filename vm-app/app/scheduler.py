@@ -60,16 +60,22 @@ except Exception:
     pass  # non-Linux platforms or missing libc — silently skip
 
 
-def _reclaim_memory():
-    """Run gc.collect() then malloc_trim(0) to return freed heap to the OS.
-    Called after large-payload requests (OCR, large chat responses) rather
-    than on a blind counter, so the cost is paid only when it matters."""
+def _reclaim_memory_sync():
+    """Synchronous GC + malloc_trim — run in a thread to avoid blocking the event loop."""
     gc.collect()
     if _libc is not None:
         try:
             _libc.malloc_trim(0)
         except Exception:
             pass
+
+
+async def _reclaim_memory():
+    """Run gc.collect() then malloc_trim(0) to return freed heap to the OS.
+    Called after large-payload requests (OCR, large chat responses) rather
+    than on a blind counter, so the cost is paid only when it matters.
+    Offloaded to a thread to avoid blocking the async event loop."""
+    await asyncio.to_thread(_reclaim_memory_sync)
 
 
 class AllCandidatesFailedError(Exception):
@@ -186,9 +192,10 @@ async def get_client() -> httpx.AsyncClient:
 
 async def close_client():
     global _client
-    if _client is not None:
-        await _client.aclose()
-        _client = None
+    async with _client_lock:
+        if _client is not None:
+            await _client.aclose()
+            _client = None
 
 
 async def get_key_semaphore(key_id: str, limit: int) -> asyncio.Semaphore:
@@ -301,21 +308,49 @@ async def schedule(
 
     providers = config.get("providers", {})
 
-    # Load settings from config or defaults
-    upstream_timeout_sec = float(config.get("upstream_timeout", 12))
-    total_budget_sec = float(config.get("schedule_total_budget", 15))
-    concurrency_limit = int(config.get("max_concurrency_per_key", 5))
+    # Load settings from config with safe fallback and clamping
+    try:
+        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout", 12)))
+    except (ValueError, TypeError):
+        upstream_timeout_sec = 12.0
 
-    cooldown_429 = float(config.get("cooldown_429_sec", 60))
-    cooldown_403 = float(config.get("cooldown_403_sec", 600))
-    cooldown_5xx = float(config.get("cooldown_duration", 30))
-    cooldown_other = float(config.get("cooldown_duration", 30))
-    # ReadTimeout means the model is just slow (e.g. reasoning models like
-    # DeepSeek-R1), NOT that the key is broken.  Use a very short cooldown
-    # so the key remains available for the next request.
+    try:
+        total_budget_sec = max(1.0, float(config.get("schedule_total_budget", 15)))
+    except (ValueError, TypeError):
+        total_budget_sec = 15.0
+
+    try:
+        concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))
+    except (ValueError, TypeError):
+        concurrency_limit = 5
+
+    try:
+        cooldown_429 = max(1.0, float(config.get("cooldown_429_sec", 60)))
+    except (ValueError, TypeError):
+        cooldown_429 = 60.0
+
+    try:
+        cooldown_403 = max(1.0, float(config.get("cooldown_403_sec", 600)))
+    except (ValueError, TypeError):
+        cooldown_403 = 600.0
+
+    try:
+        cooldown_5xx = max(1.0, float(config.get("cooldown_duration", 30)))
+    except (ValueError, TypeError):
+        cooldown_5xx = 30.0
+
+    cooldown_other = cooldown_5xx
     cooldown_read_timeout = 2.0
-    circuit_break_threshold = int(config.get("circuit_break_threshold", 3))
-    circuit_cooldown = float(config.get("circuit_cooldown_sec", 300))
+
+    try:
+        circuit_break_threshold = max(1, int(config.get("circuit_break_threshold", 3)))
+    except (ValueError, TypeError):
+        circuit_break_threshold = 3
+
+    try:
+        circuit_cooldown = max(1.0, float(config.get("circuit_cooldown_sec", 300)))
+    except (ValueError, TypeError):
+        circuit_cooldown = 300.0
 
     start_time = time.time()
     errors = []
@@ -377,9 +412,11 @@ async def schedule(
         # which defeats the cap's purpose.
         global_sem = _get_global_semaphore()
         await sem.acquire()
+        global_sem_acquired = False
         try:
             try:
                 await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
+                global_sem_acquired = True
             except asyncio.TimeoutError:
                 raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
             # Budget re-check AFTER queueing: time spent waiting on the key
@@ -475,7 +512,7 @@ async def schedule(
                         # httpx response buffer and reclaim heap pages.
                         if model_type == "ocr":
                             await resp.aclose()
-                            _reclaim_memory()
+                            await _reclaim_memory()
                         return ScheduleResult(
                             data=resp_data,
                             routed_via=routed_via,
@@ -644,7 +681,8 @@ async def schedule(
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
             finally:
-                global_sem.release()
+                if global_sem_acquired:
+                    global_sem.release()
         finally:
             sem.release()
 

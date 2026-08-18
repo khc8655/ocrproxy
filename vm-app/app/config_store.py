@@ -17,7 +17,14 @@ logger = logging.getLogger("config_store")
 _config: Optional[dict] = None
 _loaded_at: float = 0.0
 _cache_ttl: float = 300.0  # 5 minutes
-_lock = asyncio.Lock()
+_lock: Optional[asyncio.Lock] = None
+
+
+def _get_lock() -> asyncio.Lock:
+    global _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    return _lock
 
 # Config versioning: bumped whenever a config that DIFFERS from the previous
 # one is loaded from disk or saved via the admin panel.  Other modules (e.g.
@@ -80,7 +87,7 @@ def _migrate_agent_models(config: dict) -> bool:
         if not isinstance(entry, dict):
             continue
         name = entry.get("model")
-        if not name:
+        if not name or not entry.get("provider") or not entry.get("key"):
             continue
         binding = {"provider": entry["provider"], "key": entry["key"]}
         upstream = entry.get("upstream_model")
@@ -157,13 +164,13 @@ async def get_config() -> dict:
     if _config is not None and (time.time() - _loaded_at < _cache_ttl):
         return _config
 
-    async with _lock:
+    async with _get_lock():
         # Double-check after acquiring the lock, with a FRESH timestamp —
         # the outer check may have run before a long wait on the lock.
         if _config is not None and (time.time() - _loaded_at < _cache_ttl):
             return _config
 
-        _config = load_from_disk()
+        _config = await asyncio.to_thread(load_from_disk)
         _loaded_at = time.time()
         _bump_version_if_changed(_config)
         logger.info("Configuration loaded from disk.")
@@ -179,9 +186,10 @@ def clear_cache():
 
 
 async def save_config(config: dict):
-    """Save config to disk and update cache."""
+    """Save config to disk and update cache with write-lock."""
     global _config, _loaded_at
-    save_to_disk(config)
-    _config = config
-    _loaded_at = time.time()
-    _bump_version_if_changed(config)
+    async with _get_lock():
+        await asyncio.to_thread(save_to_disk, config)
+        _config = config
+        _loaded_at = time.time()
+        _bump_version_if_changed(config)
