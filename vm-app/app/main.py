@@ -80,16 +80,14 @@ async def admin_page_alias():
 async def health_check():
     """Health check endpoint for monitoring."""
     try:
-        config = await get_config()
-        return {
-            "status": "ok",
-            "providers": list(config.get("providers", {}).keys()),
-            "candidate_types": list(config.get("candidates", {}).keys()),
-        }
+        # Verify config can be read
+        await get_config()
+        return {"status": "ok"}
     except Exception as e:
+        logger.error("Health check failed: %s", e)
         return JSONResponse(
             status_code=503,
-            content={"status": "error", "detail": str(e)}
+            content={"status": "error"}
         )
 
 

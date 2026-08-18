@@ -2,6 +2,7 @@
 Admin API routes: config CRUD, stats, verify-key.
 Ported from EdgeOne edge-functions/api/admin/*.js.
 """
+import logging
 import asyncio
 import ipaddress
 import socket
@@ -17,14 +18,38 @@ from . import stats
 from .auth import verify_admin_auth
 
 router = APIRouter(prefix="/api/admin")
+logger = logging.getLogger("admin_routes")
+
+ALLOWED_STAT_TYPES = {"chat", "embedding", "reranker", "ocr"}
 
 
 def _check_auth(request: Request) -> bool:
     return verify_admin_auth(request)
 
 
-def _is_blocked_hostname(hostname: str) -> bool:
+def _check_ip_address(addr_str: str) -> bool:
+    """Check if an IP address is private, loopback, link-local, or multicast."""
+    try:
+        addr = ipaddress.ip_address(addr_str)
+        # Handle IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        )
+    except ValueError:
+        return False
+
+
+async def _is_blocked_hostname(hostname: str) -> bool:
     """Check if hostname is an internal/local/metadata address (SSRF protection)."""
+    if not hostname:
+        return True
     hostname = hostname.lower().strip()
 
     # Direct string checks for common patterns
@@ -32,41 +57,19 @@ def _is_blocked_hostname(hostname: str) -> bool:
     if hostname in blocked_exact:
         return True
 
-    blocked_prefixes = ["127.", "10.", "192.168.", "169.254.", "0."]
-    for prefix in blocked_prefixes:
-        if hostname.startswith(prefix):
-            return True
-
-    # Check 172.16-31.x.x range
-    if hostname.startswith("172."):
-        parts = hostname.split(".")
-        if len(parts) >= 2:
-            try:
-                second = int(parts[1])
-                if 16 <= second <= 31:
-                    return True
-            except ValueError:
-                pass
-
-    # IPv6 ULA (fd00::/8) and link-local (fe80::/10)
-    if hostname.startswith("fd") and len(hostname) >= 3 and hostname[2] == ":":
-        return True
-    if hostname.startswith("fe80:"):
+    # If it's a direct IP address, check it immediately
+    if _check_ip_address(hostname):
         return True
 
-    # DNS resolution check to prevent DNS rebinding attacks
+    # DNS resolution check in a thread to prevent blocking the event loop
     try:
-        resolved = socket.getaddrinfo(hostname, None)
+        resolved = await asyncio.to_thread(socket.getaddrinfo, hostname, None)
         for info in resolved:
             ip = info[4][0]
-            try:
-                addr = ipaddress.ip_address(ip)
-                if addr.is_private or addr.is_loopback or addr.is_link_local:
-                    return True
-            except ValueError:
-                continue
+            if _check_ip_address(ip):
+                return True
     except (socket.gaierror, socket.herror):
-        pass  # If DNS fails, let the HTTP request fail naturally
+        return False
 
     return False
 
@@ -80,7 +83,8 @@ async def get_config_endpoint(request: Request):
         config = await get_config()
         return JSONResponse(content=config)
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        logger.error("Failed to get config: %s", e, exc_info=True)
+        return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
 
 
 @router.post("/config")
@@ -94,17 +98,18 @@ async def save_config_endpoint(request: Request):
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
     # Validate required structure
-    if not isinstance(body, dict) or "providers" not in body or "candidates" not in body:
+    if not isinstance(body, dict) or not isinstance(body.get("providers"), dict) or not isinstance(body.get("candidates"), dict):
         return JSONResponse(
             status_code=400,
-            content={"error": "Invalid configuration: missing providers or candidates"}
+            content={"error": "Invalid configuration: providers and candidates must be objects"}
         )
 
     try:
         await save_config(body)
         return JSONResponse(content={"status": "success", "message": "Configuration saved successfully."})
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        logger.error("Failed to save config: %s", e, exc_info=True)
+        return JSONResponse(status_code=500, content={"error": "Failed to save configuration"})
 
 
 @router.get("/stats")
@@ -132,14 +137,23 @@ async def post_stats_endpoint(request: Request):
 
     # Handle stats update from scheduler (for compatibility)
     type_name = body.get("type")
-    status_code = body.get("status")
-    if not type_name or not status_code:
-        return JSONResponse(status_code=400, content={"error": "Missing type or status"})
+    if not type_name or type_name not in ALLOWED_STAT_TYPES:
+        return JSONResponse(status_code=400, content={"error": "Missing or invalid type"})
+
+    try:
+        status_code = int(body.get("status", 200))
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "Invalid status code"})
+
+    try:
+        latency = max(0.0, float(body.get("latency", 0)))
+    except (ValueError, TypeError):
+        latency = 0.0
 
     stats.record(
         type_name=type_name,
-        status_code=int(status_code),
-        latency=float(body.get("latency", 0)),
+        status_code=status_code,
+        latency=latency,
         provider=body.get("provider"),
         key=body.get("key"),
         error_msg=body.get("error_msg"),
@@ -179,7 +193,7 @@ async def verify_key_endpoint(request: Request):
 
     hostname = parsed.hostname.lower() if parsed.hostname else ""
 
-    if _is_blocked_hostname(hostname):
+    if await _is_blocked_hostname(hostname):
         return JSONResponse(
             status_code=400,
             content={"valid": False, "error": "不允许访问内网或本地地址"}
@@ -226,14 +240,16 @@ async def verify_key_endpoint(request: Request):
         })
 
     except httpx.ConnectError as e:
+        logger.warning("Verify key connect error: %s", e)
         return JSONResponse(content={
             "valid": False,
-            "error": f"网络连接异常，无法连通上游服务器: {e}"
+            "error": "网络连接异常，无法连通上游服务器"
         })
     except Exception as e:
+        logger.error("Verify key unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={
             "valid": False,
-            "error": f"验证请求失败: {e}"
+            "error": "验证请求失败"
         })
 
 
@@ -266,6 +282,13 @@ async def test_candidate_endpoint(request: Request):
         return JSONResponse(content={"success": False, "error": f"Key '{key_label}' not found"})
 
     base_url = provider.get("base_url", "")
+    try:
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
+            return JSONResponse(content={"success": False, "error": "上游 URL 不合法或为内网地址"})
+    except Exception:
+        return JSONResponse(content={"success": False, "error": "base_url 格式无效"})
+
     url = join_upstream(base_url, "chat/completions")
 
     # Build minimal test request based on type
@@ -316,10 +339,12 @@ async def test_candidate_endpoint(request: Request):
     except httpx.ConnectError as e:
         stats.record(cand_type, 500, 0.0,
                      provider=provider_name, key=key_label,
-                     error_msg=f"Manual test connect error: {e}")
-        return JSONResponse(content={"success": False, "error": f"连接失败: {e}"})
+                     error_msg="Manual test connect error")
+        logger.warning("Test candidate connect error: %s", e)
+        return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
-        return JSONResponse(content={"success": False, "error": f"测试失败: {e}"})
+        logger.error("Test candidate unexpected error: %s", e, exc_info=True)
+        return JSONResponse(content={"success": False, "error": "测试失败"})
 
 
 @router.post("/test-agent-model")
@@ -361,8 +386,18 @@ async def test_agent_model_endpoint(request: Request):
         if not api_key:
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": None, "error": "Key not found"}
+        base_url = provider.get("base_url", "")
+        try:
+            parsed = urlparse(base_url)
+            if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
+                return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                        "status": None, "latency_ms": None, "error": "Blocked or invalid upstream URL"}
+        except Exception:
+            return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
+                    "status": None, "latency_ms": None, "error": "Invalid upstream URL"}
+
         model = b.get("upstream_model") or entry.get("upstream_model") or name
-        url = join_upstream(provider.get("base_url", ""), "chat/completions")
+        url = join_upstream(base_url, "chat/completions")
         payload = {"model": model, "messages": [{"role": "user", "content": "Hi"}],
                    "max_tokens": 1, "stream": False}
         start = time.time()
@@ -386,13 +421,15 @@ async def test_agent_model_endpoint(request: Request):
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "上游超时 (20s)"}
         except httpx.ConnectError as e:
+            logger.warning("Probe connect error: %s", e)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
-                    "error": f"连接失败: {e}"}
+                    "error": "连接失败"}
         except Exception as e:
+            logger.error("Probe unexpected error: %s", e, exc_info=True)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
-                    "error": f"异常: {e}"}
+                    "error": "探测异常"}
 
     results = await asyncio.gather(*[probe(b) for b in bindings]) if bindings else []
     ok_count = sum(1 for r in results if r.get("ok"))

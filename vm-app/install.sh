@@ -223,7 +223,7 @@ EnvironmentFile=${INSTALL_DIR}/.env
 # Cap glibc malloc arenas to 2 — eliminates heap fragmentation from
 # large OCR base64 payloads on low-memory VMs.
 Environment=MALLOC_ARENA_MAX=2
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 1 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 1 --limit-concurrency 150 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
 Restart=always
 RestartSec=5
 StandardOutput=journal
