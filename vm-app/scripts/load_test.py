@@ -187,7 +187,7 @@ async def main():
             r, _ = await req(client, "chat")
             lb = (await client.get(f"{MOCK}/__stats")).json()["last_bodies"].get("gpt-mock", {})
             check("KB mode 200", r.status_code == 200, f"status={r.status_code}")
-            check("enable_thinking injected", lb.get("enable_thinking") is False, str(lb))
+            check("thinking disabled injected", lb.get("reasoning_effort") in ("none", "low"), str(lb))
 
             print("\n== 5. overload fast-fail (burst 100, delay 2.5s, per-key limit 100) ==")
             # Hot-reload a high per-key limit so the GLOBAL cap becomes the

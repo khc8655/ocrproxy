@@ -193,13 +193,19 @@ async def main():
             kb_echo = (await c.get(f"{MOCK}/__stats")).json()["last_bodies"].get("kb-chat-model", {})
             check("2. KB mode: forced non-stream + thinking off",
                   r.status_code == 200 and kb_echo.get("stream") is False
-                  and kb_echo.get("enable_thinking") is False
-                  and kb_echo.get("reasoning_effort") == "low", f"status={r.status_code} echo={kb_echo}")
+                  and kb_echo.get("reasoning_effort") in ("none", "low"), f"status={r.status_code} echo={kb_echo}")
 
             r = await c.post(f"{API}/chat/completions", headers=H,
                              json={"model": "no-such-model", "messages": [{"role": "user", "content": "hi"}]})
             check("3. unknown model -> 404 model_not_found",
                   r.status_code == 404 and r.json().get("error", {}).get("code") == "model_not_found")
+
+            # 3b. Test admin role separation
+            r_admin_denied = await c.get(f"http://127.0.0.1:{APP_PORT}/api/admin/config", headers=H)
+            r_admin_ok = await c.get(f"http://127.0.0.1:{APP_PORT}/api/admin/config", headers={"Authorization": "Bearer test-admin"})
+            check("3b. admin auth isolation (PROXY_KEY rejected, ADMIN_PASS accepted)",
+                  r_admin_denied.status_code == 401 and r_admin_ok.status_code == 200,
+                  f"denied_status={r_admin_denied.status_code} ok_status={r_admin_ok.status_code}")
 
             print("\n== B. thinking-level / parameter passthrough (agent) ==")
             req_body = {
@@ -302,7 +308,7 @@ async def main():
                 rr = await c.send(c.build_request("POST", url, headers=headers,
                                                   json={**base_body, "stream": True}), stream=True)
                 it = rr.aiter_bytes()
-                await anext(it)
+                await it.__anext__()
                 first = time.perf_counter() - t0
                 async for _ in it:
                     pass

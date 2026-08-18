@@ -57,16 +57,12 @@ def verify_proxy_auth(request: Request) -> bool:
 def verify_admin_auth(request: Request) -> bool:
     """
     Verify admin authentication.
-    Accepts ADMIN_PASSWORD or PROXY_API_KEY.
+    Strictly accepts ADMIN_PASSWORD only to prevent privilege escalation.
     """
     admin_pass = os.environ.get("ADMIN_PASSWORD")
-    proxy_key = os.environ.get("PROXY_API_KEY")
+    if not admin_pass:
+        return False
 
     token = _extract_token(request)
+    return _safe_compare(token, admin_pass)
 
-    if admin_pass and _safe_compare(token, admin_pass):
-        return True
-    if proxy_key and _safe_compare(token, proxy_key):
-        return True
-
-    return False
