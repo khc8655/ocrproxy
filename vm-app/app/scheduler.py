@@ -482,7 +482,13 @@ async def schedule(
 
                     if is_stream:
                         if handle_stream:
-                            stream_result = await handle_stream(resp, first_chunk, remainder)
+                            try:
+                                stream_result = await handle_stream(resp, first_chunk, remainder)
+                            except Exception:
+                                # handle_stream raised — make sure the
+                                # upstream response is not leaked.
+                                await resp.aclose()
+                                raise
                             return ScheduleResult(
                                 stream_resp=stream_result,
                                 routed_via=routed_via,
@@ -508,10 +514,11 @@ async def schedule(
                         )
                     else:
                         resp_data = resp.json()
-                        # OCR / vision responses can be large; release the
-                        # httpx response buffer and reclaim heap pages.
+                        # Always close the upstream response to return the
+                        # connection to the pool immediately.  For OCR / vision
+                        # (large responses) also reclaim heap pages.
+                        await resp.aclose()
                         if model_type == "ocr":
-                            await resp.aclose()
                             await _reclaim_memory()
                         return ScheduleResult(
                             data=resp_data,
@@ -529,6 +536,11 @@ async def schedule(
                 except Exception:
                     last_err_body = None
                 last_status_code = status_code
+
+                # Close the response to release the connection back to the
+                # pool immediately — we no longer need it after capturing
+                # the error body above.
+                await resp.aclose()
 
                 # Build a detailed error message including the upstream response body
                 upstream_detail = ""

@@ -13,11 +13,11 @@
 | **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） |
 | **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**模型为主的 `agent_models` 字典**取该模型的 Key 列表按序调用，429/500 自动切换下一个 Key；支持 `upstream_model` 上游 ID 重写 |
 
-- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）
+- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。仅对极少数上游不兼容的字段值做规范化（如 StepFun 不接受 `reasoning_effort="none"` → 自动降级为 `"low"`；TokenRhythm 不接受对象形式 `tool_choice` → 自动转为 `"auto"`），避免 400 错误
 - **Agent 模式故障切换**：同一模型在 `agent_models` 配置多个供应商/Key 时，429/500 自动切换到下一个
 - **独立管理**：`agent_models`（Agent 中转）与 `candidates`（知识库 4 个虚拟模型）完全分离，管理面板有独立「Agent 模型」Tab
 - **`/v1/models` 只返回 `agent_models` 的真实模型**，不包含 4 个虚拟别名（知识库工具的示例代码直接写死虚拟名，无需从列表获取）
-- **KB 入库模式**：chat 始终禁用思考（`reasoning_effort=low` + `enable_thinking=false`）且**始终快速**（强制非流式 + `chat_fast_timeout` 短超时）——批量入库无需交互式流式与推理，已写死、无开关
+- **KB 入库模式**：chat 始终禁用思考（按上游机制注入对应参数：SenseNova/TokenRhythm → `reasoning_effort=none`、StepFun → `reasoning_effort=low`、Agnes → `chat_template_kwargs={enable_thinking:false}`）且**始终快速**（强制非流式 + `chat_fast_timeout` 短超时）——批量入库无需交互式流式与推理，已写死、无开关
 
 ### 路由与故障转移
 
@@ -34,6 +34,8 @@
 - **全局并发背压**：整个进程最多 30 个在途上游请求，超出自动排队（不丢请求、不 OOM）
 - **Per-Key 并发限制**：每个 Key 独立并发限制（默认 5），防止打崩上游配额
 - **OCR 内存优化**：base64 图片只构建一次 data-URL，原始请求体提前释放，内存拷贝从 3 份降至 1 份
+- **全响应资源释放**：所有上游响应（成功/失败/流式/非流式）在不再需要时立即调用 `resp.aclose()` 归还连接池，防止高并发下的连接泄漏
+- **请求体大小限制**：chat/embedding/rerank 端点 10MB 硬上限，OCR 端点 20MB（base64 图片固有更大），在解析 JSON 前即拒绝超大请求体
 - **malloc_trim 回收**：OCR 完成后主动调用 `gc.collect()` + `libc.malloc_trim(0)` 归还堆页给内核
 - **MALLOC_ARENA_MAX=2**：从源头消除 glibc ptmalloc2 多 arena 碎片问题
 
@@ -112,13 +114,13 @@ ssh -i $KEY $VM '
   curl -sf http://127.0.0.1:8787/health'
 ```
 
-> systemd 单元变更（如 `--limit-concurrency`）必须先 `daemon-reload` 再 restart；Caddyfile 的 `request_body max_size` 等站点变更需 `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`。改完配置后可执行 `sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/load_test.py` 在 VM 上跑完整回归（9 项行为 + 内存验证）。
+> systemd 单元变更（如 `--limit-concurrency`）必须先 `daemon-reload` 再 restart；Caddyfile 的 `request_body max_size` 等站点变更需 `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`。改完配置后可执行 `sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/load_test.py` 在 VM 上跑完整回归（9 项行为 + 内存验证），也可运行 `scripts/agent_test.py`（27 项 Agent 中转）和 `scripts/stability_test.py`（17 项稳定性/加固）。
 
 ## 接口调用
 
 ### Chat — KB 入库模式（虚拟别名）
 
-适用于知识库批量入库。禁用思考（`reasoning_effort=low` + `enable_thinking=false`），**始终**强制非流式 + 短超时（`chat_fast_timeout`，默认 30s）——已写死，无需任何开关：
+适用于知识库批量入库。禁用思考（按上游机制注入对应参数），**始终**强制非流式 + 短超时（`chat_fast_timeout`，默认 30s）——已写死，无需任何开关：
 
 ```bash
 curl -X POST https://your-domain.com/v1/chat/completions \
@@ -289,7 +291,7 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 | SSRF 防护 | Key 验证接口阻止访问内网/本地/元数据地址 |
 | 时序攻击防护 | 密钥比较使用 `hmac.compare_digest` 常量时间比较 |
 | 仅本地监听 | 服务监听 127.0.0.1，外部访问必须经过 Caddy |
-| 请求体大小限制 | Caddy `request_body max_size 25MB` + uvicorn `--limit-concurrency 150` |
+| 请求体大小限制 | Caddy `request_body max_size 25MB` + 应用层 chat/embedding/rerank 10MB + OCR 20MB + uvicorn `--limit-concurrency 150` |
 
 > ⚠️ 若 9090 端口以明文 HTTP 直接暴露公网，`PROXY_API_KEY` 会以明文传输。建议：绑定域名启用 TLS（见 Caddyfile.example）、安全组限制来源 IP、或全部流量走 EdgeOne HTTPS 回源。
 
@@ -297,19 +299,22 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 `scripts/mock_upstream.py` 提供可控的模拟上游（按 API key / 请求体切换 429、空流、内容审核、工具调用、SSE 回显等行为），两套测试基于它运行：
 
-**`scripts/agent_test.py` — Agent 中转专项（16 项）**：`/v1/models` 仅含 agent_models；KB 模式强制禁思考+非流式；未知模型 404；**思考等级全量参数透传**（reasoning_effort / enable_thinking / chat_template_kwargs / thinking / temperature / top_p / seed / stop / logprobs 等逐字段比对）；工具调用（JSON + 流式 tool_calls 增量）；流式 SSE 与直连上游**逐字节一致**（含 reasoning_content）；429 / 空流故障切换；**upstream_model 公共名→上游 ID 重写**；**v3.2→v3.3 配置自动迁移**；**中转效率基准**（RTT 开销、TTFB 开销、30 并发流保真）。
+**`scripts/agent_test.py` — Agent 中转专项（27 项）**：`/v1/models` 仅含 agent_models；KB 模式强制禁思考+非流式；未知模型 404；**思考等级全量参数透传**（reasoning_effort / enable_thinking / chat_template_kwargs / thinking / temperature / top_p / seed / stop / logprobs 等逐字段比对）；工具调用（JSON + 流式 tool_calls 增量）；流式 SSE 与直连上游**逐字节一致**（含 reasoning_content）；429 / 空流故障切换；**upstream_model 公共名→上游 ID 重写**；**v3.2→v3.3 配置自动迁移**；**中转效率基准**（RTT 开销、TTFB 开销、30 并发流保真）；**Provider 规范化**（StepFun reasoning_effort="none"→"low" + reasoning_format 注入、TokenRhythm tool_choice 对象→"auto"、Agnes KB 模式 chat_template_kwargs 注入）。
 
 **`scripts/load_test.py` — KB 调度回归（9 项）**：429 切换、空流切换、内容审核早退（仅 1 次上游调用）、KB 注入、过载快速失败（503+Retry-After）、配置热更新、状态清理、3 轮大并发 OCR 内存验证。
 
+**`scripts/stability_test.py` — 稳定性/加固测试（17 项）**：畸形请求（无效 JSON/空 body/超深嵌套）安全处理；超大请求体（5MB）不 OOM；200 次顺序请求 fd 无泄漏；5 轮 × 50 并发 OCR RSS 收敛验证（r4→5 增量 < r1→2 增量）；500 次请求连接池稳定；上游 500 故障切换；上游超时优雅 503；客户端中途断开流式连接无 fd 泄漏；200 并发混合成功/失败不崩溃；100 个独立客户端快速连接/断开无 fd 泄漏。
+
 ```bash
 python -m venv venv && venv/bin/pip install -r requirements.txt
-venv/bin/python scripts/agent_test.py   # Agent 中转专项
-venv/bin/python scripts/load_test.py    # KB 调度回归
-# VM 线上运行（测试实例使用独立端口 8788/9911 与隔离配置，不影响生产）：
+venv/bin/python scripts/agent_test.py       # Agent 中转专项
+venv/bin/python scripts/load_test.py        # KB 调度回归
+venv/bin/python scripts/stability_test.py   # 稳定性/加固
+# VM 线上运行（测试实例使用独立端口与隔离配置，不影响生产）：
 sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/agent_test.py
 ```
 
-参考实测（腾讯云 VM，2026-08）：Agent 套件 14/14、KB 套件 9/9 全部通过；中转开销 RTT p50 ≈ 3ms、流式首字节开销 ≈ 3ms；3 轮 120 并发大 OCR 后 RSS 稳定 70MB（无泄漏）；真实供应商端到端验证 tool_calls 与 reasoning_content 流式透传正常。
+参考实测（腾讯云 VM，2026-08）：Agent 套件 27/27、KB 套件 9/9、稳定性套件 17/17 全部通过（共 53 项）；中转开销 RTT p50 ≈ 3ms、流式首字节开销 ≈ 3ms；3 轮 120 并发大 OCR 后 RSS 稳定 70MB（无泄漏）；5 轮 50 并发 OCR RSS 收敛（r1→2 增 55MB，r4→5 仅增 16MB）；畸形请求、超大 body、上游 500/超时、客户端断连均不崩溃、不泄漏 fd。
 
 ## 目录结构
 
@@ -332,7 +337,8 @@ vm-app/
 │   ├── health-check.sh       # systemd timer 健康检查
 │   ├── mock_upstream.py      # 测试用模拟上游（可控故障/SSE/工具调用回显）
 │   ├── agent_test.py         # Agent 中转专项测试（透传/工具/流式/效率）
-│   └── load_test.py          # KB 调度回归 + 内存压测
+│   ├── load_test.py          # KB 调度回归 + 内存压测
+│   └── stability_test.py     # 稳定性/加固测试（畸形请求/fd泄漏/RSS收敛/并发崩溃）
 ├── client/
 │   ├── proxy_client.py       # Python 客户端封装
 │   └── example.py            # 使用示例

@@ -122,6 +122,9 @@ async def chat(request: Request):
     _last_bodies[model] = _echo(body)
     _counts["chat"] += 1
 
+    if "sk-dead500" in auth:
+        return JSONResponse(status_code=500, content={"error": {"message": "internal server error", "type": "server_error"}})
+
     if "sk-dead429" in auth:
         _counts["rate_limited_429"] += 1
         return JSONResponse(status_code=429, content={"error": {"message": "rate limited", "type": "rate_limit"}})

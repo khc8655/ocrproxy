@@ -9,7 +9,8 @@ Two routing modes:
 
   2. Agent mode (real model name): model="<actual model name from config>"
      - Filters candidates to those matching the requested model name
-     - Fully transparent: passes through all request parameters untouched
+     - Mostly transparent: passes through all request parameters untouched,
+       with minimal provider-specific normalisation (see _normalise_for_provider)
      - Failover on 429/500 to other providers with the same model
      - Standard OpenAI-compatible interface
 
@@ -17,10 +18,13 @@ Chat relay optimisations:
   - Deep-copy request body to prevent cross-request mutation in concurrent scenarios.
   - Forward upstream error status + body to the client (instead of generic 503) so
     that agent frameworks receive meaningful error messages.
-  - Full transparency: tools, tool_choice, reasoning_effort, reasoning_content,
+  - Near-full transparency: tools, tool_choice, reasoning_effort, reasoning_content,
     response_format, stream_options, and all other OpenAI-compatible fields are
-    passed through untouched.  Streaming responses are forwarded as raw bytes so
-    that provider-specific SSE fields (e.g. reasoning_content deltas from
+    passed through.  Provider-specific normalisations are minimal and only applied
+    when a field value would be **rejected** by the target upstream (e.g.
+    reasoning_effort="none" → "low" for StepFun, tool_choice object → "auto" for
+    TokenRhythm).  Streaming responses are forwarded as raw bytes so that
+    provider-specific SSE fields (e.g. reasoning_content deltas from
     SenseNova / DeepSeek) reach the client verbatim.
 """
 import copy
@@ -47,6 +51,92 @@ router = APIRouter(prefix="/v1")
 # candidates of the corresponding type and applies KB-specific settings
 # (e.g. disable thinking).  Any other model name triggers agent mode.
 VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
+
+# ── Provider-specific parameter normalisation ────────────────────────
+# Agent tools (OpenClaw, Hermes, etc.) send standard OpenAI-compatible
+# parameters.  Some upstream providers reject certain values or formats.
+# These helpers normalise **only** the values that would cause a 400 error
+# — everything else passes through untouched so agent semantics are
+# preserved across providers.
+#
+# Documented incompatibilities (from upstream API docs):
+#
+# 1. reasoning_effort:
+#    - SenseNova / DeepSeek: accepts low/medium/high/none
+#    - StepFun: accepts low/medium/high — "none" causes 400
+#    - Agnes: does not use reasoning_effort (ignored, not rejected)
+#    - TokenRhythm: OpenAI-compatible passthrough
+#
+# 2. tool_choice:
+#    - Standard OpenAI: "auto"/"none"/"required" or {type:"function",...}
+#    - TokenRhythm: explicitly rejects object form, only accepts
+#      "none"/"auto"/"required"
+#
+# 3. reasoning_format (StepFun-specific):
+#    - Default "general" returns reasoning in a `reasoning` field
+#    - "deepseek-style" returns reasoning in `reasoning_content` (DeepSeek-compatible)
+#    - Agent tools expecting reasoning_content need "deepseek-style"
+
+# Providers that do not accept reasoning_effort="none"
+_PROVIDERS_NO_NONE_EFFORT = {"stepfun"}
+
+# Providers that only accept string-form tool_choice (no object form)
+_PROVIDERS_NO_OBJECT_TOOL_CHOICE = {"tokenrhythm"}
+
+
+def _normalise_for_provider(out: dict, provider: str) -> None:
+    """Normalise request body fields that the target provider would reject.
+
+    Mutates `out` in-place.  Only fields whose values would cause a 400 error
+    are touched — all other parameters pass through untouched.
+    """
+    # 1. reasoning_effort: "none" → "low" for providers that don't accept "none"
+    if provider in _PROVIDERS_NO_NONE_EFFORT:
+        re = out.get("reasoning_effort")
+        if re == "none":
+            out["reasoning_effort"] = "low"
+
+    # 2. tool_choice: object form → "auto" for providers that reject objects
+    if provider in _PROVIDERS_NO_OBJECT_TOOL_CHOICE:
+        tc = out.get("tool_choice")
+        if isinstance(tc, dict):
+            out["tool_choice"] = "auto"
+
+    # 3. StepFun: set reasoning_format="deepseek-style" so agent tools
+    #    receive reasoning_content (not the StepFun-native "reasoning" field).
+    #    Only inject if the caller hasn't already set it explicitly.
+    if provider == "stepfun":
+        if "reasoning_format" not in out:
+            out["reasoning_format"] = "deepseek-style"
+
+
+def _disable_thinking_for_kb(out: dict, provider: str) -> None:
+    """Inject provider-specific parameters to disable thinking/reasoning in KB mode.
+
+    KB ingestion is batch processing — reasoning adds latency without value.
+    Each provider has a different mechanism:
+      - SenseNova / DeepSeek: reasoning_effort="none" (truly off)
+      - StepFun: reasoning_effort="low" (lowest tier, "none" not accepted)
+      - Agnes: chat_template_kwargs={"enable_thinking": False} (reasoning_effort ignored)
+      - TokenRhythm / others: reasoning_effort="none" (standard OpenAI-compatible)
+    """
+    if provider == "stepfun":
+        out["reasoning_effort"] = "low"
+    elif provider == "agnes":
+        # Agnes uses chat_template_kwargs to control thinking, not reasoning_effort.
+        # Remove reasoning_effort if present (it's ignored by Agnes and could confuse other layers).
+        out.pop("reasoning_effort", None)
+        out["chat_template_kwargs"] = {"enable_thinking": False}
+    else:
+        # Default: sensenova, tokenrhythm, and any OpenAI-compatible provider
+        out["reasoning_effort"] = "none"
+
+
+# Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
+# This is a backstop against malicious / accidental oversized payloads that
+# would otherwise accumulate on the Python heap and risk OOM under concurrency.
+# OCR has its own separate 20 MB guard (base64 images are inherently large).
+_MAX_JSON_BODY_BYTES = 10 * 1024 * 1024
 
 
 def _error_response(exc: Exception) -> JSONResponse:
@@ -126,7 +216,24 @@ async def _parse_json_body(request: Request):
 
     Aborted uploads (e.g. Caddy rejecting an oversized body mid-stream) raise
     ClientDisconnect inside starlette — without this guard every such request
-    dumps a full traceback into the journal."""
+    dumps a full traceback into the journal.
+
+    Also enforces a maximum body size (_MAX_JSON_BODY_BYTES) to prevent OOM
+    under concurrent load — a malicious or buggy client can otherwise send a
+    100 MB JSON payload that stays on the Python heap until GC reclaims it.
+    """
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > _MAX_JSON_BODY_BYTES:
+                return None, JSONResponse(
+                    status_code=413,
+                    content={"error": {"message": "Request body too large",
+                                       "type": "invalid_request_error",
+                                       "code": "payload_too_large"}},
+                )
+        except (ValueError, TypeError):
+            pass
     try:
         return await request.json(), None
     except Exception:
@@ -213,11 +320,10 @@ async def chat_completions(request: Request):
         # ── KB ingestion mode ──────────────────────────────────────
         # Always disable thinking/reasoning for KB ingestion — this is
         # batch processing where reasoning adds latency without value.
-        # Inject only params the target upstreams actually accept, per
-        # provider (applied in build_request): sensenova -> reasoning_effort
-        # "none" (thinking truly off), stepfun -> "low" (lowest tier).
-        # enable_thinking / chat_template_kwargs are Qwen/vLLM style and
-        # ignored by both sensenova and stepfun — removed.
+        # Provider-specific injection is applied in build_request via
+        # _disable_thinking_for_kb(): sensenova/tokenrhythm → reasoning_effort
+        # "none" (thinking truly off), stepfun → "low" (lowest tier, "none"
+        # not accepted), agnes → chat_template_kwargs (its own mechanism).
         kb_force_no_reasoning = True
 
         # KB ingestion is batch processing: always fast & non-streaming.
@@ -263,8 +369,11 @@ async def chat_completions(request: Request):
         if not candidates_list:
             return _model_not_found_response(model_name)
 
-        # Agent mode: don't modify the request body except the model rewrite
-        # (public name -> upstream id when they differ).
+        # Agent mode: pass through the request body untouched except for
+        # minimal provider-specific normalisation (applied in build_request
+        # via _normalise_for_provider) that prevents 400 errors — e.g.
+        # reasoning_effort="none" → "low" for StepFun, tool_choice object →
+        # "auto" for TokenRhythm, and reasoning_format injection for StepFun.
         # Use the standard chat timeout.
         try:
             chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
@@ -288,14 +397,15 @@ async def chat_completions(request: Request):
         # concurrent requests that may share the same cached body dict.
         out = copy.deepcopy(body)
         out["model"] = cand["model"]
-        # KB-only, config-style processing: disable thinking per upstream.
+        provider = cand.get("provider", "")
         if kb_force_no_reasoning:
-            if cand.get("provider") == "sensenova":
-                out["reasoning_effort"] = "none"
-            elif cand.get("provider") == "stepfun":
-                out["reasoning_effort"] = "low"
-            else:
-                out["reasoning_effort"] = "none"
+            # KB mode: disable thinking per provider's mechanism
+            _disable_thinking_for_kb(out, provider)
+        else:
+            # Agent mode: minimal normalisation — only fix values that the
+            # target provider would reject (causing a 400 error).  All other
+            # parameters pass through untouched.
+            _normalise_for_provider(out, provider)
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
