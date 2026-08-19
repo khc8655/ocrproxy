@@ -168,6 +168,8 @@
     .subtabs button { padding: 8px 12px; border: none; background: none; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
     .subtabs button:hover { color: var(--text); }
     .subtabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .model-subtab { display: none; }
+    .model-subtab.active { display: block; }
 
     /* Utility */
     .flex { display: flex; }
@@ -245,40 +247,52 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <!-- Providers -->
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">供应商与 Key 源</div>
-            <div class="section-desc">所有 Key 先在这里定义，再绑定到下方模型</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 供应商</button>
-        </div>
-        <div class="card" id="providersBox"></div>
+      <div class="subtabs">
+        <button class="active" onclick="switchModelTab('providers')">提供商与 Key</button>
+        <button onclick="switchModelTab('agents')">Agent 模型</button>
+        <button onclick="switchModelTab('kb')">知识库模型</button>
       </div>
 
-      <!-- Agent Models -->
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">Agent 模型中转</div>
-            <div class="section-desc">以模型 ID 为主，绑定多个 Key 自动轮询（429/500 切换）</div>
+      <!-- Sub-tab: Providers -->
+      <div id="mtab-providers" class="model-subtab active">
+        <div class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-title">供应商与 Key 源</div>
+              <div class="section-desc">所有 Key 先在这里定义，再绑定到下方模型</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 供应商</button>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ Agent 模型</button>
+          <div class="card" id="providersBox"></div>
         </div>
-        <div id="agentModelsBox"></div>
       </div>
 
-      <!-- KB Models -->
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">知识库入库模型</div>
-            <div class="section-desc">4 个虚拟模型（chat / embedding / reranker / ocr），每个挂载不同提供商的实际模型</div>
+      <!-- Sub-tab: Agents -->
+      <div id="mtab-agents" class="model-subtab">
+        <div class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Agent 模型中转</div>
+              <div class="section-desc">以模型 ID 为主，绑定多个 Key 自动轮询（429/500 切换）</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ Agent 模型</button>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openCandidateModal()">+ 候选节点</button>
+          <div id="agentModelsBox"></div>
         </div>
-        <div id="kbModelsBox"></div>
+      </div>
+
+      <!-- Sub-tab: KB -->
+      <div id="mtab-kb" class="model-subtab">
+        <div class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-title">知识库入库模型</div>
+              <div class="section-desc">4 个虚拟模型（chat / embedding / reranker / ocr），每个挂载不同提供商的实际模型</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openCandidateModal()">+ 候选节点</button>
+          </div>
+          <div id="kbModelsBox"></div>
+        </div>
       </div>
     </div>
 
@@ -409,7 +423,7 @@
 
 <script>
 // State
-const state = { key: sessionStorage.getItem('admin_key') || '', config: null, stats: null, tab: 'dashboard', changed: false };
+const state = { key: sessionStorage.getItem('admin_key') || '', config: null, stats: null, tab: 'dashboard', modelTab: 'providers', changed: false };
 const tabs = [
   { id: 'dashboard', label: '概览', sub: '请求统计与错误日志' },
   { id: 'models', label: '模型', sub: '供应商、Agent 模型与 KB 模型' },
@@ -527,10 +541,19 @@ async function resetStats(){
 }
 
 // Models
+function switchModelTab(id){
+  state.modelTab=id;
+  document.querySelectorAll('#panel-models .model-subtab').forEach(p=>p.classList.remove('active'));
+  document.getElementById('mtab-'+id).classList.add('active');
+  document.querySelectorAll('#panel-models .subtabs button').forEach(b=>b.classList.remove('active'));
+  const idx={providers:0,agents:1,kb:2}[id];
+  document.querySelectorAll('#panel-models .subtabs button')[idx].classList.add('active');
+  renderModels();
+}
 function renderModels(){
-  renderProviders();
-  renderAgentModels();
-  renderKbModels();
+  if(state.modelTab==='providers') renderProviders();
+  if(state.modelTab==='agents') renderAgentModels();
+  if(state.modelTab==='kb') renderKbModels();
 }
 
 function renderProviders(){
