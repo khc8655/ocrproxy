@@ -560,6 +560,17 @@
               <input type="number" id="settingCooldown403" class="form-control" placeholder="默认 600 秒">
             </div>
           </div>
+          <div class="card settings-card">
+            <h3><svg class="ic" aria-hidden="true" style="color:var(--text-brand);"><use href="#fa-layer-group"/></svg> 配置备份与迁移</h3>
+            <div class="settings-row">
+              <span class="hint">导出包含所有供应商、API 密钥、候选路由及 Agent 模型的完整 JSON 备份文件，或从备份文件还原配置。</span>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:16px;">
+              <button class="btn btn-secondary" onclick="exportConfig()"><svg class="ic" aria-hidden="true"><use href="#fa-download"/></svg> 导出完整配置</button>
+              <button class="btn btn-primary" onclick="triggerImportConfig()"><svg class="ic" aria-hidden="true"><use href="#fa-upload"/></svg> 导入配置文件</button>
+              <input type="file" id="configFileInput" accept=".json" style="display:none" onchange="handleConfigFileSelected(event)">
+            </div>
+          </div>
           <button class="btn btn-primary" onclick="saveSettings()"><svg class="ic" aria-hidden="true"><use href="#fa-floppy-disk"/></svg> 保存参数</button>
         </div>
       </div>
@@ -568,6 +579,36 @@
 </div>
 
 <!-- ── Modals ── -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal-box">
+    <h3 class="modal-title"><svg class="ic" aria-hidden="true" style="color:var(--text-brand);"><use href="#fa-upload"/></svg> 导入配置确认</h3>
+    <div id="importPreviewStats" style="background:var(--bg-overlay-1);border-radius:var(--radius-8);padding:14px;margin-bottom:16px;font-size:0.85rem;line-height:1.6;">
+    </div>
+    <div class="form-group">
+      <label class="form-label" style="font-weight:600;">选择导入模式</label>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+        <label class="checkbox-group" style="align-items:flex-start;">
+          <input type="radio" name="importMode" value="overwrite" checked>
+          <div>
+            <b>完全覆盖 (Overwrite)</b>
+            <div style="font-size:0.75rem;color:var(--text-tertiary);">使用导入文件的配置完全替换当前系统配置（导入前服务端会自动生成 .bak 快照）</div>
+          </div>
+        </label>
+        <label class="checkbox-group" style="align-items:flex-start;">
+          <input type="radio" name="importMode" value="merge">
+          <div>
+            <b>增量合并 (Merge)</b>
+            <div style="font-size:0.75rem;color:var(--text-tertiary);">保留当前所有供应商和密钥，仅追加新供应商、新 Key 和新候选节点</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('importModal')">取消</button>
+      <button class="btn btn-primary btn-sm" id="confirmImportBtn" onclick="confirmImportConfig()">确认导入</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="providerModal">
   <div class="modal-box">
     <h3 class="modal-title" id="providerModalTitle">新增供应商</h3>
@@ -1484,6 +1525,119 @@ function saveSettings() {
   c.chat_fast_timeout = Number(document.getElementById("settingFastTimeout").value) || 30;
   showToast("参数已暂存，请点击右上角「保存并重载」生效", "success");
   triggerChange();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Config Import & Export
+// ═══════════════════════════════════════════════════════════
+let pendingImportConfig = null;
+
+async function exportConfig() {
+  try {
+    const resp = await fetch("/api/admin/config/export", { credentials: "omit", headers: getHeaders() });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast("导出失败: " + (err.error || resp.statusText), "error");
+      return;
+    }
+    const disposition = resp.headers.get("Content-Disposition") || "";
+    let filename = "ocrproxy_config.json";
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    if (match && match[1]) filename = match[1];
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showToast("配置导出成功", "success");
+  } catch (e) {
+    showToast("导出请求异常: " + e.message, "error");
+  }
+}
+
+function triggerImportConfig() {
+  const fileInput = document.getElementById("configFileInput");
+  if (fileInput) {
+    fileInput.value = "";
+    fileInput.click();
+  }
+}
+
+function handleConfigFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (!parsed || typeof parsed !== "object" || !parsed.providers || !parsed.candidates) {
+        showToast("无效的配置文件：缺少 providers 或 candidates 结构", "error");
+        return;
+      }
+      pendingImportConfig = parsed;
+
+      const providers = parsed.providers || {};
+      const pCount = Object.keys(providers).length;
+      let totalKeys = 0;
+      for (const p of Object.values(providers)) {
+        if (p && typeof p.keys === "object") totalKeys += Object.keys(p.keys).length;
+      }
+      const cands = parsed.candidates || {};
+      const chatCount = Array.isArray(cands.chat) ? cands.chat.length : 0;
+      const embCount = Array.isArray(cands.embedding) ? cands.embedding.length : 0;
+      const rerankCount = Array.isArray(cands.reranker) ? cands.reranker.length : 0;
+      const ocrCount = Array.isArray(cands.ocr) ? cands.ocr.length : 0;
+      const agentCount = parsed.agent_models && typeof parsed.agent_models === "object" ? Object.keys(parsed.agent_models).length : 0;
+
+      document.getElementById("importPreviewStats").innerHTML = `
+        <div style="font-weight:600;color:var(--text-default);margin-bottom:8px;">📁 待导入文件: ${esc(file.name)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:var(--text-secondary);">
+          <div>🏢 供应商数量: <b>${pCount}</b></div>
+          <div>🔑 API Key 总数: <b>${totalKeys}</b></div>
+          <div>🤖 Agent 模型数: <b>${agentCount}</b></div>
+          <div>🔀 候选: Chat(${chatCount}) / Emb(${embCount}) / Rerank(${rerankCount}) / OCR(${ocrCount})</div>
+        </div>
+      `;
+      openModal("importModal");
+    } catch (err) {
+      showToast("文件解析失败: 不是合法的 JSON 格式", "error");
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function confirmImportConfig() {
+  if (!pendingImportConfig) return;
+  const modeEl = document.querySelector('input[name="importMode"]:checked');
+  const mode = modeEl ? modeEl.value : "overwrite";
+  const btn = document.getElementById("confirmImportBtn");
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch("/api/admin/config/import", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ mode, config: pendingImportConfig })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+      showToast("导入失败: " + (data.error || resp.statusText), "error");
+      return;
+    }
+    closeModal("importModal");
+    pendingImportConfig = null;
+    showToast(`配置导入成功 (${mode === 'merge' ? '增量合并' : '完全覆盖'})，正在刷新...`, "success");
+    state.dirty = false;
+    updateSaveIndicator();
+    await loadAllData();
+  } catch (err) {
+    showToast("导入请求失败: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

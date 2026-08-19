@@ -1,7 +1,7 @@
-"""
-Admin API routes: config CRUD, stats, verify-key.
-Ported from EdgeOne edge-functions/api/admin/*.js.
-"""
+import os
+import copy
+import json
+import shutil
 import logging
 import asyncio
 import ipaddress
@@ -9,10 +9,10 @@ import socket
 import time
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
 
-from .config_store import get_config, save_config
+from .config_store import get_config, save_config, _get_config_dir
 from .upstream import join_upstream
 from . import stats
 from .auth import verify_admin_auth
@@ -74,6 +74,104 @@ async def _is_blocked_hostname(hostname: str) -> bool:
     return False
 
 
+def _get_config_summary(config: dict) -> dict:
+    """Generate high-level stats for config preview and response summary."""
+    providers = config.get("providers", {})
+    total_keys = 0
+    if isinstance(providers, dict):
+        for p in providers.values():
+            if isinstance(p, dict) and isinstance(p.get("keys"), dict):
+                total_keys += len(p["keys"])
+    candidates = config.get("candidates", {})
+    cand_counts = {
+        cat: len(candidates.get(cat, [])) if isinstance(candidates.get(cat), list) else 0
+        for cat in ("chat", "embedding", "reranker", "ocr")
+    }
+    agent_models = config.get("agent_models", {})
+    agent_count = len(agent_models) if isinstance(agent_models, dict) else 0
+    return {
+        "providers_count": len(providers) if isinstance(providers, dict) else 0,
+        "total_keys": total_keys,
+        "agent_models_count": agent_count,
+        "candidate_counts": cand_counts,
+    }
+
+
+def _merge_configs(base: dict, incoming: dict) -> dict:
+    """Deep-merge incoming config into base config."""
+    merged = copy.deepcopy(base)
+
+    # 1. Merge providers
+    merged_providers = merged.setdefault("providers", {})
+    incoming_providers = incoming.get("providers", {})
+    if isinstance(incoming_providers, dict):
+        for p_name, p_val in incoming_providers.items():
+            if not isinstance(p_val, dict):
+                continue
+            if p_name not in merged_providers:
+                merged_providers[p_name] = copy.deepcopy(p_val)
+            else:
+                if p_val.get("base_url"):
+                    merged_providers[p_name]["base_url"] = p_val["base_url"]
+                merged_keys = merged_providers[p_name].setdefault("keys", {})
+                incoming_keys = p_val.get("keys", {})
+                if isinstance(incoming_keys, dict):
+                    for k_name, k_secret in incoming_keys.items():
+                        if k_name and k_secret:
+                            merged_keys[k_name] = k_secret
+
+    # 2. Merge candidates (deduplicating by provider + key + model)
+    merged_candidates = merged.setdefault("candidates", {})
+    incoming_candidates = incoming.get("candidates", {})
+    if isinstance(incoming_candidates, dict):
+        for cat in ("chat", "embedding", "reranker", "ocr"):
+            in_list = incoming_candidates.get(cat, [])
+            if isinstance(in_list, list):
+                existing_list = merged_candidates.setdefault(cat, [])
+                existing_keys = {(c.get("provider"), c.get("key"), c.get("model")) for c in existing_list if isinstance(c, dict)}
+                for cand in in_list:
+                    if isinstance(cand, dict):
+                        k = (cand.get("provider"), cand.get("key"), cand.get("model"))
+                        if k not in existing_keys and cand.get("provider") and cand.get("key"):
+                            existing_list.append(copy.deepcopy(cand))
+                            existing_keys.add(k)
+
+    # 3. Merge agent_models
+    merged_agent_models = merged.setdefault("agent_models", {})
+    incoming_agent_models = incoming.get("agent_models", {})
+    if isinstance(incoming_agent_models, dict):
+        for m_name, m_val in incoming_agent_models.items():
+            if not isinstance(m_val, dict):
+                continue
+            if m_name not in merged_agent_models:
+                merged_agent_models[m_name] = copy.deepcopy(m_val)
+            else:
+                existing_keys = merged_agent_models[m_name].setdefault("keys", [])
+                existing_set = {(b.get("provider"), b.get("key")) for b in existing_keys if isinstance(b, dict)}
+                for b in m_val.get("keys", []):
+                    if isinstance(b, dict):
+                        sig = (b.get("provider"), b.get("key"))
+                        if sig not in existing_set and b.get("provider") and b.get("key"):
+                            existing_keys.append(copy.deepcopy(b))
+                            existing_set.add(sig)
+                if m_val.get("upstream_model"):
+                    merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
+
+    # 4. Update top-level setting parameters if present in incoming
+    setting_keys = [
+        "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
+        "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
+        "schedule_total_budget", "max_concurrency_per_key", "cooldown_429_sec",
+        "cooldown_403_sec", "cooldown_duration", "circuit_break_threshold",
+        "circuit_cooldown_sec", "latency_based_routing"
+    ]
+    for sk in setting_keys:
+        if sk in incoming:
+            merged[sk] = incoming[sk]
+
+    return merged
+
+
 @router.get("/config")
 async def get_config_endpoint(request: Request):
     if not _check_auth(request):
@@ -85,6 +183,113 @@ async def get_config_endpoint(request: Request):
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
+
+
+@router.get("/config/export")
+async def export_config_endpoint(request: Request):
+    """Export current configuration as a downloadable JSON file with timestamp."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        config = await get_config()
+        export_data = copy.deepcopy(config)
+        now_str = time.strftime("%Y%m%d_%H%M%S")
+        export_data["_exported_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        export_data["_version"] = "3.3"
+        filename = f"ocrproxy_config_{now_str}.json"
+
+        json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
+        return Response(
+            content=json_bytes,
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/json; charset=utf-8",
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to export config: %s", e, exc_info=True)
+        return JSONResponse(status_code=500, content={"error": "Failed to export configuration"})
+
+
+@router.post("/config/import")
+async def import_config_endpoint(request: Request):
+    """Import and apply a configuration file with overwrite or merge strategy."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > 2 * 1024 * 1024:
+                return JSONResponse(status_code=413, content={"error": "Import payload too large (max 2MB)"})
+        except (ValueError, TypeError):
+            pass
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload format"})
+
+    mode = body.get("mode", "overwrite")
+    if mode not in ("overwrite", "merge"):
+        return JSONResponse(status_code=400, content={"error": "Invalid mode: must be 'overwrite' or 'merge'"})
+
+    incoming_config = body.get("config")
+    if not isinstance(incoming_config, dict):
+        return JSONResponse(status_code=400, content={"error": "Missing or invalid 'config' object"})
+
+    # Schema validation: providers and candidates must be objects
+    providers = incoming_config.get("providers")
+    candidates = incoming_config.get("candidates")
+    if not isinstance(providers, dict) or not isinstance(candidates, dict):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid configuration: providers and candidates must be objects"}
+        )
+
+    try:
+        current_config = await get_config()
+
+        # Save snapshot backup before making modifications
+        try:
+            config_dir = _get_config_dir()
+            current_enc_file = os.path.join(config_dir, "proxy_config.enc")
+            if os.path.exists(current_enc_file):
+                bak_file = os.path.join(config_dir, f"proxy_config.enc.bak-{time.strftime('%Y%m%d%H%M%S')}")
+                shutil.copy2(current_enc_file, bak_file)
+                logger.info("Created pre-import config snapshot: %s", bak_file)
+        except Exception as bak_err:
+            logger.warning("Failed to create snapshot backup: %s", bak_err)
+
+        if mode == "merge":
+            final_config = _merge_configs(current_config, incoming_config)
+        else:
+            final_config = copy.deepcopy(incoming_config)
+
+        # Strip export metadata
+        final_config.pop("_exported_at", None)
+        final_config.pop("_version", None)
+
+        # Ensure agent_models is in valid dict format
+        if "agent_models" in final_config and not isinstance(final_config["agent_models"], dict):
+            final_config["agent_models"] = {}
+
+        await save_config(final_config)
+        summary = _get_config_summary(final_config)
+        return JSONResponse(content={
+            "success": True,
+            "mode": mode,
+            "message": "配置导入成功",
+            "summary": summary,
+        })
+    except Exception as e:
+        logger.error("Failed to import config: %s", e, exc_info=True)
+        return JSONResponse(status_code=500, content={"error": "Failed to import configuration"})
 
 
 @router.post("/config")
