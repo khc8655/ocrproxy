@@ -3,173 +3,197 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LLM Proxy 配置</title>
+  <title>OCRProxy 控制台</title>
   <style>
     :root {
-      --bg: #fff;
-      --bg-soft: #f6f6f6;
-      --text: #171717;
-      --text-secondary: #737373;
-      --border: #e5e5e5;
-      --border-strong: #d4d4d4;
+      --bg: #ffffff;
+      --bg-subtle: #f8fafc;
+      --bg-card: #ffffff;
+      --text: #0f172a;
+      --text-secondary: #64748b;
+      --text-tertiary: #94a3b8;
+      --border: #e2e8f0;
+      --border-subtle: #f1f5f9;
+      --border-strong: #cbd5e1;
       --primary: #2563eb;
+      --primary-hover: #1d4ed8;
       --primary-soft: #eff6ff;
-      --success: #16a34a;
-      --warn: #d97706;
-      --error: #dc2626;
-      --radius: 8px;
+      --primary-border: #bfdbfe;
+      --success: #10b981;
+      --success-soft: #ecfdf5;
+      --success-border: #a7f3d0;
+      --warn: #f59e0b;
+      --warn-soft: #fffbeb;
+      --warn-border: #fde68a;
+      --error: #ef4444;
+      --error-soft: #fef2f2;
+      --error-border: #fecaca;
+      --radius: 10px;
       --radius-sm: 6px;
-      --shadow: 0 1px 2px rgba(0,0,0,0.04);
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+      --shadow: 0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px -1px rgba(0,0,0,0.08);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.06);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg-soft); }
-    button, input, select { font: inherit; color: inherit; }
-    button { cursor: pointer; }
+    body { font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg-subtle); -webkit-font-smoothing: antialiased; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; border: none; background: none; }
     a { color: var(--primary); text-decoration: none; }
 
     /* Login */
-    .login-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg-soft); z-index: 1000; }
-    .login-box { width: 360px; max-width: calc(100vw - 32px); padding: 32px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
-    .login-box h2 { font-size: 20px; margin-bottom: 4px; }
-    .login-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 24px; }
+    .login-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 1000; }
+    .login-box { width: 380px; max-width: calc(100vw - 32px); padding: 36px 32px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+    .login-box h2 { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .login-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 28px; }
 
     /* Layout */
     .app { display: none; min-height: 100vh; }
-    .appbar { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
-    .appbar h1 { font-size: 16px; font-weight: 600; }
-    .appbar nav { display: flex; gap: 4px; margin-left: auto; }
-    .appbar nav button { padding: 6px 12px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text-secondary); font-size: 13px; }
-    .appbar nav button:hover { background: var(--bg-soft); color: var(--text); }
-    .appbar nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 500; }
-    .appbar .actions { display: flex; gap: 8px; align-items: center; }
-    .save-badge { display: none; align-items: center; gap: 8px; padding: 4px 10px; border-radius: var(--radius-sm); background: #fff7ed; color: var(--warn); font-size: 12px; }
+    .appbar { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); padding: 12px 28px; display: flex; align-items: center; gap: 20px; box-shadow: var(--shadow-sm); }
+    .brand-title { font-size: 17px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+    .brand-badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+    .appbar nav { display: flex; gap: 6px; margin-left: auto; }
+    .appbar nav button { padding: 7px 14px; border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 13px; font-weight: 500; transition: all .15s; }
+    .appbar nav button:hover { background: var(--bg-subtle); color: var(--text); }
+    .appbar nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+    .appbar .actions { display: flex; gap: 10px; align-items: center; }
+    .save-badge { display: none; align-items: center; gap: 8px; padding: 5px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn-border); color: #92400e; font-size: 12px; font-weight: 600; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
     .save-badge.show { display: flex; }
-    .main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .main { max-width: 1160px; margin: 0 auto; padding: 28px 24px; }
 
     /* Panels */
     .panel { display: none; }
-    .panel.active { display: block; }
+    .panel.active { display: block; animation: fadeIn .15s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
     /* Section */
     .section { margin-bottom: 32px; }
-    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .section-title { font-size: 15px; font-weight: 600; }
-    .section-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section-title { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .section-desc { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
 
     /* Cards */
-    .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
-    .card-pad { padding: 16px; }
-    .card-head { padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--bg-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .card-head h3 { font-size: 14px; font-weight: 600; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 16px; transition: border-color .15s; }
+    .card:hover { border-color: var(--border-strong); }
+    .card-pad { padding: 20px; }
+    .card-head { padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-subtle); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .card-head h3 { font-size: 14px; font-weight: 700; color: var(--text); }
     .card-head .meta { font-size: 12px; color: var(--text-secondary); }
 
     /* Buttons */
-    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; font-weight: 500; }
-    .btn:hover { background: var(--bg-soft); border-color: var(--border-strong); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; font-weight: 500; color: var(--text); box-shadow: var(--shadow-sm); transition: all .15s; user-select: none; }
+    .btn:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
     .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
-    .btn-danger { color: var(--error); border-color: rgba(220,38,38,0.2); background: #fef2f2; }
-    .btn-danger:hover { background: var(--error); color: #fff; border-color: var(--error); }
-    .btn-ghost { border-color: transparent; background: transparent; }
-    .btn-sm { padding: 5px 10px; font-size: 12px; }
-    .btn-icon { width: 28px; height: 28px; padding: 0; justify-content: center; }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .btn-danger { color: var(--error); border-color: var(--error-border); background: var(--error-soft); }
+    .btn-danger:hover:not(:disabled) { background: var(--error); color: #fff; border-color: var(--error); }
+    .btn-ghost { border-color: transparent; background: transparent; box-shadow: none; padding: 4px 8px; color: var(--text-secondary); }
+    .btn-ghost:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; height: 28px; }
+    .btn-icon { width: 30px; height: 30px; padding: 0; font-size: 13px; border-radius: var(--radius-sm); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
     /* Forms */
-    .form-group { margin-bottom: 14px; }
-    .form-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
-    .form-control { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; background: var(--bg); }
-    .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
-    select.form-control { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
-    .checkbox { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
-    .checkbox input { width: 14px; height: 14px; }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-control { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; background: var(--bg); transition: border-color .15s, box-shadow .15s; }
+    .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .form-control::placeholder { color: var(--text-tertiary); }
+    select.form-control { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+    .checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; user-select: none; }
+    .checkbox input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
 
     /* Tables */
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
-    th { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
-    tbody tr:hover { background: var(--bg-soft); }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+    th { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg-subtle); }
+    tbody tr { transition: background .1s; }
+    tbody tr:hover { background: #f8fafc; }
     tbody tr:last-child td { border-bottom: none; }
     td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
 
     /* Badges */
-    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
-    .badge-neutral { background: var(--bg-soft); color: var(--text-secondary); }
-    .badge-success { background: #dcfce7; color: var(--success); }
-    .badge-warn { background: #fef3c7; color: var(--warn); }
-    .badge-error { background: #fee2e2; color: var(--error); }
-    .badge-primary { background: var(--primary-soft); color: var(--primary); }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
+    .badge-neutral { background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-secondary); }
+    .badge-success { background: var(--success-soft); border: 1px solid var(--success-border); color: #065f46; }
+    .badge-warn { background: var(--warn-soft); border: 1px solid var(--warn-border); color: #92400e; }
+    .badge-error { background: var(--error-soft); border: 1px solid var(--error-border); color: #991b1b; }
+    .badge-primary { background: var(--primary-soft); border: 1px solid var(--primary-border); color: var(--primary); }
 
-    /* Empty / Hint */
-    .empty { padding: 32px; text-align: center; color: var(--text-secondary); font-size: 13px; }
-    .hint { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-    .hint-box { padding: 10px 12px; background: var(--bg-soft); border-radius: var(--radius-sm); margin-bottom: 16px; }
-
-    /* Stats */
+    /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat { padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
-    .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
-    .stat-value { font-size: 22px; font-weight: 700; }
-    .stat-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-    .bar-list { display: flex; flex-direction: column; gap: 10px; }
-    .bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
-    .bar-row .name { width: 80px; color: var(--text-secondary); }
-    .bar-row .track { flex: 1; height: 10px; background: var(--bg-soft); border-radius: 5px; overflow: hidden; }
-    .bar-row .fill { height: 100%; border-radius: 5px; }
-    .bar-row .num { width: 50px; text-align: right; font-variant-numeric: tabular-nums; }
-
-    /* Model cards */
-    .model-card { margin-bottom: 16px; }
-    .model-card .card-head { background: var(--bg); }
-    .model-id { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
-    .model-id small { font-weight: 400; color: var(--text-secondary); font-size: 12px; margin-left: 8px; }
+    .stat { padding: 18px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+    .stat-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .stat-value { font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+    .stat-sub { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+    .bar-list { display: flex; flex-direction: column; gap: 12px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .bar-row .name { width: 90px; color: var(--text-secondary); font-weight: 500; }
+    .bar-row .track { flex: 1; height: 10px; background: var(--bg-subtle); border-radius: 5px; overflow: hidden; }
+    .bar-row .fill { height: 100%; border-radius: 5px; transition: width .3s ease; }
+    .bar-row .num { width: 60px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-family: var(--font-mono); }
 
     /* Provider list */
-    .provider-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .provider-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); gap: 16px; }
     .provider-row:last-child { border-bottom: none; }
-    .provider-name { font-weight: 500; }
-    .provider-url { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); }
-    .key-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-    .key-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; }
+    .provider-name { font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .provider-url { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); font-weight: 400; }
+    .key-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .key-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; color: var(--text); }
 
-    /* Settings grid */
-    .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .setting-item { display: flex; flex-direction: column; gap: 4px; }
-    .setting-item.full { grid-column: 1 / -1; }
+    /* Settings grid & grouped cards */
+    .settings-group { margin-bottom: 24px; }
+    .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 24px; }
+    .setting-item { display: flex; flex-direction: column; gap: 6px; }
+    .setting-item .hint { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+    .toggle-card { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius); }
+    .toggle-card-info h4 { font-size: 13px; font-weight: 600; color: var(--text); }
+    .toggle-card-info p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
     /* Code block */
-    .code-block { background: #1a1a1a; color: #e5e5e5; border-radius: var(--radius); padding: 14px; font-family: var(--font-mono); font-size: 12px; overflow-x: auto; position: relative; }
-    .code-block pre { white-space: pre-wrap; word-break: break-all; }
-    .copy-btn { position: absolute; top: 8px; right: 8px; padding: 3px 8px; background: rgba(255,255,255,0.1); border: none; border-radius: var(--radius-sm); color: #aaa; font-size: 11px; }
-    .copy-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+    .code-block { background: #0f172a; color: #f8fafc; border-radius: var(--radius); padding: 16px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; overflow-x: auto; position: relative; border: 1px solid #1e293b; }
+    .code-block pre { white-space: pre-wrap; word-break: break-all; margin: 0; }
+    .copy-btn { position: absolute; top: 10px; right: 10px; padding: 4px 10px; background: rgba(255,255,255,0.12); border-radius: var(--radius-sm); color: #cbd5e1; font-size: 11px; font-weight: 500; transition: all .15s; }
+    .copy-btn:hover { background: rgba(255,255,255,0.22); color: #fff; }
 
     /* Modal */
-    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
-    .modal.show { display: flex; }
-    .modal-box { width: 460px; max-width: 100%; max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
-    .modal-head { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-    .modal-head h3 { font-size: 15px; }
-    .modal-body { padding: 16px; }
-    .modal-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-    .modal-close { background: none; border: none; font-size: 18px; color: var(--text-secondary); }
+    .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+    .modal.show { display: flex; animation: fadeIn .15s ease-out; }
+    .modal-box { width: 480px; max-width: 100%; max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); border: 1px solid var(--border); }
+    .modal-head { padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+    .modal-head h3 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .modal-body { padding: 20px 22px; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border-subtle); background: var(--bg-subtle); display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-close { background: none; border: none; font-size: 18px; color: var(--text-secondary); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
+    .modal-close:hover { background: var(--bg-subtle); color: var(--text); }
 
     /* Toast */
-    .toast-container { position: fixed; top: 16px; right: 16px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; }
-    .toast { padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; transform: translateX(120%); transition: transform .2s; }
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { pointer-events: auto; padding: 10px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; transform: translateX(120%); transition: transform .25s cubic-bezier(0.16, 1, 0.3, 1); }
     .toast.show { transform: translateX(0); }
-    .toast.ok { border-left: 3px solid var(--success); }
-    .toast.err { border-left: 3px solid var(--error); }
+    .toast.ok { border-left: 4px solid var(--success); color: var(--text); }
+    .toast.err { border-left: 4px solid var(--error); color: var(--text); }
 
     /* Tabs inside page */
-    .subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-    .subtabs button { padding: 8px 12px; border: none; background: none; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .subtabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .subtabs button { padding: 9px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
     .subtabs button:hover { color: var(--text); }
-    .subtabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .subtabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
     .model-subtab { display: none; }
     .model-subtab.active { display: block; }
+
+    /* Spinners & Loaders */
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.15); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Empty state */
+    .empty { padding: 40px 20px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+    .hint-box { padding: 12px 16px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
 
     /* Utility */
     .flex { display: flex; }
@@ -186,11 +210,11 @@
     .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     @media (max-width: 860px) {
-      .appbar { flex-wrap: wrap; padding: 10px 16px; }
+      .appbar { flex-wrap: wrap; padding: 12px 16px; }
       .appbar nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
       .main { padding: 16px; }
       .stats-grid, .settings-grid { grid-template-columns: 1fr; }
-      .section-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .section-head { flex-direction: column; align-items: flex-start; gap: 10px; }
     }
   </style>
 </head>
@@ -199,33 +223,33 @@
 <!-- Login -->
 <div id="loginOverlay" class="login-overlay">
   <div class="login-box">
-    <h2>LLM Proxy</h2>
-    <p>后台配置面板</p>
+    <h2>🚀 OCRProxy</h2>
+    <p>大模型中转与智能调度控制台</p>
     <div class="form-group">
-      <label class="form-label">管理员密钥</label>
-      <input type="password" id="loginKey" class="form-control" placeholder="ADMIN_PASSWORD" onkeydown="if(event.key==='Enter')login()">
+      <label class="form-label">管理员密码</label>
+      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD" onkeydown="if(event.key==='Enter')login()">
     </div>
-    <button class="btn btn-primary" style="width:100%" onclick="login()">进入</button>
-    <div id="loginErr" style="display:none;margin-top:12px;padding:8px;border-radius:var(--radius-sm);background:#fee2e2;color:var(--error);font-size:12px;text-align:center;"></div>
+    <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="login()">进入控制台</button>
+    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-sm);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
   </div>
 </div>
 
 <!-- App -->
 <div id="app" class="app">
   <header class="appbar">
-    <div>
-      <h1>LLM Proxy 配置</h1>
-      <div class="section-desc" id="pageSub">模型与 Key 管理</div>
+    <div class="brand-title">
+      <span>OCRProxy</span>
+      <span class="brand-badge">v3.3</span>
     </div>
     <nav id="topNav"></nav>
     <div class="actions">
       <div id="saveBadge" class="save-badge">
-        未保存
-        <button class="btn btn-sm" onclick="discardChanges()">放弃</button>
+        <span>⚠️ 配置已修改</span>
+        <button class="btn btn-ghost btn-sm" onclick="discardChanges()">放弃</button>
         <button class="btn btn-primary btn-sm" onclick="saveAndReload()">保存并重载</button>
       </div>
-      <button class="btn btn-icon" onclick="loadData()" title="刷新">↻</button>
-      <button class="btn btn-sm" onclick="logout()">退出</button>
+      <button class="btn btn-icon" onclick="loadData()" title="刷新数据">↻</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
     </div>
   </header>
 
@@ -234,23 +258,31 @@
     <div id="panel-dashboard" class="panel active">
       <div class="stats-grid" id="statsGrid"></div>
       <div class="section">
-        <div class="section-head"><div><div class="section-title">状态分布</div></div></div>
+        <div class="section-head"><div class="section-title">📊 状态分布</div></div>
         <div class="card card-pad">
           <div id="statusChart" class="bar-list"></div>
         </div>
       </div>
       <div class="section">
-        <div class="section-head"><div><div class="section-title">最近错误日志</div></div><button class="btn btn-danger btn-sm" onclick="resetStats()">重置统计</button></div>
-        <div class="card table-wrap"><table><thead><tr><th>时间</th><th>类型</th><th>供应商</th><th>Key</th><th>状态</th><th>错误</th></tr></thead><tbody id="logsBody"></tbody></table></div>
+        <div class="section-head">
+          <div><div class="section-title">⚠️ 最近错误日志</div></div>
+          <button class="btn btn-danger btn-sm" onclick="resetStats()">清空统计与日志</button>
+        </div>
+        <div class="card table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>类型</th><th>供应商</th><th>Key</th><th>状态</th><th>错误详情</th></tr></thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
       <div class="subtabs">
-        <button class="active" onclick="switchModelTab('providers')">提供商与 Key</button>
-        <button onclick="switchModelTab('agents')">Agent 模型</button>
-        <button onclick="switchModelTab('kb')">知识库模型</button>
+        <button class="active" onclick="switchModelTab('providers')">🏢 供应商与 Key</button>
+        <button onclick="switchModelTab('agents')">🤖 Agent 模型</button>
+        <button onclick="switchModelTab('kb')">📚 知识库模型</button>
       </div>
 
       <!-- Sub-tab: Providers -->
@@ -258,10 +290,10 @@
         <div class="section">
           <div class="section-head">
             <div>
-              <div class="section-title">供应商与 Key 源</div>
-              <div class="section-desc">所有 Key 先在这里定义，再绑定到下方模型</div>
+              <div class="section-title">供应商与 Key 凭证库</div>
+              <div class="section-desc">统一配置各上游平台的基础 URL 与 API 密钥，可在 Agent 模型或知识库路由中灵活复用</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 供应商</button>
+            <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 新增供应商</button>
           </div>
           <div class="card" id="providersBox"></div>
         </div>
@@ -273,9 +305,9 @@
           <div class="section-head">
             <div>
               <div class="section-title">Agent 模型中转</div>
-              <div class="section-desc">以模型 ID 为主，绑定多个 Key 自动轮询（429/500 切换）</div>
+              <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ Agent 模型</button>
+            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
           </div>
           <div id="agentModelsBox"></div>
         </div>
@@ -286,10 +318,10 @@
         <div class="section">
           <div class="section-head">
             <div>
-              <div class="section-title">知识库入库模型</div>
-              <div class="section-desc">4 个虚拟模型（chat / embedding / reranker / ocr），每个挂载不同提供商的实际模型</div>
+              <div class="section-title">知识库入库虚拟模型</div>
+              <div class="section-desc">4 个入库专用虚拟别名（chat / embedding / reranker / ocr），每个支持挂载多个供应商模型轮询</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openCandidateModal()">+ 候选节点</button>
+            <button class="btn btn-primary btn-sm" onclick="openCandidateModal()">+ 挂载候选节点</button>
           </div>
           <div id="kbModelsBox"></div>
         </div>
@@ -299,17 +331,17 @@
     <!-- Panel: Access -->
     <div id="panel-access" class="panel">
       <div class="section">
-        <div class="section-title mb-2">接入信息</div>
+        <div class="section-title mb-2">🔌 接入网关信息</div>
         <div class="card card-pad mb-3">
-          <div class="flex-between mb-2"><span class="text-secondary">Base URL</span><span class="mono" id="accBase">—</span></div>
-          <div class="flex-between"><span class="text-secondary">Agent 模型</span><span class="mono" id="accModels">—</span></div>
+          <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBase">—</span></div>
+          <div class="flex-between"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModels">—</span></div>
         </div>
-        <div class="section-title mb-2">Agent 调用示例</div>
+        <div class="section-title mb-2">🐍 Python (OpenAI SDK) 调用示例</div>
         <div class="code-block"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
       </div>
       <div class="section">
-        <div class="section-title mb-2">KB 入库示例</div>
-        <div class="hint-box">知识库使用固定别名 <b>chat / embedding / reranker / ocr</b>，不会出现在 /v1/models 列表中。</div>
+        <div class="section-title mb-2">📚 知识库工具接口调用示例</div>
+        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</div>
         <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbChat')">复制</button><pre id="accKbChat"></pre></div>
         <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbEmb')">复制</button><pre id="accKbEmb"></pre></div>
         <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbRank')">复制</button><pre id="accKbRank"></pre></div>
@@ -320,31 +352,109 @@
     <!-- Panel: Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
-        <div class="section-title mb-3">系统参数</div>
-        <div class="card card-pad">
+        <div class="section-title mb-3">⚙️ 系统运行参数</div>
+        
+        <!-- Group 1: Timeouts -->
+        <div class="card card-pad settings-group">
+          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">⏱️ 超时与调度预算</h3>
           <div class="settings-grid">
-            <div class="setting-item"><label class="form-label">普通请求超时 (s)</label><input type="number" id="s_timeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">Chat 推理超时 (s)</label><input type="number" id="s_chatTimeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">OCR 超时 (s)</label><input type="number" id="s_ocrTimeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">Embedding 超时 (s)</label><input type="number" id="s_embTimeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">Reranker 超时 (s)</label><input type="number" id="s_rankTimeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">KB Chat 快速超时 (s)</label><input type="number" id="s_fastTimeout" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">总调度预算 (s)</label><input type="number" id="s_budget" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">单 Key 并发限制</label><input type="number" id="s_concurrency" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">通用错误冷却 (s)</label><input type="number" id="s_cooldown" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">429 限流冷却 (s)</label><input type="number" id="s_cooldown429" class="form-control"></div>
-            <div class="setting-item"><label class="form-label">403 鉴权失败冷却 (s)</label><input type="number" id="s_cooldown403" class="form-control"></div>
-            <div class="setting-item full checkbox"><input type="checkbox" id="s_latency"><span>启用延迟感知自动路由</span></div>
+            <div class="setting-item">
+              <label class="form-label">普通请求超时 (s)</label>
+              <input type="number" id="s_timeout" class="form-control" placeholder="默认 12">
+              <span class="hint">通用 API 的 HTTP 请求超时时间</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">Chat 推理超时 (s)</label>
+              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 45">
+              <span class="hint">Agent 模式及深度思考模型的长超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">OCR 识别超时 (s)</label>
+              <input type="number" id="s_ocrTimeout" class="form-control" placeholder="默认 60">
+              <span class="hint">大图识图或多页文档识别超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">Embedding 向量超时 (s)</label>
+              <input type="number" id="s_embTimeout" class="form-control" placeholder="默认 60">
+              <span class="hint">批量文本向量计算超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">Reranker 重排超时 (s)</label>
+              <input type="number" id="s_rankTimeout" class="form-control" placeholder="默认 30">
+              <span class="hint">文档重排计算超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">KB Chat 快速入库超时 (s)</label>
+              <input type="number" id="s_fastTimeout" class="form-control" placeholder="默认 30">
+              <span class="hint">知识库入库摘要提取的短超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">单次请求总调度预算 (s)</label>
+              <input type="number" id="s_budget" class="form-control" placeholder="默认 15">
+              <span class="hint">故障切换的最长等待时间窗口</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">单 Key 并发限制</label>
+              <input type="number" id="s_concurrency" class="form-control" placeholder="默认 3">
+              <span class="hint">每个 API Key 在途最大并发保护</span>
+            </div>
           </div>
-          <div class="mt-3"><button class="btn btn-primary" onclick="saveSettings()">保存参数</button></div>
+        </div>
+
+        <!-- Group 2: Cooldowns -->
+        <div class="card card-pad settings-group">
+          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">🛡️ 故障冷却与限流保护</h3>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="form-label">通用 5xx 错误冷却 (s)</label>
+              <input type="number" id="s_cooldown" class="form-control" placeholder="默认 30">
+              <span class="hint">上游服务异常时的临时避让时间</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">429 限流冷却 (s)</label>
+              <input type="number" id="s_cooldown429" class="form-control" placeholder="默认 60">
+              <span class="hint">触发上游速率限制后的休眠时间</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">403 鉴权失败冷却 (s)</label>
+              <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600">
+              <span class="hint">Key 失效/欠费时的长时间屏蔽（额度耗尽将智能缩短为 60s）</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 3: Routing Features -->
+        <div class="card card-pad settings-group">
+          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">🔀 智能路由策略</h3>
+          <div class="toggle-card">
+            <div class="toggle-card-info">
+              <h4>启用延迟感知自动路由 (Latency-Based Routing)</h4>
+              <p>根据历史响应延迟动态排序候选节点，优先选用响应速度最快的优质节点</p>
+            </div>
+            <label class="checkbox" style="font-weight:600;">
+              <input type="checkbox" id="s_latency">
+              <span>开启</span>
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary" onclick="saveSettings()">💾 暂存系统参数</button>
         </div>
       </div>
+
       <div class="section">
-        <div class="section-title mb-3">配置备份</div>
-        <div class="card card-pad flex gap-2">
-          <button class="btn" onclick="exportConfig()">导出配置</button>
-          <button class="btn btn-primary" onclick="document.getElementById('importFile').click()">导入配置</button>
-          <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+        <div class="section-title mb-3">📦 配置备份与迁移</div>
+        <div class="card card-pad flex-between">
+          <div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:2px;">导出 / 导入完整系统配置</div>
+            <div class="text-secondary text-sm">支持下载带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn" onclick="exportConfig()">📥 导出配置</button>
+            <button class="btn btn-primary" onclick="document.getElementById('importFile').click()">📤 导入配置</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+          </div>
         </div>
       </div>
     </div>
@@ -356,8 +466,8 @@
   <div class="modal-box">
     <div class="modal-head"><h3 id="providerModalTitle">供应商</h3><button class="modal-close" onclick="closeModal('providerModal')">×</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">标识</label><input type="text" id="p_name" class="form-control" placeholder="siliconflow"></div>
-      <div class="form-group"><label class="form-label">Base URL</label><input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn"></div>
+      <div class="form-group"><label class="form-label">供应商标识 (英文字符)</label><input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova"></div>
+      <div class="form-group"><label class="form-label">Base URL 接口基础地址</label><input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn"></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('providerModal')">取消</button><button class="btn btn-primary" onclick="saveProvider()">保存</button></div>
   </div>
@@ -365,13 +475,13 @@
 
 <div class="modal" id="keyModal">
   <div class="modal-box">
-    <div class="modal-head"><h3 id="keyModalTitle">Key</h3><button class="modal-close" onclick="closeModal('keyModal')">×</button></div>
+    <div class="modal-head"><h3 id="keyModalTitle">Key 凭证</h3><button class="modal-close" onclick="closeModal('keyModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="k_provider">
-      <div class="form-group"><label class="form-label">标签</label><input type="text" id="k_label" class="form-control" placeholder="常用1"></div>
-      <div class="form-group"><label class="form-label">API Key</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
-      <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性校验</span></label>
-      <div id="k_spinner" class="hint mt-2" style="display:none;">验证中...</div>
+      <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
+      <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
+      <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
+      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验 Key 有效性...</div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('keyModal')">取消</button><button class="btn btn-primary" onclick="saveKey()">保存</button></div>
   </div>
@@ -379,40 +489,54 @@
 
 <div class="modal" id="agentModal">
   <div class="modal-box">
-    <div class="modal-head"><h3 id="agentModalTitle">Agent 模型</h3><button class="modal-close" onclick="closeModal('agentModal')">×</button></div>
+    <div class="modal-head"><h3 id="agentModalTitle">Agent 模型配置</h3><button class="modal-close" onclick="closeModal('agentModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="a_oldName">
-      <div class="form-group"><label class="form-label">模型名（Agent 调用时填写）</label><input type="text" id="a_name" class="form-control" placeholder="deepseek-ai/DeepSeek-V3"></div>
-      <div class="form-group"><label class="form-label">上游模型 ID（可选）</label><input type="text" id="a_upstream" class="form-control" placeholder="默认与模型名相同"></div>
-      <div class="form-group"><label class="form-label">绑定 Key</label><select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select></div>
-      <div id="a_keyList" class="mt-2" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;"></div>
+      <div class="form-group"><label class="form-label">模型名（对外暴露名称）</label><input type="text" id="a_name" class="form-control" placeholder="例如 deepseek-v4-flash"></div>
+      <div class="form-group"><label class="form-label">上游模型 ID（可选）</label><input type="text" id="a_upstream" class="form-control" placeholder="若上游名称与暴露名不同在此填写，默认相同"></div>
+      <div class="form-group"><label class="form-label">选择供应商并勾选绑定 Key</label><select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select></div>
+      <div id="a_keyList" class="mt-2" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('agentModal')">取消</button><button class="btn btn-primary" onclick="saveAgentModel()">保存</button></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('agentModal')">取消</button><button class="btn btn-primary" onclick="saveAgentModel()">保存配置</button></div>
   </div>
 </div>
 
 <div class="modal" id="candidateModal">
   <div class="modal-box">
-    <div class="modal-head"><h3 id="candidateModalTitle">候选节点</h3><button class="modal-close" onclick="closeModal('candidateModal')">×</button></div>
+    <div class="modal-head"><h3 id="candidateModalTitle">挂载候选节点</h3><button class="modal-close" onclick="closeModal('candidateModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="c_editCat"><input type="hidden" id="c_editIdx">
-      <div class="form-group"><label class="form-label">类型</label><select id="c_type" class="form-control"><option value="chat">chat</option><option value="embedding">embedding</option><option value="reranker">reranker</option><option value="ocr">ocr</option></select></div>
+      <div class="form-group"><label class="form-label">知识库虚拟类型</label><select id="c_type" class="form-control"><option value="chat">chat (对话与摘要)</option><option value="embedding">embedding (向量化)</option><option value="reranker">reranker (重排序)</option><option value="ocr">ocr (图文识别)</option></select></div>
       <div class="form-group"><label class="form-label">供应商</label><select id="c_provider" class="form-control" onchange="renderCandidateKeyChecks()"></select></div>
-      <div class="form-group"><label class="form-label">绑定 Key</label><div id="c_keyList" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;"></div></div>
-      <div class="form-group"><label class="form-label">上游模型 ID</label><input type="text" id="c_model" class="form-control" placeholder="deepseek-ai/DeepSeek-V3"></div>
+      <div class="form-group"><label class="form-label">选择绑定的 Key</label><div id="c_keyList" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div></div>
+      <div class="form-group"><label class="form-label">上游实际模型 ID</label><input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B"></div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary" onclick="saveCandidate()">保存</button></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary" onclick="saveCandidate()">保存挂载</button></div>
   </div>
 </div>
 
 <div class="modal" id="importModal">
   <div class="modal-box">
-    <div class="modal-head"><h3>导入配置</h3><button class="modal-close" onclick="closeModal('importModal')">×</button></div>
+    <div class="modal-head"><h3>📥 导入配置确认</h3><button class="modal-close" onclick="closeModal('importModal')">×</button></div>
     <div class="modal-body">
-      <div id="importPreview" class="hint-box"></div>
-      <div class="form-group"><label class="form-label">模式</label>
-        <label class="checkbox"><input type="radio" name="importMode" value="overwrite" checked> <span>完全覆盖</span></label>
-        <label class="checkbox mt-2"><input type="radio" name="importMode" value="merge"> <span>增量合并</span></label>
+      <div id="importPreview" class="hint-box mb-3" style="line-height:1.7;"></div>
+      <div class="form-group"><label class="form-label">选择导入合并策略</label>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+          <label class="checkbox">
+            <input type="radio" name="importMode" value="overwrite" checked>
+            <div>
+              <div style="font-weight:600;color:var(--text);">完全覆盖 (Overwrite)</div>
+              <div class="text-secondary text-sm">使用导入文件的配置完全替换当前系统（导入前服务端自动生成快照备份）</div>
+            </div>
+          </label>
+          <label class="checkbox">
+            <input type="radio" name="importMode" value="merge">
+            <div>
+              <div style="font-weight:600;color:var(--text);">增量合并 (Merge)</div>
+              <div class="text-secondary text-sm">保留现有供应商与 Key，仅追加新节点与新模型</div>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn-primary" onclick="confirmImport()">确认导入</button></div>
@@ -423,16 +547,26 @@
 
 <script>
 // State
-const state = { key: sessionStorage.getItem('admin_key') || '', config: null, stats: null, tab: 'dashboard', modelTab: 'providers', changed: false };
+const state = { 
+  key: sessionStorage.getItem('admin_key') || '', 
+  config: null, 
+  stats: null, 
+  tab: 'dashboard', 
+  modelTab: 'providers', 
+  changed: false,
+  probingKeys: new Set(),
+  probingModels: new Set()
+};
+
 const tabs = [
-  { id: 'dashboard', label: '概览', sub: '请求统计与错误日志' },
-  { id: 'models', label: '模型', sub: '供应商、Agent 模型与 KB 模型' },
-  { id: 'access', label: '接入', sub: '调用示例' },
-  { id: 'settings', label: '设置', sub: '系统参数与配置迁移' }
+  { id: 'dashboard', label: '📊 概览', sub: '实时请求统计与错误日志' },
+  { id: 'models', label: '🔀 模型路由', sub: '供应商、Agent 模型与知识库模型' },
+  { id: 'access', label: '🔌 接入指南', sub: '客户端接入地址与调用示例' },
+  { id: 'settings', label: '⚙️ 系统设置', sub: '运行参数、调度策略与配置迁移' }
 ];
 const KB_TYPES = ['chat','embedding','reranker','ocr'];
-const KB_LABELS = { chat:'Chat', embedding:'Embedding', reranker:'Reranker', ocr:'OCR' };
-const KB_COLORS = { chat:'#2563eb', embedding:'#16a34a', reranker:'#d97706', ocr:'#9333ea' };
+const KB_LABELS = { chat:'Chat 对话', embedding:'Embedding 向量', reranker:'Reranker 重排', ocr:'OCR 识图' };
+const KB_COLORS = { chat:'#2563eb', embedding:'#10b981', reranker:'#f59e0b', ocr:'#8b5cf6' };
 
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
 function esc(s) { const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML.replace(/'/g,'&#39;'); }
@@ -454,20 +588,18 @@ function switchTab(id){
   state.tab=id;
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+id).classList.add('active');
-  const t=tabs.find(x=>x.id===id);
-  document.getElementById('pageSub').textContent=t.sub;
   renderNav();
   render();
 }
 async function login(){
   const k=document.getElementById('loginKey').value.trim();
   loginErr('');
-  if(!k){ loginErr('请输入密钥'); return; }
+  if(!k){ loginErr('请输入管理员密码'); return; }
   try {
     const r=await fetch('/api/admin/config',{headers:{'Authorization':'Bearer '+k}});
-    if(r.ok){ state.key=k; sessionStorage.setItem('admin_key',k); showApp(); toast('已登录','ok'); loadData(); }
-    else loginErr('密钥无效');
-  } catch(e){ loginErr('连接失败: '+e.message); }
+    if(r.ok){ state.key=k; sessionStorage.setItem('admin_key',k); showApp(); toast('登录成功','ok'); loadData(); }
+    else loginErr('密码无效，请检查配置的 ADMIN_PASSWORD');
+  } catch(e){ loginErr('连接服务失败: '+e.message); }
 }
 function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }
 function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
@@ -479,17 +611,17 @@ async function loadData(){
     if(cr.status===401||sr.status===401){ logout(); return; }
     state.config=await cr.json(); state.stats=await sr.json(); state.changed=false;
     updateSaveBadge(); updateAccess(); render();
-  } catch(e){ toast('加载失败: '+e.message,'err'); }
+  } catch(e){ toast('加载配置失败: '+e.message,'err'); }
 }
 function markChanged(){ state.changed=true; updateSaveBadge(); }
 function updateSaveBadge(){ document.getElementById('saveBadge').classList.toggle('show',state.changed); }
-function discardChanges(){ state.changed=false; loadData(); }
+function discardChanges(){ state.changed=false; loadData(); toast('已放弃未保存修改','ok'); }
 async function saveAndReload(){
   try {
     const r=await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
-    if(!r.ok) throw new Error('保存失败');
+    if(!r.ok) throw new Error('保存配置失败');
     await fetch('/v1/reload',{method:'POST',headers:headers()});
-    state.changed=false; updateSaveBadge(); toast('已保存并重载','ok'); await loadData();
+    state.changed=false; updateSaveBadge(); toast('配置已持久化并重载生效','ok'); await loadData();
   } catch(e){ toast(e.message,'err'); }
 }
 
@@ -510,17 +642,17 @@ function renderDashboard(){
     const s=state.stats[t]||{count:0,success:0,total_latency:0};
     const rate=s.count?((s.success/s.count)*100).toFixed(1):'0.0';
     const avg=s.count?(s.total_latency/s.count*1000).toFixed(0):'0';
-    return `<div class="stat"><div class="stat-label">${KB_LABELS[t]}</div><div class="stat-value">${s.count||0}</div><div class="stat-sub">成功率 ${rate}% · 平均 ${avg}ms</div></div>`;
+    return `<div class="stat"><div class="stat-label">${KB_LABELS[t]}</div><div class="stat-value">${s.count||0}</div><div class="stat-sub">成功率 <b>${rate}%</b> · 平均 <b>${avg}ms</b></div></div>`;
   }).join('');
 
   const sums={ succ:0, e429:0, e403:0, e5xx:0 };
   types.forEach(t=>{ const s=state.stats[t]||{}; sums.succ+=s.success||0; sums.e429+=s['429']||0; sums.e403+=s['403']||0; sums.e5xx+=s['5xx']||0; });
   const total=Object.values(sums).reduce((a,b)=>a+b,0)||1;
   const segs=[
-    {k:'succ',label:'成功',c:KB_COLORS.chat},
-    {k:'e429',label:'429',c:'#f59e0b'},
-    {k:'e403',label:'403',c:KB_COLORS.ocr},
-    {k:'e5xx',label:'5xx',c:'#6b7280'}
+    {k:'succ',label:'成功 200',c:KB_COLORS.embedding},
+    {k:'e429',label:'限流 429',c:'#f59e0b'},
+    {k:'e403',label:'鉴权 403',c:KB_COLORS.ocr},
+    {k:'e5xx',label:'异常 5xx',c:'#ef4444'}
   ];
   document.getElementById('statusChart').innerHTML=segs.map(s=>`
     <div class="bar-row"><span class="name">${s.label}</span><div class="track"><div class="fill" style="width:${(sums[s.k]/total*100)}%;background:${s.c}"></div></div><span class="num">${sums[s.k]}</span></div>
@@ -528,19 +660,19 @@ function renderDashboard(){
 
   const logs=(state.stats.error_logs||[]).slice(0,50);
   const tbody=document.getElementById('logsBody');
-  if(!logs.length) tbody.innerHTML='<tr><td colspan="6" class="empty">暂无错误记录</td></tr>';
+  if(!logs.length) tbody.innerHTML='<tr><td colspan="6" class="empty">暂无错误记录，运行状态优异</td></tr>';
   else tbody.innerHTML=logs.map(l=>{
     let badge=l.status===429?'<span class="badge badge-warn">429</span>':'<span class="badge badge-error">'+l.status+'</span>';
-    return `<tr><td class="mono">${new Date(l.timestamp).toLocaleString()}</td><td><span class="badge badge-primary">${esc(l.type)}</span></td><td>${esc(l.provider)}</td><td><span class="badge badge-neutral">${esc(l.key)}</span></td><td>${badge}</td><td class="mono" style="max-width:300px" title="${esc(l.error)}">${esc(l.error)}</td></tr>`;
+    return `<tr><td class="mono">${new Date(l.timestamp).toLocaleString()}</td><td><span class="badge badge-primary">${esc(l.type)}</span></td><td>${esc(l.provider)}</td><td><span class="badge badge-neutral">${esc(l.key)}</span></td><td>${badge}</td><td class="mono" style="max-width:350px" title="${esc(l.error)}">${esc(l.error)}</td></tr>`;
   }).join('');
 }
 async function resetStats(){
-  if(!confirm('重置所有统计与日志？')) return;
+  if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
-  state.stats=await r.json(); toast('已重置','ok'); renderDashboard();
+  state.stats=await r.json(); toast('统计与日志已清空','ok'); renderDashboard();
 }
 
-// Models
+// Models dispatcher
 function switchModelTab(id){
   state.modelTab=id;
   document.querySelectorAll('#panel-models .model-subtab').forEach(p=>p.classList.remove('active'));
@@ -560,14 +692,14 @@ function renderProviders(){
   const box=document.getElementById('providersBox');
   const p=state.config.providers||{};
   const names=Object.keys(p);
-  if(!names.length){ box.innerHTML='<div class="empty">暂无供应商</div>'; return; }
+  if(!names.length){ box.innerHTML='<div class="empty">暂无供应商配置，请点击右上角新增</div>'; return; }
   box.innerHTML=names.map(name=>{
     const prov=p[name]; const keys=Object.keys(prov.keys||{});
-    const keyChips=keys.map(k=>`<span class="key-chip">${esc(k)}<button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">✎</button><button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button></span>`).join('');
+    const keyChips=keys.map(k=>`<span class="key-chip"><b>${esc(k)}</b><button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">✎</button><button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button></span>`).join('');
     return `<div class="provider-row">
       <div>
         <div class="provider-name">${esc(name)} <span class="provider-url">${esc(prov.base_url)}</span></div>
-        <div class="key-list">${keyChips||'<span class="text-secondary text-sm">暂无 Key</span>'}</div>
+        <div class="key-list">${keyChips||'<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
       </div>
       <div class="flex gap-2">
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
@@ -582,25 +714,34 @@ function renderAgentModels(){
   const box=document.getElementById('agentModelsBox');
   const models=state.config.agent_models||{};
   const names=Object.keys(models);
-  if(!names.length){ box.innerHTML='<div class="hint-box">尚未配置 Agent 模型。点击右上角添加。</div>'; return; }
+  if(!names.length){ box.innerHTML='<div class="hint-box">尚未配置 Agent 模型。点击右上角添加您的第一个模型。</div>'; return; }
   const status=state.stats.candidates_status||{};
+  
   box.innerHTML=names.map(name=>{
     const m=models[name]; const upstream=m.upstream_model||name;
-    const rows=(m.keys||[]).map((b,i)=>renderBindingRow(i+1,b,'chat',name,i,status, true));
+    const isProbingAll = state.probingModels.has(name);
+    const rows=(m.keys||[]).map((b,i)=>renderBindingRow(i+1,b,'chat',name,i,status,true));
     return `<div class="card model-card">
       <div class="card-head">
         <div>
-          <div class="model-id">${esc(name)} ${upstream!==name?`<small>→ ${esc(upstream)}</small>`:''}</div>
-          <div class="meta">${m.keys.length} 个 Key · 自动轮询</div>
+          <div class="model-id" style="font-size:14px;font-weight:700;">${esc(name)} ${upstream!==name?`<span class="badge badge-neutral" style="font-weight:400;margin-left:6px;">上游 ID: ${esc(upstream)}</span>`:''}</div>
+          <div class="meta" style="margin-top:2px;">${(m.keys||[]).length} 个 Key · 自动轮询与故障切换</div>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-sm" onclick="testAgentModelAll('${esc(name)}')">探活全部</button>
+          <button class="btn btn-sm" id="probeAllBtn-${esc(name)}" onclick="testAgentModelAll('${esc(name)}')" ${isProbingAll?'disabled':''}>
+            ${isProbingAll ? '<span class="spinner"></span> 探测中...' : '⚡ 探活全部'}
+          </button>
           <button class="btn btn-sm" onclick="editAgentModel('${esc(name)}')">编辑</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAgentModel('${esc(name)}')">删除</button>
         </div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>#</th><th>供应商</th><th>Key</th><th>状态</th><th>最近</th><th style="text-align:right">操作</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div id="agentProbe-${esc(name)}" style="display:none;padding:12px;border-top:1px solid var(--border);font-size:12px;"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>健康状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody>${rows.length ? rows.join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div id="agentProbe-${esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle);background:var(--bg-subtle);font-size:12px;"></div>
     </div>`;
   }).join('');
 }
@@ -614,88 +755,141 @@ function renderKbModels(){
     return `<div class="card model-card">
       <div class="card-head">
         <div>
-          <div class="model-id">${KB_LABELS[type]} <small>model="${type}"</small></div>
-          <div class="meta">${list.length} 个候选节点</div>
+          <div class="model-id" style="font-size:14px;font-weight:700;">${KB_LABELS[type]} <span class="badge badge-neutral" style="font-weight:400;margin-left:6px;">model="${type}"</span></div>
+          <div class="meta" style="margin-top:2px;">${list.length} 个挂载候选节点 · 按序故障切换</div>
         </div>
-        <button class="btn btn-sm" onclick="openCandidateModal('${type}')">+ 节点</button>
+        <button class="btn btn-sm" onclick="openCandidateModal('${type}')">+ 挂载节点</button>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>#</th><th>供应商</th><th>Key</th><th>模型 ID</th><th>状态</th><th>最近</th><th style="text-align:right">操作</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">暂无节点</td></tr>'}</tbody></table></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>上游实际模型 ID</th><th>健康状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody>${rows.length ? rows.join('') : '<tr><td colspan="7" class="empty">暂无候选节点</td></tr>'}</tbody>
+        </table>
+      </div>
     </div>`;
   }).join('');
 }
 
 function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
-  const nk=binding.provider+':'+binding.key+':'+type;
-  const ns=status[nk];
-  let badge='<span class="badge badge-neutral">未调用</span>', time='—';
-  if(ns){ badge=ns.status===200?'<span class="badge badge-success">200</span>':ns.status===429?'<span class="badge badge-warn">429</span>':'<span class="badge badge-error">'+ns.status+'</span>'; time=fmtTime(ns.time); }
-  const modelCell=isAgent?'':`<td class="mono truncate" title="${esc(binding.model)}">${esc(binding.model)}</td>`;
+  const nk = binding.provider + ':' + binding.key + ':' + type;
+  const ns = status[nk];
+  let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
+  if(ns){ 
+    badge = ns.status === 200 
+      ? `<span class="badge badge-success">200 OK</span>` 
+      : ns.status === 429 
+        ? `<span class="badge badge-warn">429 限流</span>` 
+        : `<span class="badge badge-error">${ns.status}</span>`; 
+    time = fmtTime(ns.time); 
+  }
+  const modelCell = isAgent ? '' : `<td class="mono truncate" title="${esc(binding.model)}"><b>${esc(binding.model)}</b></td>`;
+  
+  const probeKeyId = (isAgent ? 'agent:' + modelName : 'kb:' + type) + ':' + binding.provider + ':' + binding.key;
+  const isProbing = state.probingKeys.has(probeKeyId);
+
   let actions;
   if(isAgent){
-    const list=state.config.agent_models[modelName].keys;
-    actions=`<button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},-1)" ${i===0?'disabled':''}>↑</button>
-      <button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},1)" ${i===list.length-1?'disabled':''}>↓</button>
-      <button class="btn btn-icon btn-sm" onclick="testAgentKey('${esc(modelName)}',${i})" title="探活">⚡</button>
-      <button class="btn btn-icon btn-sm btn-danger" onclick="deleteAgentKey('${esc(modelName)}',${i})">×</button>`;
+    const list = state.config.agent_models[modelName].keys;
+    actions = `
+      <button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},-1)" ${i===0?'disabled':''} title="上移">↑</button>
+      <button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},1)" ${i===list.length-1?'disabled':''} title="下移">↓</button>
+      <button class="btn btn-icon btn-sm" id="probeBtn-${esc(probeKeyId)}" onclick="testAgentKey('${esc(modelName)}',${i})" title="快速探活" ${isProbing?'disabled':''}>
+        ${isProbing ? '<span class="spinner"></span>' : '⚡'}
+      </button>
+      <button class="btn btn-icon btn-sm btn-danger" onclick="deleteAgentKey('${esc(modelName)}',${i})" title="删除绑定">×</button>`;
   } else {
-    const list=state.config.candidates[type];
-    actions=`<button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},-1)" ${i===0?'disabled':''}>↑</button>
-      <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},1)" ${i===list.length-1?'disabled':''}>↓</button>
-      <button class="btn btn-icon btn-sm" onclick="testCandidate('${type}',${i})" title="探活">⚡</button>
-      <button class="btn btn-icon btn-sm" onclick="editCandidate('${type}',${i})">✎</button>
-      <button class="btn btn-icon btn-sm btn-danger" onclick="deleteCandidate('${type}',${i})">×</button>`;
+    const list = state.config.candidates[type];
+    actions = `
+      <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},-1)" ${i===0?'disabled':''} title="上移">↑</button>
+      <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},1)" ${i===list.length-1?'disabled':''} title="下移">↓</button>
+      <button class="btn btn-icon btn-sm" id="probeBtn-${esc(probeKeyId)}" onclick="testCandidate('${type}',${i})" title="快速探活" ${isProbing?'disabled':''}>
+        ${isProbing ? '<span class="spinner"></span>' : '⚡'}
+      </button>
+      <button class="btn btn-icon btn-sm" onclick="editCandidate('${type}',${i})" title="编辑">✎</button>
+      <button class="btn btn-icon btn-sm btn-danger" onclick="deleteCandidate('${type}',${i})" title="删除">×</button>`;
   }
-  return `<tr><td style="color:var(--primary);font-weight:600">#${idx}</td><td>${esc(binding.provider)}</td><td><span class="badge badge-neutral">${esc(binding.key)}</span></td>${modelCell}<td>${badge}</td><td class="text-sm text-secondary">${time}</td><td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end">${actions}</div></td></tr>`;
+  return `<tr>
+    <td style="color:var(--primary);font-weight:700">#${idx}</td>
+    <td><b>${esc(binding.provider)}</b></td>
+    <td><span class="badge badge-neutral">🔑 ${esc(binding.key)}</span></td>
+    ${modelCell}
+    <td>${badge}</td>
+    <td class="text-sm text-secondary">${time}</td>
+    <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end">${actions}</div></td>
+  </tr>`;
 }
 
-// Provider actions
+// Key & Provider Actions
 function openProviderModal(){ document.getElementById('providerModalTitle').textContent='新增供应商'; document.getElementById('p_name').value=''; document.getElementById('p_name').disabled=false; document.getElementById('p_url').value=''; openModal('providerModal'); }
 function editProvider(name){ const p=state.config.providers[name]; document.getElementById('providerModalTitle').textContent='编辑供应商'; document.getElementById('p_name').value=name; document.getElementById('p_name').disabled=true; document.getElementById('p_url').value=p.base_url; openModal('providerModal'); }
 function saveProvider(){
   const name=document.getElementById('p_name').value.trim(), url=document.getElementById('p_url').value.trim();
-  if(!name||!url){ toast('名称和 URL 不能为空','err'); return; }
+  if(!name||!url){ toast('供应商标识和 URL 不能为空','err'); return; }
   const isEdit=document.getElementById('p_name').disabled;
   if(!isEdit&&state.config.providers[name]){ toast('供应商已存在','err'); return; }
   if(!state.config.providers) state.config.providers={};
   if(isEdit) state.config.providers[name].base_url=url;
   else state.config.providers[name]={base_url:url,keys:{}};
-  closeModal('providerModal'); markChanged(); renderProviders();
+  closeModal('providerModal'); markChanged(); renderProviders(); toast('供应商已保存','ok');
 }
-function deleteProvider(name){ if(!confirm('删除供应商 '+name+' 及其所有 Key？'))return; delete state.config.providers[name]; KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); if(state.config.agent_models){ Object.keys(state.config.agent_models).forEach(k=>{ const m=state.config.agent_models[k]; m.keys=m.keys.filter(x=>x.provider!==name); if(!m.keys.length) delete state.config.agent_models[k]; }); } markChanged(); renderModels(); }
+function deleteProvider(name){ 
+  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？相关挂载也将一并清理。')) return; 
+  delete state.config.providers[name]; 
+  KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
+  if(state.config.agent_models){ 
+    Object.keys(state.config.agent_models).forEach(k=>{ 
+      const m=state.config.agent_models[k]; 
+      m.keys=m.keys.filter(x=>x.provider!==name); 
+      if(!m.keys.length) delete state.config.agent_models[k]; 
+    }); 
+  } 
+  markChanged(); renderModels(); toast('供应商已删除','ok');
+}
 
-// Key actions
-function openKeyModal(prov){ document.getElementById('keyModalTitle').textContent='新增 Key - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=''; document.getElementById('k_label').disabled=false; document.getElementById('k_value').value=''; document.getElementById('k_skip').checked=false; openModal('keyModal'); }
-function editKey(prov,label){ const p=state.config.providers[prov]; document.getElementById('keyModalTitle').textContent='编辑 Key - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=label; document.getElementById('k_label').disabled=true; document.getElementById('k_value').value=p.keys[label]; document.getElementById('k_skip').checked=true; openModal('keyModal'); }
-function deleteKey(prov,label){ if(!confirm('删除 Key '+label+'？'))return; delete state.config.providers[prov].keys[label]; KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>!(x.provider===prov&&x.key===label)); }); if(state.config.agent_models) Object.values(state.config.agent_models).forEach(m=>{ m.keys=m.keys.filter(x=>!(x.provider===prov&&x.key===label)); }); markChanged(); renderModels(); }
+function openKeyModal(prov){ document.getElementById('keyModalTitle').textContent='新增 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=''; document.getElementById('k_label').disabled=false; document.getElementById('k_value').value=''; document.getElementById('k_skip').checked=false; openModal('keyModal'); }
+function editKey(prov,label){ const p=state.config.providers[prov]; document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=label; document.getElementById('k_label').disabled=true; document.getElementById('k_value').value=p.keys[label]; document.getElementById('k_skip').checked=true; openModal('keyModal'); }
+function deleteKey(prov,label){ 
+  if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
+  delete state.config.providers[prov].keys[label]; 
+  KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>!(x.provider===prov&&x.key===label)); }); 
+  if(state.config.agent_models) Object.values(state.config.agent_models).forEach(m=>{ m.keys=m.keys.filter(x=>!(x.provider===prov&&x.key===label)); }); 
+  markChanged(); renderModels(); toast('Key 已删除','ok');
+}
 async function saveKey(){
   const prov=document.getElementById('k_provider').value;
   const label=document.getElementById('k_label').value.trim();
   const val=document.getElementById('k_value').value.trim();
   const skip=document.getElementById('k_skip').checked;
-  if(!label||!val){ toast('标签和 Key 不能为空','err'); return; }
+  if(!label||!val){ toast('Key 别名和密钥值不能为空','err'); return; }
   const isEdit=document.getElementById('k_label').disabled;
-  if(!isEdit&&state.config.providers[prov].keys[label]){ toast('标签已存在','err'); return; }
+  if(!isEdit&&state.config.providers[prov].keys[label]){ toast('Key 别名已存在','err'); return; }
   if(skip){ commitKey(prov,label,val); return; }
   document.getElementById('k_spinner').style.display='block';
   try {
-    const r=await fetch('/api/admin/verify-key',{method:'POST',headers:headers(),body:JSON.stringify({base_url:state.config.providers[prov].base_url,api_key:val})});
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const r=await fetch('/api/admin/verify-key',{method:'POST',headers:headers(),body:JSON.stringify({base_url:state.config.providers[prov].base_url,api_key:val}), signal: controller.signal});
+    clearTimeout(timer);
     const d=await r.json();
-    if(d.valid){ toast('校验通过','ok'); commitKey(prov,label,val); }
-    else if(confirm('校验失败: '+d.error+'\n仍要保存？')) commitKey(prov,label,val);
-  } catch(e){ if(confirm('网络异常: '+e.message+'\n仍要保存？')) commitKey(prov,label,val); }
-  document.getElementById('k_spinner').style.display='none';
+    if(d.valid){ toast('连通性校验通过','ok'); commitKey(prov,label,val); }
+    else if(confirm('连通性校验失败: '+(d.error||'响应异常')+'\n是否仍要强制保存？')) commitKey(prov,label,val);
+  } catch(e){ 
+    if(confirm('网络请求异常: '+e.message+'\n是否仍要强制保存？')) commitKey(prov,label,val); 
+  } finally {
+    document.getElementById('k_spinner').style.display='none';
+  }
 }
-function commitKey(prov,label,val){ state.config.providers[prov].keys[label]=val; closeModal('keyModal'); markChanged(); renderModels(); }
+function commitKey(prov,label,val){ state.config.providers[prov].keys[label]=val; closeModal('keyModal'); markChanged(); renderModels(); toast('Key 已保存','ok'); }
 
-// Agent model actions
+// Agent Model Actions
 function openAgentModal(){ document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; document.getElementById('a_oldName').value=''; document.getElementById('a_name').value=''; document.getElementById('a_name').readOnly=false; document.getElementById('a_upstream').value=''; populateProviderSelect('a_provider'); renderAgentKeyChecks(); openModal('agentModal'); }
-function populateProviderSelect(id){ const sel=document.getElementById(id); const names=Object.keys(state.config.providers||{}); sel.innerHTML=names.length?names.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''):'<option value="">无供应商</option>'; }
+function populateProviderSelect(id){ const sel=document.getElementById(id); const names=Object.keys(state.config.providers||{}); sel.innerHTML=names.length?names.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''):'<option value="">无可用供应商</option>'; }
 function renderAgentKeyChecks(){
   const prov=document.getElementById('a_provider').value;
   const box=document.getElementById('a_keyList');
-  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请选择供应商</div>'; return; }
+  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请先在上方选择供应商</div>'; return; }
   const keys=Object.keys(state.config.providers[prov].keys||{});
-  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无 Key</div>';
+  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
 }
 function editAgentModel(name){
   const m=state.config.agent_models[name];
@@ -708,13 +902,11 @@ function editAgentModel(name){
   const providers=[...new Set((m.keys||[]).map(x=>x.provider))];
   if(providers[0]) document.getElementById('a_provider').value=providers[0];
   renderAgentKeyChecks();
-  // Check keys across all providers
   const set=new Set((m.keys||[]).map(x=>x.provider+':'+x.key));
   document.querySelectorAll('#a_keyList input').forEach(inp=>{ const p=document.getElementById('a_provider').value; inp.checked=set.has(p+':'+inp.value); });
-  // Append other providers' keys
   const box=document.getElementById('a_keyList');
   providers.slice(1).forEach(p=>{
-    const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label">${esc(p)}</div>`+Object.keys(state.config.providers[p].keys||{}).map(k=>`<label class="checkbox"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
+    const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label" style="font-weight:700;">${esc(p)}</div>`+Object.keys(state.config.providers[p].keys||{}).map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
     box.appendChild(div);
   });
   document.querySelectorAll('#a_keyList input[data-provider]').forEach(inp=>inp.checked=set.has(inp.dataset.provider+':'+inp.value));
@@ -724,45 +916,111 @@ function saveAgentModel(){
   const oldName=document.getElementById('a_oldName').value;
   const name=document.getElementById('a_name').value.trim();
   const upstream=document.getElementById('a_upstream').value.trim();
-  if(!name){ toast('请填写模型名','err'); return; }
+  if(!name){ toast('模型名称不能为空','err'); return; }
   const bindings=[];
   document.querySelectorAll('#a_keyList input:checked').forEach(inp=>{
     bindings.push({provider:inp.dataset.provider||document.getElementById('a_provider').value, key:inp.value});
   });
-  if(!bindings.length){ toast('请勾选至少一个 Key','err'); return; }
+  if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
   if(!state.config.agent_models) state.config.agent_models={};
   if(oldName&&oldName!==name){ delete state.config.agent_models[oldName]; }
   const entry={keys:bindings}; if(upstream&&upstream!==name) entry.upstream_model=upstream;
   state.config.agent_models[name]=entry;
-  closeModal('agentModal'); markChanged(); renderAgentModels();
+  closeModal('agentModal'); markChanged(); renderAgentModels(); toast('Agent 模型已保存','ok');
 }
-function deleteAgentModel(name){ if(!confirm('删除模型 '+name+'？'))return; delete state.config.agent_models[name]; markChanged(); renderAgentModels(); }
+function deleteAgentModel(name){ if(!confirm('确定要删除 Agent 模型 "'+name+'" 吗？')) return; delete state.config.agent_models[name]; markChanged(); renderAgentModels(); toast('模型已删除','ok'); }
 function moveAgentKey(name,i,dir){ const keys=state.config.agent_models[name].keys; const t=i+dir; if(t<0||t>=keys.length)return; [keys[i],keys[t]]=[keys[t],keys[i]]; markChanged(); renderAgentModels(); }
 function deleteAgentKey(name,i){ state.config.agent_models[name].keys.splice(i,1); if(!state.config.agent_models[name].keys.length) delete state.config.agent_models[name]; markChanged(); renderAgentModels(); }
-async function testAgentKey(name,i){
-  const b=state.config.agent_models[name].keys[i];
-  const model=b.upstream_model||state.config.agent_models[name].upstream_model||name;
+
+// Anti-repeat Probing Implementation
+async function testAgentKey(name, i){
+  const b = state.config.agent_models[name].keys[i];
+  const probeKeyId = 'agent:' + name + ':' + b.provider + ':' + b.key;
+  if(state.probingKeys.has(probeKeyId)) return;
+  
+  state.probingKeys.add(probeKeyId);
+  const btn = document.getElementById('probeBtn-' + probeKeyId);
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+
+  const model = b.upstream_model || state.config.agent_models[name].upstream_model || name;
+  const start = Date.now();
   try {
-    const r=await fetch('/api/admin/test-candidate',{method:'POST',headers:headers(),body:JSON.stringify({provider:b.provider,key:b.key,model,type:'chat'})});
-    const d=await r.json(); toast(d.success?'探活成功':'探活失败: '+(d.error||d.status), d.success?'ok':'err');
-  } catch(e){ toast('探活异常: '+e.message,'err'); }
-  await loadData();
-}
-async function testAgentModelAll(name){
-  const box=document.getElementById('agentProbe-'+name); box.style.display='block'; box.innerHTML='正在探活...';
-  try {
-    const r=await fetch('/api/admin/test-agent-model',{method:'POST',headers:headers(),body:JSON.stringify({model:name})});
-    const d=await r.json();
-    if(!d.results){ box.innerHTML='探活失败'; return; }
-    const chips=d.results.map(res=>res.ok?`<span class="badge badge-success">${esc(res.provider)}/${esc(res.key)} ✓</span>`:`<span class="badge badge-error" title="${esc(res.error||'')}">${esc(res.provider)}/${esc(res.key)} ✗</span>`).join(' ');
-    box.innerHTML=`<div class="mb-2">可用: ${d.ok}/${d.total} <span class="text-secondary">${esc(d.checked_at||'')}</span></div><div class="flex gap-2" style="flex-wrap:wrap">${chips}</div>`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const r = await fetch('/api/admin/test-candidate', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider: b.provider, key: b.key, model, type: 'chat' }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    const d = await r.json();
+    const latency = Date.now() - start;
+    if(d.success) {
+      toast(`✅ [${b.provider}/${b.key}] 探活成功 (${latency}ms)`, 'ok');
+    } else {
+      toast(`❌ [${b.provider}/${b.key}] 探活失败: ${d.error || d.status}`, 'err');
+    }
+  } catch(e) {
+    toast(`⚠️ [${b.provider}/${b.key}] 探活超时或异常: ${e.message}`, 'err');
+  } finally {
+    state.probingKeys.delete(probeKeyId);
     await loadData();
-  } catch(e){ box.innerHTML='探活异常: '+esc(e.message); }
+  }
 }
 
-// Candidate actions
+async function testAgentModelAll(name){
+  if(state.probingModels.has(name)) return;
+  state.probingModels.add(name);
+
+  const btn = document.getElementById('probeAllBtn-' + name);
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 探测中...'; }
+
+  const box = document.getElementById('agentProbe-' + name);
+  box.style.display = 'block';
+  box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> 正在并发探测所有 Key 连通性，请稍候...</div>';
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch('/api/admin/test-agent-model', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ model: name }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    const d = await r.json();
+    if(!d.results){ box.innerHTML = '<span style="color:var(--error);">❌ 探活失败: 无响应数据</span>'; return; }
+    
+    const chips = d.results.map(res => {
+      const lat = res.latency_ms ? ` (${res.latency_ms}ms)` : '';
+      return res.ok 
+        ? `<span class="badge badge-success">✓ ${esc(res.provider)}/${esc(res.key)}${lat}</span>` 
+        : `<span class="badge badge-error" title="${esc(res.error||'')}">✗ ${esc(res.provider)}/${esc(res.key)} (${res.status||'ERR'})</span>`;
+    }).join(' ');
+
+    box.innerHTML = `
+      <div class="mb-2" style="font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+        <span>🎯 可用性统计: <b>${d.ok} / ${d.total}</b> 正常</span>
+        <span class="text-secondary" style="font-weight:400;">探测时间: ${esc(d.checked_at||'')}</span>
+      </div>
+      <div class="flex gap-2" style="flex-wrap:wrap;">${chips}</div>
+    `;
+    toast(`探活完成: ${name} (可用 ${d.ok}/${d.total})`, d.ok > 0 ? 'ok' : 'err');
+  } catch(e) {
+    box.innerHTML = `<span style="color:var(--error);">⚠️ 探活异常或超时: ${esc(e.message)}</span>`;
+    toast('探活异常: ' + e.message, 'err');
+  } finally {
+    state.probingModels.delete(name);
+    if(btn) { btn.disabled = false; btn.innerHTML = '⚡ 探活全部'; }
+    await loadData();
+  }
+}
+
+// Candidate Actions
 function openCandidateModal(type){
-  document.getElementById('candidateModalTitle').textContent='新增候选节点';
+  document.getElementById('candidateModalTitle').textContent='挂载候选节点';
   document.getElementById('c_editCat').value=''; document.getElementById('c_editIdx').value='';
   document.getElementById('c_type').value=type||'chat'; document.getElementById('c_type').disabled=!type;
   populateProviderSelect('c_provider'); renderCandidateKeyChecks(); document.getElementById('c_model').value='';
@@ -771,9 +1029,9 @@ function openCandidateModal(type){
 function renderCandidateKeyChecks(){
   const prov=document.getElementById('c_provider').value;
   const box=document.getElementById('c_keyList');
-  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请选择供应商</div>'; return; }
+  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请先选择供应商</div>'; return; }
   const keys=Object.keys(state.config.providers[prov].keys||{});
-  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无 Key</div>';
+  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
 }
 function editCandidate(type,i){
   const c=state.config.candidates[type][i];
@@ -790,7 +1048,7 @@ function saveCandidate(){
   const provider=document.getElementById('c_provider').value;
   const model=document.getElementById('c_model').value.trim();
   const selected=Array.from(document.querySelectorAll('#c_keyList input:checked')).map(x=>x.value);
-  if(!provider||!selected.length||!model){ toast('请填写完整并勾选至少一个 Key','err'); return; }
+  if(!provider||!selected.length||!model){ toast('请填写完整并至少勾选一个 Key','err'); return; }
   if(!state.config.candidates) state.config.candidates={};
   if(!state.config.candidates[type]) state.config.candidates[type]=[];
   const editCat=document.getElementById('c_editCat').value, editIdx=document.getElementById('c_editIdx').value;
@@ -800,85 +1058,143 @@ function saveCandidate(){
   } else {
     selected.forEach(k=>state.config.candidates[type].push({provider,key:k,model}));
   }
-  closeModal('candidateModal'); markChanged(); renderKbModels();
+  closeModal('candidateModal'); markChanged(); renderKbModels(); toast('候选节点已挂载','ok');
 }
 function moveCandidate(type,i,dir){ const list=state.config.candidates[type]; const t=i+dir; if(t<0||t>=list.length)return; [list[i],list[t]]=[list[t],list[i]]; markChanged(); renderKbModels(); }
-function deleteCandidate(type,i){ if(!confirm('删除该候选节点？'))return; state.config.candidates[type].splice(i,1); markChanged(); renderKbModels(); }
-async function testCandidate(type,i){
-  const c=state.config.candidates[type][i];
+function deleteCandidate(type,i){ if(!confirm('确定要删除该候选节点吗？')) return; state.config.candidates[type].splice(i,1); markChanged(); renderKbModels(); toast('节点已删除','ok'); }
+
+async function testCandidate(type, i){
+  const c = state.config.candidates[type][i];
+  const probeKeyId = 'kb:' + type + ':' + c.provider + ':' + c.key;
+  if(state.probingKeys.has(probeKeyId)) return;
+
+  state.probingKeys.add(probeKeyId);
+  const btn = document.getElementById('probeBtn-' + probeKeyId);
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+
+  const start = Date.now();
   try {
-    const r=await fetch('/api/admin/test-candidate',{method:'POST',headers:headers(),body:JSON.stringify({...c,type})});
-    const d=await r.json(); toast(d.success?'探活成功 HTTP '+(d.status||200):'探活失败: '+(d.error||''), d.success?'ok':'err');
-  } catch(e){ toast('探活异常: '+e.message,'err'); }
-  await loadData();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const r = await fetch('/api/admin/test-candidate', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ ...c, type }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const d = await r.json();
+    const latency = Date.now() - start;
+    if(d.success){
+      toast(`✅ [${c.provider}/${c.key}] 探活成功 (${latency}ms)`, 'ok');
+    } else {
+      toast(`❌ [${c.provider}/${c.key}] 探活失败: ${d.error || d.status}`, 'err');
+    }
+  } catch(e) {
+    toast(`⚠️ [${c.provider}/${c.key}] 探活异常: ${e.message}`, 'err');
+  } finally {
+    state.probingKeys.delete(probeKeyId);
+    await loadData();
+  }
 }
 
 // Settings
 function renderSettings(){
   const c=state.config;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v??''; };
-  set('s_timeout',c.upstream_timeout); set('s_chatTimeout',c.upstream_timeout_chat); set('s_ocrTimeout',c.upstream_timeout_ocr);
-  set('s_embTimeout',c.upstream_timeout_embedding); set('s_rankTimeout',c.upstream_timeout_rerank); set('s_fastTimeout',c.chat_fast_timeout);
-  set('s_budget',c.schedule_total_budget); set('s_concurrency',c.max_concurrency_per_key); set('s_cooldown',c.cooldown_duration);
-  set('s_cooldown429',c.cooldown_429_sec); set('s_cooldown403',c.cooldown_403_sec);
+  set('s_timeout',c.upstream_timeout); 
+  set('s_chatTimeout',c.upstream_timeout_chat); 
+  set('s_ocrTimeout',c.upstream_timeout_ocr);
+  set('s_embTimeout',c.upstream_timeout_embedding); 
+  set('s_rankTimeout',c.upstream_timeout_rerank); 
+  set('s_fastTimeout',c.chat_fast_timeout);
+  set('s_budget',c.schedule_total_budget); 
+  set('s_concurrency',c.max_concurrency_per_key); 
+  set('s_cooldown',c.cooldown_duration);
+  set('s_cooldown429',c.cooldown_429_sec); 
+  set('s_cooldown403',c.cooldown_403_sec);
   document.getElementById('s_latency').checked=!!c.latency_based_routing;
 }
 function saveSettings(){
   const c=state.config;
   c.upstream_timeout=Number(document.getElementById('s_timeout').value)||12;
-  c.upstream_timeout_chat=Number(document.getElementById('s_chatTimeout').value)||120;
+  c.upstream_timeout_chat=Number(document.getElementById('s_chatTimeout').value)||45;
   c.upstream_timeout_ocr=Number(document.getElementById('s_ocrTimeout').value)||60;
   c.upstream_timeout_embedding=Number(document.getElementById('s_embTimeout').value)||60;
   c.upstream_timeout_rerank=Number(document.getElementById('s_rankTimeout').value)||30;
   c.chat_fast_timeout=Number(document.getElementById('s_fastTimeout').value)||30;
   c.schedule_total_budget=Number(document.getElementById('s_budget').value)||15;
-  c.max_concurrency_per_key=Number(document.getElementById('s_concurrency').value)||5;
+  c.max_concurrency_per_key=Number(document.getElementById('s_concurrency').value)||3;
   c.cooldown_duration=Number(document.getElementById('s_cooldown').value)||30;
   c.cooldown_429_sec=Number(document.getElementById('s_cooldown429').value)||60;
   c.cooldown_403_sec=Number(document.getElementById('s_cooldown403').value)||600;
   c.latency_based_routing=document.getElementById('s_latency').checked;
-  toast('参数已暂存，请保存并重载','ok'); markChanged();
+  toast('参数已暂存，请点击右上角「保存并重载」生效','ok'); markChanged();
 }
 
-// Access guide
+// Access Guide
 function updateAccess(){
   const base=window.location.origin+'/v1';
   const models=Object.keys(state.config.agent_models||{});
-  const demo=models[0]||'<agent模型名>';
+  const demo=models[0]||'deepseek-v4-flash';
   document.getElementById('accBase').textContent=base;
   document.getElementById('accModels').textContent=models.length?models.join('、'):'（未配置）';
   document.getElementById('accPy').textContent=`from openai import OpenAI
-client = OpenAI(api_key="your_proxy_api_key", base_url="${base}")
-res = client.chat.completions.create(model="${demo}", messages=[{"role":"user","content":"你好"}], stream=True)
-for chunk in res:
-    if chunk.choices[0].delta.content: print(chunk.choices[0].delta.content, end="")`;
-  document.getElementById('accKbChat').textContent=`curl -X POST "${base}/chat/completions" \\
+
+client = OpenAI(
+    api_key="your_proxy_api_key",
+    base_url="${base}"
+)
+
+# 直接使用您在后台配置的 Agent 真实模型名
+response = client.chat.completions.create(
+    model="${demo}",
+    messages=[{"role": "user", "content": "你好，请用一句话介绍你自己"}],
+    stream=True
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content or ""
+    print(content, end="", flush=True)`;
+
+  document.getElementById('accKbChat').textContent=`# 1. 知识库对话与摘要 (固定别名 model="chat")
+curl -X POST "${base}/chat/completions" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"chat","messages":[{"role":"user","content":"总结"}]}'`;
-  document.getElementById('accKbEmb').textContent=`curl -X POST "${base}/embeddings" \\
+  -d '{"model":"chat","messages":[{"role":"user","content":"请总结以下文档核心观点"}]}'`;
+
+  document.getElementById('accKbEmb').textContent=`# 2. 向量化计算 (固定别名 model="embedding")
+curl -X POST "${base}/embeddings" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"embedding","input":"文本"}'`;
-  document.getElementById('accKbRank').textContent=`curl -X POST "${base}/rerank" \\
+  -d '{"model":"embedding","input":["这是待向量化的第一段文本","第二段文本"]}'`;
+
+  document.getElementById('accKbRank').textContent=`# 3. 结果精排 (固定别名 model="reranker")
+curl -X POST "${base}/rerank" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"reranker","query":"q","documents":["a","b"]}'`;
-  document.getElementById('accKbOcr').textContent=`curl -X POST "${base}/ocr" \\
+  -d '{"model":"reranker","query":"如何配置中转服务？","documents":["文档A描述配置方法...","文档B描述退款政策..."]}'`;
+
+  document.getElementById('accKbOcr').textContent=`# 4. 图文识别与文档理解 (固定别名 model="ocr")
+curl -X POST "${base}/ocr" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"ocr","image_base64":"...","prompt":"识别文字"}'`;
+  -d '{"model":"ocr","image_base64":"<Base64图片数据>","prompt":"请识别图片中的所有文字与表格内容"}'`;
 }
 
-// Import / Export
+// Backup & Import
 async function exportConfig(){
   try {
     const r=await fetch('/api/admin/config/export',{headers:headers()});
     if(!r.ok) throw new Error('导出失败');
+    const disposition = r.headers.get('Content-Disposition') || '';
+    let filename = 'ocrproxy_config.json';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    if(match && match[1]) filename = match[1];
     const blob=await r.blob(), url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='ocrproxy_config.json'; a.click(); URL.revokeObjectURL(url);
-    toast('导出成功','ok');
-  } catch(e){ toast(e.message,'err'); }
+    const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    toast('配置导出成功','ok');
+  } catch(e){ toast('导出异常: '+e.message,'err'); }
 }
 let pendingImport=null;
 function handleImportFile(e){
@@ -887,13 +1203,23 @@ function handleImportFile(e){
   reader.onload=ev=>{
     try {
       const cfg=JSON.parse(ev.target.result);
-      if(!cfg.providers||!cfg.candidates){ toast('无效配置文件','err'); return; }
+      if(!cfg.providers||!cfg.candidates){ toast('无效配置文件：缺少 providers 或 candidates 结构','err'); return; }
       pendingImport=cfg;
-      const pc=Object.keys(cfg.providers).length, kc=Object.values(cfg.providers).reduce((a,p)=>a+Object.keys(p.keys||{}).length,0);
-      const cc=cfg.candidates; const ac=Object.keys(cfg.agent_models||{}).length;
-      document.getElementById('importPreview').innerHTML=`文件: ${esc(file.name)}<br>供应商 ${pc} · Key ${kc} · Agent 模型 ${ac}<br>候选 chat/${(cc.chat||[]).length} embedding/${(cc.embedding||[]).length} reranker/${(cc.reranker||[]).length} ocr/${(cc.ocr||[]).length}`;
+      const pc=Object.keys(cfg.providers).length;
+      const kc=Object.values(cfg.providers).reduce((a,p)=>a+Object.keys(p.keys||{}).length,0);
+      const cc=cfg.candidates;
+      const ac=Object.keys(cfg.agent_models||{}).length;
+      document.getElementById('importPreview').innerHTML=`
+        <div style="font-weight:700;color:var(--text);margin-bottom:6px;">📁 待导入文件: ${esc(file.name)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:var(--text-secondary);font-size:12px;">
+          <div>🏢 供应商: <b>${pc}</b> 个</div>
+          <div>🔑 API Key: <b>${kc}</b> 个</div>
+          <div>🤖 Agent 模型: <b>${ac}</b> 个</div>
+          <div>🔀 候选: Chat(${cc.chat?.length||0}) / Emb(${cc.embedding?.length||0}) / Rerank(${cc.reranker?.length||0}) / OCR(${cc.ocr?.length||0})</div>
+        </div>
+      `;
       openModal('importModal');
-    } catch(err){ toast('JSON 解析失败','err'); }
+    } catch(err){ toast('JSON 文件解析失败，请检查文件格式','err'); }
   };
   reader.readAsText(file);
 }
@@ -903,7 +1229,7 @@ async function confirmImport(){
   try {
     const r=await fetch('/api/admin/config/import',{method:'POST',headers:headers(),body:JSON.stringify({mode,config:pendingImport})});
     const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'导入失败');
-    closeModal('importModal'); pendingImport=null; toast('导入成功','ok'); await loadData();
+    closeModal('importModal'); pendingImport=null; toast('配置导入成功，已自动刷新','ok'); await loadData();
   } catch(e){ toast(e.message,'err'); }
 }
 
@@ -912,11 +1238,11 @@ function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 function toast(msg,type){
   const c=document.getElementById('toasts'); const t=document.createElement('div'); t.className='toast '+type; t.textContent=msg;
-  c.appendChild(t); setTimeout(()=>t.classList.add('show'),10); setTimeout(()=>{t.classList.remove('show'); setTimeout(()=>t.remove(),200);},3000);
+  c.appendChild(t); setTimeout(()=>t.classList.add('show'),10); setTimeout(()=>{t.classList.remove('show'); setTimeout(()=>t.remove(),250);},3200);
 }
 function copy(id){
   const text=document.getElementById(id).textContent;
-  navigator.clipboard.writeText(text).then(()=>toast('已复制','ok')).catch(()=>toast('复制失败','err'));
+  navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板','ok')).catch(()=>toast('复制失败','err'));
 }
 </script>
 </body>
