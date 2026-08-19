@@ -33,6 +33,18 @@ with an isolated CONFIG_DIR, then runs:
     12. RTT overhead vs direct: p50/p95/p99 over 60 sequential requests
     13. TTFB (first SSE byte) overhead vs direct
     14. 30 concurrent agent streams all complete byte-exact
+  G. provider normalisation (agent mode)
+    16. StepFun: reasoning_effort="none" → "low" + reasoning_format injected
+    16b. StepFun: reasoning_format=deepseek-style injected when not set
+    16c. StepFun: explicit reasoning_format not overwritten
+    17. StepFun: reasoning_effort="high" passes through unchanged
+    18. TokenRhythm: tool_choice object → "auto"
+    19. TokenRhythm: tool_choice="auto" unchanged
+    20. SenseNova: reasoning_effort="none" preserved (accepted)
+    21. Agnes: no reasoning_format injected, params pass through
+  H. KB mode thinking disable (per provider)
+    22. KB agnes: chat_template_kwargs injected, no reasoning_effort
+    22b. KB default: reasoning_effort=none
 
 Usage:  /path/to/venv/bin/python scripts/agent_test.py
 """
@@ -79,6 +91,11 @@ def build_config() -> dict:
             "dead429": provider("dead429", 1),
             "deadstream": provider("deadstream", 1),
             "deadstream2": provider("deadstream2", 1),
+            # Real provider names for normalisation testing
+            "stepfun": provider("stepfun", 2),
+            "tokenrhythm": provider("tokenrhythm", 2),
+            "agnes": provider("agnes", 2),
+            "sensenova": provider("sensenova", 2),
         },
         # Model-centric agent routing (v3.3 schema): the model is the entity,
         # keys are an ordered list inside it. deepseek-mock also exercises the
@@ -103,6 +120,19 @@ def build_config() -> dict:
                     {"provider": "mockB", "key": "k2"},
                 ],
             },
+            # Models bound to real provider names for normalisation tests
+            "norm-stepfun": {"keys": [
+                {"provider": "stepfun", "key": "k1"},
+            ]},
+            "norm-tokenrhythm": {"keys": [
+                {"provider": "tokenrhythm", "key": "k1"},
+            ]},
+            "norm-agnes": {"keys": [
+                {"provider": "agnes", "key": "k1"},
+            ]},
+            "norm-sensenova": {"keys": [
+                {"provider": "sensenova", "key": "k1"},
+            ]},
         },
         "candidates": {
             "chat": [{"provider": "mockA", "key": "k3", "model": "kb-chat-model"}],
@@ -186,7 +216,10 @@ async def main():
             print("\n== A. routing surface ==")
             r = await c.get(f"{API}/models", headers=H)
             ids = sorted(m["id"] for m in r.json()["data"])
-            check("1. /v1/models = only agent_models", ids == ["agent-fail", "agent-main", "agent-stream", "deepseek-mock"], str(ids))
+            check("1. /v1/models = only agent_models", ids == [
+                "agent-fail", "agent-main", "agent-stream", "deepseek-mock",
+                "norm-agnes", "norm-sensenova", "norm-stepfun", "norm-tokenrhythm",
+            ], str(ids))
 
             r = await c.post(f"{API}/chat/completions", headers=H,
                              json={"model": "chat", "messages": [{"role": "user", "content": "hi"}], "stream": True})
@@ -334,6 +367,113 @@ async def main():
             bodies = await asyncio.gather(*[read_stream(rr) for rr in results])
             ok_n = sum(1 for rr, b in zip(results, bodies) if rr.status_code == 200 and b == ref_bytes)
             check("14. 30 concurrent streams all byte-exact", ok_n == 30, f"ok={ok_n}/30")
+
+            print("\n== G. provider normalisation (agent mode) ==")
+            # 16. StepFun: reasoning_effort="none" → "low" + reasoning_format injected
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-stepfun", "messages": [{"role": "user", "content": "hi"}],
+                "reasoning_effort": "none"})
+            echo = r.json().get("echo", {})
+            check("16. stepfun: reasoning_effort none→low", echo.get("reasoning_effort") == "low",
+                  f"echo.re={echo.get('reasoning_effort')}")
+            check("16b. stepfun: reasoning_format=deepseek-style injected",
+                  echo.get("reasoning_format") == "deepseek-style",
+                  f"echo.rf={echo.get('reasoning_format')}")
+
+            # 16c. StepFun: existing reasoning_format not overwritten
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-stepfun", "messages": [{"role": "user", "content": "hi"}],
+                "reasoning_effort": "high", "reasoning_format": "general"})
+            echo = r.json().get("echo", {})
+            check("16c. stepfun: explicit reasoning_format preserved",
+                  echo.get("reasoning_format") == "general",
+                  f"echo.rf={echo.get('reasoning_format')}")
+
+            # 17. StepFun: reasoning_effort="high" passes through unchanged
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-stepfun", "messages": [{"role": "user", "content": "hi"}],
+                "reasoning_effort": "high"})
+            echo = r.json().get("echo", {})
+            check("17. stepfun: reasoning_effort=high unchanged",
+                  echo.get("reasoning_effort") == "high",
+                  f"echo.re={echo.get('reasoning_effort')}")
+
+            # 18. TokenRhythm: tool_choice object → "auto"
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-tokenrhythm", "messages": [{"role": "user", "content": "hi"}],
+                "tool_choice": {"type": "function", "function": {"name": "get_weather"}}})
+            echo = r.json().get("echo", {})
+            check("18. tokenrhythm: tool_choice object→auto",
+                  echo.get("tool_choice") == "auto",
+                  f"echo.tc={echo.get('tool_choice')}")
+
+            # 19. TokenRhythm: tool_choice="auto" passes through unchanged
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-tokenrhythm", "messages": [{"role": "user", "content": "hi"}],
+                "tool_choice": "auto"})
+            echo = r.json().get("echo", {})
+            check("19. tokenrhythm: tool_choice=auto unchanged",
+                  echo.get("tool_choice") == "auto",
+                  f"echo.tc={echo.get('tool_choice')}")
+
+            # 20. SenseNova: reasoning_effort="none" passes through (accepted)
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-sensenova", "messages": [{"role": "user", "content": "hi"}],
+                "reasoning_effort": "none"})
+            echo = r.json().get("echo", {})
+            check("20. sensenova: reasoning_effort=none preserved",
+                  echo.get("reasoning_effort") == "none",
+                  f"echo.re={echo.get('reasoning_effort')}")
+
+            # 21. Agnes: no reasoning_format injected, no reasoning_effort modified
+            r = await c.post(f"{API}/chat/completions", headers=H, json={
+                "model": "norm-agnes", "messages": [{"role": "user", "content": "hi"}],
+                "reasoning_effort": "high", "chat_template_kwargs": {"enable_thinking": True}})
+            echo = r.json().get("echo", {})
+            check("21. agnes: params pass through, no reasoning_format injected",
+                  echo.get("reasoning_effort") == "high"
+                  and "reasoning_format" not in echo
+                  and echo.get("chat_template_kwargs") == {"enable_thinking": True},
+                  f"echo={echo}")
+
+            print("\n== H. KB mode thinking disable (per provider) ==")
+            # 22. Verify _disable_thinking_for_kb function directly — this tests
+            #     the per-provider thinking-disable logic without needing the
+            #     scheduler to route to a specific provider's KB candidate.
+            code = (
+                "import sys, copy\n"
+                f"sys.path.insert(0, {str(REPO)!r})\n"
+                "from app.proxy_routes import _disable_thinking_for_kb\n"
+                # StepFun: reasoning_effort=low (none not accepted)\n"
+                "b = {'model': 'x', 'reasoning_effort': 'high'}\n"
+                "_disable_thinking_for_kb(b, 'stepfun')\n"
+                "assert b['reasoning_effort'] == 'low', b\n"
+                # Agnes: chat_template_kwargs injected, reasoning_effort removed\n"
+                "b = {'model': 'x', 'reasoning_effort': 'high'}\n"
+                "_disable_thinking_for_kb(b, 'agnes')\n"
+                "assert b.get('chat_template_kwargs') == {'enable_thinking': False}, b\n"
+                "assert 'reasoning_effort' not in b, b\n"
+                # Default (sensenova/tokenrhythm): reasoning_effort=none\n"
+                "b = {'model': 'x'}\n"
+                "_disable_thinking_for_kb(b, 'sensenova')\n"
+                "assert b['reasoning_effort'] == 'none', b\n"
+                "b = {'model': 'x'}\n"
+                "_disable_thinking_for_kb(b, 'tokenrhythm')\n"
+                "assert b['reasoning_effort'] == 'none', b\n"
+                "print('KB_THINKING_OK')\n"
+            )
+            out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO))
+            check("22. _disable_thinking_for_kb per-provider logic",
+                  "KB_THINKING_OK" in out.stdout,
+                  (out.stdout.strip() + out.stderr.strip()[-300:])[:300])
+
+            # 22b. Verify KB mode via HTTP still works (mockA gets reasoning_effort=none)
+            r = await c.post(f"{API}/chat/completions", headers=H,
+                             json={"model": "chat", "messages": [{"role": "user", "content": "hi"}]})
+            kb_echo = (await c.get(f"{MOCK}/__stats")).json()["last_bodies"].get("kb-chat-model", {})
+            check("22b. KB default: reasoning_effort=none",
+                  r.status_code == 200 and kb_echo.get("reasoning_effort") == "none",
+                  f"status={r.status_code} echo={kb_echo}")
 
     finally:
         for p in (app, mock):
