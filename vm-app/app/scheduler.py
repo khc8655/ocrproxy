@@ -544,11 +544,6 @@ async def schedule(
                              provider=provider_name, key=key_label, error_msg=err_msg)
 
                 # --- Classify 400s BEFORE the early-exit check below ---
-                # The classification used to be computed after the code that
-                # referenced it, causing an UnboundLocalError on the first
-                # content-moderation 400: the error fell into the generic
-                # exception handler, wrongly cooling the key down and feeding
-                # the circuit breaker.
                 _400_is_key_issue = False
                 _is_content_moderation = False
                 if status_code == 400 and last_err_body:
@@ -556,47 +551,38 @@ async def schedule(
                     # Key/account/subscription problems that repeat across requests
                     if any(kw in body_lower for kw in [
                         "subscription", "no active", "api key", "invalid_key",
-                        "unauthorized", "account", "billing", "quota",
-                        "payment", "plan", "insufficient",
+                        "unauthorized", "account", "billing", "payment", "plan",
                     ]):
                         _400_is_key_issue = True
                     elif any(kw in body_lower for kw in [
-                        # Deliberately narrow: a bare "content" would also
-                        # match "messages content too long", which other
-                        # providers may well accept — killing legitimate
-                        # failover.  Chinese variants included because several
-                        # CN providers localise error bodies.
                         "content_filter", "content management", "content moderation",
                         "data_inspection", "moderation", "sensitive", "inappropriate",
                         "pornograph", "审核", "敏感", "违规",
                     ]):
                         _is_content_moderation = True
 
-                # --- Early exit for content-moderation 400s ---
-                # If the upstream rejected the content (not the key), trying
-                # other candidates with the same content is futile — they'll
-                # likely also reject it.  Short-circuit to save budget and
-                # avoid wasting 15 API calls on the same bad image.
-                if _is_content_moderation:
-                    logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
-                    errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                # --- Early exit for request-level 400s ---
+                # If the upstream rejected the request due to client content or format/parameters
+                # (and NOT a key/account issue), trying other candidates on the same provider with
+                # the exact same payload is futile. Short-circuit immediately to return 400 without retry.
+                if status_code == 400 and not _400_is_key_issue:
+                    if _is_content_moderation:
+                        logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
+                        errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                    else:
+                        logger.warning(f"Request-level 400 from {cand_id} — returning immediately without retry: {upstream_detail}")
+                        errors.append(f"{cand_id}: request rejected by upstream ({last_err_body[:200] if last_err_body else '400 Bad Request'})")
+                    _consecutive_failures[cand_id] = 0
                     break
 
                 # --- Cooldown logic ---
-                # 400 is ambiguous: it can mean either a request-level problem
-                # (e.g. content moderation, bad image) or a key/account problem
-                # (e.g. "no active subscription").  Only 400s that are clearly
-                # key/account issues — identified by the error body — are
-                # cooled down.  Content-moderation 400s must NOT be cooled
-                # down because they are specific to the request content and
-                # won't repeat for different requests.
-                #
                 # Cooldown policy:
                 #   400 (key issue)  – short cooldown (10s)
-                #   400 (content)    – no cooldown (request-specific)
-                #   401/403          – auth failure, longer cooldown
-                #   429              – rate limiting
-                #   5xx              – server error
+                #   400 (request)    – no cooldown (request-specific, early exited above)
+                #   401/403 (auth)   – 600s cooldown (10 min)
+                #   403 (quota)      – 60s cooldown (like 429)
+                #   429              – 60s cooldown
+                #   5xx              – 30s cooldown
                 #   404/422          – request-level, no cooldown
 
                 should_cooldown = (
@@ -613,7 +599,9 @@ async def schedule(
                     if status_code == 429:
                         cd_sec = cooldown_429
                     elif status_code == 403:
-                        cd_sec = cooldown_403
+                        # Smart 403: If due to quota / allowance exhaustion, use short cooldown (cooldown_429)
+                        _is_quota_403 = bool(last_err_body and any(w in last_err_body.lower() for w in ["quota", "allowance", "exhausted", "credit", "balance"]))
+                        cd_sec = cooldown_429 if _is_quota_403 else cooldown_403
                     elif status_code == 400 and _400_is_key_issue:
                         cd_sec = 10.0  # short cooldown for key-related 400s
                     elif status_code >= 500:
@@ -626,7 +614,7 @@ async def schedule(
 
                     _cooldown_until[cand_id] = time.time() + cd_sec
                 else:
-                    # Content moderation 400, 404/422 etc.: don't penalise key.
+                    # Non-cooldown cases (404/422 etc.): don't penalise key.
                     _consecutive_failures[cand_id] = 0
 
             except httpx.ReadTimeout as e:
