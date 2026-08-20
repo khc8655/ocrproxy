@@ -59,9 +59,6 @@
     .appbar nav button:hover { background: var(--bg-subtle); color: var(--text); }
     .appbar nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
     .appbar .actions { display: flex; gap: 10px; align-items: center; }
-    .save-badge { display: none; align-items: center; gap: 8px; padding: 5px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); border: 1px solid var(--warn-border); color: #92400e; font-size: 12px; font-weight: 600; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-    .save-badge.show { display: flex; }
     .main { max-width: 1160px; margin: 0 auto; padding: 28px 24px; }
 
     /* Panels */
@@ -243,11 +240,7 @@
     </div>
     <nav id="topNav"></nav>
     <div class="actions">
-      <div id="saveBadge" class="save-badge">
-        <span>⚠️ 配置已修改</span>
-        <button class="btn btn-ghost btn-sm" onclick="discardChanges()">放弃</button>
-        <button class="btn btn-primary btn-sm" onclick="saveAndReload()">保存并重载</button>
-      </div>
+      <button class="btn btn-ghost btn-sm" onclick="reloadRuntimeState()" title="强制重载配置并重置所有 Key 的冷却与熔断状态">🔄 清除冷却并重载</button>
       <button class="btn btn-icon" onclick="loadData()" title="刷新数据">↻</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
     </div>
@@ -467,7 +460,7 @@
         </div>
 
         <div style="display:flex;justify-content:flex-end;">
-          <button class="btn btn-primary" onclick="saveSettings()">💾 暂存系统参数</button>
+          <button class="btn btn-primary" onclick="saveSettings()">💾 保存并应用设置</button>
         </div>
       </div>
 
@@ -632,31 +625,40 @@ async function login(){
 function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }
 function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
 
-// Data
+// Data & Persistence
 async function loadData(){
   try {
     const [cr,sr]=await Promise.all([fetch('/api/admin/config',{headers:headers()}), fetch('/api/admin/stats',{headers:headers()})]);
     if(cr.status===401||sr.status===401){ logout(); return; }
-    state.config=await cr.json(); state.stats=await sr.json(); state.changed=false;
-    updateSaveBadge(); updateAccess(); render();
+    state.config=await cr.json(); state.stats=await sr.json();
+    updateAccess(); render();
   } catch(e){ toast('加载配置失败: '+e.message,'err'); }
 }
-function markChanged(){ state.changed=true; updateSaveBadge(); }
-function updateSaveBadge(){ document.getElementById('saveBadge').classList.toggle('show',state.changed); }
-function discardChanges(){ state.changed=false; loadData(); toast('已放弃未保存修改','ok'); }
-async function saveAndReload(){
+
+async function persistConfig(msg='配置已保存并立即生效'){
   try {
     const r=await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
-    if(!r.ok) throw new Error('保存配置失败');
-    await fetch('/v1/reload',{method:'POST',headers:headers()});
-    state.changed=false; updateSaveBadge(); toast('配置已持久化并重载生效','ok'); await loadData();
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      throw new Error(err.error||'保存配置失败');
+    }
+    toast(msg,'ok');
+    await loadData();
+  } catch(e){ toast(e.message,'err'); }
+}
+
+async function reloadRuntimeState(){
+  try {
+    const r=await fetch('/v1/reload',{method:'POST',headers:headers()});
+    if(!r.ok) throw new Error('重载失败');
+    toast('已重载配置并重置所有 Key 的冷却与熔断状态','ok');
+    await loadData();
   } catch(e){ toast(e.message,'err'); }
 }
 
 // Render dispatcher
 function render(){
   if(!state.config) return;
-  updateSaveBadge();
   if(state.tab==='dashboard') renderDashboard();
   if(state.tab==='models') renderModels();
   if(state.tab==='settings') renderSettings();
@@ -854,34 +856,40 @@ function saveProvider(){
   const name=document.getElementById('p_name').value.trim(), url=document.getElementById('p_url').value.trim();
   if(!name||!url){ toast('供应商标识和 URL 不能为空','err'); return; }
   const isEdit=document.getElementById('p_name').disabled;
-  if(!isEdit&&state.config.providers[name]){ toast('供应商已存在','err'); return; }
+  if(!isEdit&&state.config.providers&&state.config.providers[name]){ toast('供应商已存在','err'); return; }
   if(!state.config.providers) state.config.providers={};
   if(isEdit) state.config.providers[name].base_url=url;
   else state.config.providers[name]={base_url:url,keys:{}};
-  closeModal('providerModal'); markChanged(); renderProviders(); toast('供应商已保存','ok');
+  closeModal('providerModal');
+  persistConfig(`供应商「${name}」已保存并立即生效`);
+  renderProviders();
 }
 function deleteProvider(name){ 
   if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？相关挂载也将一并清理。')) return; 
   delete state.config.providers[name]; 
-  KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
+  KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
   if(state.config.agent_models){ 
     Object.keys(state.config.agent_models).forEach(k=>{ 
       const m=state.config.agent_models[k]; 
-      m.keys=m.keys.filter(x=>x.provider!==name); 
+      m.keys=(m.keys||[]).filter(x=>x.provider!==name); 
       if(!m.keys.length) delete state.config.agent_models[k]; 
     }); 
   } 
-  markChanged(); renderModels(); toast('供应商已删除','ok');
+  persistConfig(`供应商「${name}」已删除并立即生效`);
+  renderModels();
 }
 
 function openKeyModal(prov){ document.getElementById('keyModalTitle').textContent='新增 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=''; document.getElementById('k_label').disabled=false; document.getElementById('k_value').value=''; document.getElementById('k_skip').checked=false; openModal('keyModal'); }
 function editKey(prov,label){ const p=state.config.providers[prov]; document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=label; document.getElementById('k_label').disabled=true; document.getElementById('k_value').value=p.keys[label]; document.getElementById('k_skip').checked=true; openModal('keyModal'); }
 function deleteKey(prov,label){ 
   if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
-  delete state.config.providers[prov].keys[label]; 
-  KB_TYPES.forEach(t=>{ if(state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>!(x.provider===prov&&x.key===label)); }); 
-  if(state.config.agent_models) Object.values(state.config.agent_models).forEach(m=>{ m.keys=m.keys.filter(x=>!(x.provider===prov&&x.key===label)); }); 
-  markChanged(); renderModels(); toast('Key 已删除','ok');
+  if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
+    delete state.config.providers[prov].keys[label]; 
+  }
+  KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>!(x.provider===prov&&x.key===label)); }); 
+  if(state.config.agent_models) Object.values(state.config.agent_models).forEach(m=>{ m.keys=(m.keys||[]).filter(x=>!(x.provider===prov&&x.key===label)); }); 
+  persistConfig(`Key「${label}」已删除并立即生效`);
+  renderModels();
 }
 async function saveKey(){
   const prov=document.getElementById('k_provider').value;
@@ -907,7 +915,15 @@ async function saveKey(){
     document.getElementById('k_spinner').style.display='none';
   }
 }
-function commitKey(prov,label,val){ state.config.providers[prov].keys[label]=val; closeModal('keyModal'); markChanged(); renderModels(); toast('Key 已保存','ok'); }
+function commitKey(prov,label,val){ 
+  if(!state.config.providers) state.config.providers={};
+  if(!state.config.providers[prov]) state.config.providers[prov]={base_url:'',keys:{}};
+  if(!state.config.providers[prov].keys) state.config.providers[prov].keys={};
+  state.config.providers[prov].keys[label]=val; 
+  closeModal('keyModal'); 
+  persistConfig(`Key「${label}」已保存并立即生效`); 
+  renderModels(); 
+}
 
 // Agent Model Actions
 function openAgentModal(){ document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; document.getElementById('a_oldName').value=''; document.getElementById('a_name').value=''; document.getElementById('a_name').readOnly=false; document.getElementById('a_upstream').value=''; populateProviderSelect('a_provider'); renderAgentKeyChecks(); openModal('agentModal'); }
@@ -954,11 +970,30 @@ function saveAgentModel(){
   if(oldName&&oldName!==name){ delete state.config.agent_models[oldName]; }
   const entry={keys:bindings}; if(upstream&&upstream!==name) entry.upstream_model=upstream;
   state.config.agent_models[name]=entry;
-  closeModal('agentModal'); markChanged(); renderAgentModels(); toast('Agent 模型已保存','ok');
+  closeModal('agentModal');
+  persistConfig(`Agent 模型「${name}」已保存并立即生效`);
+  renderAgentModels();
 }
-function deleteAgentModel(name){ if(!confirm('确定要删除 Agent 模型 "'+name+'" 吗？')) return; delete state.config.agent_models[name]; markChanged(); renderAgentModels(); toast('模型已删除','ok'); }
-function moveAgentKey(name,i,dir){ const keys=state.config.agent_models[name].keys; const t=i+dir; if(t<0||t>=keys.length)return; [keys[i],keys[t]]=[keys[t],keys[i]]; markChanged(); renderAgentModels(); }
-function deleteAgentKey(name,i){ state.config.agent_models[name].keys.splice(i,1); if(!state.config.agent_models[name].keys.length) delete state.config.agent_models[name]; markChanged(); renderAgentModels(); }
+function deleteAgentModel(name){ 
+  if(!confirm('确定要删除 Agent 模型 "'+name+'" 吗？')) return; 
+  delete state.config.agent_models[name]; 
+  persistConfig(`Agent 模型「${name}」已删除并立即生效`); 
+  renderAgentModels(); 
+}
+function moveAgentKey(name,i,dir){ 
+  const keys=state.config.agent_models[name].keys; 
+  const t=i+dir; 
+  if(t<0||t>=keys.length)return; 
+  [keys[i],keys[t]]=[keys[t],keys[i]]; 
+  persistConfig('Key 优先级已调整并立即生效'); 
+  renderAgentModels(); 
+}
+function deleteAgentKey(name,i){ 
+  state.config.agent_models[name].keys.splice(i,1); 
+  if(!state.config.agent_models[name].keys.length) delete state.config.agent_models[name]; 
+  persistConfig('Key 绑定已移除并立即生效'); 
+  renderAgentModels(); 
+}
 
 // Anti-repeat Probing Implementation
 async function testAgentKey(name, i){
@@ -1086,10 +1121,24 @@ function saveCandidate(){
   } else {
     selected.forEach(k=>state.config.candidates[type].push({provider,key:k,model}));
   }
-  closeModal('candidateModal'); markChanged(); renderKbModels(); toast('候选节点已挂载','ok');
+  closeModal('candidateModal');
+  persistConfig(`候选节点已挂载到 [${type}] 并立即生效`);
+  renderKbModels();
 }
-function moveCandidate(type,i,dir){ const list=state.config.candidates[type]; const t=i+dir; if(t<0||t>=list.length)return; [list[i],list[t]]=[list[t],list[i]]; markChanged(); renderKbModels(); }
-function deleteCandidate(type,i){ if(!confirm('确定要删除该候选节点吗？')) return; state.config.candidates[type].splice(i,1); markChanged(); renderKbModels(); toast('节点已删除','ok'); }
+function moveCandidate(type,i,dir){ 
+  const list=state.config.candidates[type]; 
+  const t=i+dir; 
+  if(t<0||t>=list.length)return; 
+  [list[i],list[t]]=[list[t],list[i]]; 
+  persistConfig('候选节点优先级已调整并立即生效'); 
+  renderKbModels(); 
+}
+function deleteCandidate(type,i){ 
+  if(!confirm('确定要删除该候选节点吗？')) return; 
+  state.config.candidates[type].splice(i,1); 
+  persistConfig('候选节点已删除并立即生效'); 
+  renderKbModels(); 
+}
 
 async function testCandidate(type, i){
   const c = state.config.candidates[type][i];
@@ -1173,8 +1222,7 @@ function saveSettings(){
   c.upstream_timeout_embedding = Number(document.getElementById('s_embTimeout').value) || 60;
   c.upstream_timeout_rerank = Number(document.getElementById('s_rankTimeout').value) || 30;
 
-  toast('参数已暂存，请点击右上角「保存并重载」生效', 'ok');
-  markChanged();
+  persistConfig('系统参数已保存并立即生效');
 }
 
 // Access Guide
