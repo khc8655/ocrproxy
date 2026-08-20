@@ -7,7 +7,7 @@
 - **统一接口**：`/v1/chat/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/ocr` 标准 API，兼容 OpenAI SDK
 - **多 Key 轮询**：按候选序列轮询多个上游 Key，支持拖拽调整优先级
 - **双模式路由**：KB 入库模式（虚拟别名 `chat`/`embedding` 等，独立 candidates 配置）+ Agent 模式（真实模型名，独立 `agent_models` 配置，429/500 自动切换供应商）；`/v1/models` 仅返回 Agent 真实模型
-- **故障自动切换**：429 冷却 60s、403 鉴权失败冷却 10min（403 额度耗尽智能缩短为 60s）、5xx 冷却 30s；400 智能区分 Key/账户问题（冷却 10s 并切换）与请求级错误（参数/格式/内容审核等，立即短路退出不冷却、不来回无意义重试），连续失败 3 次触发熔断
+- **故障自动切换与熔断解耦**：429 TPM 限流采用 10s 轻量避让（不累加熔断计数器，实现平滑多 Key 轮换）、403 鉴权失败与 5 小时配额耗尽冷却 10min（600s）、5xx 服务端故障冷却 30s；400 智能区分 Key/账户问题（冷却 10s 并切换）与请求级错误（参数/格式/内容审核等，立即短路退出不重试）；仅 5xx / 宕机连续失败 3 次才触发 300s 深度熔断
 - **请求级 400 与内容审核精准短路**：当上游返回请求级 400（参数不受支持、上下文超长、内容审核等）时，直接原样返回响应并终止重试，避免在同供应商其他 Key 间无意义来回切换浪费延时
 - **全局并发背压**：最多 30 个在途上游请求，超出自动排队，防止突发入库 OOM
 - **Per-Type 状态分离**：同一 Key 用于 chat 和 OCR 时，状态统计按模型类型独立记录
@@ -15,7 +15,7 @@
 - **延迟感知路由**（可选）：根据历史延迟自动排序候选节点
 - **Chat 快速模式**：KB 入库 chat **始终**禁用推理思考、强制非流式（写死，无需配置），单次请求从 30-60s 降至 2-5s；Agent 模式则完全透传（含工具调用）
 - **内存安全**：MALLOC_ARENA_MAX=2 + malloc_trim + 全局并发限制 + 假死自动重启
-- **Web 管理面板**：可视化配置供应商、Key、路由优先级，实时统计监控
+- **Web 管理面板**：可视化配置供应商、Key、路由优先级与三段式系统参数（全局高可用 / Agent 专属 / KB 专属），实时统计监控
 - **配置导入与导出**：支持一键导出带时间戳的完整配置 JSON 备份；导入支持“完全覆盖”与“增量合并”双模式，导入前自动生成 `.bak` 快照并严格校验 Schema
 - **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
 - **角色权限隔离**：`/api/admin/*` 严格限制为 `ADMIN_PASSWORD`，普通 `PROXY_API_KEY` 无法越权访问管理接口
@@ -169,22 +169,28 @@ systemctl list-timers ocrproxy-*       # 查看定时器
 
 ```json
 {
-  "upstream_timeout": 12,
-  "upstream_timeout_chat": 120,
-  "upstream_timeout_ocr": 60,
+  "max_concurrency_per_key": 3,
   "schedule_total_budget": 15,
-  "max_concurrency_per_key": 5,
-  "cooldown_duration": 30,
-  "cooldown_429_sec": 60,
+  "cooldown_tpm_sec": 10,
+  "cooldown_5xx_sec": 30,
   "cooldown_403_sec": 600,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "chat_fast_timeout": 30,   # KB chat 写死快速：非流式 + 此超时（无 chat_fast_mode 开关）
   "latency_based_routing": false,
+  "upstream_timeout_chat": 45,
+  "chat_fast_timeout": 30,
+  "upstream_timeout_ocr": 60,
+  "upstream_timeout_embedding": 60,
+  "upstream_timeout_rerank": 30,
   "providers": {
     "siliconflow": {
       "base_url": "https://api.siliconflow.cn",
       "keys": { "KeyA": "sk-xxxx" }
+    }
+  },
+  "agent_models": {
+    "deepseek-v4-flash": {
+      "keys": [{ "provider": "sensenova", "key": "自己" }]
     }
   },
   "candidates": {
