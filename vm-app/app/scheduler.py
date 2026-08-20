@@ -324,24 +324,33 @@ async def schedule(
     except (ValueError, TypeError):
         concurrency_limit = 5
 
+    # 429 TPM Rate Limit Cooldown (default 10s, non-circuit-breaking)
     try:
-        cooldown_429 = max(1.0, float(config.get("cooldown_429_sec", 60)))
+        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_tpm_sec", config.get("cooldown_429_sec", 10))))
     except (ValueError, TypeError):
-        cooldown_429 = 60.0
+        cooldown_tpm_sec = 10.0
 
+    # 429/403 Quota Exhaustion Cooldown (default 600s)
     try:
-        cooldown_403 = max(1.0, float(config.get("cooldown_403_sec", 600)))
+        cooldown_quota_sec = max(1.0, float(config.get("cooldown_quota_sec", config.get("cooldown_403_sec", 600))))
     except (ValueError, TypeError):
-        cooldown_403 = 600.0
+        cooldown_quota_sec = 600.0
 
+    # 403 Auth Failure Cooldown (default 600s)
     try:
-        cooldown_5xx = max(1.0, float(config.get("cooldown_duration", 30)))
+        cooldown_403_sec = max(1.0, float(config.get("cooldown_403_sec", 600)))
     except (ValueError, TypeError):
-        cooldown_5xx = 30.0
+        cooldown_403_sec = 600.0
 
-    cooldown_other = cooldown_5xx
+    # 5xx Server Error Cooldown (default 30s)
+    try:
+        cooldown_5xx_sec = max(1.0, float(config.get("cooldown_5xx_sec", config.get("cooldown_duration", 30))))
+    except (ValueError, TypeError):
+        cooldown_5xx_sec = 30.0
+
     cooldown_read_timeout = 2.0
 
+    # Circuit breaker threshold (only for genuine 5xx server failures / crash)
     try:
         circuit_break_threshold = max(1, int(config.get("circuit_break_threshold", 3)))
     except (ValueError, TypeError):
@@ -587,44 +596,48 @@ async def schedule(
                     _consecutive_failures[cand_id] = 0
                     break
 
-                # --- Cooldown logic ---
-                # Cooldown policy:
-                #   400 (key issue)  – short cooldown (10s)
-                #   400 (request)    – no cooldown (request-specific, early exited above)
-                #   401/403 (auth)   – 600s cooldown (10 min)
-                #   403 (quota)      – 60s cooldown (like 429)
-                #   429              – 60s cooldown
-                #   5xx              – 30s cooldown
-                #   404/422          – request-level, no cooldown
+                # --- Cooldown & Circuit Breaker Logic (Decoupled) ---
+                # Policy:
+                # 1. 429 Rate Limit (TPM/RPM): 10s cooldown, DO NOT increment circuit breaker.
+                # 2. 429/403 Quota Exhausted: 600s cooldown, DO NOT increment circuit breaker.
+                # 3. 401/403 Auth Failure: 600s cooldown, DO NOT increment circuit breaker.
+                # 4. 400 (Key issue): 10s cooldown, DO NOT increment circuit breaker.
+                # 5. 5xx Server Error: 30s cooldown, INCREMENT circuit breaker (>=3 triggers 300s).
+                # 6. 404/422 (Request level): No cooldown.
 
-                should_cooldown = (
-                    (status_code == 400 and _400_is_key_issue)
-                    or status_code in (401, 403, 429)
-                    or status_code >= 500
-                )
+                if status_code == 429:
+                    _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
+                        "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
+                    ]))
+                    cd_sec = cooldown_quota_sec if _is_quota else cooldown_tpm_sec
+                    _consecutive_failures[cand_id] = 0  # Rate limits do not count as server crash
+                    _cooldown_until[cand_id] = time.time() + cd_sec
+                    logger.info(f"429 on {cand_id} ({'Quota' if _is_quota else 'TPM/RPM'} limit) — cool down {cd_sec}s")
 
-                if should_cooldown:
+                elif status_code in (401, 403):
+                    _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
+                        "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
+                    ]))
+                    cd_sec = cooldown_quota_sec if _is_quota else cooldown_403_sec
+                    _consecutive_failures[cand_id] = 0
+                    _cooldown_until[cand_id] = time.time() + cd_sec
+
+                elif status_code == 400 and _400_is_key_issue:
+                    _consecutive_failures[cand_id] = 0
+                    _cooldown_until[cand_id] = time.time() + 10.0
+
+                elif status_code >= 500:
                     cf = _consecutive_failures.get(cand_id, 0) + 1
                     _consecutive_failures[cand_id] = cf
+                    cd_sec = cooldown_5xx_sec
 
-                    cd_sec = cooldown_other
-                    if status_code == 429:
-                        cd_sec = cooldown_429
-                    elif status_code == 403:
-                        # Smart 403: If due to quota / allowance exhaustion, use short cooldown (cooldown_429)
-                        _is_quota_403 = bool(last_err_body and any(w in last_err_body.lower() for w in ["quota", "allowance", "exhausted", "credit", "balance"]))
-                        cd_sec = cooldown_429 if _is_quota_403 else cooldown_403
-                    elif status_code == 400 and _400_is_key_issue:
-                        cd_sec = 10.0  # short cooldown for key-related 400s
-                    elif status_code >= 500:
-                        cd_sec = cooldown_5xx
-
-                    # Circuit breaker escalation
+                    # Circuit breaker escalation only for 5xx server failures
                     if cf >= circuit_break_threshold:
                         cd_sec = max(cd_sec, circuit_cooldown)
-                        logger.warning(f"Circuit breaker triggered for {cand_id}. Cool down for {cd_sec}s.")
+                        logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {cd_sec}s.")
 
                     _cooldown_until[cand_id] = time.time() + cd_sec
+
                 else:
                     # Non-cooldown cases (404/422 etc.): don't penalise key.
                     _consecutive_failures[cand_id] = 0

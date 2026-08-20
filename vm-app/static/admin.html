@@ -352,89 +352,117 @@
     <!-- Panel: Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
-        <div class="section-title mb-3">⚙️ 系统运行参数</div>
+        <div class="section-title mb-3">⚙️ 系统运行与可靠性参数</div>
         
-        <!-- Group 1: Timeouts -->
+        <!-- Group 1: Global Reliability & Rate Limits -->
         <div class="card card-pad settings-group">
-          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">⏱️ 超时与调度预算</h3>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              🛡️ 全局高可用与限流熔断 (Global Reliability)
+            </h3>
+            <span class="badge badge-primary">全局通用</span>
+          </div>
           <div class="settings-grid">
             <div class="setting-item">
-              <label class="form-label">普通请求超时 (s)</label>
-              <input type="number" id="s_timeout" class="form-control" placeholder="默认 12">
-              <span class="hint">通用 API 的 HTTP 请求超时时间</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">Chat 推理超时 (s)</label>
-              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 45">
-              <span class="hint">Agent 模式及深度思考模型的长超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">OCR 识别超时 (s)</label>
-              <input type="number" id="s_ocrTimeout" class="form-control" placeholder="默认 60">
-              <span class="hint">大图识图或多页文档识别超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">Embedding 向量超时 (s)</label>
-              <input type="number" id="s_embTimeout" class="form-control" placeholder="默认 60">
-              <span class="hint">批量文本向量计算超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">Reranker 重排超时 (s)</label>
-              <input type="number" id="s_rankTimeout" class="form-control" placeholder="默认 30">
-              <span class="hint">文档重排计算超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">KB Chat 快速入库超时 (s)</label>
-              <input type="number" id="s_fastTimeout" class="form-control" placeholder="默认 30">
-              <span class="hint">知识库入库摘要提取的短超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">单次请求总调度预算 (s)</label>
-              <input type="number" id="s_budget" class="form-control" placeholder="默认 15">
-              <span class="hint">故障切换的最长等待时间窗口</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">单 Key 并发限制</label>
+              <label class="form-label">单 Key 最大并发限制</label>
               <input type="number" id="s_concurrency" class="form-control" placeholder="默认 3">
-              <span class="hint">每个 API Key 在途最大并发保护</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Group 2: Cooldowns -->
-        <div class="card card-pad settings-group">
-          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">🛡️ 故障冷却与限流保护</h3>
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="form-label">通用 5xx 错误冷却 (s)</label>
-              <input type="number" id="s_cooldown" class="form-control" placeholder="默认 30">
-              <span class="hint">上游服务异常时的临时避让时间</span>
+              <span class="hint">每个 API Key 在途最大并发保护，防止打崩配额</span>
             </div>
             <div class="setting-item">
-              <label class="form-label">429 限流冷却 (s)</label>
-              <input type="number" id="s_cooldown429" class="form-control" placeholder="默认 60">
-              <span class="hint">触发上游速率限制后的休眠时间</span>
+              <label class="form-label">故障转移总预算 (s)</label>
+              <input type="number" id="s_budget" class="form-control" placeholder="默认 15">
+              <span class="hint">单次请求在多候选 Key 之间轮换的最长等待窗口</span>
             </div>
             <div class="setting-item">
-              <label class="form-label">403 鉴权失败冷却 (s)</label>
+              <label class="form-label">429 TPM 速率限流短期冷却 (s)</label>
+              <input type="number" id="s_cooldownTpm" class="form-control" placeholder="默认 10">
+              <span class="hint">针对 429001/TPM 超限的轻量避让，不累加熔断计数器</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">5xx 服务端故障冷却 (s)</label>
+              <input type="number" id="s_cooldown5xx" class="form-control" placeholder="默认 30">
+              <span class="hint">上游 500/502/503/504 等服务异常时的临时避让时间</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">403 鉴权失败 / 额度耗尽冷却 (s)</label>
               <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600">
-              <span class="hint">Key 失效/欠费时的长时间屏蔽（额度耗尽将智能缩短为 60s）</span>
+              <span class="hint">Key 无效或 5小时配额用尽时的长期屏蔽（10分钟）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">5xx 严重故障熔断阈值 (次)</label>
+              <input type="number" id="s_circuitThreshold" class="form-control" placeholder="默认 3">
+              <span class="hint">连续 5xx / 宕机达到该次数时触发深度熔断（429 限流不计入）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">严重故障熔断时长 (s)</label>
+              <input type="number" id="s_circuitCooldown" class="form-control" placeholder="默认 300">
+              <span class="hint">触发深度熔断后该候选节点的休眠锁定时间（5分钟）</span>
             </div>
           </div>
-        </div>
 
-        <!-- Group 3: Routing Features -->
-        <div class="card card-pad settings-group">
-          <h3 class="mb-3" style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">🔀 智能路由策略</h3>
-          <div class="toggle-card">
+          <div class="toggle-card mt-3">
             <div class="toggle-card-info">
-              <h4>启用延迟感知自动路由 (Latency-Based Routing)</h4>
-              <p>根据历史响应延迟动态排序候选节点，优先选用响应速度最快的优质节点</p>
+              <h4>启用延迟感知智能路由 (Latency-Based Routing)</h4>
+              <p>根据历史真实响应延迟动态排序候选节点，优先选用响应速度最快的优质节点</p>
             </div>
             <label class="checkbox" style="font-weight:600;">
               <input type="checkbox" id="s_latency">
               <span>开启</span>
             </label>
+          </div>
+        </div>
+
+        <!-- Group 2: Agent Mode Settings -->
+        <div class="card card-pad settings-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              🤖 Agent 模式专属设置 (Agent Mode)
+            </h3>
+            <span class="badge badge-success">Agent 真实模型</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="form-label">Agent 对话与推理读超时 (s)</label>
+              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 45">
+              <span class="hint">Agent 工具调用、深度思考推理等长耗时请求的响应超时</span>
+            </div>
+          </div>
+          <div class="hint-box mt-3" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:12px 14px;border-radius:var(--radius-sm);">
+            💡 <b>Agent 模式全自动机制说明：</b><br>
+            • <b>纯透传零损耗</b>：原生透传 <code>tools</code> / <code>tool_choice</code> 函数调用、<code>reasoning_content</code> 深度推理过程与流式 SSE 字节流。<br>
+            • <b>多 Key 故障轮询</b>：单个 Key 遇到 429 TPM 超限时快速避让 10 秒并自动无缝轮换至下一个 Key，不再死锁熔断。
+          </div>
+        </div>
+
+        <!-- Group 3: KB Ingestion Settings -->
+        <div class="card card-pad settings-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              📚 KB 知识库入库专属设置 (KB Ingestion)
+            </h3>
+            <span class="badge badge-neutral">KB 虚拟别名</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="form-label">KB Chat 快速对话超时 (s)</label>
+              <input type="number" id="s_fastTimeout" class="form-control" placeholder="默认 30">
+              <span class="hint">知识库入库摘要提取的短超时（写死禁用思考 + 强制非流式）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">OCR 图像识别超时 (s)</label>
+              <input type="number" id="s_ocrTimeout" class="form-control" placeholder="默认 60">
+              <span class="hint">大图识图或多页文档视觉模型识别超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">Embedding 向量化超时 (s)</label>
+              <input type="number" id="s_embTimeout" class="form-control" placeholder="默认 60">
+              <span class="hint">批量文本向量计算超时</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label">Reranker 重排打分超时 (s)</label>
+              <input type="number" id="s_rankTimeout" class="form-control" placeholder="默认 30">
+              <span class="hint">检索召回文档重排计算超时</span>
+            </div>
           </div>
         </div>
 
@@ -1100,36 +1128,53 @@ async function testCandidate(type, i){
 
 // Settings
 function renderSettings(){
-  const c=state.config;
-  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v??''; };
-  set('s_timeout',c.upstream_timeout); 
-  set('s_chatTimeout',c.upstream_timeout_chat); 
-  set('s_ocrTimeout',c.upstream_timeout_ocr);
-  set('s_embTimeout',c.upstream_timeout_embedding); 
-  set('s_rankTimeout',c.upstream_timeout_rerank); 
-  set('s_fastTimeout',c.chat_fast_timeout);
-  set('s_budget',c.schedule_total_budget); 
-  set('s_concurrency',c.max_concurrency_per_key); 
-  set('s_cooldown',c.cooldown_duration);
-  set('s_cooldown429',c.cooldown_429_sec); 
-  set('s_cooldown403',c.cooldown_403_sec);
-  document.getElementById('s_latency').checked=!!c.latency_based_routing;
+  const c=state.config||{};
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=(v!==undefined && v!==null)?v:''; };
+  // Group 1: Global Reliability
+  set('s_concurrency', c.max_concurrency_per_key ?? 3);
+  set('s_budget', c.schedule_total_budget ?? 15);
+  set('s_cooldownTpm', c.cooldown_tpm_sec ?? c.cooldown_429_sec ?? 10);
+  set('s_cooldown5xx', c.cooldown_5xx_sec ?? c.cooldown_duration ?? 30);
+  set('s_cooldown403', c.cooldown_403_sec ?? 600);
+  set('s_circuitThreshold', c.circuit_break_threshold ?? 3);
+  set('s_circuitCooldown', c.circuit_cooldown_sec ?? 300);
+  const latEl=document.getElementById('s_latency');
+  if(latEl) latEl.checked=!!c.latency_based_routing;
+
+  // Group 2: Agent Mode
+  set('s_chatTimeout', c.upstream_timeout_chat ?? 45);
+
+  // Group 3: KB Ingestion
+  set('s_fastTimeout', c.chat_fast_timeout ?? 30);
+  set('s_ocrTimeout', c.upstream_timeout_ocr ?? 60);
+  set('s_embTimeout', c.upstream_timeout_embedding ?? 60);
+  set('s_rankTimeout', c.upstream_timeout_rerank ?? 30);
 }
 function saveSettings(){
-  const c=state.config;
-  c.upstream_timeout=Number(document.getElementById('s_timeout').value)||12;
-  c.upstream_timeout_chat=Number(document.getElementById('s_chatTimeout').value)||45;
-  c.upstream_timeout_ocr=Number(document.getElementById('s_ocrTimeout').value)||60;
-  c.upstream_timeout_embedding=Number(document.getElementById('s_embTimeout').value)||60;
-  c.upstream_timeout_rerank=Number(document.getElementById('s_rankTimeout').value)||30;
-  c.chat_fast_timeout=Number(document.getElementById('s_fastTimeout').value)||30;
-  c.schedule_total_budget=Number(document.getElementById('s_budget').value)||15;
-  c.max_concurrency_per_key=Number(document.getElementById('s_concurrency').value)||3;
-  c.cooldown_duration=Number(document.getElementById('s_cooldown').value)||30;
-  c.cooldown_429_sec=Number(document.getElementById('s_cooldown429').value)||60;
-  c.cooldown_403_sec=Number(document.getElementById('s_cooldown403').value)||600;
-  c.latency_based_routing=document.getElementById('s_latency').checked;
-  toast('参数已暂存，请点击右上角「保存并重载」生效','ok'); markChanged();
+  const c=state.config||{};
+  // Group 1: Global Reliability
+  c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 3;
+  c.schedule_total_budget = Number(document.getElementById('s_budget').value) || 15;
+  c.cooldown_tpm_sec = Number(document.getElementById('s_cooldownTpm').value) || 10;
+  c.cooldown_429_sec = c.cooldown_tpm_sec; // backward compatibility
+  c.cooldown_5xx_sec = Number(document.getElementById('s_cooldown5xx').value) || 30;
+  c.cooldown_duration = c.cooldown_5xx_sec; // backward compatibility
+  c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
+  c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
+  c.circuit_cooldown_sec = Number(document.getElementById('s_circuitCooldown').value) || 300;
+  c.latency_based_routing = !!document.getElementById('s_latency').checked;
+
+  // Group 2: Agent Mode
+  c.upstream_timeout_chat = Number(document.getElementById('s_chatTimeout').value) || 45;
+
+  // Group 3: KB Ingestion
+  c.chat_fast_timeout = Number(document.getElementById('s_fastTimeout').value) || 30;
+  c.upstream_timeout_ocr = Number(document.getElementById('s_ocrTimeout').value) || 60;
+  c.upstream_timeout_embedding = Number(document.getElementById('s_embTimeout').value) || 60;
+  c.upstream_timeout_rerank = Number(document.getElementById('s_rankTimeout').value) || 30;
+
+  toast('参数已暂存，请点击右上角「保存并重载」生效', 'ok');
+  markChanged();
 }
 
 // Access Guide

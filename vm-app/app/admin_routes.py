@@ -161,9 +161,10 @@ def _merge_configs(base: dict, incoming: dict) -> dict:
     setting_keys = [
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
-        "schedule_total_budget", "max_concurrency_per_key", "cooldown_429_sec",
-        "cooldown_403_sec", "cooldown_duration", "circuit_break_threshold",
-        "circuit_cooldown_sec", "latency_based_routing"
+        "schedule_total_budget", "max_concurrency_per_key",
+        "cooldown_tpm_sec", "cooldown_quota_sec", "cooldown_5xx_sec",
+        "cooldown_429_sec", "cooldown_403_sec", "cooldown_duration",
+        "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing"
     ]
     for sk in setting_keys:
         if sk in incoming:
