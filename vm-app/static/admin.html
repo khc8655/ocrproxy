@@ -906,7 +906,7 @@ function renderAgentModels(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>健康状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
           <tbody>${rows.length ? rows.join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
         </table>
       </div>
@@ -931,7 +931,7 @@ function renderKbModels(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>上游实际模型 ID</th><th>健康状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>上游实际模型 ID</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
           <tbody>${rows.length ? rows.join('') : '<tr><td colspan="7" class="empty">暂无候选节点</td></tr>'}</tbody>
         </table>
       </div>
@@ -946,11 +946,18 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   const ns = status[nk] || status[binding.provider + ':' + binding.key + ':' + (isAgent ? ('agent:' + modelName) : type)] || status[binding.provider + ':' + binding.key + ':' + type];
   let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
   if(ns){ 
-    badge = ns.status === 200 
-      ? `<span class="badge badge-success">200 OK</span>` 
-      : ns.status === 429 
-        ? `<span class="badge badge-warn">429 限流</span>` 
-        : `<span class="badge badge-error">${ns.status}</span>`; 
+    if(ns.status === 200){
+      if(ns.latency_ms !== null && ns.latency_ms !== undefined && ns.latency_ms > 0){
+        const latStr = ns.latency_ms >= 1000 ? (ns.latency_ms / 1000).toFixed(2) + 's' : ns.latency_ms + 'ms';
+        badge = `<span class="badge badge-success" title="最近响应耗时: ${ns.latency_ms}ms" style="font-weight:700;">⚡ ${latStr}</span>`;
+      } else {
+        badge = `<span class="badge badge-success" style="font-weight:700;">⚡ 正常</span>`;
+      }
+    } else if(ns.status === 429) {
+      badge = `<span class="badge badge-warn">429 限流</span>`;
+    } else {
+      badge = `<span class="badge badge-error">${ns.status} 异常</span>`;
+    }
     time = fmtTime(ns.time); 
   }
   const modelCell = isAgent ? '' : `<td class="mono truncate" title="${esc(binding.model)}"><b>${esc(binding.model)}</b></td>`;
@@ -1198,9 +1205,9 @@ async function testAgentModelAll(name){
     if(!d.results){ box.innerHTML = '<span style="color:var(--error);">❌ 探活失败: 无响应数据</span>'; return; }
     
     const chips = d.results.map(res => {
-      const lat = res.latency_ms ? ` (${res.latency_ms}ms)` : '';
+      const lat = res.latency_ms !== null && res.latency_ms !== undefined ? ` ⚡ ${res.latency_ms >= 1000 ? (res.latency_ms/1000).toFixed(2)+'s' : res.latency_ms+'ms'}` : '';
       return res.ok 
-        ? `<span class="badge badge-success">✓ ${esc(res.provider)}/${esc(res.key)}${lat}</span>` 
+        ? `<span class="badge badge-success" style="font-weight:600;">✓ ${esc(res.provider)}/${esc(res.key)}${lat}</span>` 
         : `<span class="badge badge-error" title="${esc(res.error||'')}">✗ ${esc(res.provider)}/${esc(res.key)} (${res.status||'ERR'})</span>`;
     }).join(' ');
 

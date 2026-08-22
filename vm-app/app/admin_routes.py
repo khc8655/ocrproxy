@@ -493,67 +493,74 @@ async def test_candidate_endpoint(request: Request):
     else:
         test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}
 
+    start_t = time.time()
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0), follow_redirects=False) as client:
             resp = await client.post(url, headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             }, json=test_body)
+            lat_sec = time.time() - start_t
+            lat_ms = int(round(lat_sec * 1000))
 
             if 200 <= resp.status_code < 300:
                 # Record successful test in stats so dashboard reflects it
                 if category == "agent":
-                    stats.record_agent(model_name, resp.status_code, 0.0,
+                    stats.record_agent(model_name, resp.status_code, lat_sec,
                                        provider=provider_name, key=key_label)
                 else:
-                    stats.record_kb(cand_type, resp.status_code, 0.0,
+                    stats.record_kb(cand_type, resp.status_code, lat_sec,
                                     provider=provider_name, key=key_label)
-                return JSONResponse(content={"success": True, "status": resp.status_code, "message": "OK"})
+                return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
             # Record failed test in stats
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
             if category == "agent":
-                stats.record_agent(model_name, resp.status_code, 0.0,
+                stats.record_agent(model_name, resp.status_code, lat_sec,
                                    provider=provider_name, key=key_label,
                                    error_msg=f"Manual test failed: {err_text}")
             else:
-                stats.record_kb(cand_type, resp.status_code, 0.0,
+                stats.record_kb(cand_type, resp.status_code, lat_sec,
                                 provider=provider_name, key=key_label,
                                 error_msg=f"Manual test failed: {err_text}")
             return JSONResponse(content={
                 "success": False,
                 "status": resp.status_code,
+                "latency_ms": lat_ms,
                 "error": resp.text[:500] if resp.text else "No response body"
             })
 
     except httpx.ReadTimeout:
+        lat_sec = time.time() - start_t
         if category == "agent":
-            stats.record_agent(model_name, 500, 0.0,
+            stats.record_agent(model_name, 500, lat_sec,
                                provider=provider_name, key=key_label,
                                error_msg="Manual test timeout (30s)")
         else:
-            stats.record_kb(cand_type, 500, 0.0,
+            stats.record_kb(cand_type, 500, lat_sec,
                             provider=provider_name, key=key_label,
                             error_msg="Manual test timeout (30s)")
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
+        lat_sec = time.time() - start_t
         if category == "agent":
-            stats.record_agent(model_name, 500, 0.0,
+            stats.record_agent(model_name, 500, lat_sec,
                                provider=provider_name, key=key_label,
                                error_msg="Manual test connect error")
         else:
-            stats.record_kb(cand_type, 500, 0.0,
+            stats.record_kb(cand_type, 500, lat_sec,
                             provider=provider_name, key=key_label,
                             error_msg="Manual test connect error")
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
+        lat_sec = time.time() - start_t
         if category == "agent":
-            stats.record_agent(model_name, 500, 0.0,
+            stats.record_agent(model_name, 500, lat_sec,
                                provider=provider_name, key=key_label,
                                error_msg=f"Manual test error: {str(e)}")
         else:
-            stats.record_kb(cand_type, 500, 0.0,
+            stats.record_kb(cand_type, 500, lat_sec,
                             provider=provider_name, key=key_label,
                             error_msg=f"Manual test error: {str(e)}")
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
@@ -621,27 +628,30 @@ async def test_agent_model_endpoint(request: Request):
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
                     }, json=payload)
-            latency_ms = int((time.time() - start) * 1000)
+            lat_sec = time.time() - start
+            latency_ms = int(lat_sec * 1000)
             ok = 200 <= resp.status_code < 300
             if ok:
-                stats.record_agent(name, resp.status_code, 0.0,
+                stats.record_agent(name, resp.status_code, lat_sec,
                                    provider=b.get("provider"), key=b.get("key"))
             else:
-                stats.record_agent(name, resp.status_code, 0.0,
+                stats.record_agent(name, resp.status_code, lat_sec,
                                    provider=b.get("provider"), key=b.get("key"),
                                    error_msg=f"Probe failed: HTTP {resp.status_code}")
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": ok,
                     "status": resp.status_code, "latency_ms": latency_ms,
                     "error": None if ok else resp.text[:200]}
         except httpx.ReadTimeout:
-            stats.record_agent(name, 500, 0.0,
+            lat_sec = time.time() - start
+            stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
                                error_msg="Probe timeout (20s)")
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "上游超时 (20s)"}
         except httpx.ConnectError as e:
-            stats.record_agent(name, 500, 0.0,
+            lat_sec = time.time() - start
+            stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
                                error_msg="Probe connect error")
             logger.warning("Probe connect error: %s", e)
@@ -649,7 +659,8 @@ async def test_agent_model_endpoint(request: Request):
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "连接失败"}
         except Exception as e:
-            stats.record_agent(name, 500, 0.0,
+            lat_sec = time.time() - start
+            stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
                                error_msg=f"Probe error: {str(e)}")
             logger.error("Probe unexpected error: %s", e, exc_info=True)
