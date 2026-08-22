@@ -249,21 +249,41 @@
   <main class="main">
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
-      <div class="stats-grid" id="statsGrid"></div>
-      <div class="section">
-        <div class="section-head"><div class="section-title">📊 状态分布</div></div>
-        <div class="card card-pad">
-          <div id="statusChart" class="bar-list"></div>
+      <!-- Section 1: Agent Metrics Overview -->
+      <div class="section mb-4">
+        <div class="section-head">
+          <div class="section-title">🤖 Agent 智能体对话总览</div>
+          <span class="badge badge-success">真实模型路由</span>
         </div>
+        <div class="stats-grid" id="agentStatsGrid"></div>
+        <div id="agentTopModelsStrip" class="card card-pad mt-3" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 18px;background:var(--bg-subtle);"></div>
       </div>
+
+      <!-- Section 2: KB Metrics Overview -->
+      <div class="section mb-4">
+        <div class="section-head">
+          <div class="section-title">📚 KB 知识库入库总览</div>
+          <span class="badge badge-neutral">虚拟别名入库</span>
+        </div>
+        <div class="stats-grid" id="kbStatsGrid"></div>
+      </div>
+
+      <!-- Section 3: Categorized Error Logs -->
       <div class="section">
         <div class="section-head">
-          <div><div class="section-title">⚠️ 最近错误日志</div></div>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="section-title">⚠️ 最近错误日志</div>
+            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;">
+              <button class="btn btn-sm btn-ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
+              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">🤖 仅 Agent</button>
+              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">📚 仅 KB</button>
+            </div>
+          </div>
           <button class="btn btn-danger btn-sm" onclick="resetStats()">清空统计与日志</button>
         </div>
         <div class="card table-wrap">
           <table>
-            <thead><tr><th>时间</th><th>类型</th><th>供应商</th><th>Key</th><th>状态</th><th>错误详情</th></tr></thead>
+            <thead><tr><th>时间</th><th>分类</th><th>模型 / 类型</th><th>供应商</th><th>Key 别名</th><th>状态</th><th>错误详情</th></tr></thead>
             <tbody id="logsBody"></tbody>
           </table>
         </div>
@@ -664,38 +684,157 @@ function render(){
   if(state.tab==='settings') renderSettings();
 }
 
-// Dashboard
-function renderDashboard(){
-  const types=KB_TYPES;
-  const grid=document.getElementById('statsGrid');
-  grid.innerHTML=types.map(t=>{
-    const s=state.stats[t]||{count:0,success:0,total_latency:0};
-    const rate=s.count?((s.success/s.count)*100).toFixed(1):'0.0';
-    const avg=s.count?(s.total_latency/s.count*1000).toFixed(0):'0';
-    return `<div class="stat"><div class="stat-label">${KB_LABELS[t]}</div><div class="stat-value">${s.count||0}</div><div class="stat-sub">成功率 <b>${rate}%</b> · 平均 <b>${avg}ms</b></div></div>`;
-  }).join('');
+// Dashboard Log Filtering
+state.logFilter = 'all';
 
-  const sums={ succ:0, e429:0, e403:0, e5xx:0 };
-  types.forEach(t=>{ const s=state.stats[t]||{}; sums.succ+=s.success||0; sums.e429+=s['429']||0; sums.e403+=s['403']||0; sums.e5xx+=s['5xx']||0; });
-  const total=Object.values(sums).reduce((a,b)=>a+b,0)||1;
-  const segs=[
-    {k:'succ',label:'成功 200',c:KB_COLORS.embedding},
-    {k:'e429',label:'限流 429',c:'#f59e0b'},
-    {k:'e403',label:'鉴权 403',c:KB_COLORS.ocr},
-    {k:'e5xx',label:'异常 5xx',c:'#ef4444'}
-  ];
-  document.getElementById('statusChart').innerHTML=segs.map(s=>`
-    <div class="bar-row"><span class="name">${s.label}</span><div class="track"><div class="fill" style="width:${(sums[s.k]/total*100)}%;background:${s.c}"></div></div><span class="num">${sums[s.k]}</span></div>
-  `).join('');
+function filterLogs(filter){
+  state.logFilter = filter;
+  ['all', 'agent', 'kb'].forEach(f => {
+    const el = document.getElementById('lp-' + f);
+    if(el) el.classList.toggle('active', f === filter);
+  });
+  renderLogsTable();
+}
 
-  const logs=(state.stats.error_logs||[]).slice(0,50);
-  const tbody=document.getElementById('logsBody');
-  if(!logs.length) tbody.innerHTML='<tr><td colspan="6" class="empty">暂无错误记录，运行状态优异</td></tr>';
-  else tbody.innerHTML=logs.map(l=>{
-    let badge=l.status===429?'<span class="badge badge-warn">429</span>':'<span class="badge badge-error">'+l.status+'</span>';
-    return `<tr><td class="mono">${new Date(l.timestamp).toLocaleString()}</td><td><span class="badge badge-primary">${esc(l.type)}</span></td><td>${esc(l.provider)}</td><td><span class="badge badge-neutral">${esc(l.key)}</span></td><td>${badge}</td><td class="mono" style="max-width:350px" title="${esc(l.error)}">${esc(l.error)}</td></tr>`;
+function renderLogsTable(){
+  const allLogs = state.stats.error_logs || [];
+  const f = state.logFilter || 'all';
+  const filtered = f === 'all' 
+    ? allLogs 
+    : allLogs.filter(l => l.category === f || (f === 'kb' && l.type !== 'agent') || (f === 'agent' && l.type === 'agent'));
+  const logs = filtered.slice(0, 50);
+  const tbody = document.getElementById('logsBody');
+  if(!tbody) return;
+  if(!logs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无错误记录，运行状态优异 🚀</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(l => {
+    const isAg = (l.category === 'agent' || l.type === 'agent');
+    const catBadge = isAg ? '<span class="badge badge-success">🤖 Agent</span>' : '<span class="badge badge-neutral">📚 KB</span>';
+    const modelTag = l.model_name || l.type || '—';
+    const badge = l.status === 429 
+      ? '<span class="badge badge-warn">429 限流</span>' 
+      : '<span class="badge badge-error">' + l.status + '</span>';
+    return `<tr>
+      <td class="mono">${new Date(l.timestamp).toLocaleString()}</td>
+      <td>${catBadge}</td>
+      <td class="mono truncate" style="max-width:180px;" title="${esc(modelTag)}"><b>${esc(modelTag)}</b></td>
+      <td>${esc(l.provider)}</td>
+      <td><span class="badge badge-neutral">${esc(l.key)}</span></td>
+      <td>${badge}</td>
+      <td class="mono" style="max-width:320px;white-space:normal;word-break:break-all;" title="${esc(l.error)}">${esc(l.error)}</td>
+    </tr>`;
   }).join('');
 }
+
+// Dashboard
+function renderDashboard(){
+  const st = state.stats || {};
+  const ag = st.agent || { count: 0, success: 0, total_latency: 0, fallback_count: 0, '429': 0, '5xx': 0, '403': 0, '4xx': 0, models: {} };
+  const kb = st.kb || { chat: st.chat||{}, embedding: st.embedding||{}, reranker: st.reranker||{}, ocr: st.ocr||{} };
+
+  // 1. Agent Stats Grid
+  const agRate = ag.count ? ((ag.success / ag.count) * 100).toFixed(1) : '0.0';
+  const agAvg = ag.count ? ((ag.total_latency / ag.count) * 1000).toFixed(0) : '0';
+  const agErrors = (ag['429'] || 0) + (ag['5xx'] || 0) + (ag['403'] || 0) + (ag['4xx'] || 0);
+
+  const agGrid = document.getElementById('agentStatsGrid');
+  if(agGrid) {
+    agGrid.innerHTML = `
+      <div class="stat">
+        <div class="stat-label">Agent 对话总请求</div>
+        <div class="stat-value" style="color:var(--primary);">${ag.count || 0}</div>
+        <div class="stat-sub">成功 <b>${ag.success || 0}</b> · 异常 <b>${agErrors}</b></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">请求成功率</div>
+        <div class="stat-value" style="color:${Number(agRate) >= 95 ? 'var(--success)' : (Number(agRate) >= 80 ? '#f59e0b' : 'var(--error)')};">${agRate}%</div>
+        <div class="stat-sub">429: <b>${ag['429'] || 0}</b> · 5xx: <b>${ag['5xx'] || 0}</b></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">平均响应延迟</div>
+        <div class="stat-value">${agAvg}<span style="font-size:14px;font-weight:500;color:var(--text-secondary);margin-left:2px;">ms</span></div>
+        <div class="stat-sub">端到端往返耗时</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Key 故障轮换 (Failovers)</div>
+        <div class="stat-value" style="color:${ag.fallback_count ? '#f59e0b' : 'var(--text)'};">${ag.fallback_count || 0}</div>
+        <div class="stat-sub">429 / 5xx 自动避让切换</div>
+      </div>
+    `;
+  }
+
+  // 2. Compact Top 3 Models Badge Strip
+  const topStrip = document.getElementById('agentTopModelsStrip');
+  if(topStrip) {
+    const statModels = ag.models || {};
+    const modelEntries = Object.keys(statModels).map(name => {
+      const m = statModels[name];
+      const rate = m.count ? ((m.success / m.count) * 100).toFixed(1) : '0.0';
+      const avg = m.count ? ((m.total_latency / m.count) * 1000).toFixed(0) : '0';
+      return { name, count: m.count || 0, success: m.success || 0, fallback: m.fallback_count || 0, rate, avg };
+    }).filter(m => m.count > 0);
+
+    modelEntries.sort((a, b) => b.count - a.count);
+    const top3 = modelEntries.slice(0, 3);
+
+    if(top3.length === 0) {
+      topStrip.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
+          <span style="font-size:16px;">🏆</span>
+          <span style="font-weight:600;color:var(--text);">热门模型 Top 3：</span>
+          <span>暂无实际调用记录</span>
+        </div>
+        <span class="badge badge-neutral" style="font-size:11px;">按调用量动态排行</span>
+      `;
+    } else {
+      const rankBadges = ['🥇', '🥈', '🥉'];
+      const chips = top3.map((m, idx) => {
+        const pct = ag.count > 0 ? ((m.count / ag.count) * 100).toFixed(0) : '0';
+        return `
+          <div style="display:flex;align-items:center;gap:6px;background:var(--card-bg);padding:4px 10px;border-radius:20px;border:1px solid var(--border);font-size:12px;">
+            <span>${rankBadges[idx]}</span>
+            <span class="mono" style="font-weight:700;color:var(--text);">${esc(m.name)}</span>
+            <span class="badge badge-primary" style="font-size:11px;padding:2px 6px;">${m.count} 次 (${pct}%)</span>
+            <span style="color:var(--text-secondary);font-size:11px;">${m.avg}ms</span>
+          </div>
+        `;
+      }).join('');
+
+      topStrip.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-weight:700;font-size:13px;color:var(--text);display:flex;align-items:center;gap:4px;">
+            🏆 热门模型 Top 3
+          </span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${chips}
+          </div>
+        </div>
+        <span class="text-secondary text-sm">共 ${modelEntries.length} 个活跃模型</span>
+      `;
+    }
+  }
+
+  // 3. KB Stats Grid
+  const kbGrid = document.getElementById('kbStatsGrid');
+  if(kbGrid) {
+    kbGrid.innerHTML = KB_TYPES.map(t => {
+      const s = kb[t] || { count: 0, success: 0, total_latency: 0 };
+      const rate = s.count ? ((s.success / s.count) * 100).toFixed(1) : '0.0';
+      const avg = s.count ? ((s.total_latency / s.count) * 1000).toFixed(0) : '0';
+      return `<div class="stat">
+        <div class="stat-label">${KB_LABELS[t]}</div>
+        <div class="stat-value">${s.count || 0}</div>
+        <div class="stat-sub">成功率 <b>${rate}%</b> · 平均 <b>${avg}ms</b></div>
+      </div>`;
+    }).join('');
+  }
+
+  // 5. Render Filtered Logs Table
+  renderLogsTable();
+}
+
 async function resetStats(){
   if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
@@ -750,7 +889,7 @@ function renderAgentModels(){
   box.innerHTML=names.map(name=>{
     const m=models[name]; const upstream=m.upstream_model||name;
     const isProbingAll = state.probingModels.has(name);
-    const rows=(m.keys||[]).map((b,i)=>renderBindingRow(i+1,b,'chat',name,i,status,true));
+    const rows=(m.keys||[]).map((b,i)=>renderBindingRow(i+1,b,null,name,i,status,true));
     return `<div class="card model-card">
       <div class="card-head">
         <div>
@@ -801,8 +940,10 @@ function renderKbModels(){
 }
 
 function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
-  const nk = binding.provider + ':' + binding.key + ':' + type;
-  const ns = status[nk];
+  const nk = isAgent
+    ? ('agent:' + modelName + ':' + binding.provider + ':' + binding.key)
+    : ('kb:' + type + ':' + binding.provider + ':' + binding.key);
+  const ns = status[nk] || status[binding.provider + ':' + binding.key + ':' + (isAgent ? ('agent:' + modelName) : type)] || status[binding.provider + ':' + binding.key + ':' + type];
   let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
   if(ns){ 
     badge = ns.status === 200 
@@ -1013,7 +1154,7 @@ async function testAgentKey(name, i){
     const r = await fetch('/api/admin/test-candidate', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ provider: b.provider, key: b.key, model, type: 'chat' }),
+      body: JSON.stringify({ provider: b.provider, key: b.key, model, type: 'chat', category: 'agent', model_name: name }),
       signal: controller.signal
     });
     clearTimeout(timeout);
