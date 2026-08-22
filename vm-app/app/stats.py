@@ -151,12 +151,14 @@ def record_agent(
             m_stats["5xx"] += 1
 
         now_ms = int(time.time() * 1000)
+        lat_ms = int(round(lat * 1000)) if lat > 0 else 0
 
         # 3. Update Candidate Node Status (Isolated for Agent)
         if provider and key:
             node_key = f"agent:{model_name}:{provider}:{key}"
             _stats["candidates_status"][node_key] = {
                 "status": code,
+                "latency_ms": lat_ms,
                 "category": "agent",
                 "model": model_name,
                 "time": now_ms
@@ -164,6 +166,7 @@ def record_agent(
             # Also populate lookup key for UI backwards compatibility
             _stats["candidates_status"][f"{provider}:{key}:agent:{model_name}"] = {
                 "status": code,
+                "latency_ms": lat_ms,
                 "category": "agent",
                 "model": model_name,
                 "time": now_ms
@@ -223,6 +226,7 @@ def record_kb(
             t_stats["5xx"] += 1
 
         now_ms = int(time.time() * 1000)
+        lat_ms = int(round(lat * 1000)) if lat > 0 else 0
 
         # Update legacy top-level dict for backwards compatibility
         if kb_type in _stats:
@@ -233,6 +237,7 @@ def record_kb(
             node_key = f"kb:{kb_type}:{provider}:{key}"
             _stats["candidates_status"][node_key] = {
                 "status": code,
+                "latency_ms": lat_ms,
                 "category": "kb",
                 "type": kb_type,
                 "time": now_ms
@@ -240,6 +245,7 @@ def record_kb(
             # Also store legacy format for backward compatibility
             _stats["candidates_status"][f"{provider}:{key}:{kb_type}"] = {
                 "status": code,
+                "latency_ms": lat_ms,
                 "category": "kb",
                 "type": kb_type,
                 "time": now_ms
