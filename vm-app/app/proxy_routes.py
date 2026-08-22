@@ -137,6 +137,7 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
 # would otherwise accumulate on the Python heap and risk OOM under concurrency.
 # OCR has its own separate 20 MB guard (base64 images are inherently large).
 _MAX_JSON_BODY_BYTES = 10 * 1024 * 1024
+_MAX_OCR_BODY_BYTES = 20 * 1024 * 1024
 
 
 def _error_response(exc: Exception) -> JSONResponse:
@@ -211,32 +212,51 @@ def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     return min(180.0, timeout * min(3, max(candidate_count, 1)))
 
 
-async def _parse_json_body(request: Request):
+async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES):
     """Parse the request JSON body, returning (body, error_response).
 
-    Aborted uploads (e.g. Caddy rejecting an oversized body mid-stream) raise
-    ClientDisconnect inside starlette — without this guard every such request
-    dumps a full traceback into the journal.
-
-    Also enforces a maximum body size (_MAX_JSON_BODY_BYTES) to prevent OOM
-    under concurrent load — a malicious or buggy client can otherwise send a
-    100 MB JSON payload that stays on the Python heap until GC reclaims it.
+    Enforces max_bytes limit on both Content-Length header and chunked streams
+    to prevent memory exhaustion / OOM under concurrent loads.
     """
     cl = request.headers.get("content-length")
     if cl:
         try:
-            if int(cl) > _MAX_JSON_BODY_BYTES:
+            if int(cl) > max_bytes:
                 return None, JSONResponse(
                     status_code=413,
-                    content={"error": {"message": "Request body too large",
+                    content={"error": {"message": f"Request body too large (max {max_bytes // (1024 * 1024)}MB)",
                                        "type": "invalid_request_error",
                                        "code": "payload_too_large"}},
                 )
         except (ValueError, TypeError):
             pass
+
+    body_bytes = bytearray()
     try:
-        return await request.json(), None
-    except Exception:
+        async for chunk in request.stream():
+            body_bytes.extend(chunk)
+            if len(body_bytes) > max_bytes:
+                return None, JSONResponse(
+                    status_code=413,
+                    content={"error": {"message": f"Request body too large (max {max_bytes // (1024 * 1024)}MB)",
+                                       "type": "invalid_request_error",
+                                       "code": "payload_too_large"}},
+                )
+        if not body_bytes:
+            return None, JSONResponse(
+                status_code=400,
+                content={"error": {"message": "Invalid JSON body or aborted upload",
+                                   "type": "invalid_request_error"}},
+            )
+        return json.loads(body_bytes.decode("utf-8")), None
+    except json.JSONDecodeError:
+        return None, JSONResponse(
+            status_code=400,
+            content={"error": {"message": "Invalid JSON body or aborted upload",
+                               "type": "invalid_request_error"}},
+        )
+    except Exception as e:
+        logger.warning("Error reading request body: %s", e)
         return None, JSONResponse(
             status_code=400,
             content={"error": {"message": "Invalid JSON body or aborted upload",
@@ -318,18 +338,10 @@ async def chat_completions(request: Request):
 
     if model_name == "chat":
         # ── KB ingestion mode ──────────────────────────────────────
-        # Always disable thinking/reasoning for KB ingestion — this is
-        # batch processing where reasoning adds latency without value.
-        # Provider-specific injection is applied in build_request via
-        # _disable_thinking_for_kb(): sensenova/tokenrhythm → reasoning_effort
-        # "none" (thinking truly off), stepfun → "low" (lowest tier, "none"
-        # not accepted), agnes → chat_template_kwargs (its own mechanism).
+        req_category = "kb"
+        req_model_name = "chat"
         kb_force_no_reasoning = True
 
-        # KB ingestion is batch processing: always fast & non-streaming.
-        # Answers are summary fragments consumed by the ingestion pipeline,
-        # not interactive chat — streaming adds SSE parsing overhead and
-        # thinking adds latency without value.  Hard-coded, no config switch.
         if is_stream:
             body["stream"] = False
             is_stream = False
@@ -346,10 +358,8 @@ async def chat_completions(request: Request):
 
     else:
         # ── Agent mode (real model name) ──────────────────────────
-        # Model-centric routing: agent_models[model_name] is the entity, and
-        # its ordered key bindings expand into the scheduler candidate list.
-        # Each binding may carry its own upstream_model override; the
-        # model-level value (defaulting to the public name) applies otherwise.
+        req_category = "agent"
+        req_model_name = model_name
         agent_models = config.get("agent_models") or {}
         entry = agent_models.get(model_name) if isinstance(agent_models, dict) else None
         if not entry:
@@ -369,12 +379,6 @@ async def chat_completions(request: Request):
         if not candidates_list:
             return _model_not_found_response(model_name)
 
-        # Agent mode: pass through the request body untouched except for
-        # minimal provider-specific normalisation (applied in build_request
-        # via _normalise_for_provider) that prevents 400 errors — e.g.
-        # reasoning_effort="none" → "low" for StepFun, tool_choice object →
-        # "auto" for TokenRhythm, and reasoning_format injection for StepFun.
-        # Use the standard chat timeout.
         try:
             chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
         except (ValueError, TypeError):
@@ -386,16 +390,17 @@ async def chat_completions(request: Request):
             content={"error": {"message": "No chat candidates configured", "type": "server_error"}},
         )
 
-    # Build config copy with overridden settings
-    config = copy.deepcopy(config)
-    config["upstream_timeout"] = chat_timeout
-    config["schedule_total_budget"] = _scale_budget(config, chat_timeout, len(candidates_list))
-    config["candidates"] = {"chat": candidates_list}
+    # Lightweight runtime config without deepcopying the entire global config dict
+    req_config = {
+        **config,
+        "upstream_timeout": chat_timeout,
+        "schedule_total_budget": _scale_budget(config, chat_timeout, len(candidates_list)),
+        "candidates": {"chat": candidates_list},
+    }
 
     def build_request(cand, api_key, upstream_base_url):
-        # Deep-copy to isolate nested objects (messages, tools, etc.) across
-        # concurrent requests that may share the same cached body dict.
-        out = copy.deepcopy(body)
+        # Shallow-copy dict to isolate top-level mutations without expensive deep copies
+        out = dict(body)
         out["model"] = cand["model"]
         provider = cand.get("provider", "")
         if kb_force_no_reasoning:
@@ -415,9 +420,6 @@ async def chat_completions(request: Request):
 
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
-            # first_chunk + remainder come from the scheduler, which pre-read
-            # one chunk to verify the stream actually delivers data — replay
-            # the chunk, then continue the SAME live iterator.
             async def event_generator():
                 try:
                     if first_chunk:
@@ -435,9 +437,11 @@ async def chat_completions(request: Request):
 
         try:
             sr = await schedule(
-                config, "chat", build_request,
+                req_config, "chat", build_request,
                 handle_stream=handle_stream,
                 is_stream=True,
+                category=req_category,
+                request_model=req_model_name,
             )
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -450,7 +454,11 @@ async def chat_completions(request: Request):
             return _error_response(e)
 
     try:
-        sr = await schedule(config, "chat", build_request)
+        sr = await schedule(
+            req_config, "chat", build_request,
+            category=req_category,
+            request_model=req_model_name,
+        )
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -503,13 +511,15 @@ async def embeddings(request: Request):
     except (ValueError, TypeError):
         emb_timeout = 60.0
 
-    config = copy.deepcopy(config)
-    config["upstream_timeout"] = emb_timeout
-    config["schedule_total_budget"] = _scale_budget(config, emb_timeout, len(candidates_list))
-    config["candidates"] = {"embedding": candidates_list}
+    req_config = {
+        **config,
+        "upstream_timeout": emb_timeout,
+        "schedule_total_budget": _scale_budget(config, emb_timeout, len(candidates_list)),
+        "candidates": {"embedding": candidates_list},
+    }
 
     def build_request(cand, api_key, upstream_base_url):
-        out = copy.deepcopy(body)
+        out = dict(body)
         out["model"] = cand["model"]
         url = join_upstream(upstream_base_url, "embeddings")
         headers = {
@@ -519,7 +529,10 @@ async def embeddings(request: Request):
         return "POST", url, headers, out
 
     try:
-        sr = await schedule(config, "embedding", build_request)
+        sr = await schedule(
+            req_config, "embedding", build_request,
+            category="kb", request_model="embedding"
+        )
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -571,13 +584,15 @@ async def rerank(request: Request):
     except (ValueError, TypeError):
         rerank_timeout = 30.0
 
-    config = copy.deepcopy(config)
-    config["upstream_timeout"] = rerank_timeout
-    config["schedule_total_budget"] = _scale_budget(config, rerank_timeout, len(candidates_list))
-    config["candidates"] = {"reranker": candidates_list}
+    req_config = {
+        **config,
+        "upstream_timeout": rerank_timeout,
+        "schedule_total_budget": _scale_budget(config, rerank_timeout, len(candidates_list)),
+        "candidates": {"reranker": candidates_list},
+    }
 
     def build_request(cand, api_key, upstream_base_url):
-        out = copy.deepcopy(body)
+        out = dict(body)
         out["model"] = cand["model"]
         url = join_upstream(upstream_base_url, "rerank")
         headers = {
@@ -587,7 +602,10 @@ async def rerank(request: Request):
         return "POST", url, headers, out
 
     try:
-        sr = await schedule(config, "reranker", build_request)
+        sr = await schedule(
+            req_config, "reranker", build_request,
+            category="kb", request_model="reranker"
+        )
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -607,20 +625,13 @@ async def ocr(request: Request):
     if not verify_proxy_auth(request):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body, err = await _parse_json_body(request)
+    body, err = await _parse_json_body(request, max_bytes=_MAX_OCR_BODY_BYTES)
     if err:
         return err
     img_b64 = body.get("image_base64")
     img_url = body.get("image_url")
     if not img_b64 and not img_url:
         return JSONResponse(status_code=400, content={"error": {"message": "Must provide image_base64 or image_url", "code": "missing_image"}})
-
-    # Payload size guard: max 20MB base64 (approx 15MB binary)
-    if img_b64 and len(img_b64) > 20 * 1024 * 1024:
-        return JSONResponse(
-            status_code=413,
-            content={"error": {"message": "Image payload too large (max 20MB base64)", "code": "payload_too_large"}}
-        )
 
     prompt = body.get("prompt", "请识别图片中的所有文字内容，返回纯文本。")
 
@@ -679,13 +690,18 @@ async def ocr(request: Request):
     except (ValueError, TypeError):
         ocr_timeout = 60.0
 
-    config = copy.deepcopy(config)
-    config["upstream_timeout"] = ocr_timeout
     ocr_candidates = len(config.get("candidates", {}).get("ocr", []))
-    config["schedule_total_budget"] = _scale_budget(config, ocr_timeout, ocr_candidates)
+    req_config = {
+        **config,
+        "upstream_timeout": ocr_timeout,
+        "schedule_total_budget": _scale_budget(config, ocr_timeout, ocr_candidates),
+    }
 
     try:
-        sr = await schedule(config, "ocr", build_request)
+        sr = await schedule(
+            req_config, "ocr", build_request,
+            category="kb", request_model="ocr"
+        )
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)

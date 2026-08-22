@@ -341,30 +341,7 @@ async def post_stats_endpoint(request: Request):
         stats.reset()
         return JSONResponse(content=stats.get_stats())
 
-    # Handle stats update from scheduler (for compatibility)
-    type_name = body.get("type")
-    if not type_name or type_name not in ALLOWED_STAT_TYPES:
-        return JSONResponse(status_code=400, content={"error": "Missing or invalid type"})
-
-    try:
-        status_code = int(body.get("status", 200))
-    except (ValueError, TypeError):
-        return JSONResponse(status_code=400, content={"error": "Invalid status code"})
-
-    try:
-        latency = max(0.0, float(body.get("latency", 0)))
-    except (ValueError, TypeError):
-        latency = 0.0
-
-    stats.record(
-        type_name=type_name,
-        status_code=status_code,
-        latency=latency,
-        provider=body.get("provider"),
-        key=body.get("key"),
-        error_msg=body.get("error_msg"),
-    )
-    return JSONResponse(content={"status": "success", "stats": stats.get_stats()})
+    return JSONResponse(status_code=400, content={"error": "Invalid stats action"})
 
 
 @router.post("/verify-key")
@@ -474,6 +451,8 @@ async def test_candidate_endpoint(request: Request):
     key_label = body.get("key")
     model = body.get("model")
     cand_type = body.get("type", "chat")
+    category = body.get("category", "kb")
+    model_name = body.get("model_name") or model
 
     if not provider_name or not key_label or not model:
         return JSONResponse(status_code=400, content={"error": "Missing provider, key, or model"})
@@ -523,14 +502,24 @@ async def test_candidate_endpoint(request: Request):
 
             if 200 <= resp.status_code < 300:
                 # Record successful test in stats so dashboard reflects it
-                stats.record(cand_type, resp.status_code, 0.0,
-                             provider=provider_name, key=key_label)
+                if category == "agent":
+                    stats.record_agent(model_name, resp.status_code, 0.0,
+                                       provider=provider_name, key=key_label)
+                else:
+                    stats.record_kb(cand_type, resp.status_code, 0.0,
+                                    provider=provider_name, key=key_label)
                 return JSONResponse(content={"success": True, "status": resp.status_code, "message": "OK"})
 
             # Record failed test in stats
-            stats.record(cand_type, resp.status_code, 0.0,
-                         provider=provider_name, key=key_label,
-                         error_msg=f"Manual test failed: HTTP {resp.status_code}")
+            err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
+            if category == "agent":
+                stats.record_agent(model_name, resp.status_code, 0.0,
+                                   provider=provider_name, key=key_label,
+                                   error_msg=f"Manual test failed: {err_text}")
+            else:
+                stats.record_kb(cand_type, resp.status_code, 0.0,
+                                provider=provider_name, key=key_label,
+                                error_msg=f"Manual test failed: {err_text}")
             return JSONResponse(content={
                 "success": False,
                 "status": resp.status_code,
@@ -538,17 +527,35 @@ async def test_candidate_endpoint(request: Request):
             })
 
     except httpx.ReadTimeout:
-        stats.record(cand_type, 500, 0.0,
-                     provider=provider_name, key=key_label,
-                     error_msg="Manual test timeout (30s)")
+        if category == "agent":
+            stats.record_agent(model_name, 500, 0.0,
+                               provider=provider_name, key=key_label,
+                               error_msg="Manual test timeout (30s)")
+        else:
+            stats.record_kb(cand_type, 500, 0.0,
+                            provider=provider_name, key=key_label,
+                            error_msg="Manual test timeout (30s)")
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
-        stats.record(cand_type, 500, 0.0,
-                     provider=provider_name, key=key_label,
-                     error_msg="Manual test connect error")
+        if category == "agent":
+            stats.record_agent(model_name, 500, 0.0,
+                               provider=provider_name, key=key_label,
+                               error_msg="Manual test connect error")
+        else:
+            stats.record_kb(cand_type, 500, 0.0,
+                            provider=provider_name, key=key_label,
+                            error_msg="Manual test connect error")
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
+        if category == "agent":
+            stats.record_agent(model_name, 500, 0.0,
+                               provider=provider_name, key=key_label,
+                               error_msg=f"Manual test error: {str(e)}")
+        else:
+            stats.record_kb(cand_type, 500, 0.0,
+                            provider=provider_name, key=key_label,
+                            error_msg=f"Manual test error: {str(e)}")
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={"success": False, "error": "测试失败"})
 
@@ -570,7 +577,7 @@ async def test_agent_model_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    name = body.get("model")
+    name = body.get("model") or body.get("name")
     if not name:
         return JSONResponse(status_code=400, content={"error": "Missing model name"})
 
@@ -617,21 +624,34 @@ async def test_agent_model_endpoint(request: Request):
             latency_ms = int((time.time() - start) * 1000)
             ok = 200 <= resp.status_code < 300
             if ok:
-                stats.record("chat", resp.status_code, 0.0,
-                             provider=b.get("provider"), key=b.get("key"))
+                stats.record_agent(name, resp.status_code, 0.0,
+                                   provider=b.get("provider"), key=b.get("key"))
+            else:
+                stats.record_agent(name, resp.status_code, 0.0,
+                                   provider=b.get("provider"), key=b.get("key"),
+                                   error_msg=f"Probe failed: HTTP {resp.status_code}")
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": ok,
                     "status": resp.status_code, "latency_ms": latency_ms,
                     "error": None if ok else resp.text[:200]}
         except httpx.ReadTimeout:
+            stats.record_agent(name, 500, 0.0,
+                               provider=b.get("provider"), key=b.get("key"),
+                               error_msg="Probe timeout (20s)")
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "上游超时 (20s)"}
         except httpx.ConnectError as e:
+            stats.record_agent(name, 500, 0.0,
+                               provider=b.get("provider"), key=b.get("key"),
+                               error_msg="Probe connect error")
             logger.warning("Probe connect error: %s", e)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "连接失败"}
         except Exception as e:
+            stats.record_agent(name, 500, 0.0,
+                               provider=b.get("provider"), key=b.get("key"),
+                               error_msg=f"Probe error: {str(e)}")
             logger.error("Probe unexpected error: %s", e, exc_info=True)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),

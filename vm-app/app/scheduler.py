@@ -284,11 +284,14 @@ async def schedule(
     build_request: Callable[[dict, str, str], tuple],
     handle_stream: Optional[Callable[[httpx.Response], Any]] = None,
     is_stream: bool = False,
+    category: str = "kb",
+    request_model: Optional[str] = None,
 ) -> ScheduleResult:
     """
     Core scheduler logic. Iterates candidates, runs failover logic, cooldown, and budget check.
-    Records stats directly to in-memory stats module.
+    Records stats directly to in-memory stats module with Agent vs KB isolation.
     """
+    req_model_name = request_model or model_type
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
@@ -472,7 +475,8 @@ async def schedule(
                             errors.append(err_msg)
                             cand_latency = time.time() - cand_start
                             stats.record(model_type, 502, cand_latency,
-                                         provider=provider_name, key=key_label, error_msg=err_msg)
+                                         provider=provider_name, key=key_label, error_msg=err_msg,
+                                         category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
                             # Short cooldown — likely a transient provider glitch
                             _cooldown_until[cand_id] = time.time() + 5.0
                             continue
@@ -487,7 +491,8 @@ async def schedule(
                     _record_latency(cand_id, cand_latency)
 
                     stats.record(model_type, status_code, cand_latency,
-                                 provider=provider_name, key=key_label)
+                                 provider=provider_name, key=key_label,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
                     if is_stream:
                         if handle_stream:
@@ -562,7 +567,8 @@ async def schedule(
 
                 cand_latency = time.time() - cand_start
                 stats.record(model_type, status_code, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg)
+                             provider=provider_name, key=key_label, error_msg=err_msg,
+                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
                 # --- Classify 400s BEFORE the early-exit check below ---
                 _400_is_key_issue = False
@@ -659,7 +665,8 @@ async def schedule(
                 # 599 = pseudo-code for client-side read timeout: keeps the 5xx
                 # bucket in stats but stays distinguishable from real upstream 5xx.
                 stats.record(model_type, 599, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg)
+                             provider=provider_name, key=key_label, error_msg=err_msg,
+                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
             except httpx.ConnectTimeout as e:
                 # ConnectTimeout = network issue, short cooldown
@@ -673,7 +680,8 @@ async def schedule(
                 cand_latency = time.time() - cand_start
                 # 598 = pseudo-code for connect timeout (network issue, not upstream 5xx)
                 stats.record(model_type, 598, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg)
+                             provider=provider_name, key=key_label, error_msg=err_msg,
+                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
             except Exception as e:
                 cf = _consecutive_failures.get(cand_id, 0) + 1
@@ -691,7 +699,8 @@ async def schedule(
 
                 cand_latency = time.time() - cand_start
                 stats.record(model_type, 500, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg)
+                             provider=provider_name, key=key_label, error_msg=err_msg,
+                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
             finally:
                 if global_sem_acquired:
