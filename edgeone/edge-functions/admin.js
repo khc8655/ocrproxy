@@ -1138,23 +1138,36 @@ tr:hover td, .tbl tbody tr:hover td {
 
 <!-- Modal: Agent Model -->
 <div id="agentModal" class="modal">
-  <div class="modal-box" style="width:540px;">
+  <div class="modal-box" style="width:580px;">
     <div class="modal-head">
-      <h3 id="agentModalTitle">新增模型</h3>
+      <h3 id="agentModalTitle">新增 Agent 模型</h3>
       <button class="modal-close" onclick="closeModal('agentModal')">关闭</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label class="form-label">模型名称 (如 glm-5.2, step-3.7-flash, gemini-3.5-flash)</label>
-        <input type="text" id="m_model_name" class="form-control" placeholder="如 glm-5.2">
+        <label class="form-label">供应商快捷筛选与推荐模型</label>
+        <select id="m_model_prov_filter" class="form-control" onchange="onModelProvFilterChange()">
+          <option value="">全部供应商</option>
+        </select>
+        <div id="m_quick_model_tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       </div>
       <div class="form-group">
-        <label class="form-label">上游模型 (可选，留空则与模型名称一致)</label>
+        <label class="form-label">模型名称 (对外 Model ID，如 glm-5.2, gemini-2.5-flash)</label>
+        <input type="text" id="m_model_name" class="form-control" placeholder="如 gemini-2.5-flash">
+      </div>
+      <div class="form-group">
+        <label class="form-label">上游模型 (可选，实际传给服务商的模型名，留空则与模型名称一致)</label>
         <input type="text" id="m_upstream_model" class="form-control" placeholder="如 deepseek-v4-flash-0731">
       </div>
       <div class="form-group">
-        <label class="form-label">候选 Key 绑定序列 (勾选要参与该模型轮换的 Key)</label>
-        <div id="m_bindings_container" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px;background:var(--color-bg-page);"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="margin:0;">候选 Key 绑定序列 (按供应商分组勾选)</label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(true)">全选</button>
+            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(false)">清空</button>
+          </div>
+        </div>
+        <div id="m_bindings_container" style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px;background:var(--color-bg-page);display:flex;flex-direction:column;gap:8px;"></div>
       </div>
     </div>
     <div class="modal-foot">
@@ -1889,12 +1902,87 @@ async function deleteKey(prov, label) {
   await persistConfig();
 }
 
+let currentEditingModelKeys = [];
+
+function populateModelProvFilter() {
+  const select = document.getElementById('m_model_prov_filter');
+  if (!select) return;
+  select.innerHTML = '<option value="">全部供应商</option>';
+  const providers = cfg.providers || {};
+  for (const p of Object.keys(providers)) {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = \`\${p} (\${Object.keys(providers[p].keys || {}).length} 个 Key)\`;
+    select.appendChild(opt);
+  }
+}
+
+function onModelProvFilterChange() {
+  const select = document.getElementById('m_model_prov_filter');
+  const prov = select ? select.value : '';
+  renderBindingsCheckboxes(getSelectedBindingsFromDom(), prov);
+  renderQuickModelTags(prov);
+}
+
+function renderQuickModelTags(prov) {
+  const tagBox = document.getElementById('m_quick_model_tags');
+  if (!tagBox) return;
+  tagBox.innerHTML = '';
+  if (!prov) return;
+
+  const preset = PRESETS[prov.toLowerCase()];
+  if (preset && preset.models && preset.models.length > 0) {
+    preset.models.forEach(m => {
+      const tag = document.createElement('button');
+      tag.type = 'button';
+      tag.className = 'btn btn-ghost btn-sm';
+      tag.style.cssText = 'font-size:11px;padding:2px 8px;height:24px;background:var(--color-bg-subtle);';
+      tag.textContent = \`+ 填入 \${m.id}\`;
+      tag.onclick = () => {
+        document.getElementById('m_model_name').value = m.id;
+        document.getElementById('m_upstream_model').value = m.upstream || '';
+        toggleProviderKeys(prov, true);
+      };
+      tagBox.appendChild(tag);
+    });
+  }
+}
+
+function getSelectedBindingsFromDom() {
+  const checkedBoxes = document.querySelectorAll('#m_bindings_container input[type="checkbox"]:checked');
+  const list = Array.from(checkedBoxes).map(cb => ({
+    provider: cb.dataset.provider,
+    key: cb.dataset.key,
+  }));
+  if (list.length > 0) return list;
+  return currentEditingModelKeys;
+}
+
+function toggleSelectAllKeys(selectAll) {
+  const checkboxes = document.querySelectorAll('#m_bindings_container input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    cb.checked = selectAll;
+  });
+}
+
+function toggleProviderKeys(prov, forceCheck = false) {
+  const checkboxes = document.querySelectorAll(\`#m_bindings_container input[data-provider="\${prov}"]\`);
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  checkboxes.forEach(cb => {
+    cb.checked = forceCheck ? true : !allChecked;
+  });
+}
+
 function openAddModelModal() {
   document.getElementById('agentModalTitle').textContent = '新增 Agent 模型';
   document.getElementById('m_model_name').value = '';
   document.getElementById('m_model_name').disabled = false;
   document.getElementById('m_upstream_model').value = '';
+  currentEditingModelKeys = [];
+  populateModelProvFilter();
+  document.getElementById('m_model_prov_filter').value = '';
   renderBindingsCheckboxes([]);
+  renderQuickModelTags('');
   openModal('agentModal');
 }
 
@@ -1904,33 +1992,61 @@ function openEditModelModal(m) {
   document.getElementById('m_model_name').disabled = true;
   const item = cfg.agent_models[m] || {};
   document.getElementById('m_upstream_model').value = item.upstream_model || '';
+  currentEditingModelKeys = item.keys || [];
+  populateModelProvFilter();
+  document.getElementById('m_model_prov_filter').value = '';
   renderBindingsCheckboxes(item.keys || []);
+  renderQuickModelTags('');
   openModal('agentModal');
 }
 
-function renderBindingsCheckboxes(existingKeys = []) {
+function renderBindingsCheckboxes(existingKeys = [], filterProv = '') {
   const container = document.getElementById('m_bindings_container');
+  if (!container) return;
   container.innerHTML = '';
   const providers = cfg.providers || {};
+  let provList = Object.keys(providers);
+  if (filterProv) {
+    provList = provList.filter(p => p === filterProv);
+  }
 
-  let count = 0;
-  for (const [p, prov] of Object.entries(providers)) {
-    for (const k of Object.keys(prov.keys || {})) {
-      count++;
+  let totalKeys = 0;
+  for (const p of provList) {
+    const prov = providers[p];
+    const keysObj = prov.keys || {};
+    const keyLabels = Object.keys(keysObj);
+    if (keyLabels.length === 0) continue;
+
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'provider-key-group';
+    groupDiv.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-sm);background:#fff;padding:8px 12px;';
+
+    let keysCheckboxesHtml = '';
+    keyLabels.forEach(k => {
+      totalKeys++;
       const isChecked = existingKeys.some(b => b.provider === p && b.key === k);
-      const div = document.createElement('div');
-      div.style.marginBottom = '6px';
-      div.innerHTML = \`
-        <label class="checkbox">
+      keysCheckboxesHtml += \`
+        <label class="checkbox" style="font-size:13px;cursor:pointer;margin:0;">
           <input type="checkbox" data-provider="\${p}" data-key="\${k}" \${isChecked ? 'checked' : ''}>
-          <span><b>\${p}</b> / \${k}</span>
+          <span><span class="key-chip" style="font-weight:600;">\${k}</span></span>
         </label>
       \`;
-      container.appendChild(div);
-    }
+    });
+
+    groupDiv.innerHTML = \`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;border-bottom:1px solid var(--color-border);padding-bottom:4px;">
+        <span style="font-weight:700;font-size:13px;color:var(--color-text-primary);">\${p}</span>
+        <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 6px;height:20px;" onclick="toggleProviderKeys('\${p}')">选择该厂商</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;">
+        \${keysCheckboxesHtml}
+      </div>
+    \`;
+    container.appendChild(groupDiv);
   }
-  if (count === 0) {
-    container.innerHTML = '<div class="text-secondary" style="font-size:12px;">暂无可用的 Key，请先添加供应商与 Key</div>';
+
+  if (totalKeys === 0) {
+    container.innerHTML = '<div class="text-secondary" style="font-size:12px;padding:8px;">暂无匹配的 Key，请先添加供应商与 Key</div>';
   }
 }
 
