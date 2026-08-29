@@ -83,6 +83,24 @@ _PROVIDERS_NO_NONE_EFFORT = {"stepfun"}
 # Providers that only accept string-form tool_choice (no object form)
 _PROVIDERS_NO_OBJECT_TOOL_CHOICE = {"tokenrhythm"}
 
+# Google Gemini / AI Studio providers
+_GOOGLE_PROVIDERS = {"google", "gemini", "aistudio", "google-ai"}
+
+
+def _sanitize_gemini_schema(schema):
+    """Recursively strip $schema and non-standard fields that Gemini rejects."""
+    if not isinstance(schema, dict):
+        return schema
+    clean = copy.deepcopy(schema)
+    clean.pop("$schema", None)
+    if "properties" in clean and isinstance(clean["properties"], dict):
+        clean["properties"] = {
+            k: _sanitize_gemini_schema(v) for k, v in clean["properties"].items()
+        }
+    if "items" in clean and isinstance(clean["items"], dict):
+        clean["items"] = _sanitize_gemini_schema(clean["items"])
+    return clean
+
 
 def _normalise_for_provider(out: dict, provider: str) -> None:
     """Normalise request body fields that the target provider would reject.
@@ -90,14 +108,16 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
     Mutates `out` in-place.  Only fields whose values would cause a 400 error
     are touched — all other parameters pass through untouched.
     """
+    p = str(provider or "").lower()
+
     # 1. reasoning_effort: "none" → "low" for providers that don't accept "none"
-    if provider in _PROVIDERS_NO_NONE_EFFORT:
+    if p in _PROVIDERS_NO_NONE_EFFORT:
         re = out.get("reasoning_effort")
         if re == "none":
             out["reasoning_effort"] = "low"
 
     # 2. tool_choice: object form → "auto" for providers that reject objects
-    if provider in _PROVIDERS_NO_OBJECT_TOOL_CHOICE:
+    if p in _PROVIDERS_NO_OBJECT_TOOL_CHOICE:
         tc = out.get("tool_choice")
         if isinstance(tc, dict):
             out["tool_choice"] = "auto"
@@ -105,9 +125,52 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
     # 3. StepFun: set reasoning_format="deepseek-style" so agent tools
     #    receive reasoning_content (not the StepFun-native "reasoning" field).
     #    Only inject if the caller hasn't already set it explicitly.
-    if provider == "stepfun":
+    if p == "stepfun":
         if "reasoning_format" not in out:
             out["reasoning_format"] = "deepseek-style"
+
+    # 4. Google AI Studio / Gemini Adaptation (Gemini 2.5 / 3 / 3.5+)
+    is_google = p in _GOOGLE_PROVIDERS or str(out.get("model", "")).lower().startswith("gemini")
+    if is_google:
+        # Map reasoning_effort to extra_body.google.thinking_config
+        re = out.pop("reasoning_effort", None)
+        if re is not None:
+            effort = str(re).lower()
+            extra = out.setdefault("extra_body", {}).setdefault("google", {})
+            model_name = str(out.get("model", "")).lower()
+            is_gemini_25 = model_name.startswith("gemini-2.5-")
+            is_pro = "pro" in model_name
+
+            if effort in ("none", "false"):
+                extra["thinking_config"] = {"include_thoughts": False}
+            elif is_gemini_25:
+                extra["thinking_config"] = {"include_thoughts": True}
+            else:
+                thinking_level = "low"
+                if effort in ("high", "xhigh", "max"):
+                    thinking_level = "high"
+                elif effort == "medium" and not is_pro:
+                    thinking_level = "medium"
+                extra["thinking_config"] = {
+                    "include_thoughts": True,
+                    "thinking_level": thinking_level,
+                }
+
+        # Sanitize tool schemas
+        tools = out.get("tools")
+        if isinstance(tools, list):
+            cleaned_tools = []
+            for t in tools:
+                if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
+                    fn = copy.deepcopy(t["function"])
+                    if "parameters" in fn:
+                        fn["parameters"] = _sanitize_gemini_schema(fn["parameters"])
+                    t_clean = copy.deepcopy(t)
+                    t_clean["function"] = fn
+                    cleaned_tools.append(t_clean)
+                else:
+                    cleaned_tools.append(t)
+            out["tools"] = cleaned_tools
 
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
@@ -118,17 +181,21 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
       - SenseNova / DeepSeek: reasoning_effort="none" (truly off)
       - StepFun: reasoning_effort="low" (lowest tier, "none" not accepted)
       - Agnes: chat_template_kwargs={"enable_thinking": False} (reasoning_effort ignored)
+      - Google Gemini: extra_body.google.thinking_config={"include_thoughts": False}
       - TokenRhythm / others: reasoning_effort="none" (standard OpenAI-compatible)
     """
-    if provider == "stepfun":
+    p = str(provider or "").lower()
+    if p == "stepfun":
         out["reasoning_effort"] = "low"
-    elif provider == "agnes":
-        # Agnes uses chat_template_kwargs to control thinking, not reasoning_effort.
-        # Remove reasoning_effort if present (it's ignored by Agnes and could confuse other layers).
+    elif p == "agnes":
         out.pop("reasoning_effort", None)
         out["chat_template_kwargs"] = {"enable_thinking": False}
+    elif p in _GOOGLE_PROVIDERS:
+        out.pop("reasoning_effort", None)
+        out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
+            "include_thoughts": False
+        }
     else:
-        # Default: sensenova, tokenrhythm, and any OpenAI-compatible provider
         out["reasoning_effort"] = "none"
 
 

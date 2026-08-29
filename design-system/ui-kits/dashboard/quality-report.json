@@ -1,0 +1,10 @@
+{
+  "screensGenerated": 3,
+  "inventedComponents": [],
+  "interactiveStatesRendered": ["hover", "disabled", "selected"],
+  "primaryActionPerScreen": {
+    "概览": "查看库况统计",
+    "任务中心": "查看任务列表",
+    "基础配置": "保存配置"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "slug": "modal",
+  "schemaVersion": 2,
+  "name": "Modal",
+  "category": "Containers",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "dialog", "evidence": "Centered overlay dialog for confirmations, forms, file pickers"}
+  ],
+  "variantDimensions": [
+    {"axis": "variant", "values": ["default"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Default Modal",
+      "whySelected": "Standard dialog for file picker and confirmations",
+      "traits": {
+        "backdropBg": "rgba(15, 23, 42, 0.45)",
+        "dialogBg": "var(--color-bg-card)",
+        "border": "1px solid var(--color-border)",
+        "borderRadius": "var(--radius-lg)",
+        "shadow": "var(--shadow-5)",
+        "width": "520px",
+        "maxWidth": "calc(100vw - 32px)",
+        "headerPadding": "14px 20px",
+        "bodyPadding": "16px 20px",
+        "footerPadding": "14px 20px",
+        "footerAlign": "flex-end",
+        "footerGap": "8px"
+      },
+      "childrenDigest": "header (title + close icon) + body (scrollable) + footer (secondary + primary buttons)"
+    }
+  ],
+  "anatomy": {
+    "root": "div.modal-overlay + div.modal-dialog",
+    "children": ["modal-header", "modal-body", "modal-footer"],
+    "states": {"open": "display: flex", "closed": "display: none"}
+  },
+  "structurePatterns": [
+    "<div class='modal-overlay'><div class='modal-dialog'><div class='modal-header'><h3>标题</h3><button class='modal-close'><svg class='icon'><use href='#icon-close'/></svg></button></div><div class='modal-body'>...</div><div class='modal-footer'><button class='btn secondary'>取消</button><button class='btn'>确定</button></div></div></div>"
+  ],
+  "usageHints": {"priorityHint": "primary", "zIndex": 200, "animation": "fade in + slight scale"},
+  "doNotInvent": ["full-screen modals", "draggable modals", "multi-step wizard modals", "side drawer"],
+  "unknowns": [],
+  "keyInsightSeed": "Centered dialog with header, body, footer buttons; overlay backdrop"
+}

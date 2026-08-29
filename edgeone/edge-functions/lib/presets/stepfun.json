@@ -1,0 +1,22 @@
+{
+  "id": "stepfun",
+  "name": "阶跃星辰 (StepFun)",
+  "base_url": "https://api.stepfun.com/step_plan",
+  "description": "阶跃星辰大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
+  "features": {
+    "reasoning_effort_none_to_low": true,
+    "reasoning_format_inject": "deepseek-style"
+  },
+  "recommended_models": [
+    {
+      "name": "step-3.7-flash",
+      "upstream_model": "step-3.7-flash",
+      "description": "阶跃最新闪电高速推理大模型"
+    },
+    {
+      "name": "step-2-16k",
+      "upstream_model": "step-2-16k",
+      "description": "阶跃 Step-2 旗舰大模型"
+    }
+  ]
+}

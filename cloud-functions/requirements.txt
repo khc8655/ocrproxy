@@ -1,5 +1,0 @@
-# EdgeOne Cloud Function (Python 3.10) — long-context fallback.
-# Auto-detected by the build pipeline; explicit pinning is safer though.
-fastapi>=0.110.0
-httpx>=0.27.0
-pydantic>=2.5.0

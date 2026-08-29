@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轻量配置页示例</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../core.css">
+<style>
+  body { max-width: 720px; margin: 40px auto; padding: 0 20px; }
+  .page-title { font-size: var(--font-size-h1); font-weight: 600; margin-bottom: 24px; }
+</style>
+</head>
+<body>
+  <h1 class="page-title">基础配置</h1>
+
+  <div class="alert info">
+    <svg class="icon"><use href="#icon-info"/></svg>
+    <span>修改配置后需要点击保存才会生效。</span>
+  </div>
+
+  <div class="card">
+    <h2>API 设置</h2>
+    <div class="form-field">
+      <label>API Key</label>
+      <input type="text" placeholder="请输入 API Key">
+    </div>
+    <div class="form-field has-error">
+      <label>服务端点</label>
+      <input type="text" value="">
+      <p class="error-msg">
+        <svg class="icon icon-sm"><use href="#icon-error"/></svg>
+        服务端点不能为空
+      </p>
+    </div>
+    <div class="form-field">
+      <label>
+        <input type="checkbox" checked> 启用自动同步
+      </label>
+    </div>
+    <button class="btn">保存配置</button>
+    <button class="btn secondary">重置</button>
+  </div>
+
+  <div class="card">
+    <h2>最近记录</h2>
+    <table>
+      <thead><tr><th>时间</th><th>操作</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>2024-08-29 10:00</td><td>保存配置</td><td>成功</td></tr>
+        <tr><td>2024-08-29 09:30</td><td>测试连接</td><td>失败</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 最小图标精灵：只放这个页面需要的 -->
+  <svg style="display:none">
+    <symbol id="icon-info" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5v0.5"/></symbol>
+    <symbol id="icon-error" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v0.5"/></symbol>
+  </svg>
+</body>
+</html>

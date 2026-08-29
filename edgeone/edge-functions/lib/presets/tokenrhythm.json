@@ -1,0 +1,21 @@
+{
+  "id": "tokenrhythm",
+  "name": "TokenRhythm",
+  "base_url": "https://api.tokenrhythm.com/v1",
+  "description": "TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换",
+  "features": {
+    "tool_choice_object_to_auto": true
+  },
+  "recommended_models": [
+    {
+      "name": "claude-3-5-sonnet-20241022",
+      "upstream_model": "claude-3-5-sonnet-20241022",
+      "description": "Claude 3.5 Sonnet 强编程模型"
+    },
+    {
+      "name": "gpt-4o",
+      "upstream_model": "gpt-4o",
+      "description": "OpenAI GPT-4o 旗舰全能模型"
+    }
+  ]
+}

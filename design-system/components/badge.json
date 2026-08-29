@@ -1,0 +1,63 @@
+{
+  "slug": "badge",
+  "schemaVersion": 2,
+  "name": "Status Badge",
+  "category": "Feedback",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "status-indicator", "evidence": "Job/task status display: done, running, queued, failed, canceled"},
+    {"candidate": "service-status", "evidence": "Service health: running, stopped, not-detected"}
+  ],
+  "variantDimensions": [
+    {"axis": "status", "values": ["done", "running", "queued", "failed", "canceled"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Done Badge",
+      "whySelected": "Completed task or healthy service status",
+      "traits": {"bg":"var(--color-success-bg)","color":"var(--color-success)","radius":"10px","padding":"2px 10px","fontSize":"12px","fontWeight":"500"},
+      "childrenDigest": "text label only"
+    },
+    {
+      "name": "Running Badge",
+      "whySelected": "Active task or running service",
+      "traits": {"bg":"var(--color-primary-bg)","color":"var(--color-primary)","radius":"10px","padding":"2px 10px","fontSize":"12px","fontWeight":"500"},
+      "childrenDigest": "text label only"
+    },
+    {
+      "name": "Queued Badge",
+      "whySelected": "Waiting task in queue",
+      "traits": {"bg":"var(--color-bg-hover)","color":"var(--color-text-3)","radius":"10px","padding":"2px 10px","fontSize":"12px","fontWeight":"500"},
+      "childrenDigest": "text label only"
+    },
+    {
+      "name": "Failed Badge",
+      "whySelected": "Failed task or missing service",
+      "traits": {"bg":"var(--color-danger-bg)","color":"var(--color-danger)","radius":"10px","padding":"2px 10px","fontSize":"12px","fontWeight":"500"},
+      "childrenDigest": "text label only"
+    },
+    {
+      "name": "Canceled Badge",
+      "whySelected": "Canceled or canceling task",
+      "traits": {"bg":"var(--color-warning-bg)","color":"var(--color-warning)","radius":"10px","padding":"2px 10px","fontSize":"12px","fontWeight":"500"},
+      "childrenDigest": "text label only"
+    }
+  ],
+  "anatomy": {
+    "root": "span.badge element with modifier class",
+    "children": ["text label"],
+    "states": {"default":"static, no hover effect"}
+  },
+  "structurePatterns": [
+    "<span class='badge b-done'>已完成</span>",
+    "<span class='badge b-running'>运行中</span>",
+    "<span class='badge b-queued'>排队中</span>",
+    "<span class='badge b-failed'>失败</span>",
+    "<span class='badge b-canceled'>已取消</span>"
+  ],
+  "usageHints": {"priorityHint":"primary","spacing":"inline within table cells or stat values","alignment":"inline-flex with 4px gap"},
+  "doNotInvent": ["badge icons", "badge links", "removable badges", "badge counts"],
+  "unknowns": [],
+  "keyInsightSeed": "Pill shape with semantic colors: done/running/queued/failed/canceled, 12px text"
+}
