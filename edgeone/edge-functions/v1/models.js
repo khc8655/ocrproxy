@@ -2,8 +2,6 @@
  * v1/models.js — GET /v1/models
  *
  * Returns the list of real model names from the agent_models config.
- * Mirrors the VM's `/v1/models` behaviour: only real models, no virtual
- * KB aliases (those are KB-mode only and don't exist here).
  */
 
 import {
@@ -13,10 +11,10 @@ import {
   resolveKvBinding,
 } from '../lib/config.js';
 
-export default async function onRequestGet(context) {
+export async function onRequestGet(context) {
   const { env } = context;
 
-  // Optional auth (matches v1-chat behaviour)
+  // Optional auth
   const authNeeded = env?.PROXY_API_KEY;
   if (authNeeded) {
     const got = context.request.headers.get('authorization') || '';
@@ -63,3 +61,5 @@ export default async function onRequestGet(context) {
     },
   });
 }
+
+export default onRequestGet;
