@@ -1,0 +1,49 @@
+{
+  "version": 3,
+  "name": "ocrproxy-agent-relay",
+  "build": {
+    "edgeFunctions": "edge-functions",
+    "cloudFunctions": "cloud-functions"
+  },
+  "functions": {
+    "edge": {
+      "memory": 128,
+      "executionTimeout": 30000
+    },
+    "cloud": {
+      "memory": 256,
+      "executionTimeout": 120000,
+      "regions": ["ap-guangzhou"]
+    }
+  },
+  "kv": {
+    "agent_kv": {
+      "description": "Stores the live agent_models + providers config. Optional; env var AGENT_CONFIG_JSON is the fallback when KV is empty."
+    }
+  },
+  "env": {
+    "PROXY_API_KEY": {
+      "description": "Bearer token clients must send on /v1/* endpoints.",
+      "secret": true
+    },
+    "AGENT_CONFIG_JSON": {
+      "description": "JSON string with shape { providers, agent_models }. Read on cold start; KV key 'config' takes precedence.",
+      "secret": false
+    },
+    "UPSTREAM_TIMEOUT_MS": {
+      "description": "Read timeout when calling upstream LLM providers. Default 60000.",
+      "secret": false
+    },
+    "EDGEONE_FALLBACK_URL": {
+      "description": "Optional. When body > 1MB, returned in X-Fallback-Endpoint header. Point at the Cloud Function or VM endpoint.",
+      "secret": false
+    }
+  },
+  "routes": [
+    {
+      "src": "^/v1/chat/completions/?$",
+      "methods": ["POST"],
+      "handler": "edge"
+    }
+  ]
+}

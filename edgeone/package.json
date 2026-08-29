@@ -1,0 +1,25 @@
+{
+  "name": "ocrproxy-edgeone-relay",
+  "version": "0.1.0",
+  "description": "Agent-mode LLM API relay deployed to Tencent Cloud EdgeOne Makers. Stateless IP-rotator over 3200+ edge nodes for free-key amplification.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build:admin": "node scripts/build-admin.mjs",
+    "dev": "npm run build:admin && edgeone makers dev",
+    "deploy": "npm run build:admin && edgeone makers deploy",
+    "deploy:preview": "npm run build:admin && edgeone makers deploy -e preview",
+    "env:list": "edgeone makers env ls",
+    "env:set": "edgeone makers env set",
+    "env:pull": "edgeone makers env pull -f .env",
+    "ip-check": "bash scripts/check-ip-diversity.sh",
+    "smoke": "bash scripts/smoke-test.sh",
+    "test": "node scripts/test-units.mjs"
+  },
+  "devDependencies": {
+    "edgeone": "^1.0.0"
+  }
+}
