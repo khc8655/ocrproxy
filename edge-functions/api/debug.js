@@ -57,6 +57,8 @@ export async function onRequestGet(context) {
           ? `KV binding detected as "${scan.detected.name}" on scope "${scan.detected.scope}".`
           : 'No KV binding detected. Check `scopes.<name>.kvLike` — if any of those arrays is non-empty, that scope exposes a KV handle under one of those names. Consider adding it to KV_BINDING_CANDIDATES in lib/config.js, or rename your binding to one of the candidates.',
         scopes: scan.scopes,
+        request_url: context.request.url,
+        request_search: new URL(context.request.url, 'http://localhost').search,
         env_keys: env ? Object.keys(env) : [],
       },
       null,
