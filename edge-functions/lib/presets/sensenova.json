@@ -1,0 +1,26 @@
+{
+  "id": "sensenova",
+  "name": "商汤日日新 (SenseNova)",
+  "base_url": "https://token.sensenova.cn/v1",
+  "description": "商汤日日新大模型开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制",
+  "features": {
+    "native_thinking": true
+  },
+  "recommended_models": [
+    {
+      "name": "glm-5.2",
+      "upstream_model": "GLM-5.2",
+      "description": "智谱/商汤最新 GLM-5.2 旗舰推理大模型"
+    },
+    {
+      "name": "deepseek-v3",
+      "upstream_model": "DeepSeek-V3",
+      "description": "DeepSeek-V3 基础推理模型"
+    },
+    {
+      "name": "deepseek-r1",
+      "upstream_model": "DeepSeek-R1",
+      "description": "DeepSeek-R1 深度思考推理模型"
+    }
+  ]
+}

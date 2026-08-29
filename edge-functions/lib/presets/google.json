@@ -1,0 +1,32 @@
+{
+  "id": "google",
+  "name": "Google AI Studio (Gemini)",
+  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射与 Schema 裁剪适配",
+  "features": {
+    "thinking_config": true,
+    "sanitize_schema": true
+  },
+  "recommended_models": [
+    {
+      "name": "gemini-3.5-flash",
+      "upstream_model": "gemini-3.5-flash",
+      "description": "最新高性价比推理模型 (支持 low/medium/high 思考等级)"
+    },
+    {
+      "name": "gemini-3.5-pro",
+      "upstream_model": "gemini-3.5-pro",
+      "description": "最新旗舰强推理模型 (支持 low/high 思考等级)"
+    },
+    {
+      "name": "gemini-2.5-flash",
+      "upstream_model": "gemini-2.5-flash",
+      "description": "经典多模态快速模型"
+    },
+    {
+      "name": "gemini-2.5-pro",
+      "upstream_model": "gemini-2.5-pro",
+      "description": "经典多模态深度思考模型"
+    }
+  ]
+}
