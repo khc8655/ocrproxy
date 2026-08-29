@@ -1,8 +1,8 @@
 /**
- * api/config.js — Config read/write and key probing API for the admin UI.
+ * api/config.js — Config read/write and key/model probing API for the admin UI.
  *
  *   GET  /api/config              — read current config
- *   GET  /api/config?action=test   — probe a single (provider, key) upstream
+ *   GET  /api/config?action=test   — probe a single (provider, key, model) upstream
  *   POST /api/config              — validate + write full config to KV key "config"
  *   PUT  /api/config              — same as POST
  *   DELETE /api/config            — reset config to empty
@@ -42,27 +42,26 @@ function checkAuth(request, env) {
   return null;
 }
 
-async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
-  const urlsToTry = [];
-  if (baseUrl.endsWith('/v1')) {
-    urlsToTry.push(`${baseUrl}/models`);
-  } else {
-    urlsToTry.push(`${baseUrl}/v1/models`);
-    urlsToTry.push(`${baseUrl}/models`);
-  }
-
+async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '') {
   const start = Date.now();
   let resp = null;
   let lastErr = null;
 
-  for (const url of urlsToTry) {
+  // 1. If targetModel is specified, probe chat completions directly for true model latency
+  if (targetModel) {
+    const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
     try {
-      resp = await fetch(url, {
-        method: 'GET',
+      resp = await fetch(chatUrl, {
+        method: 'POST',
         headers: {
           'authorization': `Bearer ${apiKey}`,
-          'accept': 'application/json',
+          'content-type': 'application/json',
         },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
         eo: {
           timeoutSetting: {
             connectTimeout: 8_000,
@@ -71,11 +70,43 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
           },
         },
       });
-      if (resp && resp.status !== 404) {
-        break;
-      }
     } catch (e) {
       lastErr = e;
+    }
+  }
+
+  // 2. Fallback to /models probe if targetModel was not provided or failed with network error
+  if (!resp) {
+    const urlsToTry = [];
+    if (baseUrl.endsWith('/v1')) {
+      urlsToTry.push(`${baseUrl}/models`);
+    } else {
+      urlsToTry.push(`${baseUrl}/v1/models`);
+      urlsToTry.push(`${baseUrl}/models`);
+    }
+
+    for (const url of urlsToTry) {
+      try {
+        resp = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'authorization': `Bearer ${apiKey}`,
+            'accept': 'application/json',
+          },
+          eo: {
+            timeoutSetting: {
+              connectTimeout: 8_000,
+              readTimeout: 12_000,
+              writeTimeout: 4_000,
+            },
+          },
+        });
+        if (resp && resp.status !== 404) {
+          break;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
     }
   }
 
@@ -85,6 +116,7 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
     return {
       ok: false,
       upstream: baseUrl,
+      model: targetModel || null,
       status: 0,
       latency_ms: latency,
       error: `network_error: ${lastErr?.message || lastErr || 'timeout'}`,
@@ -95,7 +127,7 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
   let verdict = '';
   if (resp.status >= 200 && resp.status < 300) {
     ok = true;
-    verdict = 'reachable + key accepted';
+    verdict = targetModel ? `model ${targetModel} ok` : 'reachable + key accepted';
   } else if (resp.status === 401 || resp.status === 403) {
     ok = false;
     verdict = 'key rejected (401/403)';
@@ -103,10 +135,11 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
     ok = false;
     verdict = 'rate-limited (429)';
   } else if (resp.status === 404) {
-    ok = true;
-    verdict = 'reachable, but /models not exposed (chat works)';
+    ok = targetModel ? false : true;
+    verdict = targetModel ? `model ${targetModel} not found (404)` : 'reachable, but /models not exposed (chat works)';
   } else {
-    ok = false;
+    // 400 with model thinking message could still mean model exists and key is good
+    ok = resp.status === 400;
     verdict = `status ${resp.status}`;
   }
 
@@ -114,6 +147,7 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
     ok,
     verdict,
     upstream: baseUrl,
+    model: targetModel || null,
     status: resp.status,
     latency_ms: latency,
   };
@@ -173,6 +207,7 @@ export async function onRequestGet(context) {
   if (action === 'test') {
     const providerName = String(url.searchParams.get('provider') || '').trim();
     const keyLabel = String(url.searchParams.get('key') || '').trim();
+    const targetModel = String(url.searchParams.get('model') || '').trim();
     if (!providerName || !keyLabel) {
       return new Response(
         JSON.stringify({ error: { type: 'invalid_request_error', message: 'provider and key are required' } }),
@@ -194,7 +229,7 @@ export async function onRequestGet(context) {
       );
     }
     const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
-    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl);
+    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
@@ -255,6 +290,7 @@ export async function onRequestPut(context) {
   if (body?.action === 'test') {
     const providerName = String(body.provider || '').trim();
     const keyLabel = String(body.key || '').trim();
+    const targetModel = String(body.model || '').trim();
     let curConfig;
     try {
       curConfig = await loadConfig(context.env, kv);
@@ -270,7 +306,7 @@ export async function onRequestPut(context) {
       return new Response(JSON.stringify({ error: { type: 'not_found', message: `Key "${keyLabel}" not found` } }), { status: 404 });
     }
     const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
-    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl);
+    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
