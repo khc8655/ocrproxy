@@ -1,0 +1,16 @@
+{
+  "components": [
+    {"slug":"button","name":"Button","category":"Actions","sourceKind":"from-scratch","confidence":"high","variantCount":4,"priorityHint":"primary","keyInsightSeed":"Compact 32px height, blue primary with white text, no decorative icons"},
+    {"slug":"card","name":"Card","category":"Containers","sourceKind":"from-scratch","confidence":"high","variantCount":2,"priorityHint":"primary","keyInsightSeed":"White surface with 1px border and whisper-quiet shadow, 20px padding"},
+    {"slug":"table","name":"Table","category":"Data Display","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"Gray header row, hover highlight, no zebra stripes, bottom-border-only rows"},
+    {"slug":"badge","name":"Status Badge","category":"Feedback","sourceKind":"from-scratch","confidence":"high","variantCount":5,"priorityHint":"primary","keyInsightSeed":"Pill shape with semantic colors: done/running/queued/failed/canceled"},
+    {"slug":"tabs","name":"Tabs","category":"Navigation","sourceKind":"from-scratch","confidence":"high","variantCount":3,"priorityHint":"primary","keyInsightSeed":"Card-style tabs with active blue bottom border; pill-style and nested secondary tabs"},
+    {"slug":"alert","name":"Alert","category":"Feedback","sourceKind":"from-scratch","confidence":"high","variantCount":4,"priorityHint":"primary","keyInsightSeed":"Inline banners: info/success/warning/error with icon prefix and optional close"},
+    {"slug":"form-error","name":"Form Error","category":"Feedback","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"Field-level validation: red border, red icon and caption below input"},
+    {"slug":"toolbar","name":"Toolbar","category":"Layout","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"Search + filter dropdown + action buttons row above table, border-radius container"},
+    {"slug":"modal","name":"Modal","category":"Containers","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"Centered dialog with header, body, footer buttons; overlay backdrop"},
+    {"slug":"file-picker","name":"File Picker","category":"Data Display","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"Bucket file browser with breadcrumb, folder rows, checkboxes, confirm/cancel footer"},
+    {"slug":"navigation","name":"Top Navigation","category":"Layout","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"48px sticky bar, brand logo left, user actions right, subtle bottom border"},
+    {"slug":"sidebar","name":"Side Navigation","category":"Layout","sourceKind":"from-scratch","confidence":"high","variantCount":1,"priorityHint":"primary","keyInsightSeed":"220px width, icon+label items, active state with blue left border and light blue bg"}
+  ]
+}

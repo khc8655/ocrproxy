@@ -1,0 +1,59 @@
+{
+  "slug": "file-picker",
+  "schemaVersion": 2,
+  "name": "File Picker",
+  "category": "Data Display",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "file-browser", "evidence": "Bucket file/folder selection dialog shown in reference screenshot"},
+    {"candidate": "tree-selector", "evidence": "Hierarchical folder list with checkbox selection"}
+  ],
+  "variantDimensions": [
+    {"axis": "variant", "values": ["default"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Default File Picker",
+      "whySelected": "Storage bucket file and folder selection dialog",
+      "traits": {
+        "dialogWidth": "520px",
+        "rowHeight": "36px",
+        "rowPadding": "8px 12px",
+        "rowHoverBg": "var(--color-bg-hover)",
+        "selectedBg": "var(--color-primary-bg)",
+        "folderColor": "var(--color-warning-500)",
+        "folderIconSize": "18px",
+        "breadcrumbFontSize": "13px",
+        "breadcrumbColor": "var(--color-text-3)",
+        "listBorder": "1px solid var(--color-border)",
+        "listBorderRadius": "var(--radius-md)",
+        "listMaxHeight": "320px"
+      },
+      "childrenDigest": "breadcrumb path + scrollable folder/file rows with checkbox + footer with selection count and confirm/cancel buttons"
+    }
+  ],
+  "anatomy": {
+    "root": "div.file-picker inside modal-body",
+    "children": ["breadcrumb", "file-list", "file-row (icon + checkbox + label)"],
+    "states": {
+      "row-default": "transparent bg",
+      "row-hover": "subtle gray bg",
+      "row-selected": "light blue bg",
+      "checkbox-checked": "primary filled check",
+      "checkbox-indeterminate": "primary filled minus"
+    }
+  },
+  "structurePatterns": [
+    "<div class='file-picker'><div class='fp-breadcrumb'>小鱼易连 /</div><div class='fp-list'><label class='fp-row'><svg class='icon'><use href='#icon-folder'/></svg><input type='checkbox'><span class='fp-name'>文件夹</span><span class='fp-meta'>整个目录</span></label></div></div>"
+  ],
+  "usageHints": {
+    "priorityHint": "primary",
+    "selectionMode": "single or multiple via checkboxes",
+    "footerText": "确定（已选 N 项）",
+    "confirmDisabled": "when selectedCount === 0"
+  },
+  "doNotInvent": ["thumbnail previews", "file size columns", "drag-and-drop upload", "sortable columns"],
+  "unknowns": [],
+  "keyInsightSeed": "Bucket file browser with breadcrumb, folder rows, checkboxes, confirm/cancel footer"
+}

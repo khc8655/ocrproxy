@@ -1,0 +1,41 @@
+{
+  "slug": "navigation",
+  "schemaVersion": 2,
+  "name": "Top Navigation",
+  "category": "Layout",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "app-header", "evidence": "48px sticky top bar with brand identity and user actions"}
+  ],
+  "variantDimensions": [
+    {"axis": "variant", "values": ["default"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Default TopNav",
+      "whySelected": "Single top navigation bar for all pages",
+      "traits": {
+        "height":"48px",
+        "bg":"var(--color-bg-card)",
+        "borderBottom":"1px solid var(--color-border)",
+        "padding":"0 20px",
+        "position":"sticky top 0 z-index 100",
+        "shadow":"var(--shadow-1)"
+      },
+      "childrenDigest": "brand-logo (28px gradient square with K) + brand text + nav-info + logout button"
+    }
+  ],
+  "anatomy": {
+    "root": "header.top-nav element",
+    "children": ["brand section (logo + text)", "right section (info + logout)"],
+    "states": {"default":"static sticky bar"}
+  },
+  "structurePatterns": [
+    "<header class='top-nav'><div class='top-nav-brand'>...</div><div class='top-nav-right'>...</div></header>"
+  ],
+  "usageHints": {"priorityHint":"primary","height":"48px fixed","sticky":"always sticky at top"},
+  "doNotInvent": ["search bar in nav", "user avatar dropdown", "notifications bell", "multi-level mega menu"],
+  "unknowns": [],
+  "keyInsightSeed": "48px sticky bar, brand logo left, user actions right, subtle bottom border"
+}

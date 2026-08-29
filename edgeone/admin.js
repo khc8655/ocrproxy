@@ -1,463 +1,902 @@
-// admin.js — Client logic for the EdgeOne Agent Relay admin page.
-//
-// Talks to four API endpoints:
-//   GET   /api/config          read current config
-//   POST  /api/config          write config to KV
-//   GET   /api/state           read KV cooldowns
-//   DELETE /api/state          clear all cooldowns
-//   POST  /api/test            test a (provider, key) pair
-//
-// Auth: PROXY_API_KEY is held in sessionStorage as `admin_key` and
-// sent on every request as `Authorization: Bearer <key>`.
+/**
+ * admin.js — OCRProxy EdgeOne Admin UI Controller (VM-grade parity + Presets & Export/Import)
+ */
 
-const KEY_STORAGE = 'admin_key';
-let cfg = null;          // current config (the { providers, agent_models } tree)
-let cfgMeta = null;      // { source, last_modified }
-let cooldowns = [];      // array of { provider, keyLabel, expiresAt, ... }
+let cfg = { providers: {}, agent_models: {} };
+let cfgMeta = {};
+let healthData = {};
+let stateData = [];
+let ipData = {};
+let activeTab = 'dashboard';
+let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
-// ---- API helpers --------------------------------------------------------
-function key() { return sessionStorage.getItem(KEY_STORAGE) || ''; }
-function setKey(k) { sessionStorage.setItem(KEY_STORAGE, k); }
-function clearKey() { sessionStorage.removeItem(KEY_STORAGE); }
+const TOKEN_KEY = 'ocrproxy_edge_token';
 
-async function api(method, path, body) {
-  const headers = { 'content-type': 'application/json' };
-  if (key()) headers['authorization'] = `Bearer ${key()}`;
-  const init = { method, headers };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  const r = await fetch(path, init);
-  const text = await r.text();
+// ---- Provider Presets Database -------------------------------------------
+const PRESET_DEFINITIONS = {
+  google: {
+    id: 'google',
+    name: 'Google AI Studio (Gemini)',
+    base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射与 Schema 裁剪适配',
+    recommended_models: [
+      { name: 'gemini-3.5-flash', upstream: 'gemini-3.5-flash', desc: '最新高性价比推理模型 (支持 low/medium/high 思考等级)', checked: true },
+      { name: 'gemini-3.5-pro', upstream: 'gemini-3.5-pro', desc: '最新旗舰强推理模型 (支持 low/high 思考等级)', checked: true },
+      { name: 'gemini-2.5-flash', upstream: 'gemini-2.5-flash', desc: '经典多模态快速模型', checked: false },
+      { name: 'gemini-2.5-pro', upstream: 'gemini-2.5-pro', desc: '经典多模态深度思考模型', checked: false },
+    ]
+  },
+  sensenova: {
+    id: 'sensenova',
+    name: '商汤日日新 (SenseNova)',
+    base_url: 'https://token.sensenova.cn/v1',
+    description: '商汤日日新大模型开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
+    recommended_models: [
+      { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '智谱/商汤最新 GLM-5.2 旗舰推理大模型', checked: true },
+      { name: 'deepseek-v3', upstream: 'DeepSeek-V3', desc: 'DeepSeek-V3 基础推理模型', checked: false },
+      { name: 'deepseek-r1', upstream: 'DeepSeek-R1', desc: 'DeepSeek-R1 深度思考推理模型', checked: false },
+    ]
+  },
+  stepfun: {
+    id: 'stepfun',
+    name: '阶跃星辰 (StepFun)',
+    base_url: 'https://api.stepfun.com/step_plan',
+    description: '阶跃星辰大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入',
+    recommended_models: [
+      { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: '阶跃最新闪电高速推理大模型', checked: true },
+      { name: 'step-2-16k', upstream: 'step-2-16k', desc: '阶跃 Step-2 旗舰大模型', checked: false },
+    ]
+  },
+  siliconflow: {
+    id: 'siliconflow',
+    name: '硅基流动 (SiliconFlow)',
+    base_url: 'https://api.siliconflow.cn/v1',
+    description: '硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5 等海量开源模型',
+    recommended_models: [
+      { name: 'deepseek-ai/DeepSeek-V3', upstream: 'deepseek-ai/DeepSeek-V3', desc: 'DeepSeek-V3 全尺寸旗舰模型', checked: true },
+      { name: 'deepseek-ai/DeepSeek-R1', upstream: 'deepseek-ai/DeepSeek-R1', desc: 'DeepSeek-R1 全尺寸深度思考模型', checked: false },
+      { name: 'Qwen/Qwen2.5-72B-Instruct', upstream: 'Qwen/Qwen2.5-72B-Instruct', desc: '通义千问 72B Instruct 指令模型', checked: false },
+    ]
+  },
+  tokenrhythm: {
+    id: 'tokenrhythm',
+    name: 'TokenRhythm',
+    base_url: 'https://api.tokenrhythm.com/v1',
+    description: 'TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换',
+    recommended_models: [
+      { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true },
+      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false },
+    ]
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek 官方开放平台',
+    base_url: 'https://api.deepseek.com/v1',
+    description: 'DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存',
+    recommended_models: [
+      { name: 'deepseek-chat', upstream: 'deepseek-chat', desc: 'DeepSeek-V3 快速对话大模型', checked: true },
+      { name: 'deepseek-reasoner', upstream: 'deepseek-reasoner', desc: 'DeepSeek-R1 深度思考推理大模型', checked: true },
+    ]
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI 官方 / 标准中转',
+    base_url: 'https://api.openai.com/v1',
+    description: 'OpenAI 官方 API 或标准兼容中转网关',
+    recommended_models: [
+      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能大模型', checked: true },
+      { name: 'gpt-4o-mini', upstream: 'gpt-4o-mini', desc: 'OpenAI GPT-4o-mini 高性价比快速模型', checked: true },
+      { name: 'o3-mini', upstream: 'o3-mini', desc: 'OpenAI 最新 o3-mini 快速推理思考模型', checked: false },
+      { name: 'o1', upstream: 'o1', desc: 'OpenAI o1 深度思考推理旗舰模型', checked: false },
+    ]
+  }
+};
+
+function getKey() {
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+
+function setKey(k) {
+  localStorage.setItem(TOKEN_KEY, k);
+}
+
+function clearKey() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function toast(msg, type = 'ok') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
+function copySnippet(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const text = el.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    toast('已复制到剪贴板', 'ok');
+  }).catch(() => {
+    toast('复制失败，请手动复制', 'err');
+  });
+}
+
+// ---- API wrapper ---------------------------------------------------------
+async function api(method, path, body = null) {
+  const token = getKey();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null,
+  });
+
+  const text = await res.text();
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch {}
-  if (!r.ok) {
-    const msg = data?.error?.message || text || `HTTP ${r.status}`;
-    throw new Error(msg);
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
+
+  if (res.status === 401) {
+    clearKey();
+    showLoginOverlay('凭证无效或已过期，请重新登录');
+    throw new Error('未授权 (401)');
+  }
+  if (!res.ok) {
+    throw new Error(data?.error?.message || data?.error || `HTTP ${res.status}`);
   }
   return data;
 }
 
-// ---- Toast --------------------------------------------------------------
-let toastTimer = null;
-function toast(msg, type = '') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast show ' + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+// ---- Navigation / Tabs ---------------------------------------------------
+function switchTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll('#topNav button').forEach(b => b.classList.remove('active'));
+  const btn = Array.from(document.querySelectorAll('#topNav button')).find(b => b.getAttribute('onclick')?.includes(tabId));
+  if (btn) btn.classList.add('active');
+
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(`panel-${tabId}`);
+  if (panel) panel.classList.add('active');
+
+  if (tabId === 'raw') renderRawJson();
+  if (tabId === 'access') renderAccess();
+  if (tabId === 'state') probeEgressIp();
 }
 
-// ---- Auth ----------------------------------------------------------------
-// Login flows:
-//   1. Probe GET /api/config to verify the key.
-//   2. If it succeeds → enter normally.
-//   3. If it fails with "use admin UI" / "KV not bound" (i.e. auth PASSED
-//      but the config store is empty/missing) → still let the user in
-//      with an empty cfg, so they can write the first config.
-//   4. Anything else (auth failed, etc.) → fail the login.
-function doLogin() {
-  const k = document.getElementById('loginKey').value.trim();
-  if (!k) { document.getElementById('loginErr').textContent = '请输入 key'; return; }
-  setKey(k);
-  // Probe /api/config to verify the key
-  api('GET', '/api/config').then((d) => {
-    document.getElementById('loginErr').textContent = '';
-    enterApp(d.config, d, false);
-  }).catch((e) => {
-    const msg = e?.message || '';
-    // The "use admin UI" / "KV not bound" / "AGENT_CONFIG_JSON" errors
-    // all mean auth passed but config store is not ready.  Let the user
-    // in with an empty config so they can fix it from the UI.
-    if (
-      msg.includes('use admin UI') ||
-      msg.includes('KV namespace is not bound') ||
-      msg.includes('AGENT_CONFIG_JSON')
-    ) {
-      enterApp({ providers: {}, agent_models: {} }, { source: 'empty', last_modified: null }, true);
-    } else {
-      clearKey();
-      document.getElementById('loginErr').textContent = '登录失败：' + msg;
-    }
-  });
-}
-
-function enterApp(config, meta, firstRun) {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appScreen').style.display = '';
-  document.getElementById('logoutBtn').style.display = '';
-  cfg = config || { providers: {}, agent_models: {} };
-  cfgMeta = meta || {};
-  renderAll();
-  if (firstRun) {
-    toast('KV 还没 config。填好后点 "保存到 KV"。', 'ok');
+// ---- Login Flow ----------------------------------------------------------
+function showLoginOverlay(errText = '') {
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  const err = document.getElementById('loginErr');
+  if (errText) {
+    err.textContent = errText;
+    err.style.display = 'block';
   } else {
+    err.style.display = 'none';
+  }
+}
+
+function hideLoginOverlay() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+}
+
+async function doLogin() {
+  const input = document.getElementById('loginKey').value.trim();
+  if (!input && !getKey()) {
+    showLoginOverlay('请输入 PROXY_API_KEY');
+    return;
+  }
+  if (input) setKey(input);
+
+  try {
+    await loadAllData();
+    hideLoginOverlay();
     toast('登录成功', 'ok');
+  } catch (e) {
+    showLoginOverlay('验证失败: ' + (e?.message || e));
   }
 }
 
 function doLogout() {
   clearKey();
-  cfg = null; cfgMeta = null; cooldowns = [];
-  document.getElementById('loginScreen').style.display = '';
-  document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('logoutBtn').style.display = 'none';
-  document.getElementById('loginKey').value = '';
+  showLoginOverlay();
 }
 
-document.getElementById('logoutBtn').addEventListener('click', doLogout);
-
-// ---- Tabs ---------------------------------------------------------------
-document.querySelectorAll('.tab').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach((p) => p.style.display = 'none');
-    btn.classList.add('active');
-    const id = btn.dataset.tab;
-    document.querySelector(`.pane[data-pane="${id}"]`).style.display = '';
-    if (id === 'state') refreshState();
-  });
-});
-
-// ---- Render: providers & keys -----------------------------------------
-function renderProviders() {
-  const root = document.getElementById('providersList');
-  if (!cfg) { root.innerHTML = '<p class="hint">未加载</p>'; return; }
-  const providers = cfg.providers || {};
-  const names = Object.keys(providers);
-  if (names.length === 0) {
-    root.innerHTML = '<p class="hint">还没有服务商，点右上"+ 新增服务商"开始。</p>';
-    return;
-  }
-  root.innerHTML = names.map((name) => {
-    const p = providers[name] || {};
-    const keys = p.keys || {};
-    const keyRows = Object.entries(keys).map(([label, value]) => `
-      <div class="field-row" data-key-row="${esc(name)}/${esc(label)}">
-        <label>${esc(label)}</label>
-        <input type="password" data-key-input="${esc(name)}/${esc(label)}" value="${esc(value)}" autocomplete="off" />
-        <button class="btn btn-sm btn-ghost" data-test-key="${esc(name)}/${esc(label)}">测试</button>
-        <button class="btn btn-sm btn-danger" data-del-key="${esc(name)}/${esc(label)}">删除</button>
-      </div>
-    `).join('');
-    return `
-      <div class="card" data-provider="${esc(name)}">
-        <div class="card-head">
-          <div class="card-title">📡 ${esc(name)}</div>
-          <div class="card-actions">
-            <button class="btn btn-sm" data-add-key="${esc(name)}">+ Key</button>
-            <button class="btn btn-sm btn-danger" data-del-provider="${esc(name)}">删除服务商</button>
-          </div>
-        </div>
-        <div class="field-row">
-          <label>base_url</label>
-          <input data-base="${esc(name)}" value="${esc(p.base_url || '')}" />
-        </div>
-        <div>${keyRows || '<p class="hint" style="margin:0">还没有 Key，点 "+ Key" 添加</p>'}</div>
-      </div>
-    `;
-  }).join('');
-
-  // Wire events
-  root.querySelectorAll('[data-base]').forEach((el) => {
-    el.addEventListener('change', (e) => { cfg.providers[e.target.dataset.base].base_url = e.target.value.trim(); });
-  });
-  root.querySelectorAll('[data-key-input]').forEach((el) => {
-    el.addEventListener('change', (e) => {
-      const [p, k] = e.target.dataset.keyInput.split('/');
-      cfg.providers[p].keys[k] = e.target.value;
-    });
-  });
-  root.querySelectorAll('[data-add-key]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const p = e.target.dataset.addKey;
-      const name = prompt('新 Key 标签（label）');
-      if (!name) return;
-      if (!cfg.providers[p].keys) cfg.providers[p].keys = {};
-      cfg.providers[p].keys[name] = '';
-      renderProviders();
-    });
-  });
-  root.querySelectorAll('[data-del-key]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const [p, k] = e.target.dataset.delKey.split('/');
-      if (!confirm(`删除 Key "${p}/${k}"？`)) return;
-      delete cfg.providers[p].keys[k];
-      renderProviders();
-    });
-  });
-  root.querySelectorAll('[data-del-provider]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const p = e.target.dataset.delProvider;
-      if (!confirm(`删除服务商 "${p}"？`)) return;
-      delete cfg.providers[p];
-      renderProviders();
-    });
-  });
-  root.querySelectorAll('[data-test-key]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const [p, k] = e.target.dataset.testKey.split('/');
-      testConnection(p, k);
-    });
-  });
-}
-
-function addProvider() {
-  const name = prompt('服务商名称（小写英文，如 sensenova）');
-  if (!name) return;
-  if (cfg.providers[name]) { toast('已存在', 'err'); return; }
-  cfg.providers[name] = { base_url: 'https://', keys: {} };
-  renderProviders();
-}
-
-// ---- Render: models -----------------------------------------------------
-function renderModels() {
-  const root = document.getElementById('modelsList');
-  if (!cfg) { root.innerHTML = '<p class="hint">未加载</p>'; return; }
-  const models = cfg.agent_models || {};
-  const names = Object.keys(models);
-  if (names.length === 0) {
-    root.innerHTML = '<p class="hint">还没有模型。</p>';
-    return;
-  }
-  root.innerHTML = names.map((name) => {
-    const m = models[name] || {};
-    const bindings = Array.isArray(m.keys) ? m.keys : [];
-    const bindingRows = bindings.map((b, idx) => {
-      const providerOptions = Object.keys(cfg.providers || {}).map((p) =>
-        `<option value="${esc(p)}" ${p === b.provider ? 'selected' : ''}>${esc(p)}</option>`
-      ).join('');
-      const keyOptions = (() => {
-        if (!b.provider || !cfg.providers[b.provider]) return '';
-        return Object.keys(cfg.providers[b.provider].keys || {}).map((k) =>
-          `<option value="${esc(k)}" ${k === b.key ? 'selected' : ''}>${esc(k)}</option>`
-        ).join('');
-      })();
-      return `
-        <div class="field-row" data-binding-row="${esc(name)}/${idx}">
-          <select data-bind-provider="${esc(name)}/${idx}">
-            <option value="">— provider —</option>
-            ${providerOptions}
-          </select>
-          <select data-bind-key="${esc(name)}/${idx}">
-            <option value="">— key —</option>
-            ${keyOptions}
-          </select>
-          <input placeholder="upstream_model（可空）" data-bind-upstream="${esc(name)}/${idx}" value="${esc(b.upstream_model || '')}" />
-          <button class="btn btn-sm btn-danger" data-del-binding="${esc(name)}/${idx}">删除</button>
-        </div>
-      `;
-    }).join('');
-    return `
-      <div class="card" data-model="${esc(name)}">
-        <div class="card-head">
-          <div class="card-title">🤖 ${esc(name)}</div>
-          <div class="card-actions">
-            <button class="btn btn-sm" data-add-binding="${esc(name)}">+ 绑定</button>
-            <button class="btn btn-sm btn-danger" data-del-model="${esc(name)}">删除模型</button>
-          </div>
-        </div>
-        <div>${bindingRows || '<p class="hint" style="margin:0">还没有绑定</p>'}</div>
-      </div>
-    `;
-  }).join('');
-
-  // Wire events
-  root.querySelectorAll('[data-bind-provider]').forEach((el) => {
-    el.addEventListener('change', (e) => {
-      const [name, idx] = e.target.dataset.bindProvider.split('/');
-      const bindings = cfg.agent_models[name].keys;
-      bindings[+idx].provider = e.target.value;
-      bindings[+idx].key = '';
-      renderModels(); // re-render so the key dropdown updates
-    });
-  });
-  root.querySelectorAll('[data-bind-key]').forEach((el) => {
-    el.addEventListener('change', (e) => {
-      const [name, idx] = e.target.dataset.bindKey.split('/');
-      cfg.agent_models[name].keys[+idx].key = e.target.value;
-    });
-  });
-  root.querySelectorAll('[data-bind-upstream]').forEach((el) => {
-    el.addEventListener('change', (e) => {
-      const [name, idx] = e.target.dataset.bindUpstream.split('/');
-      const v = e.target.value.trim();
-      if (v) cfg.agent_models[name].keys[+idx].upstream_model = v;
-      else delete cfg.agent_models[name].keys[+idx].upstream_model;
-    });
-  });
-  root.querySelectorAll('[data-add-binding]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      cfg.agent_models[e.target.dataset.addBinding].keys.push({ provider: '', key: '' });
-      renderModels();
-    });
-  });
-  root.querySelectorAll('[data-del-binding]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const [name, idx] = e.target.dataset.delBinding.split('/');
-      cfg.agent_models[name].keys.splice(+idx, 1);
-      renderModels();
-    });
-  });
-  root.querySelectorAll('[data-del-model]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      const name = e.target.dataset.delModel;
-      if (!confirm(`删除模型 "${name}"？`)) return;
-      delete cfg.agent_models[name];
-      renderModels();
-    });
-  });
-}
-
-function addModel() {
-  const name = prompt('模型 ID（如 deepseek-v4-flash）');
-  if (!name) return;
-  if (cfg.agent_models[name]) { toast('已存在', 'err'); return; }
-  cfg.agent_models[name] = { keys: [] };
-  renderModels();
-}
-
-// ---- Render: state -----------------------------------------------------
-async function refreshState() {
+// ---- Data Fetching -------------------------------------------------------
+async function loadAllData() {
   try {
-    const data = await api('GET', '/api/state');
-    cooldowns = data.cooldowns || [];
-    renderState();
-  } catch (e) {
-    document.getElementById('stateList').innerHTML = `<p class="err">读取 KV 状态失败：${esc(e.message)}</p>`;
-  }
-}
+    const [cfgRes, healthRes, stateRes] = await Promise.all([
+      api('GET', '/api/config'),
+      api('GET', '/health').catch(() => ({})),
+      api('GET', '/api/state').catch(() => ({ cooldowns: [] })),
+    ]);
 
-function renderState() {
-  const root = document.getElementById('stateList');
-  if (cooldowns.length === 0) {
-    root.innerHTML = '<p class="hint">没有 cooldown 记录。</p>';
-    return;
-  }
-  const inCooldown = cooldowns.filter((c) => c.inCooldown);
-  const clean = cooldowns.filter((c) => !c.inCooldown);
-  const fmt = (ms) => {
-    if (ms <= 0) return '—';
-    if (ms < 60_000) return `${Math.ceil(ms/1000)}s`;
-    return `${Math.ceil(ms/60_000)}m ${Math.floor((ms%60_000)/1000)}s`;
-  };
-  const renderRow = (c) => `
-    <div class="kv-row ${c.inCooldown ? 'bad' : 'cool'}" data-state-row="${esc(c.provider)}/${esc(c.keyLabel)}">
-      <span>📡 <b>${esc(c.provider)}</b></span>
-      <span>🔑 ${esc(c.keyLabel)} <span class="ts">(${esc(c.upstreamModel)})</span></span>
-      <span>${c.inCooldown ? '⏱ 冷却中 剩余 ' + fmt(c.remainingMs) : '✅ 正常'}${c.consecutiveFailures > 0 ? ' · 失败 ' + c.consecutiveFailures + ' 次' : ''}</span>
-      <button class="btn btn-sm btn-ghost" data-clear-key="${esc(c.provider)}/${esc(c.keyLabel)}">清除</button>
-    </div>
-  `;
-  let html = '';
-  if (inCooldown.length) {
-    html += `<h3 style="margin:16px 0 8px 0;font-size:13px;color:var(--danger)">冷却中 (${inCooldown.length})</h3>`;
-    html += inCooldown.map(renderRow).join('');
-  }
-  if (clean.length) {
-    html += `<h3 style="margin:16px 0 8px 0;font-size:13px;color:var(--text-2)">正常 (${clean.length})</h3>`;
-    html += clean.map(renderRow).join('');
-  }
-  root.innerHTML = html;
-  root.querySelectorAll('[data-clear-key]').forEach((el) => {
-    el.addEventListener('click', async (e) => {
-      const [p, k] = e.target.dataset.clearKey.split('/');
-      await clearKeyCooldown(p, k);
-    });
-  });
-}
+    cfg = cfgRes.config || cfgRes;
+    cfgMeta = {
+      source: cfgRes.source || 'EdgeOne KV',
+      lastModified: cfgRes.last_modified,
+    };
+    healthData = healthRes;
+    stateData = stateRes.cooldowns || [];
 
-async function clearAllCooldowns() {
-  if (!confirm('清空所有 key 的 cooldown 和失败计数？')) return;
-  try {
-    await api('DELETE', '/api/state');
-    toast('已清空', 'ok');
-    refreshState();
-  } catch (e) {
-    toast('清空失败：' + e.message, 'err');
-  }
-}
-
-async function clearKeyCooldown(provider, keyLabel) {
-  // We use DELETE /api/state?provider=...&key=... — but our endpoint
-  // doesn't support that yet.  For now, just clear all and let the
-  // operator pick the right one manually.
-  await clearAllCooldowns();
-}
-
-// ---- Raw JSON editor ----------------------------------------------------
-function renderRawJson() {
-  const ta = document.getElementById('rawJson');
-  ta.value = JSON.stringify(cfg, null, 2);
-}
-async function saveRawConfig() {
-  const ta = document.getElementById('rawJson');
-  const errEl = document.getElementById('rawErr');
-  errEl.textContent = '';
-  let parsed;
-  try {
-    parsed = JSON.parse(ta.value);
-  } catch (e) {
-    errEl.textContent = 'JSON 解析失败：' + e.message;
-    return;
-  }
-  try {
-    const res = await api('POST', '/api/config', { config: parsed });
-    toast('已保存到 KV，' + (res.propagation_hint || ''), 'ok');
-    cfg = res.config;
-    if (res.last_modified) cfgMeta.last_modified = res.last_modified;
-    cfgMeta.source = res.source || 'kv';
     renderAll();
   } catch (e) {
-    errEl.textContent = '保存失败：' + e.message;
+    console.error('Failed to load data', e);
+    throw e;
   }
 }
 
-// ---- Test connection ---------------------------------------------------
-async function testConnection(provider, keyLabel) {
-  toast(`测试 ${provider}/${keyLabel} ...`);
+// ---- Egress IP probe -----------------------------------------------------
+async function probeEgressIp() {
+  const clientEl = document.getElementById('ipClient');
+  const egressEl = document.getElementById('ipEgress');
+  const nodeEl = document.getElementById('ipNode');
+  const geoEl = document.getElementById('ipGeo');
+
+  if (clientEl) clientEl.textContent = '探测中...';
+  if (egressEl) egressEl.textContent = '探测中...';
+
   try {
-    const res = await api('POST', '/api/test', { provider, key: keyLabel });
-    if (res.ok) toast(`✅ ${res.verdict} (${res.latency_ms}ms)`, 'ok');
-    else toast(`❌ ${res.verdict}`, 'err');
+    const data = await api('GET', '/check-ip');
+    ipData = data;
+    if (clientEl) clientEl.textContent = data.client_ip || '—';
+    if (egressEl) egressEl.textContent = data.egress_ip || '—';
+    if (nodeEl) nodeEl.textContent = data.node_uuid || '—';
+    if (geoEl) geoEl.textContent = `${data.geo?.country || ''} ${data.geo?.region || ''} ${data.geo?.city || ''}`.trim() || '边缘节点网络';
   } catch (e) {
-    toast('测试失败：' + e.message, 'err');
+    if (clientEl) clientEl.textContent = '获取失败';
+    if (egressEl) egressEl.textContent = '获取失败';
   }
 }
 
-// ---- Wiring ------------------------------------------------------------
+// ---- Rendering -----------------------------------------------------------
 function renderAll() {
-  const sourceLabel = cfgMeta?.source === 'kv' ? 'KV'
-    : cfgMeta?.source === 'env' ? 'ENV'
-    : cfgMeta?.source === 'empty' ? '空'
-    : '?';
-  const sourceClass = cfgMeta?.source === 'kv' ? 'ok'
-    : cfgMeta?.source === 'empty' ? 'warn'
-    : (cfgMeta?.source === 'env' ? 'warn' : '');
-  document.getElementById('configSource').textContent = sourceLabel;
-  document.getElementById('configSource').className = 'badge ' + sourceClass;
+  renderDashboard();
+  renderAgentModels();
   renderProviders();
-  renderModels();
+  renderStateTable();
   renderRawJson();
-  refreshState();
+  renderAccess();
 }
 
-// ---- ESC helpers --------------------------------------------------------
-function esc(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// ---- Init ---------------------------------------------------------------
-window.addEventListener('DOMContentLoaded', () => {
-  // Auto-login if a key is already in storage
-  if (key()) {
-    doLogin();
+function renderDashboard() {
+  const models = Object.keys(cfg.agent_models || {});
+  const providers = cfg.providers || {};
+  let totalKeys = 0;
+  for (const p of Object.values(providers)) {
+    totalKeys += Object.keys(p.keys || {}).length;
   }
-  document.getElementById('loginKey').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doLogin();
-  });
+
+  const activeCooldowns = stateData.filter(s => s.expiresAt > Date.now());
+
+  document.getElementById('statModelCount').textContent = models.length;
+  document.getElementById('statTotalKeys').textContent = totalKeys;
+  document.getElementById('statCooldowns').textContent = activeCooldowns.length;
+
+  const badge = document.getElementById('configSourceBadge');
+  if (badge) {
+    badge.textContent = `${cfgMeta.source || 'KV'} 同步中`;
+  }
+
+  // Quick models table
+  const tbody = document.getElementById('quickModelsBody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    if (models.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-secondary" style="text-align:center;padding:24px;">暂未配置 Agent 模型</td></tr>';
+      return;
+    }
+
+    for (const m of models) {
+      const item = cfg.agent_models[m];
+      const keys = item.keys || [];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600;"><span class="mono">${m}</span></td>
+        <td class="mono text-secondary">${item.upstream_model || m}</td>
+        <td><span class="badge badge-neutral">${keys.length} 个候选 Key</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="switchTab('agents')">查看</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+}
+
+function renderStateTable() {
+  const tbody = document.getElementById('stateTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!stateData || stateData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-secondary" style="text-align:center;padding:24px;">无冷却记录</td></tr>';
+    return;
+  }
+
+  const now = Date.now();
+  for (const c of stateData) {
+    const isCooling = c.expiresAt > now;
+    const remainingSec = isCooling ? Math.round((c.expiresAt - now) / 1000) : 0;
+    const expStr = isCooling ? `${remainingSec}s 后恢复` : '已解冻';
+    const badgeHtml = isCooling
+      ? `<span class="badge badge-warning">冷却中 (${c.cooldownSec || remainingSec}s)</span>`
+      : `<span class="badge badge-success">正常就绪</span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight:600;">${c.provider}</td>
+      <td class="mono">${c.keyLabel}</td>
+      <td>${badgeHtml}</td>
+      <td class="mono">${c.failCount || 0} 次</td>
+      <td class="mono">${expStr}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderAgentModels() {
+  const box = document.getElementById('agentModelsBox');
+  if (!box) return;
+  box.innerHTML = '';
+  const models = Object.keys(cfg.agent_models || {});
+
+  if (models.length === 0) {
+    box.innerHTML = '<div class="card card-pad empty">暂未配置 Agent 模型</div>';
+    return;
+  }
+
+  for (const m of models) {
+    const item = cfg.agent_models[m];
+    const keys = item.keys || [];
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    let keysRowsHtml = '';
+    keys.forEach((b, idx) => {
+      const cacheKey = `${b.provider}:${b.key}`;
+      const latInfo = modelLatencyCache[cacheKey];
+      let latBadge = '';
+      if (latInfo) {
+        latBadge = latInfo.ok
+          ? `<span class="badge badge-success">${latInfo.latency_ms}ms</span>`
+          : `<span class="badge badge-error">${latInfo.status}</span>`;
+      }
+
+      keysRowsHtml += `
+        <div class="provider-row" style="padding:10px 16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge badge-neutral">#${idx+1}</span>
+            <span style="font-weight:600;">${b.provider}</span>
+            <span class="key-chip">${b.key}</span>
+            ${latBadge}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm" onclick="testSingleKey('${b.provider}', '${b.key}')">探活</button>
+            <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('${m}', ${idx})">移除</button>
+          </div>
+        </div>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="card-head">
+        <div>
+          <h3>${m}</h3>
+        <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${keys.length} 个 Key</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="openEditModelModal('${m}')">编辑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteModel('${m}')">删除</button>
+        </div>
+      </div>
+      <div style="background:var(--color-bg-page);">${keysRowsHtml || '<div class="empty">暂未绑定 Key</div>'}</div>
+    `;
+    box.appendChild(card);
+  }
+}
+
+function renderProviders() {
+  const box = document.getElementById('providersBox');
+  if (!box) return;
+  box.innerHTML = '';
+  const providers = cfg.providers || {};
+  const provNames = Object.keys(providers);
+
+  if (provNames.length === 0) {
+    box.innerHTML = '<div class="card card-pad empty">暂未配置供应商</div>';
+    return;
+  }
+
+  for (const p of provNames) {
+    const prov = providers[p];
+    const keysObj = prov.keys || {};
+    const keyLabels = Object.keys(keysObj);
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    let keysListHtml = '';
+    keyLabels.forEach(k => {
+      const val = keysObj[k];
+      const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
+      const cacheKey = `${p}:${k}`;
+      const latInfo = modelLatencyCache[cacheKey];
+      let latBadge = '';
+      if (latInfo) {
+        latBadge = latInfo.ok
+          ? `<span class="badge badge-success">${latInfo.latency_ms}ms</span>`
+          : `<span class="badge badge-error">${latInfo.status}</span>`;
+      }
+
+      keysListHtml += `
+        <div class="provider-row" style="padding:10px 16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-weight:600;">${k}</span>
+            <span class="mono text-secondary" style="font-size:12px;">${masked}</span>
+            ${latBadge}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm" onclick="testSingleKey('${p}', '${k}')">测试</button>
+            <button class="btn btn-ghost btn-sm" onclick="openEditKeyModal('${p}', '${k}', '${val}')">编辑</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteKey('${p}', '${k}')">删除</button>
+          </div>
+        </div>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="card-head">
+        <div>
+          <h3>${p}</h3>
+        <div class="meta mono mt-2">${prov.base_url || '—'} · ${keyLabels.length} 个 Key</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${p}')">+ 新增 Key</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${p}')">删除供应商</button>
+        </div>
+      </div>
+      <div style="background:var(--color-bg-page);">${keysListHtml || '<div class="empty">暂无 Key</div>'}</div>
+    `;
+    box.appendChild(card);
+  }
+}
+
+function renderRawJson() {
+  const ta = document.getElementById('rawJsonText');
+  if (ta) ta.value = JSON.stringify(cfg, null, 2);
+}
+
+function renderAccess() {
+  const origin = window.location.origin;
+  document.getElementById('accBaseUrl').textContent = `${origin}/v1`;
+  const models = Object.keys(cfg.agent_models || {});
+  document.getElementById('accModelsList').textContent = models.join(', ') || '—';
+
+  const pySample = `from openai import OpenAI
+
+client = OpenAI(
+    api_key="${getKey() || 'YOUR_PROXY_API_KEY'}",
+    base_url="${origin}/v1"
+)
+
+response = client.chat.completions.create(
+    model="${models[0] || 'glm-5.2'}",
+    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
+    stream=True
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content or ""
+    print(content, end="", flush=True)
+`;
+  document.getElementById('accPy').textContent = pySample;
+
+  const curlSample = `curl -X POST ${origin}/v1/chat/completions \\
+  -H "Authorization: Bearer ${getKey() || 'YOUR_PROXY_API_KEY'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${models[0] || 'glm-5.2'}",
+    "messages": [{"role": "user", "content": "1+1="}],
+    "stream": true
+  }'`;
+  document.getElementById('accCurl').textContent = curlSample;
+}
+
+// ---- Key Test ------------------------------------------------------------
+async function testSingleKey(provider, key) {
+  toast(`探活 ${provider}/${key}...`, 'ok');
+  try {
+    const res = await api('POST', '/api/test', { provider, key });
+    modelLatencyCache[`${provider}:${key}`] = res;
+    renderAgentModels();
+    renderProviders();
+    if (res.ok) {
+      toast(`${provider}/${key} 连接成功 (${res.latency_ms}ms)`, 'ok');
+    } else {
+      toast(`${provider}/${key} 失败 (HTTP ${res.status})`, 'err');
+    }
+  } catch (e) {
+    toast(`探活异常: ${e?.message || e}`, 'err');
+  }
+}
+
+// ---- Modals & Actions ----------------------------------------------------
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+// Preset Selection Handler
+function onPresetSelected() {
+  const presetId = document.getElementById('m_prov_preset').value;
+  const nameInput = document.getElementById('m_prov_name');
+  const urlInput = document.getElementById('m_prov_url');
+  const descEl = document.getElementById('m_prov_desc');
+  const modelsWrap = document.getElementById('m_prov_models_wrap');
+  const modelsList = document.getElementById('m_prov_models_list');
+
+  if (!presetId || !PRESET_DEFINITIONS[presetId]) {
+    nameInput.value = '';
+    urlInput.value = '';
+    descEl.style.display = 'none';
+    modelsWrap.style.display = 'none';
+    modelsList.innerHTML = '';
+    return;
+  }
+
+  const preset = PRESET_DEFINITIONS[presetId];
+  nameInput.value = preset.id;
+  urlInput.value = preset.base_url;
+  descEl.textContent = preset.description || '';
+  descEl.style.display = 'block';
+
+  // Render recommended models checklist
+  modelsList.innerHTML = '';
+  if (preset.recommended_models && preset.recommended_models.length > 0) {
+    modelsWrap.style.display = 'block';
+    preset.recommended_models.forEach((rm) => {
+      const row = document.createElement('div');
+      row.style.marginBottom = '6px';
+      row.innerHTML = `
+        <label class="checkbox" style="align-items:flex-start;">
+          <input type="checkbox" data-model="${rm.name}" data-upstream="${rm.upstream}" ${rm.checked ? 'checked' : ''}>
+          <div style="font-size:12px;">
+            <div style="font-weight:600;color:var(--color-text-1);">${rm.name} <span class="mono text-secondary" style="font-weight:normal;">(映射: ${rm.upstream})</span></div>
+            <div class="text-secondary" style="font-size:11px;margin-top:2px;">${rm.desc || ''}</div>
+          </div>
+        </label>
+      `;
+      modelsList.appendChild(row);
+    });
+  } else {
+    modelsWrap.style.display = 'none';
+  }
+}
+
+function openAddProviderModal() {
+  document.getElementById('providerModalTitle').textContent = '新增供应商';
+  document.getElementById('presetSelectGroup').style.display = 'block';
+  document.getElementById('m_prov_preset').value = '';
+  document.getElementById('m_prov_name').value = '';
+  document.getElementById('m_prov_name').disabled = false;
+  document.getElementById('m_prov_url').value = '';
+  document.getElementById('m_prov_key_label').value = 'default';
+  document.getElementById('m_prov_key_val').value = '';
+  document.getElementById('m_prov_init_key_wrap').style.display = 'block';
+  document.getElementById('m_prov_desc').style.display = 'none';
+  document.getElementById('m_prov_models_wrap').style.display = 'none';
+  openModal('providerModal');
+}
+
+async function saveProviderModal() {
+  const name = document.getElementById('m_prov_name').value.trim();
+  const url = document.getElementById('m_prov_url').value.trim();
+  if (!name || !url) { toast('请填写供应商与 Base URL', 'err'); return; }
+
+  cfg.providers = cfg.providers || {};
+  cfg.providers[name] = cfg.providers[name] || { keys: {} };
+  cfg.providers[name].base_url = url;
+
+  const keyLabel = document.getElementById('m_prov_key_label').value.trim() || 'default';
+  const keyVal = document.getElementById('m_prov_key_val').value.trim();
+
+  // If initial API Key provided, save it
+  if (keyVal) {
+    cfg.providers[name].keys = cfg.providers[name].keys || {};
+    cfg.providers[name].keys[keyLabel] = keyVal;
+  }
+
+  // If recommended models were checked, auto-register / bind them
+  const checkedModels = document.querySelectorAll('#m_prov_models_list input[type="checkbox"]:checked');
+  if (checkedModels.length > 0) {
+    cfg.agent_models = cfg.agent_models || {};
+    const keyToBind = keyVal ? keyLabel : Object.keys(cfg.providers[name].keys || {})[0] || 'default';
+
+    checkedModels.forEach((cb) => {
+      const modelName = cb.dataset.model;
+      const upstream = cb.dataset.upstream || modelName;
+
+      if (!cfg.agent_models[modelName]) {
+        cfg.agent_models[modelName] = {
+          upstream_model: upstream,
+          keys: [{ provider: name, key: keyToBind }],
+        };
+      } else {
+        const existingKeys = cfg.agent_models[modelName].keys || [];
+        if (!existingKeys.some((b) => b.provider === name && b.key === keyToBind)) {
+          existingKeys.push({ provider: name, key: keyToBind });
+          cfg.agent_models[modelName].keys = existingKeys;
+        }
+      }
+    });
+  }
+
+  closeModal('providerModal');
+  await persistConfig();
+}
+
+async function deleteProvider(name) {
+  if (!confirm(`删除供应商「${name}」及其全部 Key？`)) return;
+  delete cfg.providers[name];
+  await persistConfig();
+}
+
+function openAddKeyModal(prov) {
+  document.getElementById('keyModalTitle').textContent = `为 ${prov} 新增 Key`;
+  document.getElementById('m_key_prov').value = prov;
+  document.getElementById('m_key_label').value = '';
+  document.getElementById('m_key_val').value = '';
+  openModal('keyModal');
+}
+
+function openEditKeyModal(prov, label, val) {
+  document.getElementById('keyModalTitle').textContent = `编辑 ${prov} Key: ${label}`;
+  document.getElementById('m_key_prov').value = prov;
+  document.getElementById('m_key_label').value = label;
+  document.getElementById('m_key_val').value = val;
+  openModal('keyModal');
+}
+
+async function saveKeyModal() {
+  const prov = document.getElementById('m_key_prov').value;
+  const label = document.getElementById('m_key_label').value.trim();
+  const val = document.getElementById('m_key_val').value.trim();
+  if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
+
+  cfg.providers[prov] = cfg.providers[prov] || { keys: {} };
+  cfg.providers[prov].keys = cfg.providers[prov].keys || {};
+  cfg.providers[prov].keys[label] = val;
+
+  closeModal('keyModal');
+  await persistConfig();
+}
+
+async function deleteKey(prov, label) {
+  if (!confirm(`删除 Key「${label}」？`)) return;
+  delete cfg.providers[prov].keys[label];
+  await persistConfig();
+}
+
+function openAddModelModal() {
+  document.getElementById('agentModalTitle').textContent = '新增 Agent 模型';
+  document.getElementById('m_model_name').value = '';
+  document.getElementById('m_model_name').disabled = false;
+  document.getElementById('m_upstream_model').value = '';
+  renderBindingsCheckboxes([]);
+  openModal('agentModal');
+}
+
+function openEditModelModal(m) {
+  document.getElementById('agentModalTitle').textContent = `编辑 Agent 模型: ${m}`;
+  document.getElementById('m_model_name').value = m;
+  document.getElementById('m_model_name').disabled = true;
+  const item = cfg.agent_models[m] || {};
+  document.getElementById('m_upstream_model').value = item.upstream_model || '';
+  renderBindingsCheckboxes(item.keys || []);
+  openModal('agentModal');
+}
+
+function renderBindingsCheckboxes(existingKeys = []) {
+  const container = document.getElementById('m_bindings_container');
+  container.innerHTML = '';
+  const providers = cfg.providers || {};
+
+  let count = 0;
+  for (const [p, prov] of Object.entries(providers)) {
+    for (const k of Object.keys(prov.keys || {})) {
+      count++;
+      const isChecked = existingKeys.some(b => b.provider === p && b.key === k);
+      const div = document.createElement('div');
+      div.style.marginBottom = '6px';
+      div.innerHTML = `
+        <label class="checkbox">
+          <input type="checkbox" data-provider="${p}" data-key="${k}" ${isChecked ? 'checked' : ''}>
+          <span><b>${p}</b> / ${k}</span>
+        </label>
+      `;
+      container.appendChild(div);
+    }
+  }
+  if (count === 0) {
+    container.innerHTML = '<div class="text-secondary" style="font-size:12px;">暂无可用的 Key，请先添加供应商与 Key</div>';
+  }
+}
+
+async function saveAgentModal() {
+  const name = document.getElementById('m_model_name').value.trim();
+  const upstream = document.getElementById('m_upstream_model').value.trim();
+  if (!name) { toast('请输入模型名称', 'err'); return; }
+
+  const checkedBoxes = document.querySelectorAll('#m_bindings_container input[type="checkbox"]:checked');
+  const keys = Array.from(checkedBoxes).map(cb => ({
+    provider: cb.dataset.provider,
+    key: cb.dataset.key,
+  }));
+
+  if (keys.length === 0) {
+    toast('请至少勾选一个候选 Key 绑定', 'err');
+    return;
+  }
+
+  cfg.agent_models = cfg.agent_models || {};
+  cfg.agent_models[name] = { keys };
+  if (upstream) cfg.agent_models[name].upstream_model = upstream;
+
+  closeModal('agentModal');
+  await persistConfig();
+}
+
+async function removeModelKeyBinding(modelName, index) {
+  if (cfg.agent_models?.[modelName]?.keys) {
+    cfg.agent_models[modelName].keys.splice(index, 1);
+    await persistConfig();
+  }
+}
+
+async function deleteModel(name) {
+  if (!confirm(`删除模型「${name}」？`)) return;
+  delete cfg.agent_models[name];
+  await persistConfig();
+}
+
+// ---- Clear Cooldowns -----------------------------------------------------
+async function clearAllCooldowns() {
+  if (!confirm('清空全部 Key 冷却与失败计数？')) return;
+  try {
+    await api('DELETE', '/api/state');
+    toast('冷却已清空', 'ok');
+    await loadAllData();
+  } catch (e) {
+    toast('操作失败: ' + (e?.message || e), 'err');
+  }
+}
+
+// ---- Config Export & Import (JSON / Blob) --------------------------------
+function exportConfigJson() {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `ocrproxy_edgeone_config_${timestamp}.json`;
+    const jsonStr = JSON.stringify(cfg, null, 2);
+
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast(`配置已导出: ${filename}`, 'ok');
+  } catch (e) {
+    toast('导出失败: ' + (e?.message || e), 'err');
+  }
+}
+
+function triggerImportConfig() {
+  const fileInput = document.getElementById('configFileImportInput');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function handleConfigFileImport(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const content = e.target.result;
+      const parsed = JSON.parse(content);
+
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('导入文件不是有效的 JSON 对象');
+      }
+
+      if (!parsed.providers && !parsed.agent_models) {
+        throw new Error('未检测到 providers 或 agent_models 配置节点');
+      }
+
+      const countProv = Object.keys(parsed.providers || {}).length;
+      const countModels = Object.keys(parsed.agent_models || {}).length;
+
+      if (!confirm(`导入配置包含 ${countProv} 个供应商与 ${countModels} 个模型，覆盖当前 KV 配置？`)) {
+        return;
+      }
+
+      cfg = parsed;
+      await persistConfig();
+      toast('配置已导入', 'ok');
+    } catch (err) {
+      toast('导入失败: ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---- Raw JSON ------------------------------------------------------------
+function formatRawJson() {
+  const ta = document.getElementById('rawJsonText');
+  try {
+    const parsed = JSON.parse(ta.value);
+    ta.value = JSON.stringify(parsed, null, 2);
+    document.getElementById('rawJsonErr').style.display = 'none';
+  } catch (e) {
+    const errEl = document.getElementById('rawJsonErr');
+    errEl.textContent = 'JSON 格式错误: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function saveRawJson() {
+  const ta = document.getElementById('rawJsonText');
+  const errEl = document.getElementById('rawJsonErr');
+  try {
+    const parsed = JSON.parse(ta.value);
+    errEl.style.display = 'none';
+    cfg = parsed;
+    await persistConfig();
+  } catch (e) {
+    errEl.textContent = 'JSON 格式解析失败: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function persistConfig() {
+  try {
+    const res = await api('POST', '/api/config', cfg);
+    cfgMeta = res;
+    renderAll();
+    toast('配置已保存', 'ok');
+  } catch (e) {
+    toast('保存失败: ' + (e?.message || e), 'err');
+  }
+}
+
+// ---- Init ----------------------------------------------------------------
+window.addEventListener('DOMContentLoaded', () => {
+  if (getKey()) {
+    doLogin();
+  } else {
+    showLoginOverlay();
+  }
 });

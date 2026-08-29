@@ -25,30 +25,19 @@
 
 ```
 ocrproxy/
-├── vm-app/                        # VM 部署版本（生产环境）
-│   ├── app/
-│   │   ├── main.py                # FastAPI 应用入口
-│   │   ├── scheduler.py           # 故障转移调度器（并发控制、内存回收）
-│   │   ├── proxy_routes.py        # 代理路由 /v1/*
-│   │   ├── admin_routes.py        # 管理路由 /api/admin/*
-│   │   ├── config_store.py        # 加密配置存储
-│   │   ├── stats.py               # 内存统计模块
-│   │   └── auth.py                # 鉴权工具
-│   ├── static/
-│   │   └── admin.html             # 管理面板（SPA）
-│   ├── client/
-│   │   ├── proxy_client.py        # Python 客户端封装
-│   │   └── example.py             # 使用示例
-│   ├── scripts/
-│   │   ├── init_config.py         # 配置初始化脚本
-│   │   └── health-check.sh        # 健康检查脚本
-│   ├── install.sh                 # 一键安装脚本
-│   ├── ocrproxy.service           # systemd 服务模板
-│   ├── ocrproxy-health.timer      # 健康检查定时器（60s）
-│   ├── ocrproxy-restart.timer     # 每日重启定时器（04:00）
-│   ├── Caddyfile.example          # Caddy 反向代理配置示例
-│   ├── requirements.txt
-│   └── README.md                  # 详细部署文档
+├── vm-app/                        # VM 部署版本（生产环境：KB 模式 + 集中调度）
+│   ├── app/                       # FastAPI 应用与调度引擎
+│   ├── static/                    # 管理面板静态资源
+│   ├── client/                    # Python 客户端封装与示例
+│   └── scripts/                   # 初始化与运维健康检查
+├── edgeone/                       # EdgeOne Makers Serverless 边缘中转版本
+│   ├── edge-functions/            # V8 边缘函数 (/, /v1/*, /api/*, /health, /check-ip)
+│   ├── cloud-functions/           # Python 云函数 (长上下文备用)
+│   ├── admin.html / css / js      # 现代管理后台前端源码 (自动打包为单文件边缘函数)
+│   ├── edgeone.json               # EdgeOne 项目部署配置
+│   ├── package.json               # 构建与自动化测试套件
+│   └── scripts/                   # 构建打包与 Node 单元测试
+├── hermes-gemini-vertex-adaptation.md # Gemini / Vertex AI 适配技术文档
 ├── .gitignore
 └── README.md                      # 本文件
 ```

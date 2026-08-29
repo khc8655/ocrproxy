@@ -1,0 +1,42 @@
+{
+  "slug": "form-error",
+  "schemaVersion": 2,
+  "name": "Form Error",
+  "category": "Feedback",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "field-validation", "evidence": "Input validation error states in forms"}
+  ],
+  "variantDimensions": [
+    {"axis": "variant", "values": ["input-error"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Input Error State",
+      "whySelected": "Field-level validation error display",
+      "traits": {
+        "inputBorder": "1px solid var(--color-danger)",
+        "inputFocusShadow": "0 0 0 3px rgba(220, 38, 38, 0.12)",
+        "captionColor": "var(--color-danger)",
+        "captionFontSize": "12px",
+        "captionMarginTop": "4px",
+        "iconColor": "var(--color-danger)",
+        "iconSize": "14px"
+      },
+      "childrenDigest": "input with red border + error caption with red icon and text"
+    }
+  ],
+  "anatomy": {
+    "root": "div.form-field with .has-error modifier",
+    "children": ["label", "input/select", "error message"],
+    "states": {"default": "normal border", "error": "red border + red caption"}
+  },
+  "structurePatterns": [
+    "<div class='form-field has-error'><label>名称</label><input type='text'><p class='error-msg'><svg>...</svg>必填字段</p></div>"
+  ],
+  "usageHints": {"priorityHint": "primary", "spacing": "4px between input and error caption", "placement": "immediately below offending field"},
+  "doNotInvent": ["tooltip errors", "popover errors", "shake animation", "inline icon inside input"],
+  "unknowns": [],
+  "keyInsightSeed": "Field-level validation: red border, red icon and caption below input"
+}

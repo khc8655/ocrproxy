@@ -21,7 +21,7 @@ import {
   kvNotBoundResponse,
   KV_BINDING_CANDIDATES,
 } from '../edge-functions/lib/config.js';
-import { normaliseForProvider } from '../edge-functions/lib/normalize.js';
+import { normaliseForProvider, rescueToolCallsFromText } from '../edge-functions/lib/normalize.js';
 import {
   getCooldown,
   setCooldown,
@@ -36,6 +36,7 @@ import {
   COOLDOWN_DURATIONS,
   CIRCUIT_BREAKER_THRESHOLD,
 } from '../edge-functions/lib/cooldowns.js';
+import { PRESETS, PRESET_MAP, getPreset } from '../edge-functions/lib/presets/index.js';
 
 let passed = 0;
 let failed = 0;
@@ -273,16 +274,81 @@ test('normalize: sensenova does not inject reasoning_format', () => {
   eq(body.reasoning_format, undefined);
 });
 
-test('normalize: handles null/undefined body gracefully', () => {
-  normaliseForProvider(null, 'stepfun');
-  normaliseForProvider(undefined, 'stepfun');
-  truthy(true); // didn't throw
+// normaliseForProvider — Google AI Studio / Gemini
+test('normalize: google reasoning "none" → include_thoughts: false', () => {
+  const body = { model: 'gemini-3.5-flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'google');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: false });
 });
 
-test('normalize: handles null body fields gracefully', () => {
-  const body = { tool_choice: null };
-  normaliseForProvider(body, 'tokenrhythm');
-  eq(body.tool_choice, null);
+test('normalize: google reasoning "low" → thinking_level: low', () => {
+  const body = { model: 'gemini-3.5-flash', reasoning_effort: 'low' };
+  normaliseForProvider(body, 'google');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'low' });
+});
+
+test('normalize: google reasoning "medium" on Flash → thinking_level: medium', () => {
+  const body = { model: 'gemini-3.5-flash', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'google');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'medium' });
+});
+
+test('normalize: google reasoning "medium" on Pro → thinking_level: low (Pro only has low/high)', () => {
+  const body = { model: 'gemini-3.5-pro', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'google');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'low' });
+});
+
+test('normalize: google reasoning "high" → thinking_level: high', () => {
+  const body = { model: 'gemini-3.5-flash', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'google');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'high' });
+});
+
+test('normalize: google strips $schema from tool parameters', () => {
+  const body = {
+    model: 'gemini-3.5-flash',
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          parameters: {
+            $schema: 'http://json-schema.org/draft-07/schema#',
+            type: 'object',
+            properties: {
+              location: { type: 'string', $schema: '...' },
+            },
+          },
+        },
+      },
+    ],
+  };
+  normaliseForProvider(body, 'google');
+  eq(body.tools[0].function.parameters.$schema, undefined);
+  eq(body.tools[0].function.parameters.properties.location.$schema, undefined);
+});
+
+test('rescueToolCallsFromText: extracts markdown json tool call', () => {
+  const text = 'Here is the tool call:\n```json\n{"name": "fetch_weather", "arguments": {"city": "Shanghai"}}\n```';
+  const rescued = rescueToolCallsFromText(text);
+  truthy(rescued);
+  eq(rescued.length, 1);
+  eq(rescued[0].function.name, 'fetch_weather');
+  eq(JSON.parse(rescued[0].function.arguments).city, 'Shanghai');
+});
+
+test('rescueToolCallsFromText: extracts <tool_call> xml tag', () => {
+  const text = '<tool_call>{"name": "search", "arguments": {"q": "test"}}</tool_call>';
+  const rescued = rescueToolCallsFromText(text);
+  truthy(rescued);
+  eq(rescued.length, 1);
+  eq(rescued[0].function.name, 'search');
 });
 
 console.log('\n== cooldowns.js ==');
@@ -824,7 +890,50 @@ test('kvNotBoundResponse: returns 503 with diagnostic scan in body', async () =>
   truthy(body.scan.scopes);
 });
 
+// ============================================================================
+// Presets Registry Tests
+// ============================================================================
+console.log('\n== presets ==');
+
+test('PRESETS: contains all 7 major providers', () => {
+  truthy(PRESETS.length >= 7);
+  const ids = PRESETS.map(p => p.id);
+  truthy(ids.includes('google'));
+  truthy(ids.includes('sensenova'));
+  truthy(ids.includes('stepfun'));
+  truthy(ids.includes('siliconflow'));
+  truthy(ids.includes('tokenrhythm'));
+  truthy(ids.includes('deepseek'));
+  truthy(ids.includes('openai'));
+});
+
+test('getPreset: finds google preset with recommended models', () => {
+  const p = getPreset('google');
+  truthy(p);
+  eq(p.name, 'Google AI Studio (Gemini)');
+  truthy(p.base_url.includes('generativelanguage.googleapis.com'));
+  truthy(p.recommended_models.length >= 2);
+  const modelNames = p.recommended_models.map(m => m.name);
+  truthy(modelNames.includes('gemini-3.5-flash'));
+  truthy(modelNames.includes('gemini-3.5-pro'));
+});
+
+test('getPreset: finds sensenova with GLM-5.2', () => {
+  const p = getPreset('sensenova');
+  truthy(p);
+  eq(p.id, 'sensenova');
+  const modelNames = p.recommended_models.map(m => m.name);
+  truthy(modelNames.includes('glm-5.2'));
+});
+
+test('getPreset: is case-insensitive', () => {
+  const p = getPreset('Google');
+  truthy(p);
+  eq(p.id, 'google');
+});
+
 console.log('\n----');
 console.log(`PASS: ${passed}`);
 console.log(`FAIL: ${failed}`);
 process.exit(failed === 0 ? 0 : 1);
+

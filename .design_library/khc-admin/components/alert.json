@@ -1,0 +1,86 @@
+{
+  "slug": "alert",
+  "schemaVersion": 2,
+  "name": "Alert",
+  "category": "Feedback",
+  "sourceKind": "from-scratch",
+  "confidence": "high",
+  "semanticTypeCandidates": [
+    {"candidate": "inline-banner", "evidence": "Global informational/error/warning messages below tabs in reference screenshots"},
+    {"candidate": "toast", "evidence": "Transient notification system already implemented in base.html"}
+  ],
+  "variantDimensions": [
+    {"axis": "type", "values": ["info", "success", "warning", "error"]}
+  ],
+  "representativeVariants": [
+    {
+      "name": "Info Alert",
+      "whySelected": "Contextual help and neutral notices",
+      "traits": {
+        "bg": "var(--color-primary-bg)",
+        "border": "1px solid var(--color-primary-2)",
+        "color": "var(--color-text-2)",
+        "iconColor": "var(--color-primary)",
+        "borderRadius": "var(--radius-md)",
+        "padding": "10px 14px",
+        "fontSize": "13px"
+      },
+      "childrenDigest": "leading info icon + message text + optional close button"
+    },
+    {
+      "name": "Success Alert",
+      "whySelected": "Operation completed feedback",
+      "traits": {
+        "bg": "var(--color-success-bg)",
+        "border": "1px solid var(--color-success-2)",
+        "color": "var(--color-success)",
+        "iconColor": "var(--color-success)",
+        "borderRadius": "var(--radius-md)",
+        "padding": "10px 14px",
+        "fontSize": "13px"
+      },
+      "childrenDigest": "leading success icon + message text + optional close button"
+    },
+    {
+      "name": "Warning Alert",
+      "whySelected": "Caution messages requiring attention",
+      "traits": {
+        "bg": "var(--color-warning-bg)",
+        "border": "1px solid var(--color-warning-2)",
+        "color": "var(--color-warning)",
+        "iconColor": "var(--color-warning)",
+        "borderRadius": "var(--radius-md)",
+        "padding": "10px 14px",
+        "fontSize": "13px"
+      },
+      "childrenDigest": "leading warning icon + message text + optional close button"
+    },
+    {
+      "name": "Error Alert",
+      "whySelected": "Critical failures and validation summaries",
+      "traits": {
+        "bg": "var(--color-danger-bg)",
+        "border": "1px solid var(--color-danger-2)",
+        "color": "var(--color-danger)",
+        "iconColor": "var(--color-danger)",
+        "borderRadius": "var(--radius-md)",
+        "padding": "10px 14px",
+        "fontSize": "13px"
+      },
+      "childrenDigest": "leading error icon + message text + optional close button"
+    }
+  ],
+  "anatomy": {
+    "root": "div.alert element with type modifier",
+    "children": ["icon", "message text", "close button (optional)"],
+    "states": {"default": "static banner", "close": "removed from DOM"}
+  },
+  "structurePatterns": [
+    "<div class='alert info'><svg class='icon'><use href='#icon-info'/></svg><span>提示信息</span></div>",
+    "<div class='alert error'><svg class='icon'><use href='#icon-error'/></svg><span>错误信息</span><button class='close'>...</button></div>"
+  ],
+  "usageHints": {"priorityHint": "primary", "spacing": "16px margin-bottom", "placement": "below tabs or page header"},
+  "doNotInvent": ["dismissible via auto-hide", "action buttons inside alert", "alert titles"],
+  "unknowns": [],
+  "keyInsightSeed": "Inline banners: info/success/warning/error with icon prefix and optional close"
+}

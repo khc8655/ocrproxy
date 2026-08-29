@@ -181,7 +181,11 @@ export default async function onRequestPost(context) {
     );
 
     if (result.kind === 'success') {
-      await recordSuccess(binding.provider, binding.keyLabel, kv);
+      if (typeof context?.waitUntil === 'function') {
+        context.waitUntil(recordSuccess(binding.provider, binding.keyLabel, kv));
+      } else {
+        await recordSuccess(binding.provider, binding.keyLabel, kv);
+      }
       // Attach debug headers
       const headers = result.response.headers;
       headers.set('x-edgeone-relay', 'v8-1');
