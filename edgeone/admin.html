@@ -278,23 +278,36 @@
 
 <!-- Modal: Agent Model -->
 <div id="agentModal" class="modal">
-  <div class="modal-box" style="width:540px;">
+  <div class="modal-box" style="width:580px;">
     <div class="modal-head">
-      <h3 id="agentModalTitle">新增模型</h3>
+      <h3 id="agentModalTitle">新增 Agent 模型</h3>
       <button class="modal-close" onclick="closeModal('agentModal')">关闭</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label class="form-label">模型名称 (如 glm-5.2, step-3.7-flash, gemini-3.5-flash)</label>
-        <input type="text" id="m_model_name" class="form-control" placeholder="如 glm-5.2">
+        <label class="form-label">供应商快捷筛选与推荐模型</label>
+        <select id="m_model_prov_filter" class="form-control" onchange="onModelProvFilterChange()">
+          <option value="">全部供应商</option>
+        </select>
+        <div id="m_quick_model_tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       </div>
       <div class="form-group">
-        <label class="form-label">上游模型 (可选，留空则与模型名称一致)</label>
+        <label class="form-label">模型名称 (对外 Model ID，如 glm-5.2, gemini-2.5-flash)</label>
+        <input type="text" id="m_model_name" class="form-control" placeholder="如 gemini-2.5-flash">
+      </div>
+      <div class="form-group">
+        <label class="form-label">上游模型 (可选，实际传给服务商的模型名，留空则与模型名称一致)</label>
         <input type="text" id="m_upstream_model" class="form-control" placeholder="如 deepseek-v4-flash-0731">
       </div>
       <div class="form-group">
-        <label class="form-label">候选 Key 绑定序列 (勾选要参与该模型轮换的 Key)</label>
-        <div id="m_bindings_container" style="max-height:200px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:10px;background:var(--color-bg-page);"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="margin:0;">候选 Key 绑定序列 (按供应商分组勾选)</label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(true)">全选</button>
+            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(false)">清空</button>
+          </div>
+        </div>
+        <div id="m_bindings_container" style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px;background:var(--color-bg-page);display:flex;flex-direction:column;gap:8px;"></div>
       </div>
     </div>
     <div class="modal-foot">
