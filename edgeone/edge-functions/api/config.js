@@ -166,8 +166,9 @@ export async function onRequestGet(context) {
     config = { providers: {}, agent_models: {} };
   }
 
-  // Check if this is a test probe action
-  const url = new URL(context.request.url);
+  // Check if this is a test probe action in GET
+  const reqUrl = String(context.request?.url || '');
+  const url = new URL(reqUrl, 'http://localhost');
   const action = url.searchParams.get('action');
   if (action === 'test') {
     const providerName = String(url.searchParams.get('provider') || '').trim();
@@ -248,6 +249,32 @@ export async function onRequestPut(context) {
       JSON.stringify({ error: { type: 'invalid_request_error', message: `Invalid JSON: ${e?.message || e}` } }),
       { status: 400, headers: { 'content-type': 'application/json' } }
     );
+  }
+
+  // Handle action=test in POST/PUT body
+  if (body?.action === 'test') {
+    const providerName = String(body.provider || '').trim();
+    const keyLabel = String(body.key || '').trim();
+    let curConfig;
+    try {
+      curConfig = await loadConfig(context.env, kv);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: { type: 'config_error', message: e?.message || e } }), { status: 500 });
+    }
+    const provider = curConfig.providers?.[providerName];
+    if (!provider) {
+      return new Response(JSON.stringify({ error: { type: 'not_found', message: `Provider "${providerName}" not found` } }), { status: 404 });
+    }
+    const apiKey = provider.keys?.[keyLabel];
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: { type: 'not_found', message: `Key "${keyLabel}" not found` } }), { status: 404 });
+    }
+    const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
+    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl);
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    });
   }
 
   const incoming = body?.config || body;
