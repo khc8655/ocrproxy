@@ -22,14 +22,7 @@ function checkAuth(request, env) {
   return null;
 }
 
-export default async function onRequest(context) {
-  if (context.request.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: { type: 'invalid_request_error', message: 'Method Not Allowed' } }),
-      { status: 405, headers: { 'content-type': 'application/json' } }
-    );
-  }
-
+export async function onRequestPost(context) {
   const authErr = checkAuth(context.request, context.env);
   if (authErr) return authErr;
 
@@ -189,6 +182,9 @@ export default async function onRequest(context) {
   );
 }
 
-export async function onRequestPost(context) {
-  return onRequest(context);
+export async function onRequestGet(context) {
+  return new Response(JSON.stringify({ message: 'POST /api/test with {provider, key} to probe.' }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
 }
