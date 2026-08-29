@@ -38,5 +38,15 @@
       "description": "Optional. When body > 1MB, returned in X-Fallback-Endpoint header. Point at the Cloud Function or VM endpoint.",
       "secret": false
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "^/(api|v1|admin|health|check-ip)(/.*)?$",
+      "handler": "edge"
+    },
+    {
+      "src": "^/?$",
+      "handler": "edge"
+    }
+  ]
 }

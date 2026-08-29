@@ -180,3 +180,7 @@ export async function onRequestPost(context) {
     { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
   );
 }
+
+export async function onRequestPost(context) {
+  return onRequestPut(context);
+}
