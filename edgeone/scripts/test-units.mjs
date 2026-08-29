@@ -1,0 +1,830 @@
+// scripts/test-units.mjs
+//
+// Local unit tests for the pure-logic modules — runs on Node 18+.
+// We don't need EdgeOne runtime to test these; the libs are pure ESM.
+//
+// Run with:  node scripts/test-units.mjs
+// Exit 0 on success, non-zero on first failure.
+
+import {
+  loadConfig,
+  listBindings,
+  pickBinding,
+  resolveBinding,
+  buildChatUrl,
+  buildModelsList,
+  ConfigError,
+  sanitizeJsonString,
+  validateConfig,
+  resolveKvBinding,
+  scanKvBindings,
+  kvNotBoundResponse,
+  KV_BINDING_CANDIDATES,
+} from '../edge-functions/lib/config.js';
+import { normaliseForProvider } from '../edge-functions/lib/normalize.js';
+import {
+  getCooldown,
+  setCooldown,
+  getCooldownsBatch,
+  recordFailure,
+  recordSuccess,
+  classifyFailure,
+  shouldFailover,
+  bindingId,
+  clearAllState,
+  snapshotState,
+  COOLDOWN_DURATIONS,
+  CIRCUIT_BREAKER_THRESHOLD,
+} from '../edge-functions/lib/cooldowns.js';
+
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log(`  PASS  ${name}`);
+    passed++;
+  } catch (e) {
+    console.log(`  FAIL  ${name}`);
+    console.log(`        ${e?.message || e}`);
+    if (e?.stack) console.log(e.stack.split('\n').slice(1, 4).join('\n'));
+    failed++;
+  }
+}
+
+function eq(a, b) {
+  if (a !== b) throw new Error(`expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function deepEq(a, b) {
+  if (JSON.stringify(a) !== JSON.stringify(b)) {
+    throw new Error(`expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+  }
+}
+function truthy(v) {
+  if (!v) throw new Error(`expected truthy, got ${JSON.stringify(v)}`);
+}
+
+// ---- Sample config used by most tests -----------------------------------
+const SAMPLE_CONFIG = {
+  providers: {
+    siliconflow: {
+      base_url: 'https://api.siliconflow.cn',
+      keys: { KeyA: 'sk-aaa', KeyB: 'sk-bbb' },
+    },
+    sensenova: {
+      base_url: 'https://api.sensenova.cn/v1',
+      keys: { self: 'sk-self' },
+    },
+  },
+  agent_models: {
+    'deepseek-v4-flash': {
+      keys: [
+        { provider: 'sensenova', key: 'self', upstream_model: 'DeepSeek-V3-Flash' },
+      ],
+    },
+    'multi-key-model': {
+      keys: [
+        { provider: 'siliconflow', key: 'KeyA' },
+        { provider: 'siliconflow', key: 'KeyB' },
+        { provider: 'sensenova', key: 'self', upstream_model: 'deepseek-v3' },
+      ],
+    },
+  },
+};
+
+console.log('== config.js ==');
+
+// loadConfig: env JSON
+test('loadConfig: reads from env.AGENT_CONFIG_JSON', async () => {
+  const cfg = await loadConfig({ AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG) });
+  deepEq(Object.keys(cfg.providers).sort(), ['sensenova', 'siliconflow']);
+});
+
+// loadConfig: missing config throws ConfigError
+test('loadConfig: throws ConfigError when nothing is set', async () => {
+  try {
+    await loadConfig({});
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError, got ' + e?.name);
+  }
+});
+
+// loadConfig: missing fields throws ConfigError
+test('loadConfig: throws ConfigError when providers is missing', async () => {
+  try {
+    await loadConfig({ AGENT_CONFIG_JSON: JSON.stringify({ agent_models: {} }) });
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError, got ' + e?.name);
+  }
+});
+
+// listBindings
+test('listBindings: returns single binding for single-key model', () => {
+  const b = listBindings(SAMPLE_CONFIG, 'deepseek-v4-flash');
+  eq(b.length, 1);
+  eq(b[0].provider, 'sensenova');
+  eq(b[0].keyLabel, 'self');
+  eq(b[0].upstreamModel, 'DeepSeek-V3-Flash');
+});
+
+test('listBindings: returns multiple bindings for multi-key model', () => {
+  const b = listBindings(SAMPLE_CONFIG, 'multi-key-model');
+  eq(b.length, 3);
+});
+
+test('listBindings: returns [] for unknown model', () => {
+  eq(listBindings(SAMPLE_CONFIG, 'no-such-model').length, 0);
+});
+
+test('listBindings: drops bindings with missing provider', () => {
+  const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  cfg.agent_models['broken-model'] = {
+    keys: [{ provider: 'does-not-exist', key: 'x' }],
+  };
+  eq(listBindings(cfg, 'broken-model').length, 0);
+});
+
+test('listBindings: drops bindings with missing key', () => {
+  const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  cfg.agent_models['broken-model'] = {
+    keys: [{ provider: 'siliconflow', key: 'KeyDoesNotExist' }],
+  };
+  eq(listBindings(cfg, 'broken-model').length, 0);
+});
+
+// pickBinding
+test('pickBinding: returns the only binding if length 1', () => {
+  const b = pickBinding([{ x: 1 }]);
+  deepEq(b, { x: 1 });
+});
+
+test('pickBinding: returns one of the bindings when multiple', () => {
+  const seen = new Set();
+  for (let i = 0; i < 100; i++) {
+    const x = pickBinding([{ x: 'a' }, { x: 'b' }, { x: 'c' }]);
+    seen.add(x.x);
+  }
+  if (seen.size < 2) throw new Error('pickBinding is biased, only saw ' + [...seen]);
+  if (seen.size > 3) throw new Error('pickBinding returned extra values');
+});
+
+test('pickBinding: returns null for empty list', () => {
+  eq(pickBinding([]), null);
+});
+
+// resolveBinding
+test('resolveBinding: returns api key + base url', () => {
+  const b = listBindings(SAMPLE_CONFIG, 'deepseek-v4-flash')[0];
+  const r = resolveBinding(SAMPLE_CONFIG, b);
+  eq(r.apiKey, 'sk-self');
+  eq(r.baseUrl, 'https://api.sensenova.cn/v1');
+  eq(r.upstreamModel, 'DeepSeek-V3-Flash');
+});
+
+test('resolveBinding: trims trailing slashes from base url', () => {
+  const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  cfg.providers.sensenova.base_url = 'https://api.sensenova.cn/v1///';
+  const b = listBindings(cfg, 'deepseek-v4-flash')[0];
+  const r = resolveBinding(cfg, b);
+  eq(r.baseUrl, 'https://api.sensenova.cn/v1');
+});
+
+test('resolveBinding: throws ConfigError if provider disappears', () => {
+  const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  const b = listBindings(cfg, 'multi-key-model')[0];
+  delete cfg.providers[b.provider];
+  try {
+    resolveBinding(cfg, b);
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError');
+  }
+});
+
+// buildChatUrl
+test('buildChatUrl: appends /chat/completions', () => {
+  eq(buildChatUrl('https://api.siliconflow.cn'), 'https://api.siliconflow.cn/chat/completions');
+  eq(buildChatUrl('https://api.siliconflow.cn/'), 'https://api.siliconflow.cn/chat/completions');
+  eq(buildChatUrl('https://api.siliconflow.cn/v1'), 'https://api.siliconflow.cn/v1/chat/completions');
+});
+
+// buildModelsList
+test('buildModelsList: returns object= list with one entry per model', () => {
+  const list = buildModelsList(SAMPLE_CONFIG);
+  eq(list.object, 'list');
+  eq(list.data.length, 2);
+  const ids = list.data.map((d) => d.id).sort();
+  deepEq(ids, ['deepseek-v4-flash', 'multi-key-model']);
+});
+
+console.log('\n== normalize.js ==');
+
+// normaliseForProvider — stepfun
+test('normalize: stepfun reason "none" → "low"', () => {
+  const body = { reasoning_effort: 'none' };
+  normaliseForProvider(body, 'stepfun');
+  eq(body.reasoning_effort, 'low');
+});
+
+test('normalize: stepfun reason "low" stays "low"', () => {
+  const body = { reasoning_effort: 'low' };
+  normaliseForProvider(body, 'stepfun');
+  eq(body.reasoning_effort, 'low');
+});
+
+test('normalize: stepfun injects reasoning_format=deepseek-style', () => {
+  const body = {};
+  normaliseForProvider(body, 'stepfun');
+  eq(body.reasoning_format, 'deepseek-style');
+});
+
+test('normalize: stepfun respects existing reasoning_format', () => {
+  const body = { reasoning_format: 'native' };
+  normaliseForProvider(body, 'stepfun');
+  eq(body.reasoning_format, 'native');
+});
+
+// normaliseForProvider — tokenrhythm
+test('normalize: tokenrhythm object tool_choice → "auto"', () => {
+  const body = { tool_choice: { type: 'function', function: { name: 'foo' } } };
+  normaliseForProvider(body, 'tokenrhythm');
+  eq(body.tool_choice, 'auto');
+});
+
+test('normalize: tokenrhythm string tool_choice stays string', () => {
+  const body = { tool_choice: 'auto' };
+  normaliseForProvider(body, 'tokenrhythm');
+  eq(body.tool_choice, 'auto');
+});
+
+// normaliseForProvider — other providers
+test('normalize: sensenova "none" reason is preserved', () => {
+  const body = { reasoning_effort: 'none' };
+  normaliseForProvider(body, 'sensenova');
+  eq(body.reasoning_effort, 'none');
+});
+
+test('normalize: sensenova does not inject reasoning_format', () => {
+  const body = { reasoning_effort: 'none' };
+  normaliseForProvider(body, 'sensenova');
+  eq(body.reasoning_format, undefined);
+});
+
+test('normalize: handles null/undefined body gracefully', () => {
+  normaliseForProvider(null, 'stepfun');
+  normaliseForProvider(undefined, 'stepfun');
+  truthy(true); // didn't throw
+});
+
+test('normalize: handles null body fields gracefully', () => {
+  const body = { tool_choice: null };
+  normaliseForProvider(body, 'tokenrhythm');
+  eq(body.tool_choice, null);
+});
+
+console.log('\n== cooldowns.js ==');
+
+// ---- Mock KV store -----------------------------------------------------
+function makeMockKV() {
+  const data = new Map();
+  return {
+    data,
+    async get(key, opts) {
+      if (!data.has(key)) return null;
+      const entry = data.get(key);
+      if (entry.expiresAt && entry.expiresAt < Date.now()) {
+        data.delete(key);
+        return null;
+      }
+      return opts?.type === 'text' ? entry.value : entry.value;
+    },
+    async put(key, value, opts) {
+      data.set(key, { value: String(value), expiresAt: opts?.expirationTtl ? Date.now() + opts.expirationTtl * 1000 : 0 });
+    },
+    async delete(key) { data.delete(key); },
+  };
+}
+
+// ---- classifyFailure / shouldFailover -----------------------------------
+test('classifyFailure: returns 60s for 429', () => {
+  eq(classifyFailure(429, 'http'), COOLDOWN_DURATIONS.TPM_429);
+  eq(COOLDOWN_DURATIONS.TPM_429, 60);
+});
+
+test('classifyFailure: returns 600s for 403', () => {
+  eq(classifyFailure(403, 'http'), COOLDOWN_DURATIONS.QUOTA_403);
+  eq(COOLDOWN_DURATIONS.QUOTA_403, 600);
+});
+
+test('classifyFailure: returns 30s for 5xx', () => {
+  eq(classifyFailure(500, 'http'), COOLDOWN_DURATIONS.SERVER_5XX);
+  eq(classifyFailure(502, 'http'), COOLDOWN_DURATIONS.SERVER_5XX);
+  eq(classifyFailure(503, 'http'), COOLDOWN_DURATIONS.SERVER_5XX);
+});
+
+test('classifyFailure: returns 0 for 2xx (no cooldown needed)', () => {
+  eq(classifyFailure(200, 'http'), 0);
+  eq(classifyFailure(201, 'http'), 0);
+});
+
+test('classifyFailure: returns 0 for 400 (request-level, do not cooldown)', () => {
+  eq(classifyFailure(400, 'http'), 0);
+});
+
+test('classifyFailure: returns 5s for empty stream', () => {
+  eq(classifyFailure(200, 'empty_stream'), COOLDOWN_DURATIONS.EMPTY_STREAM);
+});
+
+test('classifyFailure: returns 2s for read timeout', () => {
+  eq(classifyFailure(0, 'read_timeout'), COOLDOWN_DURATIONS.READ_TIMEOUT);
+});
+
+test('shouldFailover: 2xx and 400 do NOT failover', () => {
+  eq(shouldFailover(200, 'http'), false);
+  eq(shouldFailover(201, 'http'), false);
+  eq(shouldFailover(400, 'http'), false);
+});
+
+test('shouldFailover: 429, 5xx, 401, 403, 404 DO failover', () => {
+  eq(shouldFailover(429, 'http'), true);
+  eq(shouldFailover(500, 'http'), true);
+  eq(shouldFailover(502, 'http'), true);
+  eq(shouldFailover(401, 'http'), true);
+  eq(shouldFailover(403, 'http'), true);
+  eq(shouldFailover(404, 'http'), true);
+});
+
+test('shouldFailover: empty_stream and read_timeout always failover', () => {
+  eq(shouldFailover(200, 'empty_stream'), true);
+  eq(shouldFailover(0, 'read_timeout'), true);
+});
+
+// ---- bindingId ---------------------------------------------------------
+test('bindingId: produces stable id', () => {
+  eq(bindingId({ provider: 'a', keyLabel: 'b' }), 'a:b');
+});
+
+// ---- setCooldown / getCooldown -----------------------------------------
+test('setCooldown + getCooldown: round-trip', async () => {
+  const kv = makeMockKV();
+  await setCooldown('prov', 'key', 30, kv);
+  const exp = await getCooldown('prov', 'key', kv);
+  truthy(exp > Date.now() && exp <= Date.now() + 30_100);
+});
+
+test('getCooldown: returns 0 when no entry', async () => {
+  const kv = makeMockKV();
+  eq(await getCooldown('nope', 'nope', kv), 0);
+});
+
+test('getCooldown: returns 0 when KV is undefined', async () => {
+  eq(await getCooldown('p', 'k', undefined), 0);
+});
+
+test('setCooldown: no-op when KV is undefined', async () => {
+  // Should not throw
+  await setCooldown('p', 'k', 30, undefined);
+});
+
+// ---- getCooldownsBatch ------------------------------------------------
+test('getCooldownsBatch: returns map with all binding IDs', async () => {
+  const kv = makeMockKV();
+  await setCooldown('a', 'k1', 30, kv);
+  const bindings = [
+    { provider: 'a', keyLabel: 'k1' },
+    { provider: 'a', keyLabel: 'k2' },
+    { provider: 'b', keyLabel: 'k1' },
+  ];
+  const map = await getCooldownsBatch(bindings, kv);
+  eq(map.size, 3);
+  truthy(map.get('a:k1') > 0);
+  eq(map.get('a:k2'), 0);
+  eq(map.get('b:k1'), 0);
+});
+
+test('getCooldownsBatch: returns empty map when KV is undefined', async () => {
+  const bindings = [{ provider: 'a', keyLabel: 'k1' }];
+  const map = await getCooldownsBatch(bindings, undefined);
+  eq(map.size, 0);
+});
+
+// ---- recordFailure / circuit breaker ---------------------------------
+test('recordFailure: increments counter up to threshold then triggers breaker', async () => {
+  const kv = makeMockKV();
+  let count;
+  count = await recordFailure('p', 'k', kv);
+  eq(count, 1);
+  count = await recordFailure('p', 'k', kv);
+  eq(count, 2);
+  count = await recordFailure('p', 'k', kv);
+  eq(count, 3);
+  // After 3 failures, breaker cooldown should be set
+  const exp = await getCooldown('p', 'k', kv);
+  truthy(exp > Date.now() + (COOLDOWN_DURATIONS.CIRCUIT_BREAKER - 5) * 1000);
+  // And the counter is reset
+  eq(await recordFailure('p', 'k', kv), 1);
+});
+
+test('recordSuccess: clears the failure counter', async () => {
+  const kv = makeMockKV();
+  await recordFailure('p', 'k', kv);
+  await recordFailure('p', 'k', kv);
+  await recordSuccess('p', 'k', kv);
+  // After clearing, next failure should be 1 again
+  eq(await recordFailure('p', 'k', kv), 1);
+});
+
+test('recordSuccess: no-op when KV is undefined', async () => {
+  await recordSuccess('p', 'k', undefined);
+});
+
+// ---- clearAllState ----------------------------------------------------
+test('clearAllState: wipes cooldowns and counters', async () => {
+  const kv = makeMockKV();
+  const bindings = [
+    { provider: 'a', keyLabel: 'k1' },
+    { provider: 'a', keyLabel: 'k2' },
+  ];
+  await setCooldown('a', 'k1', 60, kv);
+  await setCooldown('a', 'k2', 60, kv);
+  await recordFailure('a', 'k1', kv);
+  const n = await clearAllState(bindings, kv);
+  eq(n, 2);
+  eq(await getCooldown('a', 'k1', kv), 0);
+  eq(await getCooldown('a', 'k2', kv), 0);
+  eq(await recordFailure('a', 'k1', kv), 1); // counter was reset
+});
+
+test('clearAllState: no-op when KV is undefined', async () => {
+  eq(await clearAllState([{ provider: 'a', keyLabel: 'k' }], undefined), 0);
+});
+
+// ---- snapshotState ----------------------------------------------------
+test('snapshotState: returns structured state for all bindings', async () => {
+  const kv = makeMockKV();
+  await setCooldown('a', 'k1', 30, kv);
+  await recordFailure('b', 'k1', kv);
+  await recordFailure('b', 'k1', kv);
+  const bindings = [
+    { provider: 'a', keyLabel: 'k1', upstreamModel: 'model-a' },
+    { provider: 'b', keyLabel: 'k1', upstreamModel: 'model-b' },
+  ];
+  const snap = await snapshotState(bindings, kv);
+  eq(snap.length, 2);
+  const a = snap.find((s) => s.provider === 'a');
+  eq(a.inCooldown, true);
+  eq(a.upstreamModel, 'model-a');
+  const b = snap.find((s) => s.provider === 'b');
+  eq(b.inCooldown, false);
+  eq(b.consecutiveFailures, 2);
+});
+
+test('snapshotState: works when KV is undefined (returns 0/0)', async () => {
+  const bindings = [{ provider: 'a', keyLabel: 'k1' }];
+  const snap = await snapshotState(bindings, undefined);
+  eq(snap.length, 1);
+  eq(snap[0].inCooldown, false);
+  eq(snap[0].consecutiveFailures, 0);
+});
+
+test('circuit breaker threshold is 3 (matches VM)', () => {
+  eq(CIRCUIT_BREAKER_THRESHOLD, 3);
+});
+
+console.log('\n== sanitizeJsonString ==');
+
+test('sanitize: passes clean JSON through unchanged', () => {
+  const clean = '{"providers":{"a":{"base_url":"x","keys":{"k":"v"}}},"agent_models":{}}';
+  eq(sanitizeJsonString(clean), clean);
+});
+
+test('sanitize: trims leading and trailing whitespace', () => {
+  const clean = '{"a":1}';
+  eq(sanitizeJsonString('   \n\t' + clean + '   \n'), clean);
+});
+
+test('sanitize: strips surrounding double quotes', () => {
+  const clean = '{"a":1}';
+  eq(sanitizeJsonString('"' + clean + '"'), clean);
+});
+
+test('sanitize: strips surrounding single quotes', () => {
+  const clean = '{"a":1}';
+  eq(sanitizeJsonString("'" + clean + "'"), clean);
+});
+
+test('sanitize: strips quotes + whitespace together', () => {
+  const clean = '{"a":1}';
+  eq(sanitizeJsonString('  "\n' + clean + '\n"  '), clean);
+});
+
+test('sanitize: extracts JSON from junk-prefixed string (env console prefix)', () => {
+  const clean = '{"providers":{},"agent_models":{}}';
+  eq(sanitizeJsonString('Some leading text: ' + clean + ' trailing'), clean);
+});
+
+test('sanitize: handles multi-line JSON with newlines inside', () => {
+  const ml = '{\n  "a": 1,\n  "b": 2\n}';
+  eq(sanitizeJsonString(ml), ml);
+});
+
+test('sanitize: empty / null returns empty', () => {
+  eq(sanitizeJsonString(''), '');
+  eq(sanitizeJsonString(null), '');
+  eq(sanitizeJsonString(undefined), '');
+});
+
+test('sanitize: real-world edge case (extra trailing chars)', () => {
+  const clean = '{"providers":{},"agent_models":{}}';
+  // Some console UIs append a copy button that leaks extra closing brace
+  eq(sanitizeJsonString(clean + '}'), clean);
+});
+
+console.log('\n== loadConfig with malformed env ==');
+
+test('loadConfig: tolerates surrounding quotes around JSON env', async () => {
+  const clean = JSON.stringify(SAMPLE_CONFIG);
+  const wrapped = '"' + clean + '"';  // console-stripped wrongly
+  const cfg = await loadConfig({ AGENT_CONFIG_JSON: wrapped });
+  deepEq(Object.keys(cfg.providers).sort(), ['sensenova', 'siliconflow']);
+});
+
+test('loadConfig: tolerates leading "Some text: " prefix', async () => {
+  const clean = JSON.stringify(SAMPLE_CONFIG);
+  const dirty = 'Value: ' + clean + ' (end)';
+  const cfg = await loadConfig({ AGENT_CONFIG_JSON: dirty });
+  deepEq(Object.keys(cfg.providers).sort(), ['sensenova', 'siliconflow']);
+});
+
+test('loadConfig: gives helpful preview when value is unrecoverable garbage', async () => {
+  try {
+    await loadConfig({ AGENT_CONFIG_JSON: 'not json at all !!!' });
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError');
+    if (!e.message.includes('value preview')) {
+      throw new Error('error should include value preview, got: ' + e.message);
+    }
+  }
+});
+
+test('loadConfig: reads from KV when KV is bound and has data', async () => {
+  // Mock KV handle: get returns our config string.
+  const kv = {
+    get: async (key) => key === 'config' ? JSON.stringify(SAMPLE_CONFIG) : null,
+  };
+  const cfg = await loadConfig({ AGENT_CONFIG_JSON: 'GARBAGE_NOT_USED' }, kv);
+  deepEq(Object.keys(cfg.providers).sort(), ['sensenova', 'siliconflow']);
+});
+
+test('loadConfig: when KV is bound but empty, throws clear "use admin UI" error', async () => {
+  const kv = { get: async () => null };
+  try {
+    await loadConfig({ AGENT_CONFIG_JSON: 'GARBAGE' }, kv);
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError');
+    if (!e.message.includes('admin UI')) {
+      throw new Error('error should mention admin UI, got: ' + e.message);
+    }
+    if (!e.message.includes('intentionally ignored')) {
+      throw new Error('error should explain env is ignored, got: ' + e.message);
+    }
+  }
+});
+
+test('loadConfig: when KV is bound but throws, surfaces the error', async () => {
+  const kv = { get: async () => { throw new Error('upstream timeout'); } };
+  try {
+    await loadConfig({ AGENT_CONFIG_JSON: 'GARBAGE' }, kv);
+    throw new Error('should have thrown');
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw new Error('expected ConfigError');
+    if (!e.message.includes('upstream timeout')) {
+      throw new Error('error should include underlying error, got: ' + e.message);
+    }
+  }
+});
+
+console.log('\n== validateConfig ==');
+
+const GOOD_CONFIG = {
+  providers: {
+    s1: { base_url: 'https://x.com', keys: { k1: 'sk-1', k2: 'sk-2' } },
+  },
+  agent_models: {
+    m1: { keys: [{ provider: 's1', key: 'k1' }] },
+    m2: { keys: [
+      { provider: 's1', key: 'k1' },
+      { provider: 's1', key: 'k2', upstream_model: 'real-name' },
+    ] },
+  },
+};
+
+test('validateConfig: accepts good config', () => {
+  eq(validateConfig(GOOD_CONFIG), null);
+});
+
+test('validateConfig: rejects null', () => {
+  truthy(validateConfig(null));
+  truthy(validateConfig(undefined));
+});
+
+test('validateConfig: rejects non-object', () => {
+  truthy(validateConfig('string'));
+  truthy(validateConfig(42));
+  truthy(validateConfig([]));
+});
+
+test('validateConfig: rejects missing providers', () => {
+  truthy(validateConfig({ agent_models: {} }));
+  truthy(validateConfig({ providers: 'not-an-object', agent_models: {} }));
+});
+
+test('validateConfig: rejects provider without base_url', () => {
+  const bad = { providers: { s1: { keys: { k1: 'v' } } }, agent_models: {} };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects provider with empty base_url', () => {
+  const bad = { providers: { s1: { base_url: '', keys: { k1: 'v' } } }, agent_models: {} };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects provider with no keys', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: {} } }, agent_models: {} };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects empty key value', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: '' } } }, agent_models: {} };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects missing agent_models', () => {
+  truthy(validateConfig({ providers: { s1: { base_url: 'x', keys: { k1: 'v' } } } }));
+});
+
+test('validateConfig: rejects model with no bindings', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } }, agent_models: { m1: { keys: [] } } };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects binding to unknown provider', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } },
+    agent_models: { m1: { keys: [{ provider: 'unknown', key: 'k1' }] } } };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects binding to unknown key', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } },
+    agent_models: { m1: { keys: [{ provider: 's1', key: 'unknown' }] } } };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects malformed binding', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } },
+    agent_models: { m1: { keys: [null, 'string', 42] } } };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: rejects non-string upstream_model', () => {
+  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } },
+    agent_models: { m1: { keys: [{ provider: 's1', key: 'k1', upstream_model: 42 }] } } };
+  truthy(validateConfig(bad));
+});
+
+test('validateConfig: accepts upstream_model omitted', () => {
+  const ok = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } },
+    agent_models: { m1: { keys: [{ provider: 's1', key: 'k1' }] } } };
+  eq(validateConfig(ok), null);
+});
+
+console.log('\n== resolveKvBinding ==');
+
+function makeFakeKv() {
+  return { get: () => {}, put: () => {}, delete: () => {} };
+}
+
+test('resolveKvBinding: returns undefined when nothing is bound', () => {
+  eq(resolveKvBinding({}), undefined);
+  eq(resolveKvBinding(null), undefined);
+  eq(resolveKvBinding({ env: { FOO: 'bar' } }), undefined);
+});
+
+test('resolveKvBinding: finds agent_kv', () => {
+  const kv = makeFakeKv();
+  const ctx = { agent_kv: kv };
+  const r = resolveKvBinding(ctx);
+  truthy(r);
+  eq(r.name, 'agent_kv');
+  eq(r.kv, kv);
+});
+
+test('resolveKvBinding: finds kv (lowercase)', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ kv });
+  eq(r.name, 'kv');
+});
+
+test('resolveKvBinding: finds KV (uppercase)', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ KV: kv });
+  eq(r.name, 'KV');
+});
+
+test('resolveKvBinding: rejects a property that is not a KV handle', () => {
+  // The bound value must be a KV handle (have get/put).  Strings,
+  // numbers, and objects without those methods are not valid.
+  const r = resolveKvBinding({ agent_kv: 'not-a-kv' });
+  eq(r, undefined);
+  const r2 = resolveKvBinding({ agent_kv: { get: 'string-not-func' } });
+  eq(r2, undefined);
+});
+
+test('resolveKvBinding: picks the first match in priority order', () => {
+  const kv1 = makeFakeKv();
+  const kv2 = makeFakeKv();
+  // Both 'kv' and 'agent_kv' bound — should pick whichever comes first
+  // in the candidate list.
+  const r = resolveKvBinding({ kv: kv1, agent_kv: kv2 });
+  // Both are valid; first one in CANDIDATES list wins.
+  truthy(['kv', 'agent_kv'].includes(r.name));
+});
+
+test('resolveKvBinding: finds my_kv (doc example name)', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ my_kv: kv });
+  truthy(r, 'expected a binding');
+  eq(r.name, 'my_kv');
+});
+
+test('resolveKvBinding: finds bindings via context.env', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ env: { agent_kv: kv } });
+  truthy(r);
+  eq(r.name, 'agent_kv');
+  eq(r.scope, 'context.env');
+});
+
+test('resolveKvBinding: finds bindings via context.bindings', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ bindings: { agent_kv: kv } });
+  truthy(r);
+  eq(r.name, 'agent_kv');
+  eq(r.scope, 'context.bindings');
+});
+
+test('resolveKvBinding: duck-typed scan finds a KV handle under unknown name', () => {
+  // Operator bound the namespace as "WEIRD_NAME" — our candidate list
+  // doesn't include it, but the duck-typed scan should still find it.
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ WEIRD_NAME: kv });
+  truthy(r, 'expected a binding via duck-typing');
+  eq(r.name, 'WEIRD_NAME');
+});
+
+test('resolveKvBinding: duck-typed scan finds KV nested at one level', () => {
+  const kv = makeFakeKv();
+  const r = resolveKvBinding({ stuff: { DEEPLY_NAMED: kv } });
+  truthy(r, 'expected a nested binding');
+  eq(r.name, 'stuff.DEEPLY_NAMED');
+});
+
+test('KV_BINDING_CANDIDATES: includes the doc example name (my_kv)', () => {
+  truthy(KV_BINDING_CANDIDATES.includes('my_kv'));
+  truthy(KV_BINDING_CANDIDATES.includes('agent_kv'));
+});
+
+test('scanKvBindings: reports which scope has a KV-like handle', () => {
+  const kv = makeFakeKv();
+  const scan = scanKvBindings({ agent_kv: kv, env: { FOO: 'bar' } });
+  truthy(scan.detected);
+  eq(scan.detected.name, 'agent_kv');
+  truthy(scan.scopes.context.kvLike.includes('agent_kv'));
+  // `env` is at context level in this test (not nested), so it shows up
+  // as a regular key on `scopes.context`, not as `scopes.context.env`.
+  truthy(scan.scopes.context.keys.includes('env'));
+});
+
+test('scanKvBindings: when nothing is bound, detected is null', () => {
+  const scan = scanKvBindings({ env: { X: 'y' } });
+  eq(scan.detected, null);
+});
+
+test('kvNotBoundResponse: returns 503 with diagnostic scan in body', async () => {
+  const resp = kvNotBoundResponse({ env: { X: 'y' } });
+  eq(resp.status, 503);
+  const body = await resp.json();
+  truthy(body.error.message.includes('KV namespace is not bound'));
+  truthy(body.scan, 'expected scan payload');
+  truthy(body.scan.scopes);
+});
+
+console.log('\n----');
+console.log(`PASS: ${passed}`);
+console.log(`FAIL: ${failed}`);
+process.exit(failed === 0 ? 0 : 1);

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdgeOne Agent Relay — Admin</title>
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">⚡</span>
+      <span class="brand-text">EdgeOne Agent Relay</span>
+    </div>
+    <div class="topbar-right">
+      <span id="configSource" class="badge"></span>
+      <button id="logoutBtn" class="btn btn-ghost" style="display:none">登出</button>
+    </div>
+  </header>
+
+  <!-- Login screen -->
+  <main id="loginScreen" class="login-screen">
+    <form class="login-card" onsubmit="event.preventDefault(); doLogin();">
+      <h1>管理员登录</h1>
+      <p class="login-desc">输入 <code>PROXY_API_KEY</code> 进入管理面板</p>
+      <input id="loginKey" type="password" placeholder="Bearer token" autocomplete="off">
+      <button type="submit" class="btn btn-primary">登录</button>
+      <p id="loginErr" class="err"></p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <main id="appScreen" style="display:none">
+    <nav class="tabs">
+      <button data-tab="providers" class="tab active">🔑 服务商 / Key</button>
+      <button data-tab="models" class="tab">🤖 Agent 模型</button>
+      <button data-tab="state" class="tab">⚡ KV 状态</button>
+      <button data-tab="raw" class="tab">📋 原始 JSON</button>
+    </nav>
+
+    <!-- Providers + Keys -->
+    <section data-pane="providers" class="pane">
+      <div class="pane-head">
+        <h2>服务商与 API Key</h2>
+        <button class="btn btn-primary" onclick="addProvider()">+ 新增服务商</button>
+      </div>
+      <div id="providersList"></div>
+    </section>
+
+    <!-- Models -->
+    <section data-pane="models" class="pane" style="display:none">
+      <div class="pane-head">
+        <h2>Agent 模型绑定</h2>
+        <button class="btn btn-primary" onclick="addModel()">+ 新增模型</button>
+      </div>
+      <p class="hint">每个模型列出可用的 (provider, key) 绑定。请求时随机选一个，按状态码触发 cooldown / 熔断。</p>
+      <div id="modelsList"></div>
+    </section>
+
+    <!-- KV state (cooldowns) -->
+    <section data-pane="state" class="pane" style="display:none">
+      <div class="pane-head">
+        <h2>KV 状态（cooldown / 失败计数）</h2>
+        <button class="btn btn-danger" onclick="clearAllCooldowns()">🗑 清空所有 cooldown</button>
+      </div>
+      <p class="hint">显示当前 EdgeOne KV 里的所有 cooldown 记录和失败计数。KV 是 60s 最终一致，本节点立即可见。</p>
+      <div id="stateList"></div>
+    </section>
+
+    <!-- Raw JSON editor -->
+    <section data-pane="raw" class="pane" style="display:none">
+      <div class="pane-head">
+        <h2>原始 JSON 编辑器</h2>
+        <button class="btn btn-primary" onclick="saveRawConfig()">保存到 KV</button>
+      </div>
+      <p class="hint">高级用法：直接编辑完整 config JSON。保存会覆盖结构化编辑的修改。<br>格式：<code>{"providers":{...},"agent_models":{...}}</code></p>
+      <textarea id="rawJson" spellcheck="false"></textarea>
+      <p id="rawErr" class="err"></p>
+    </section>
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

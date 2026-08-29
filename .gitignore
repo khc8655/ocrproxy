@@ -25,3 +25,9 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+  
