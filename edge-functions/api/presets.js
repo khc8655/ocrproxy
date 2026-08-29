@@ -21,3 +21,5 @@ export async function onRequestGet(context) {
     },
   });
 }
+
+export default onRequestGet;
