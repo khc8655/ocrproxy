@@ -10,6 +10,7 @@ import {
   loadConfig,
   buildModelsList,
   ConfigError,
+  resolveKvBinding,
 } from '../lib/config.js';
 
 export default async function onRequestGet(context) {
@@ -41,7 +42,8 @@ export default async function onRequestGet(context) {
 
   let config;
   try {
-    config = await loadConfig(env, context.agent_kv);
+    const kvRes = resolveKvBinding(context);
+    config = await loadConfig(env, kvRes?.kv);
   } catch (e) {
     if (e instanceof ConfigError) {
       return new Response(
