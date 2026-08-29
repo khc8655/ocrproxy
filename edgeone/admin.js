@@ -520,14 +520,14 @@ for chunk in response:
 async function testSingleKey(provider, key) {
   toast(`探活 ${provider}/${key}...`, 'ok');
   try {
-    const res = await api('POST', '/api/test', { provider, key });
+    const res = await api('GET', `/api/config?action=test&provider=${encodeURIComponent(provider)}&key=${encodeURIComponent(key)}`);
     modelLatencyCache[`${provider}:${key}`] = res;
     renderAgentModels();
     renderProviders();
     if (res.ok) {
       toast(`${provider}/${key} 连接成功 (${res.latency_ms}ms)`, 'ok');
     } else {
-      toast(`${provider}/${key} 失败 (HTTP ${res.status})`, 'err');
+      toast(`${provider}/${key} 探活异常 (HTTP ${res.status || 'ERR'})`, 'err');
     }
   } catch (e) {
     toast(`探活异常: ${e?.message || e}`, 'err');

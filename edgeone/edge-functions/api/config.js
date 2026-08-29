@@ -1,18 +1,11 @@
 /**
- * api/config.js — Config read/write API for the admin UI.
+ * api/config.js — Config read/write and key probing API for the admin UI.
  *
- *   GET  /api/config    — read current config (KV > env fallback), plus
- *                          source indicator and last-modified timestamp
- *   POST /api/config    — validate + write full config to KV key "config"
- *
- * Writes go ONLY to KV (not env).  After a POST, every edge node will
- * pick up the new config within ~60s (KV eventual consistency).  The
- * writer's own node sees it immediately because of write-after-read
- * consistency on the same KV instance.
- *
- * Auth: same PROXY_API_KEY as the rest of the API.  In a production
- * hardening pass you'd want a separate ADMIN_PASSWORD; for now we
- * reuse the relay token since this is a personal-scale project.
+ *   GET  /api/config              — read current config
+ *   GET  /api/config?action=test   — probe a single (provider, key) upstream
+ *   POST /api/config              — validate + write full config to KV key "config"
+ *   PUT  /api/config              — same as POST
+ *   DELETE /api/config            — reset config to empty
  */
 
 import {
@@ -25,11 +18,11 @@ import {
 } from '../lib/config.js';
 
 const CONFIG_KV_KEY = 'config';
-const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days — admin writes are explicit
+const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 
 function checkAuth(request, env) {
   const need = env?.PROXY_API_KEY;
-  if (!need) return null; // no auth configured — allow
+  if (!need) return null;
   const got = request.headers.get('authorization') || '';
   if (got !== `Bearer ${need}`) {
     return new Response(
@@ -49,17 +42,90 @@ function checkAuth(request, env) {
   return null;
 }
 
+async function probeKey(providerName, keyLabel, apiKey, baseUrl) {
+  const urlsToTry = [];
+  if (baseUrl.endsWith('/v1')) {
+    urlsToTry.push(`${baseUrl}/models`);
+  } else {
+    urlsToTry.push(`${baseUrl}/v1/models`);
+    urlsToTry.push(`${baseUrl}/models`);
+  }
+
+  const start = Date.now();
+  let resp = null;
+  let lastErr = null;
+
+  for (const url of urlsToTry) {
+    try {
+      resp = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'authorization': `Bearer ${apiKey}`,
+          'accept': 'application/json',
+        },
+        eo: {
+          timeoutSetting: {
+            connectTimeout: 8_000,
+            readTimeout: 12_000,
+            writeTimeout: 4_000,
+          },
+        },
+      });
+      if (resp && resp.status !== 404) {
+        break;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  const latency = Date.now() - start;
+
+  if (!resp) {
+    return {
+      ok: false,
+      upstream: baseUrl,
+      status: 0,
+      latency_ms: latency,
+      error: `network_error: ${lastErr?.message || lastErr || 'timeout'}`,
+    };
+  }
+
+  let ok = false;
+  let verdict = '';
+  if (resp.status >= 200 && resp.status < 300) {
+    ok = true;
+    verdict = 'reachable + key accepted';
+  } else if (resp.status === 401 || resp.status === 403) {
+    ok = false;
+    verdict = 'key rejected (401/403)';
+  } else if (resp.status === 429) {
+    ok = false;
+    verdict = 'rate-limited (429)';
+  } else if (resp.status === 404) {
+    ok = true;
+    verdict = 'reachable, but /models not exposed (chat works)';
+  } else {
+    ok = false;
+    verdict = `status ${resp.status}`;
+  }
+
+  return {
+    ok,
+    verdict,
+    upstream: baseUrl,
+    status: resp.status,
+    latency_ms: latency,
+  };
+}
+
 export async function onRequestGet(context) {
   const authErr = checkAuth(context.request, context.env);
   if (authErr) return authErr;
 
-  // Resolve KV binding by trying common variable names
   const kvRes = resolveKvBinding(context);
   const kv = kvRes?.kv;
 
-  // Detect source: KV > env.  We probe KV by listing known config keys
-  // (cheap; just one key + last_modified).  If KV is not bound we
-  // fall back to env.
   let source = 'env';
   let lastModified = null;
   let config = null;
@@ -74,7 +140,6 @@ export async function onRequestGet(context) {
         lastModified = parsed.last_modified || null;
       }
     } catch (e) {
-      // KV read failure — fall back to env, but report the error.
       return new Response(
         JSON.stringify({
           error: { type: 'config_error', message: `KV read failed: ${e?.message || e}` },
@@ -98,8 +163,41 @@ export async function onRequestGet(context) {
   }
 
   if (!config) {
-    source = 'empty';
     config = { providers: {}, agent_models: {} };
+  }
+
+  // Check if this is a test probe action
+  const url = new URL(context.request.url);
+  const action = url.searchParams.get('action');
+  if (action === 'test') {
+    const providerName = String(url.searchParams.get('provider') || '').trim();
+    const keyLabel = String(url.searchParams.get('key') || '').trim();
+    if (!providerName || !keyLabel) {
+      return new Response(
+        JSON.stringify({ error: { type: 'invalid_request_error', message: 'provider and key are required' } }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    const provider = config.providers?.[providerName];
+    if (!provider) {
+      return new Response(
+        JSON.stringify({ error: { type: 'not_found', message: `Provider "${providerName}" not found` } }),
+        { status: 404, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    const apiKey = provider.keys?.[keyLabel];
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: { type: 'not_found', message: `Key "${keyLabel}" not found` } }),
+        { status: 404, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
+    const result = await probeKey(providerName, keyLabel, apiKey, baseUrl);
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    });
   }
 
   return new Response(
@@ -109,11 +207,14 @@ export async function onRequestGet(context) {
       kv_binding: kvRes?.name || null,
       config,
     }),
-    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    }
   );
 }
 
-export async function onRequestPost(context) {
+export async function onRequestPut(context) {
   const authErr = checkAuth(context.request, context.env);
   if (authErr) return authErr;
 
@@ -123,7 +224,6 @@ export async function onRequestPost(context) {
   }
   const kv = kvRes.kv;
 
-  // Body
   let bodyText;
   try {
     bodyText = await context.request.text();
@@ -150,7 +250,6 @@ export async function onRequestPost(context) {
     );
   }
 
-  // Accept either { providers, agent_models } or a full config
   const incoming = body?.config || body;
   const validationErr = validateConfig(incoming);
   if (validationErr) {
@@ -160,8 +259,14 @@ export async function onRequestPost(context) {
     );
   }
 
+  const wrapped = {
+    source: 'kv',
+    last_modified: new Date().toISOString(),
+    config: incoming,
+  };
+
   try {
-    await kv.put(CONFIG_KV_KEY, JSON.stringify(incoming));
+    await kv.put(CONFIG_KV_KEY, JSON.stringify(wrapped));
   } catch (e) {
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV write failed: ${e?.message || e}` } }),
@@ -183,4 +288,32 @@ export async function onRequestPost(context) {
 
 export async function onRequestPost(context) {
   return onRequestPut(context);
+}
+
+export async function onRequestDelete(context) {
+  const authErr = checkAuth(context.request, context.env);
+  if (authErr) return authErr;
+
+  const kvRes = resolveKvBinding(context);
+  if (!kvRes) {
+    return kvNotBoundResponse(context);
+  }
+  const kv = kvRes.kv;
+
+  try {
+    await kv.delete(CONFIG_KV_KEY);
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: { type: 'kv_error', message: `KV delete failed: ${e?.message || e}` } }),
+      { status: 500, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      message: 'Config reset to empty. Fallback to env on next read.',
+    }),
+    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
+  );
 }
