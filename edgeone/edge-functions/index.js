@@ -1423,13 +1423,22 @@ async function probeEgressIp() {
   try {
     const data = await api('GET', '/check-ip');
     ipData = data;
-    if (clientEl) clientEl.textContent = data.client_ip || '—';
-    if (egressEl) egressEl.textContent = data.egress_ip || '—';
-    if (nodeEl) nodeEl.textContent = data.node_uuid || '—';
-    if (geoEl) geoEl.textContent = \`\${data.geo?.country || ''} \${data.geo?.region || ''} \${data.geo?.city || ''}\`.trim() || '边缘节点网络';
+    const clientIp = data.clientIp || data.client_ip || '—';
+    const egressIp = data.egressIp || data.egress_ip || '—';
+    const nodeUuid = data.nodeUuid || data.node_uuid || '—';
+    const geoText = (typeof data.geo === 'object' && data.geo)
+      ? \`\${data.geo.country || ''} \${data.geo.region || ''} \${data.geo.city || ''}\`.trim()
+      : (data.geo || '边缘节点网络');
+
+    if (clientEl) clientEl.textContent = clientIp;
+    if (egressEl) egressEl.textContent = egressIp;
+    if (nodeEl) nodeEl.textContent = nodeUuid;
+    if (geoEl) geoEl.textContent = geoText || '边缘节点网络';
+    toast(\`已刷新节点 IP: 出口 \${egressIp} (\${geoText || '边缘'})\`, 'ok');
   } catch (e) {
     if (clientEl) clientEl.textContent = '获取失败';
     if (egressEl) egressEl.textContent = '获取失败';
+    toast(\`探测 IP 异常: \${e?.message || e}\`, 'err');
   }
 }
 
