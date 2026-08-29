@@ -1547,13 +1547,13 @@ function renderAgentModels() {
 
     let keysRowsHtml = '';
     keys.forEach((b, idx) => {
-      const cacheKey = \`\${b.provider}:\${b.key}\`;
+      const cacheKey = \`model:\${m}:\${b.provider}:\${b.key}\`;
       const latInfo = modelLatencyCache[cacheKey];
       let latBadge = '';
       if (latInfo) {
         latBadge = latInfo.ok
           ? \`<span class="badge badge-success">\${latInfo.latency_ms}ms</span>\`
-          : \`<span class="badge badge-error">\${latInfo.status}</span>\`;
+          : \`<span class="badge badge-error">\${latInfo.status || 'ERR'}</span>\`;
       }
 
       keysRowsHtml += \`
@@ -1565,7 +1565,7 @@ function renderAgentModels() {
             \${latBadge}
           </div>
           <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="testSingleKey('\${b.provider}', '\${b.key}')">探活</button>
+            <button class="btn btn-ghost btn-sm" onclick="testModelKey('\${m}', '\${b.provider}', '\${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('\${m}', \${idx})">移除</button>
           </div>
         </div>
@@ -1612,13 +1612,13 @@ function renderProviders() {
     keyLabels.forEach(k => {
       const val = keysObj[k];
       const masked = val ? \`\${val.slice(0, 6)}...\${val.slice(-4)}\` : '';
-      const cacheKey = \`\${p}:\${k}\`;
+      const cacheKey = \`prov:\${p}:\${k}\`;
       const latInfo = modelLatencyCache[cacheKey];
       let latBadge = '';
       if (latInfo) {
         latBadge = latInfo.ok
           ? \`<span class="badge badge-success">\${latInfo.latency_ms}ms</span>\`
-          : \`<span class="badge badge-error">\${latInfo.status}</span>\`;
+          : \`<span class="badge badge-error">\${latInfo.status || 'ERR'}</span>\`;
       }
 
       keysListHtml += \`
@@ -1695,13 +1695,30 @@ for chunk in response:
   document.getElementById('accCurl').textContent = curlSample;
 }
 
-// ---- Key Test ------------------------------------------------------------
+// ---- Key & Model Test ---------------------------------------------------
+async function testModelKey(modelName, provider, key) {
+  const item = cfg.agent_models?.[modelName];
+  const upstreamModel = item?.upstream_model || modelName;
+  toast(\`探活模型 \${modelName} (\${provider}/\${key})...\`, 'ok');
+  try {
+    const res = await api('GET', \`/api/config?action=test&provider=\${encodeURIComponent(provider)}&key=\${encodeURIComponent(key)}&model=\${encodeURIComponent(upstreamModel)}\`);
+    modelLatencyCache[\`model:\${modelName}:\${provider}:\${key}\`] = res;
+    renderAgentModels();
+    if (res.ok) {
+      toast(\`\${modelName} [\${provider}/\${key}] 成功 (\${res.latency_ms}ms)\`, 'ok');
+    } else {
+      toast(\`\${modelName} [\${provider}/\${key}] 异常 (HTTP \${res.status || 'ERR'} - \${res.verdict || res.error || ''})\`, 'err');
+    }
+  } catch (e) {
+    toast(\`探活异常: \${e?.message || e}\`, 'err');
+  }
+}
+
 async function testSingleKey(provider, key) {
-  toast(\`探活 \${provider}/\${key}...\`, 'ok');
+  toast(\`测试供应商 \${provider}/\${key}...\`, 'ok');
   try {
     const res = await api('GET', \`/api/config?action=test&provider=\${encodeURIComponent(provider)}&key=\${encodeURIComponent(key)}\`);
-    modelLatencyCache[\`\${provider}:\${key}\`] = res;
-    renderAgentModels();
+    modelLatencyCache[\`prov:\${provider}:\${key}\`] = res;
     renderProviders();
     if (res.ok) {
       toast(\`\${provider}/\${key} 连接成功 (\${res.latency_ms}ms)\`, 'ok');
