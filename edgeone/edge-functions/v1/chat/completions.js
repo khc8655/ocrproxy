@@ -47,7 +47,7 @@ import {
 } from '../../lib/cooldowns.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 60_000;
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000; // 25s upstream timeout to allow failover within EdgeOne 30s limit
 const MAX_RETRIES = 3;
 
 export default async function onRequestPost(context) {
