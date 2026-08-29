@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "name": "ocrproxy-agent-relay",
+  "name": "freellm",
   "build": {
     "edgeFunctions": "edge-functions",
     "cloudFunctions": "cloud-functions"

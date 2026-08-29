@@ -79,7 +79,17 @@ const functionCode =
   '  });\n' +
   '}\n';
 
+const rootProject = join(root, '..');
+const rootIndexPath = join(rootProject, 'edge-functions', 'index.js');
+const rootAdminPath = join(rootProject, 'edge-functions', 'admin.js');
+
 writeFileSync(indexPath, functionCode, 'utf8');
 writeFileSync(adminPath, functionCode, 'utf8');
 console.log(`Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of HTML inlined)`);
+
+if (existsSync(join(rootProject, 'edge-functions'))) {
+  writeFileSync(rootIndexPath, functionCode, 'utf8');
+  writeFileSync(rootAdminPath, functionCode, 'utf8');
+  console.log(`Synced to root: ${rootIndexPath} and ${rootAdminPath}`);
+}
 

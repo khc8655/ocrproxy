@@ -2,8 +2,8 @@
   "version": 3,
   "name": "freellm",
   "build": {
-    "edgeFunctions": "edgeone/edge-functions",
-    "cloudFunctions": "edgeone/cloud-functions"
+    "edgeFunctions": "edge-functions",
+    "cloudFunctions": "cloud-functions"
   },
   "functions": {
     "edge": {
