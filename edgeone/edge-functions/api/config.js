@@ -160,14 +160,8 @@ export async function onRequestPost(context) {
     );
   }
 
-  // Wrap with metadata for audit
-  const wrapped = {
-    last_modified: new Date().toISOString(),
-    config: incoming,
-  };
-
   try {
-    await kv.put(CONFIG_KV_KEY, JSON.stringify(wrapped));
+    await kv.put(CONFIG_KV_KEY, JSON.stringify(incoming));
   } catch (e) {
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV write failed: ${e?.message || e}` } }),
@@ -180,9 +174,6 @@ export async function onRequestPost(context) {
       ok: true,
       last_modified: wrapped.last_modified,
       source: 'kv',
-      // Note: a config write is eventually-consistent across edge nodes
-      // (~60 s).  This writer's own next request will see the new
-      // config immediately.
       propagation_hint: 'New config propagates to all edge nodes within ~60 s.',
       config: incoming,
     }),
