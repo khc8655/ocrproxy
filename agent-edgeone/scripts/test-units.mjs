@@ -378,6 +378,28 @@ test('normalize: google strips $schema from tool parameters', () => {
   eq(body.tools[0].function.parameters.properties.location.$schema, undefined);
 });
 
+// normaliseForProvider — Agnes AI
+test('normalize: agnes reasoning "high" → chat_template_kwargs.enable_thinking: true', () => {
+  const body = { model: 'agnes-2.5-flash', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'agnes');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { enable_thinking: true });
+});
+
+test('normalize: agnes reasoning "none" → chat_template_kwargs.enable_thinking: false', () => {
+  const body = { model: 'agnes-2.5-flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'agnes');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { enable_thinking: false });
+});
+
+// normaliseForProvider — SenseNova
+test('normalize: sensenova object tool_choice → "auto"', () => {
+  const body = { model: 'sensenova-6.8-flash-lite', tool_choice: { type: 'function', function: { name: 'calc' } } };
+  normaliseForProvider(body, 'sensenova');
+  eq(body.tool_choice, 'auto');
+});
+
 test('rescueToolCallsFromText: extracts markdown json tool call', () => {
   const text = 'Here is the tool call:\n```json\n{"name": "fetch_weather", "arguments": {"city": "Shanghai"}}\n```';
   const rescued = rescueToolCallsFromText(text);
@@ -939,8 +961,8 @@ test('kvNotBoundResponse: returns 503 with diagnostic scan in body', async () =>
 // ============================================================================
 console.log('\n== presets ==');
 
-test('PRESETS: contains all 7 major providers', () => {
-  truthy(PRESETS.length >= 7);
+test('PRESETS: contains all 8 major providers', () => {
+  truthy(PRESETS.length >= 8);
   const ids = PRESETS.map(p => p.id);
   truthy(ids.includes('google'));
   truthy(ids.includes('sensenova'));
@@ -949,6 +971,7 @@ test('PRESETS: contains all 7 major providers', () => {
   truthy(ids.includes('tokenrhythm'));
   truthy(ids.includes('deepseek'));
   truthy(ids.includes('openai'));
+  truthy(ids.includes('agnes'));
 });
 
 test('getPreset: finds google preset with recommended models', () => {

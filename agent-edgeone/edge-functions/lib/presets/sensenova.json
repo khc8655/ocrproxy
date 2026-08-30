@@ -1,26 +1,47 @@
 {
   "id": "sensenova",
   "name": "商汤日日新 (SenseNova)",
+  "protocol": "openai",
   "base_url": "https://token.sensenova.cn/v1",
-  "description": "商汤日日新大模型开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制",
+  "doc_url": "https://platform.sensenova.cn/docs",
+  "description": "商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型",
   "features": {
-    "native_thinking": true
+    "native_thinking": true,
+    "multimodal": true,
+    "tools": true
   },
   "recommended_models": [
+    {
+      "name": "sensenova-6.8-flash-lite",
+      "upstream_model": "sensenova-6.8-flash-lite",
+      "description": "商汤轻量级多模态智能体模型，高并发低延迟"
+    },
+    {
+      "name": "deepseek-v4-flash",
+      "upstream_model": "deepseek-v4-flash",
+      "description": "1M 超长上下文深度思考模型"
+    },
     {
       "name": "glm-5.2",
       "upstream_model": "GLM-5.2",
       "description": "智谱/商汤最新 GLM-5.2 旗舰推理大模型"
-    },
-    {
-      "name": "deepseek-v3",
-      "upstream_model": "DeepSeek-V3",
-      "description": "DeepSeek-V3 基础推理模型"
-    },
-    {
-      "name": "deepseek-r1",
-      "upstream_model": "DeepSeek-R1",
-      "description": "DeepSeek-R1 深度思考推理模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "openai_passthrough",
+      "supported_levels": ["none", "low", "medium", "high"]
+    },
+    "tools": {
+      "normalize_choice_to_string": true,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }

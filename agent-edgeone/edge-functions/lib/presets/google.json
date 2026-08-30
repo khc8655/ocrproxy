@@ -1,11 +1,13 @@
 {
   "id": "google",
   "name": "Google AI Studio (Gemini)",
+  "protocol": "google_openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-  "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射与 Schema 裁剪适配",
+  "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix 与 Schema 裁剪",
   "features": {
-    "thinking_config": true,
-    "sanitize_schema": true
+    "native_thinking": true,
+    "multimodal": true,
+    "tools": true
   },
   "recommended_models": [
     {
@@ -28,5 +30,26 @@
       "upstream_model": "gemini-2.5-pro",
       "description": "经典多模态深度思考模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "gemini_thinking_matrix",
+      "none_action": "include_thoughts_false",
+      "model_matrix": {
+        "flash": ["minimal", "low", "medium", "high"],
+        "pro": ["low", "high"]
+      }
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": true,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }

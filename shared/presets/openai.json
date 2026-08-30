@@ -1,10 +1,14 @@
 {
   "id": "openai",
   "name": "OpenAI 官方 / 标准兼容中转",
+  "protocol": "openai",
   "base_url": "https://api.openai.com/v1",
-  "description": "OpenAI 官方 API 或标准兼容中转网关",
+  "doc_url": "https://platform.openai.com/docs",
+  "description": "OpenAI 官方 API 或标准兼容中转网关，原生支持 reasoning_effort 思考控制与多模态",
   "features": {
-    "standard_openai": true
+    "native_thinking": true,
+    "tools": true,
+    "multimodal": true
   },
   "recommended_models": [
     {
@@ -27,5 +31,22 @@
       "upstream_model": "o1",
       "description": "OpenAI o1 深度思考推理旗舰模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "openai_passthrough",
+      "supported_levels": ["none", "low", "medium", "high"]
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }

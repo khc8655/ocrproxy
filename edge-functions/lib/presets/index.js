@@ -9,6 +9,7 @@ import siliconflowPreset from './siliconflow.json' with { type: 'json' };
 import tokenrhythmPreset from './tokenrhythm.json' with { type: 'json' };
 import deepseekPreset from './deepseek.json' with { type: 'json' };
 import openaiPreset from './openai.json' with { type: 'json' };
+import agnesPreset from './agnes.json' with { type: 'json' };
 
 export const PRESETS = [
   googlePreset,
@@ -18,6 +19,7 @@ export const PRESETS = [
   tokenrhythmPreset,
   deepseekPreset,
   openaiPreset,
+  agnesPreset,
 ];
 
 export const PRESET_MAP = Object.fromEntries(PRESETS.map((p) => [p.id, p]));

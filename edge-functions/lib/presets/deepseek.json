@@ -1,10 +1,13 @@
 {
   "id": "deepseek",
   "name": "DeepSeek 官方开放平台",
+  "protocol": "openai",
   "base_url": "https://api.deepseek.com/v1",
+  "doc_url": "https://api-docs.deepseek.com",
   "description": "DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存",
   "features": {
-    "native_thinking": true
+    "native_thinking": true,
+    "tools": true
   },
   "recommended_models": [
     {
@@ -17,5 +20,22 @@
       "upstream_model": "deepseek-reasoner",
       "description": "DeepSeek-R1 深度思考推理大模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "openai_passthrough",
+      "supported_levels": ["none", "low", "medium", "high"]
+    },
+    "tools": {
+      "normalize_choice_to_string": true,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }
