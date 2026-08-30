@@ -16,7 +16,7 @@
     "cloud": {
       "memory": 256,
       "executionTimeout": 120000,
-      "regions": ["ap-guangzhou"]
+      "regions": ["ap-guangzhou", "ap-shanghai", "ap-beijing"]
     }
   },
   "headers": [
