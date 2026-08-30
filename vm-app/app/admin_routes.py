@@ -485,6 +485,8 @@ async def test_candidate_endpoint(request: Request):
     else:
         url = join_upstream(base_url, "chat/completions")
         test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16}
+        from .proxy_routes import _normalise_for_provider
+        _normalise_for_provider(test_body, provider_name)
 
     start_t = time.time()
     try:
@@ -577,6 +579,8 @@ async def test_agent_model_endpoint(request: Request):
         url = join_upstream(base_url, "chat/completions")
         payload = {"model": model, "messages": [{"role": "user", "content": "Hi"}],
                    "max_tokens": 16, "stream": False}
+        from .proxy_routes import _normalise_for_provider
+        _normalise_for_provider(payload, b.get("provider"))
         start = time.time()
         try:
             async with sem:

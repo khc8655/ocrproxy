@@ -125,6 +125,18 @@ export function normaliseForProvider(body, provider) {
     }
   }
 
+  // 4) Agnes AI: map reasoning_effort to chat_template_kwargs.enable_thinking
+  if (p === 'agnes' || String(body.model || '').toLowerCase().startsWith('agnes')) {
+    if (body.reasoning_effort !== undefined) {
+      const effort = String(body.reasoning_effort).toLowerCase();
+      body.chat_template_kwargs = body.chat_template_kwargs || {};
+      if (body.chat_template_kwargs.enable_thinking === undefined) {
+        body.chat_template_kwargs.enable_thinking = (effort !== 'none' && effort !== 'false');
+      }
+      delete body.reasoning_effort;
+    }
+  }
+
   return body;
 }
 

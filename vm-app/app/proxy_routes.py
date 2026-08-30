@@ -177,6 +177,15 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
                     cleaned_tools.append(t)
             out["tools"] = cleaned_tools
 
+    # 5. Agnes AI: map reasoning_effort to chat_template_kwargs.enable_thinking
+    if p == "agnes" or str(out.get("model", "")).lower().startswith("agnes"):
+        re = out.pop("reasoning_effort", None)
+        if re is not None:
+            effort = str(re).lower()
+            ctk = out.setdefault("chat_template_kwargs", {})
+            if "enable_thinking" not in ctk:
+                ctk["enable_thinking"] = effort not in ("none", "false")
+
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
     """Inject provider-specific parameters to disable thinking/reasoning in KB mode.
