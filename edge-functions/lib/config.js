@@ -423,7 +423,13 @@ export function resolveBinding(config, binding) {
  */
 export function buildChatUrl(baseUrl) {
   const cleaned = String(baseUrl || '').replace(/\/+$/, '');
-  return `${cleaned}/chat/completions`;
+  if (cleaned.endsWith('/chat/completions')) {
+    return cleaned;
+  }
+  if (cleaned.endsWith('/v1') || cleaned.endsWith('/v1beta/openai') || cleaned.includes('/v1/')) {
+    return `${cleaned}/chat/completions`;
+  }
+  return `${cleaned}/v1/chat/completions`;
 }
 
 /**

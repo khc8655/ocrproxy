@@ -250,10 +250,12 @@ test('resolveBinding: throws ConfigError if provider disappears', () => {
 });
 
 // buildChatUrl
-test('buildChatUrl: appends /chat/completions', () => {
-  eq(buildChatUrl('https://api.siliconflow.cn'), 'https://api.siliconflow.cn/chat/completions');
-  eq(buildChatUrl('https://api.siliconflow.cn/'), 'https://api.siliconflow.cn/chat/completions');
+test('buildChatUrl: intelligently formats /v1/chat/completions', () => {
+  eq(buildChatUrl('https://api.siliconflow.cn'), 'https://api.siliconflow.cn/v1/chat/completions');
+  eq(buildChatUrl('https://api.siliconflow.cn/'), 'https://api.siliconflow.cn/v1/chat/completions');
   eq(buildChatUrl('https://api.siliconflow.cn/v1'), 'https://api.siliconflow.cn/v1/chat/completions');
+  eq(buildChatUrl('https://api.stepfun.com/step_plan'), 'https://api.stepfun.com/step_plan/v1/chat/completions');
+  eq(buildChatUrl('https://generativelanguage.googleapis.com/v1beta/openai'), 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
 });
 
 // buildModelsList
