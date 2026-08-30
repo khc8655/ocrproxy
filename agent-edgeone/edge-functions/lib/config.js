@@ -564,3 +564,34 @@ export function sanitizeJsonString(raw) {
   }
   return s;
 }
+
+/**
+ * Check Bearer auth against PROXY_API_KEY.
+ * Returns null if ok, or a Response object if unauthorized.
+ */
+export function checkAuth(request, env, config) {
+  const need = env?.PROXY_API_KEY || config?.proxy_api_key;
+  if (!need) return null;
+  const rawAuth = request?.headers?.get('authorization') || request?.headers?.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+  if (token !== String(need).trim()) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'authentication_error',
+          message: 'Missing or invalid Authorization header.',
+          code: 'invalid_api_key',
+        },
+      }),
+      {
+        status: 401,
+        headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
+      }
+    );
+  }
+  return null;
+}
+
+export function requireAuth(context) {
+  return checkAuth(context?.request, context?.env);
+}
