@@ -40,7 +40,7 @@ const PRESET_DEFINITIONS = {
   stepfun: {
     id: 'stepfun',
     name: '阶跃星辰 (StepFun)',
-    base_url: 'https://api.stepfun.com/step_plan',
+    base_url: 'https://api.stepfun.com/v1',
     description: '阶跃星辰大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入',
     recommended_models: [
       { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: '阶跃最新闪电高速推理大模型', checked: true },

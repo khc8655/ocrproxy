@@ -647,13 +647,44 @@
 
 <!-- Modals -->
 <div class="modal" id="providerModal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head"><h3 id="providerModalTitle">供应商</h3><button class="modal-close" onclick="closeModal('providerModal')">×</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">供应商标识 (英文字符)</label><input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova"></div>
-      <div class="form-group"><label class="form-label">Base URL 接口基础地址</label><input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn"></div>
+      <div class="form-group" id="p_preset_wrap">
+        <label class="form-label">推荐官方适配模板 (自动填入参数与模型)</label>
+        <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
+          <option value="">-- 自定义配置 (手动输入) --</option>
+          <option value="google">Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)</option>
+          <option value="sensenova">商汤日日新 (SenseNova GLM-5.2 / DeepSeek)</option>
+          <option value="stepfun">阶跃星辰 (StepFun Step-3.7-Flash / Step-2)</option>
+          <option value="siliconflow">硅基流动 (SiliconFlow DeepSeek / Qwen / 向量重排)</option>
+          <option value="tokenrhythm">TokenRhythm (Claude / GPT 系列)</option>
+          <option value="deepseek">DeepSeek 官方开放平台</option>
+          <option value="openai">OpenAI 官方 / 标准中转</option>
+        </select>
+        <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
+        <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Base URL 接口基础地址</label>
+        <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">
+      </div>
+      <div id="p_init_key_wrap" class="form-group" style="margin-top:14px;">
+        <label class="form-label">初始 API Key (可选)</label>
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;">
+          <input type="text" id="p_init_label" class="form-control" placeholder="别名(如主账号)" value="default">
+          <input type="text" id="p_init_val" class="form-control" placeholder="API Key 密钥明文 (sk-...)">
+        </div>
+      </div>
+      <div id="p_models_wrap" class="form-group" style="display:none;margin-top:14px;">
+        <label class="form-label">自动创建并绑定推荐模型</label>
+        <div id="p_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--bg-subtle);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      </div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('providerModal')">取消</button><button class="btn btn-primary" onclick="saveProvider()">保存</button></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('providerModal')">取消</button><button class="btn btn-primary" onclick="saveProvider()">保存供应商</button></div>
   </div>
 </div>
 
@@ -673,28 +704,62 @@
 </div>
 
 <div class="modal" id="agentModal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head"><h3 id="agentModalTitle">Agent 模型配置</h3><button class="modal-close" onclick="closeModal('agentModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="a_oldName">
-      <div class="form-group"><label class="form-label">模型名（对外暴露名称）</label><input type="text" id="a_name" class="form-control" placeholder="例如 deepseek-v4-flash"></div>
-      <div class="form-group"><label class="form-label">上游模型 ID（可选）</label><input type="text" id="a_upstream" class="form-control" placeholder="若上游名称与暴露名不同在此填写，默认相同"></div>
-      <div class="form-group"><label class="form-label">选择供应商并勾选绑定 Key</label><select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select></div>
-      <div id="a_keyList" class="mt-2" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
+      <div class="form-group">
+        <label class="form-label">模型名（对外暴露名称）</label>
+        <input type="text" id="a_name" class="form-control" placeholder="例如 deepseek-v4-flash">
+      </div>
+      <div class="form-group">
+        <label class="form-label">上游实际模型 ID（可选，若与暴露名相同可留空）</label>
+        <input type="text" id="a_upstream" class="form-control" placeholder="例如 DeepSeek-V3-Flash">
+      </div>
+      <div class="form-group">
+        <label class="form-label">选择供应商并勾选绑定 Key</label>
+        <select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select>
+      </div>
+      <div id="a_quickModels" class="mb-2" style="display:none;">
+        <div class="text-xs text-secondary mb-1">官方推荐模型 (点击自动填入)：</div>
+        <div id="a_quickTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+      <div id="a_keyList" class="mt-2" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('agentModal')">取消</button><button class="btn btn-primary" onclick="saveAgentModel()">保存配置</button></div>
   </div>
 </div>
 
 <div class="modal" id="candidateModal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head"><h3 id="candidateModalTitle">挂载候选节点</h3><button class="modal-close" onclick="closeModal('candidateModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="c_editCat"><input type="hidden" id="c_editIdx">
-      <div class="form-group"><label class="form-label">知识库虚拟类型</label><select id="c_type" class="form-control"><option value="chat">chat (对话与摘要)</option><option value="embedding">embedding (向量化)</option><option value="reranker">reranker (重排序)</option><option value="ocr">ocr (图文识别)</option></select></div>
-      <div class="form-group"><label class="form-label">供应商</label><select id="c_provider" class="form-control" onchange="renderCandidateKeyChecks()"></select></div>
-      <div class="form-group"><label class="form-label">选择绑定的 Key</label><div id="c_keyList" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div></div>
-      <div class="form-group"><label class="form-label">上游实际模型 ID</label><input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B"></div>
+      <div class="form-group">
+        <label class="form-label">知识库虚拟类型</label>
+        <select id="c_type" class="form-control" onchange="renderCandidateQuickModels()">
+          <option value="chat">chat (对话与摘要)</option>
+          <option value="embedding">embedding (向量化)</option>
+          <option value="reranker">reranker (重排序)</option>
+          <option value="ocr">ocr (图文识别)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">供应商</label>
+        <select id="c_provider" class="form-control" onchange="renderCandidateKeyChecks(); renderCandidateQuickModels();"></select>
+      </div>
+      <div id="c_quickModels" class="mb-2" style="display:none;">
+        <div class="text-xs text-secondary mb-1">推荐适配模型 (点击自动填入)：</div>
+        <div id="c_quickTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">上游实际模型 ID</label>
+        <input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B">
+      </div>
+      <div class="form-group">
+        <label class="form-label">选择绑定的 Key</label>
+        <div id="c_keyList" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
+      </div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary" onclick="saveCandidate()">保存挂载</button></div>
   </div>
@@ -1187,20 +1252,230 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   </tr>`;
 }
 
+// ---- Provider Presets Database -------------------------------------------
+const PRESET_DEFINITIONS = {
+  google: {
+    id: 'google',
+    name: 'Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)',
+    base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射与 Tool Schema 自动裁剪适配。',
+    recommended_models: [
+      { name: 'gemini-3.5-flash', upstream: 'gemini-3.5-flash', desc: '最新高性价比推理模型 (支持 low/medium/high 思考等级)', checked: true, kb_type: 'chat' },
+      { name: 'gemini-3.5-pro', upstream: 'gemini-3.5-pro', desc: '最新旗舰强推理模型 (支持 low/high 思考等级)', checked: true, kb_type: 'chat' },
+      { name: 'gemini-2.5-flash', upstream: 'gemini-2.5-flash', desc: '经典多模态快速模型', checked: false, kb_type: 'ocr' },
+      { name: 'gemini-2.5-pro', upstream: 'gemini-2.5-pro', desc: '经典多模态深度思考模型', checked: false, kb_type: 'chat' }
+    ]
+  },
+  sensenova: {
+    id: 'sensenova',
+    name: '商汤日日新 (SenseNova GLM-5.2 / DeepSeek)',
+    base_url: 'https://token.sensenova.cn/v1',
+    description: '商汤日日新开放平台，支持 GLM-5.2、DeepSeek-V3/R1、多模态 OCR 等，原生支持 reasoning_effort 思考控制。',
+    recommended_models: [
+      { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '智谱/商汤最新 GLM-5.2 旗舰推理大模型', checked: true, kb_type: 'chat' },
+      { name: 'sensenova-6.8-flash-lite', upstream: 'sensenova-6.8-flash-lite', desc: 'SenseNova 多模态 OCR 高速识别模型', checked: false, kb_type: 'ocr' },
+      { name: 'deepseek-v3', upstream: 'DeepSeek-V3', desc: 'DeepSeek-V3 基础推理模型', checked: false, kb_type: 'chat' },
+      { name: 'deepseek-r1', upstream: 'DeepSeek-R1', desc: 'DeepSeek-R1 深度思考推理模型', checked: false, kb_type: 'chat' }
+    ]
+  },
+  stepfun: {
+    id: 'stepfun',
+    name: '阶跃星辰 (StepFun Step-3.7-Flash / Step-2)',
+    base_url: 'https://api.stepfun.com/v1',
+    description: '阶跃星辰大模型平台，系统已内置 reasoning_effort none->low 降级兼容与 deepseek-style 思考格式自动注入。',
+    recommended_models: [
+      { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: '阶跃最新闪电高速推理大模型', checked: true, kb_type: 'chat' },
+      { name: 'step-2-16k', upstream: 'step-2-16k', desc: '阶跃 Step-2 旗舰大模型', checked: false, kb_type: 'chat' }
+    ]
+  },
+  siliconflow: {
+    id: 'siliconflow',
+    name: '硅基流动 (SiliconFlow DeepSeek / Qwen / 向量重排)',
+    base_url: 'https://api.siliconflow.cn/v1',
+    description: '硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5/Qwen3 等海量开源模型及向量/重排模型。',
+    recommended_models: [
+      { name: 'deepseek-ai/DeepSeek-V3', upstream: 'deepseek-ai/DeepSeek-V3', desc: 'DeepSeek-V3 全尺寸旗舰模型', checked: true, kb_type: 'chat' },
+      { name: 'deepseek-ai/DeepSeek-R1', upstream: 'deepseek-ai/DeepSeek-R1', desc: 'DeepSeek-R1 全尺寸深度思考模型', checked: false, kb_type: 'chat' },
+      { name: 'Qwen/Qwen2.5-72B-Instruct', upstream: 'Qwen/Qwen2.5-72B-Instruct', desc: '通义千问 72B Instruct 指令模型', checked: false, kb_type: 'chat' },
+      { name: 'Qwen/Qwen3-Embedding-4B', upstream: 'Qwen/Qwen3-Embedding-4B', desc: '通义千问高性能向量嵌入模型 (2560 维)', checked: false, kb_type: 'embedding' },
+      { name: 'Qwen/Qwen3-Reranker-0.6B', upstream: 'Qwen/Qwen3-Reranker-0.6B', desc: '通义千问高精度检索重排序模型', checked: false, kb_type: 'reranker' }
+    ]
+  },
+  tokenrhythm: {
+    id: 'tokenrhythm',
+    name: 'TokenRhythm (Claude / GPT 系列)',
+    base_url: 'https://api.tokenrhythm.com/v1',
+    description: 'TokenRhythm 聚合大模型路由网关，系统已内置 tool_choice 对象转字符串自动清洗。',
+    recommended_models: [
+      { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true, kb_type: 'chat' },
+      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false, kb_type: 'chat' }
+    ]
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek 官方开放平台',
+    base_url: 'https://api.deepseek.com/v1',
+    description: 'DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存。',
+    recommended_models: [
+      { name: 'deepseek-chat', upstream: 'deepseek-chat', desc: 'DeepSeek-V3 快速对话大模型', checked: true, kb_type: 'chat' },
+      { name: 'deepseek-reasoner', upstream: 'deepseek-reasoner', desc: 'DeepSeek-R1 深度思考推理大模型', checked: true, kb_type: 'chat' }
+    ]
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI 官方 / 标准中转',
+    base_url: 'https://api.openai.com/v1',
+    description: 'OpenAI 官方 API 或标准兼容中转网关。',
+    recommended_models: [
+      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能大模型', checked: true, kb_type: 'chat' },
+      { name: 'gpt-4o-mini', upstream: 'gpt-4o-mini', desc: 'OpenAI GPT-4o-mini 高性价比快速模型', checked: true, kb_type: 'chat' },
+      { name: 'o3-mini', upstream: 'o3-mini', desc: 'OpenAI 最新 o3-mini 快速推理思考模型', checked: false, kb_type: 'chat' },
+      { name: 'o1', upstream: 'o1', desc: 'OpenAI o1 深度思考推理旗舰模型', checked: false, kb_type: 'chat' },
+      { name: 'text-embedding-3-small', upstream: 'text-embedding-3-small', desc: 'OpenAI 向量嵌入模型', checked: false, kb_type: 'embedding' }
+    ]
+  }
+};
+
+// Preset Selection Handler
+function onProviderPresetChange(){
+  const presetId = document.getElementById('p_preset').value;
+  const nameInput = document.getElementById('p_name');
+  const urlInput = document.getElementById('p_url');
+  const descEl = document.getElementById('p_desc');
+  const modelsWrap = document.getElementById('p_models_wrap');
+  const modelsList = document.getElementById('p_models_list');
+
+  if(!presetId || !PRESET_DEFINITIONS[presetId]){
+    nameInput.value = '';
+    urlInput.value = '';
+    descEl.style.display = 'none';
+    modelsWrap.style.display = 'none';
+    modelsList.innerHTML = '';
+    return;
+  }
+
+  const preset = PRESET_DEFINITIONS[presetId];
+  nameInput.value = preset.id;
+  urlInput.value = preset.base_url;
+  descEl.textContent = preset.description || '';
+  descEl.style.display = 'block';
+
+  modelsList.innerHTML = '';
+  if(preset.recommended_models && preset.recommended_models.length > 0){
+    modelsWrap.style.display = 'block';
+    preset.recommended_models.forEach((rm) => {
+      const row = document.createElement('div');
+      row.style.marginBottom = '6px';
+      row.innerHTML = `
+        <label class="checkbox" style="align-items:flex-start;">
+          <input type="checkbox" data-model="${esc(rm.name)}" data-upstream="${esc(rm.upstream)}" data-kb="${esc(rm.kb_type||'')}" ${rm.checked ? 'checked' : ''}>
+          <div style="font-size:12px;">
+            <div style="font-weight:600;color:var(--text);">${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: ${esc(rm.upstream)})</span></div>
+            <div class="text-secondary" style="font-size:11px;margin-top:2px;">${esc(rm.desc || '')}</div>
+          </div>
+        </label>
+      `;
+      modelsList.appendChild(row);
+    });
+  } else {
+    modelsWrap.style.display = 'none';
+  }
+}
+
 // Key & Provider Actions
-function openProviderModal(){ document.getElementById('providerModalTitle').textContent='新增供应商'; document.getElementById('p_name').value=''; document.getElementById('p_name').disabled=false; document.getElementById('p_url').value=''; openModal('providerModal'); }
-function editProvider(name){ const p=state.config.providers[name]; document.getElementById('providerModalTitle').textContent='编辑供应商'; document.getElementById('p_name').value=name; document.getElementById('p_name').disabled=true; document.getElementById('p_url').value=p.base_url; openModal('providerModal'); }
+function openProviderModal(){
+  document.getElementById('providerModalTitle').textContent = '新增供应商';
+  document.getElementById('p_preset_wrap').style.display = 'block';
+  document.getElementById('p_preset').value = '';
+  document.getElementById('p_desc').style.display = 'none';
+  document.getElementById('p_name').value = '';
+  document.getElementById('p_name').disabled = false;
+  document.getElementById('p_url').value = '';
+  document.getElementById('p_init_key_wrap').style.display = 'block';
+  document.getElementById('p_init_label').value = 'default';
+  document.getElementById('p_init_val').value = '';
+  document.getElementById('p_models_wrap').style.display = 'none';
+  document.getElementById('p_models_list').innerHTML = '';
+  openModal('providerModal');
+}
+
+function editProvider(name){
+  const p = state.config.providers[name];
+  document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
+  document.getElementById('p_preset_wrap').style.display = 'none';
+  document.getElementById('p_desc').style.display = 'none';
+  document.getElementById('p_name').value = name;
+  document.getElementById('p_name').disabled = true;
+  document.getElementById('p_url').value = p.base_url;
+  document.getElementById('p_init_key_wrap').style.display = 'none';
+  document.getElementById('p_models_wrap').style.display = 'none';
+  openModal('providerModal');
+}
+
 function saveProvider(){
-  const name=document.getElementById('p_name').value.trim(), url=document.getElementById('p_url').value.trim();
-  if(!name||!url){ toast('供应商标识和 URL 不能为空','err'); return; }
-  const isEdit=document.getElementById('p_name').disabled;
-  if(!isEdit&&state.config.providers&&state.config.providers[name]){ toast('供应商已存在','err'); return; }
-  if(!state.config.providers) state.config.providers={};
-  if(isEdit) state.config.providers[name].base_url=url;
-  else state.config.providers[name]={base_url:url,keys:{}};
+  const name = document.getElementById('p_name').value.trim();
+  const url = document.getElementById('p_url').value.trim();
+  if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
+  const isEdit = document.getElementById('p_name').disabled;
+  if(!isEdit && state.config.providers && state.config.providers[name]){ toast('供应商已存在', 'err'); return; }
+  if(!state.config.providers) state.config.providers = {};
+  if(isEdit) {
+    state.config.providers[name].base_url = url;
+  } else {
+    state.config.providers[name] = { base_url: url, keys: {} };
+    // Process optional initial Key
+    const initLabel = (document.getElementById('p_init_label').value || 'default').trim();
+    const initVal = (document.getElementById('p_init_val').value || '').trim();
+    if(initVal){
+      state.config.providers[name].keys[initLabel] = initVal;
+    }
+
+    // Process auto-creation of recommended models
+    const checkedModels = [];
+    document.querySelectorAll('#p_models_list input[type="checkbox"]:checked').forEach(cb => {
+      checkedModels.push({
+        name: cb.dataset.model,
+        upstream: cb.dataset.upstream,
+        kb_type: cb.dataset.kb
+      });
+    });
+
+    if(checkedModels.length > 0 && initVal){
+      // 1. Agent models auto-creation
+      if(!state.config.agent_models) state.config.agent_models = {};
+      checkedModels.forEach(m => {
+        if(!state.config.agent_models[m.name]){
+          state.config.agent_models[m.name] = {
+            keys: [{ provider: name, key: initLabel }],
+            upstream_model: m.upstream
+          };
+        } else {
+          const keys = state.config.agent_models[m.name].keys || [];
+          if(!keys.some(k => k.provider === name && k.key === initLabel)){
+            keys.push({ provider: name, key: initLabel });
+            state.config.agent_models[m.name].keys = keys;
+          }
+        }
+      });
+
+      // 2. KB models auto-creation (if kb_type is present)
+      if(!state.config.candidates) state.config.candidates = {};
+      checkedModels.forEach(m => {
+        if(m.kb_type && ['chat', 'embedding', 'reranker', 'ocr'].includes(m.kb_type)){
+          if(!state.config.candidates[m.kb_type]) state.config.candidates[m.kb_type] = [];
+          const list = state.config.candidates[m.kb_type];
+          if(!list.some(c => c.provider === name && c.key === initLabel && c.model === m.upstream)){
+            list.push({ provider: name, key: initLabel, model: m.upstream });
+          }
+        }
+      });
+    }
+  }
+
   closeModal('providerModal');
   persistConfig(`供应商「${name}」已保存并立即生效`);
   renderProviders();
+  renderModels();
 }
 function deleteProvider(name){ 
   if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？相关挂载也将一并清理。')) return; 
@@ -1312,6 +1587,11 @@ function commitKey(prov,label,val){
 }
 
 // Agent Model Actions
+function applyAgentQuickModel(name, upstream){
+  document.getElementById('a_name').value = name;
+  document.getElementById('a_upstream').value = upstream || name;
+}
+
 function openAgentModal(){ 
   document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; 
   document.getElementById('a_oldName').value=''; 
@@ -1326,9 +1606,27 @@ function populateProviderSelect(id){ const sel=document.getElementById(id); cons
 function renderAgentKeyChecks(){
   const prov=document.getElementById('a_provider').value;
   const box=document.getElementById('a_keyList');
-  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请先在上方选择供应商</div>'; return; }
+  const quickBox=document.getElementById('a_quickModels');
+  const quickTags=document.getElementById('a_quickTags');
+
+  if(!prov||!state.config.providers[prov]){ 
+    box.innerHTML='<div class="hint">请先在上方选择供应商</div>'; 
+    if(quickBox) quickBox.style.display='none';
+    return; 
+  }
   const keys=Object.keys(state.config.providers[prov].keys||{});
   box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
+
+  // Render quick tags
+  const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
+  if(preset && preset.recommended_models && preset.recommended_models.length > 0 && quickBox && quickTags){
+    quickTags.innerHTML = preset.recommended_models.map(rm =>
+      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(rm.name)}', '${esc(rm.upstream)}')">${esc(rm.name)}</button>`
+    ).join(' ');
+    quickBox.style.display = 'block';
+  } else if(quickBox) {
+    quickBox.style.display = 'none';
+  }
 }
 function editAgentModel(name){
   const m=state.config.agent_models[name] || {};
@@ -1481,11 +1779,42 @@ async function testAgentModelAll(name){
 }
 
 // Candidate Actions
+function applyCandidateQuickModel(model){
+  document.getElementById('c_model').value = model;
+}
+
+function renderCandidateQuickModels(){
+  const prov = document.getElementById('c_provider').value;
+  const type = document.getElementById('c_type').value;
+  const quickBox = document.getElementById('c_quickModels');
+  const quickTags = document.getElementById('c_quickTags');
+
+  if(!prov || !quickBox || !quickTags){
+    if(quickBox) quickBox.style.display = 'none';
+    return;
+  }
+
+  const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
+  if(preset && preset.recommended_models && preset.recommended_models.length > 0){
+    const matching = preset.recommended_models.filter(rm => !rm.kb_type || rm.kb_type === type);
+    const listToRender = matching.length > 0 ? matching : preset.recommended_models;
+    quickTags.innerHTML = listToRender.map(rm =>
+      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(rm.upstream)}')">${esc(rm.name)} (${esc(rm.upstream)})</button>`
+    ).join(' ');
+    quickBox.style.display = 'block';
+  } else {
+    quickBox.style.display = 'none';
+  }
+}
+
 function openCandidateModal(type){
   document.getElementById('candidateModalTitle').textContent='挂载候选节点';
   document.getElementById('c_editCat').value=''; document.getElementById('c_editIdx').value='';
   document.getElementById('c_type').value=type||'chat'; document.getElementById('c_type').disabled=!type;
-  populateProviderSelect('c_provider'); renderCandidateKeyChecks(); document.getElementById('c_model').value='';
+  populateProviderSelect('c_provider'); 
+  renderCandidateKeyChecks(); 
+  renderCandidateQuickModels();
+  document.getElementById('c_model').value='';
   openModal('candidateModal');
 }
 function renderCandidateKeyChecks(){
@@ -1501,7 +1830,9 @@ function editCandidate(type,i){
   document.getElementById('c_editCat').value=type; document.getElementById('c_editIdx').value=i;
   document.getElementById('c_type').value=type; document.getElementById('c_type').disabled=true;
   populateProviderSelect('c_provider'); document.getElementById('c_provider').value=c.provider;
-  renderCandidateKeyChecks(); document.querySelectorAll('#c_keyList input').forEach(inp=>inp.checked=inp.value===c.key);
+  renderCandidateKeyChecks(); 
+  renderCandidateQuickModels();
+  document.querySelectorAll('#c_keyList input').forEach(inp=>inp.checked=inp.value===c.key);
   document.getElementById('c_model').value=c.model;
   openModal('candidateModal');
 }
