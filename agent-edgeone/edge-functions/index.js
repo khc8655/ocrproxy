@@ -895,6 +895,7 @@ tr:hover td, .tbl tbody tr:hover td {
       <button onclick="switchTab('agents')">Agent 模型</button>
       <button onclick="switchTab('providers')">供应商</button>
       <button onclick="switchTab('state')">状态</button>
+      <button onclick="switchTab('settings')">全局策略</button>
       <button onclick="switchTab('raw')">JSON 配置</button>
       <button onclick="switchTab('access')">接入说明</button>
     </nav>
@@ -1016,6 +1017,117 @@ tr:hover td, .tbl tbody tr:hover td {
             <thead><tr><th>供应商</th><th>Key 别名</th><th>状态</th><th>连续失败</th><th>冷却到期时间</th></tr></thead>
             <tbody id="stateTableBody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel: Global Settings -->
+    <div id="panel-settings" class="panel">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">全局策略与超时控制</div>
+            <div class="section-desc">统一配置大模型路由算法、全局硬超时预算与跨厂商熔断策略</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存策略设置</button>
+          </div>
+        </div>
+        <div class="card card-pad mb-4">
+          <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">分流算法与超时预算</h4>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
+            <div class="form-group">
+              <label class="form-label">路由分流算法 (agent_routing_strategy)</label>
+              <select id="set_routing_strategy" class="form-control">
+                <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐，稳定高效</option>
+                <option value="round_robin">原子轮询 (round_robin) — 均衡摊销各个 Key</option>
+                <option value="priority_fallback">优先级优先 (priority_fallback) — 严格按顺序尝试</option>
+                <option value="random">随机散列 (random) — 随机挑选候选 Key</option>
+              </select>
+              <div class="text-secondary text-sm mt-1">控制多个候选 Key 之间的主备切换与负载均衡方式</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">全局请求硬超时预算 (request_total_budget_sec)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_request_total_budget_sec" class="form-control" min="10" max="120" step="1" value="25" style="width:140px;">
+                <span class="text-secondary">秒 (EdgeOne 建议 25s 以规避平台 30s 强杀；VM 建议 45~60s)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">单次客户端请求的最大总时钟，超时立即主动返回 504，彻底杜绝 4 分钟死锁</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">单 Key 上游超时时间 (upstream_timeout_sec)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="60" step="1" value="15" style="width:140px;">
+                <span class="text-secondary">秒 (默认 15s)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">向上游单一 Key 发起请求的等待上限，超时后无缝切换下一候选 Key</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">单请求最大重试次数 (schedule_total_budget)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_schedule_total_budget" class="form-control" min="1" max="5" step="1" value="3" style="width:140px;">
+                <span class="text-secondary">次 (默认 3 次)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">单次请求最多允许尝试的候选 Key 数量上限</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">智能故障熔断与冷却避让</h4>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
+            <div class="form-group">
+              <label class="form-label">单厂商尝试次数上限 (max_attempts_per_provider)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_max_attempts_per_provider" class="form-control" min="1" max="5" step="1" value="2" style="width:140px;">
+                <span class="text-secondary">次 (默认 2 次)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">防止同一厂商（如7个商汤Key）源站宕机时在同一厂商上死等7次超时</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">跨厂商快速熔断 (fast_failover_provider_down)</label>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                <label class="checkbox" style="font-size:14px;cursor:pointer;">
+                  <input type="checkbox" id="set_fast_failover_provider_down" checked>
+                  <span style="font-weight:600;">开启跨厂商快速熔断</span>
+                </label>
+              </div>
+              <div class="text-secondary text-sm mt-1">遇 502/504/超时且存在其他备用厂商时，直接跳过当前厂商所有 Key，秒级切走</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">429 限流冷却时长 (cooldown_429_sec)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_cooldown_429_sec" class="form-control" min="10" max="600" step="1" value="60" style="width:140px;">
+                <span class="text-secondary">秒 (默认 60s)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">命中 RPM / TPM 限流时的临时避让冷却时长</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">5xx 故障冷却时长 (cooldown_5xx_sec)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_cooldown_5xx_sec" class="form-control" min="5" max="300" step="1" value="30" style="width:140px;">
+                <span class="text-secondary">秒 (默认 30s)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">上游源站抛出 500/502/503/504 错误时的避让冷却时长</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">连续失败熔断阈值 (circuit_break_threshold)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_circuit_break_threshold" class="form-control" min="1" max="10" step="1" value="3" style="width:140px;">
+                <span class="text-secondary">次 (默认 3 次)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">某个 Key 连续失败达到该次数后触发断路器熔断</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">403 鉴权失败隔离时长 (cooldown_403_sec)</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="number" id="set_cooldown_403_sec" class="form-control" min="60" max="3600" step="1" value="600" style="width:140px;">
+                <span class="text-secondary">秒 (默认 600s)</span>
+              </div>
+              <div class="text-secondary text-sm mt-1">Key 无效或欠费被拒时的主动隔离时间</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1463,8 +1575,73 @@ function renderAll() {
   renderAgentModels();
   renderProviders();
   renderStateTable();
+  renderSettings();
   renderRawJson();
   renderAccess();
+}
+
+function renderSettings() {
+  const s = cfg.settings || {};
+  const elStrat = document.getElementById('set_routing_strategy');
+  if (elStrat) elStrat.value = s.agent_routing_strategy || cfg.agent_routing_strategy || 'sticky_failover';
+
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  if (elBudget) elBudget.value = s.request_total_budget_sec || 25;
+
+  const elUpstream = document.getElementById('set_upstream_timeout_sec');
+  if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 15;
+
+  const elRetries = document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = s.schedule_total_budget || 3;
+
+  const elProvMax = document.getElementById('set_max_attempts_per_provider');
+  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 2;
+
+  const elFastFail = document.getElementById('set_fast_failover_provider_down');
+  if (elFastFail) elFastFail.checked = s.fast_failover_provider_down !== false;
+
+  const elCd429 = document.getElementById('set_cooldown_429_sec');
+  if (elCd429) elCd429.value = s.cooldown_429_sec || 60;
+
+  const elCd5xx = document.getElementById('set_cooldown_5xx_sec');
+  if (elCd5xx) elCd5xx.value = s.cooldown_5xx_sec || 30;
+
+  const elCircuit = document.getElementById('set_circuit_break_threshold');
+  if (elCircuit) elCircuit.value = s.circuit_break_threshold || 3;
+
+  const elCd403 = document.getElementById('set_cooldown_403_sec');
+  if (elCd403) elCd403.value = s.cooldown_403_sec || 600;
+}
+
+async function saveSettings() {
+  cfg.settings = {
+    agent_routing_strategy: document.getElementById('set_routing_strategy').value,
+    request_total_budget_sec: Number(document.getElementById('set_request_total_budget_sec').value) || 25,
+    upstream_timeout_sec: Number(document.getElementById('set_upstream_timeout_sec').value) || 15,
+    schedule_total_budget: Number(document.getElementById('set_schedule_total_budget').value) || 3,
+    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
+    fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
+    cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
+    cooldown_5xx_sec: Number(document.getElementById('set_cooldown_5xx_sec').value) || 30,
+    circuit_break_threshold: Number(document.getElementById('set_circuit_break_threshold').value) || 3,
+    cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
+  };
+  await persistConfig();
+  toast('全局策略设置已保存生效', 'ok');
+}
+
+function resetSettingsToDefault() {
+  document.getElementById('set_routing_strategy').value = 'sticky_failover';
+  document.getElementById('set_request_total_budget_sec').value = 25;
+  document.getElementById('set_upstream_timeout_sec').value = 15;
+  document.getElementById('set_schedule_total_budget').value = 3;
+  document.getElementById('set_max_attempts_per_provider').value = 2;
+  document.getElementById('set_fast_failover_provider_down').checked = true;
+  document.getElementById('set_cooldown_429_sec').value = 60;
+  document.getElementById('set_cooldown_5xx_sec').value = 30;
+  document.getElementById('set_circuit_break_threshold').value = 3;
+  document.getElementById('set_cooldown_403_sec').value = 600;
+  toast('已填入推荐默认值，请点击保存生效', 'ok');
 }
 
 function renderDashboard() {

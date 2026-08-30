@@ -1,0 +1,17 @@
+{
+  "id": "agnes",
+  "name": "Agnes AI (爱格尼斯)",
+  "base_url": "https://apihub.agnes-ai.com/v1",
+  "description": "Agnes AI 大模型平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型",
+  "features": {
+    "native_thinking": false,
+    "chat_template_kwargs_thinking": true
+  },
+  "recommended_models": [
+    {
+      "name": "agnes-2.5-flash",
+      "upstream_model": "agnes-2.5-flash",
+      "description": "Agnes 2.5 Flash 高速轻量模型"
+    }
+  ]
+}
