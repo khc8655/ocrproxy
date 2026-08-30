@@ -9,7 +9,7 @@
 import { loadConfig, ConfigError, resolveKvBinding } from './lib/config.js';
 import { snapshotState, getCooldownsBatch, bindingId } from './lib/cooldowns.js';
 
-export default async function onRequestGet(context) {
+export async function onRequestGet(context) {
   let configOk = false;
   let configErr = null;
   let modelCount = 0;
@@ -67,3 +67,9 @@ export default async function onRequestGet(context) {
     }
   );
 }
+
+export async function onRequest(context) {
+  return onRequestGet(context);
+}
+
+export default onRequestGet;

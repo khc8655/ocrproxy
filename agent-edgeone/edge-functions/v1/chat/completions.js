@@ -52,7 +52,7 @@ const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000; // 25s upstream timeout to allow failover within EdgeOne 30s limit
 const MAX_RETRIES = 3;
 
-export default async function onRequestPost(context) {
+export async function onRequestPost(context) {
   const { request, env } = context;
   const startMs = Date.now();
   // Try common KV binding names (agent_kv, kv, KV, etc.) — see
@@ -427,3 +427,9 @@ function tooLargeResponse(actualBytes) {
     { status: 413, headers }
   );
 }
+
+export async function onRequest(context) {
+  return onRequestPost(context);
+}
+
+export default onRequestPost;
