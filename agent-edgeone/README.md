@@ -29,14 +29,13 @@
 
 ## 🚀 EdgeOne Makers 单仓库一键部署指南
 
-通过将本 Monorepo 仓库直接绑定至 EdgeOne Makers，即可实现免维护持续集成：
+由于项目已预置经过深度调优的 `edgeone.json` 配置文件，EdgeOne Makers 将**自动读取构建命令、安装命令、Node 20 版本及 API/控制台零缓存网络规则**：
 
-### 1. EdgeOne 控制台配置
+### 1. EdgeOne 控制台创建项目
 在 [腾讯云 EdgeOne 控制台](https://console.cloud.tencent.com/edgeone) 创建 Makers 项目：
 * **Git 仓库**：选择 `https://github.com/khc8655/ocrprox`
 * **根目录 (Root Directory)**：填写 **`agent-edgeone`**
-* **构建命令 (Build Command)**：`npm run build:admin`
-* **输出目录 (Output Directory)**：`.`
+* **构建与运行设置**：系统将自动读取 `edgeone.json`（已内嵌 `npm run build:admin`、Node 20、禁用 API 缓存、开启 SSE 流式直通 `X-Accel-Buffering: no` 与全域 CORS）。
 
 ### 2. KV 命名空间绑定
 * 在 EdgeOne 控制台「KV 存储」中创建一个名为 **`agent_kv`** 的命名空间；
@@ -45,7 +44,8 @@
 ### 3. 环境变量配置
 在项目环境变量中配置：
 * `PROXY_API_KEY`: 客户端调用 `/v1/*` 接口所需的 Bearer Token；
-* `UPSTREAM_TIMEOUT_MS`: 上游读取超时时间（推荐 `25000`）。
+* `ADMIN_PASSWORD`: Web 管理后台登录密码；
+* `UPSTREAM_TIMEOUT_MS`: 上游读取超时时间（推荐 `30000`）。
 
 ---
 
