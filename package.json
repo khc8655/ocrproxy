@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:admin": "cd agent-edgeone && node scripts/build-admin.mjs && cp -R edge-functions/* ../edge-functions/",
-    "test": "cd agent-edgeone && npm test"
+    "build:presets": "cd agent-edgeone && node scripts/build-presets.mjs",
+    "build:admin": "cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && cp -R edge-functions/* ../edge-functions/",
+    "test": "cd agent-edgeone && node scripts/build-presets.mjs && npm test"
   }
 }
