@@ -21,7 +21,8 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
 │
 ├── shared/                            # 共享资源与规范文档
-│   ├── presets/                       # 7 大官方供应商标准预设 JSON (Google, OpenAI, SenseNova, SiliconFlow 等)
+│   ├── presets/                       # 8 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, DeepSeek, OpenAI)
+│   ├── admin/                         # 跨端共用的现代化 Web 管理后台前端 (HTML / CSS / JS)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
 ├── scripts/                           # 运维与发布工具
@@ -73,9 +74,22 @@ ocrprox (Monorepo)
 
 ### 3. 链路追踪与透明诊断响应头
 每次请求均在 HTTP 响应头中注入实时链路信息：
-- `x-proxy-route`: 如 `sensenova/主号=read_timeout->agnes/主号=ok`
-- `x-proxy-attempts`: 如 `2`
-- `x-proxy-latency-ms`: 如 `3430`
+- `x-proxy-route`: 如 `stepfun/自己=ok` 或 `sensenova/测试=http_429->agnes/自己=ok`
+- `x-proxy-attempts`: 如 `1` 或 `2`
+- `x-proxy-latency-ms`: 如 `1870`
+
+### 4. 统一声明式适配器管道 (Declarative Adapter Pipeline)
+通过 `shared/presets/*.json` 声明式规则驱动，彻底消除硬编码 `if-else`：
+- **思考链等级控制 (Reasoning & Thinking Level)**：
+  - **SenseNova (商汤)**：原生支持标准 `reasoning_effort` (`none/low/medium/high`)，支持 `sensenova-6.8-flash-lite`, `deepseek-v4-flash`, `glm-5.2`；
+  - **StepFun (阶跃)**：`none` 自动映射为 `low` 降级（防止上游 400），自动注入 `reasoning_format: "deepseek-style"` 以在 SSE 流中返回 `reasoning_content`；
+  - **Agnes AI**：OpenAI 协议下自动映射为 `chat_template_kwargs: {"enable_thinking": true/false}`；
+  - **Google AI Studio (Gemini)**：动态 Thinking Matrix，Flash 支持 `medium`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`。
+- **特殊工具调用 (Tool Calling)**：
+  - **`tool_choice` 规整**：TokenRhythm / SenseNova / DeepSeek 严禁对象形式，自动转为 `"auto"` 字符串；
+  - **Schema 清洗**：针对 Google Gemini 递归剔除禁止出现的 `$schema` 关键字；
+  - **文本 Tool Call 拯救**：自动捕获模型在文本中输出的代码块与 XML 标签并提取为标准 OpenAI `tool_calls`。
+- **智能 URL 端点补齐**：自动感知供应商是否包含 `/v1` 后缀并智能规整拼接。
 
 ---
 
