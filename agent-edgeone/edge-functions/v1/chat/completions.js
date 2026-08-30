@@ -301,16 +301,33 @@ export async function onRequestPost(context) {
     }
   }
 
-  // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502)
+  // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502, 504)
   const lastDetail = lastErrorText ? `: ${lastErrorText.slice(0, 200)}` : '';
-  const finalStatus = (lastStatus >= 400 && lastStatus < 600) ? lastStatus : 503;
+  const finalStatus = (lastStatus >= 400 && lastStatus < 600)
+    ? lastStatus
+    : (attemptLog.some((a) => a.includes('timeout') || a.includes('read_timeout')) ? 504 : 503);
+
+  let userFriendlyMsg = `当前模型所有 ${tried.size} 个候选 Key 均已尝试但均失败 (${attemptLog.join(' -> ')})。`;
+  if (finalStatus === 429) {
+    userFriendlyMsg += ` 上游源站返回 429 频控/并发超限。服务暂不可用，建议切换备用模型。`;
+  } else if (finalStatus === 403 || finalStatus === 401) {
+    userFriendlyMsg += ` 上游源站返回 ${finalStatus} 鉴权或配额异常。建议检查配置或切换模型。`;
+  } else if (finalStatus === 504) {
+    userFriendlyMsg += ` 上游源站响应超时。服务暂不稳定，建议切换备用模型。`;
+  } else {
+    userFriendlyMsg += ` 上游源站返回 ${finalStatus} 异常，服务不稳定，建议切换模型。`;
+  }
+  if (lastDetail) {
+    userFriendlyMsg += ` [详情${lastDetail}]`;
+  }
+
   console.error(`[EdgeOne:FailoverExhausted] model=${body.model} final_status=${finalStatus} attempts=${attemptLog.join('->')} total_ms=${Date.now() - startMs}`);
   return new Response(
     JSON.stringify({
       error: {
         type: finalStatus === 429 ? 'rate_limit_error' : (finalStatus >= 500 ? 'upstream_error' : 'failover_exhausted'),
-        message: `All ${tried.size} candidate attempts failed. Last failure (${finalStatus}): ${attemptLog[attemptLog.length - 1] || 'unknown'}${lastDetail}.`,
-        code: finalStatus === 429 ? 'rate_limit_exceeded' : 'failover_exhausted',
+        message: userFriendlyMsg,
+        code: finalStatus === 429 ? 'rate_limit_exceeded' : (finalStatus === 504 ? 'gateway_timeout' : 'failover_exhausted'),
         trace: attemptLog,
       },
     }),

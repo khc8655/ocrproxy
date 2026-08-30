@@ -1008,9 +1008,9 @@ console.log('\n== Schema v2 Settings ==');
 
 test('DEFAULT_SETTINGS: contains all 10 standard fields', () => {
   eq(DEFAULT_SETTINGS.request_total_budget_sec, 25);
-  eq(DEFAULT_SETTINGS.upstream_timeout_sec, 15);
+  eq(DEFAULT_SETTINGS.upstream_timeout_sec, 8);
   eq(DEFAULT_SETTINGS.schedule_total_budget, 3);
-  eq(DEFAULT_SETTINGS.max_attempts_per_provider, 2);
+  eq(DEFAULT_SETTINGS.max_attempts_per_provider, 3);
   eq(DEFAULT_SETTINGS.fast_failover_provider_down, true);
   eq(DEFAULT_SETTINGS.agent_routing_strategy, 'sticky_failover');
   eq(DEFAULT_SETTINGS.cooldown_429_sec, 60);

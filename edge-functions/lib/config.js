@@ -42,9 +42,9 @@ export const KV_BINDING_CANDIDATES = [
 export const DEFAULT_SETTINGS = {
   agent_routing_strategy: 'sticky_failover',
   request_total_budget_sec: 25, // 25s budget for EdgeOne to be safely under 30s platform limit
-  upstream_timeout_sec: 15,     // 15s per attempt
+  upstream_timeout_sec: 8,      // 8s per attempt so 3 keys can easily be tried within 25s budget
   schedule_total_budget: 3,     // max 3 total attempts per request
-  max_attempts_per_provider: 2, // max 2 attempts per provider to prevent cascading multi-key timeouts
+  max_attempts_per_provider: 3, // max 3 attempts per provider to allow trying 3 keys of same provider
   fast_failover_provider_down: true, // skip provider on 502/504/timeout if other providers exist
   cooldown_429_sec: 60,
   cooldown_5xx_sec: 30,
