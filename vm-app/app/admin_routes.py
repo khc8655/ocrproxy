@@ -93,11 +93,11 @@ def _get_config_summary(config: dict) -> dict:
     }
 
 
-def _merge_configs(base: dict, incoming: dict) -> dict:
-    """Deep-merge incoming config into base config."""
+def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "full") -> dict:
+    """Deep-merge incoming config into base config, filtered by active RUN_MODE."""
     merged = copy.deepcopy(base)
 
-    # 1. Merge providers
+    # 1. Merge providers (universal asset across all modes)
     merged_providers = merged.setdefault("providers", {})
     incoming_providers = incoming.get("providers", {})
     if isinstance(incoming_providers, dict):
@@ -116,46 +116,54 @@ def _merge_configs(base: dict, incoming: dict) -> dict:
                         if k_name and k_secret:
                             merged_keys[k_name] = k_secret
 
-    # 2. Merge candidates (deduplicating by provider + key + model)
-    merged_candidates = merged.setdefault("candidates", {})
-    incoming_candidates = incoming.get("candidates", {})
-    if isinstance(incoming_candidates, dict):
-        for cat in ("chat", "embedding", "reranker", "ocr"):
-            in_list = incoming_candidates.get(cat, [])
-            if isinstance(in_list, list):
-                existing_list = merged_candidates.setdefault(cat, [])
-                existing_keys = {(c.get("provider"), c.get("key"), c.get("model")) for c in existing_list if isinstance(c, dict)}
-                for cand in in_list:
-                    if isinstance(cand, dict):
-                        k = (cand.get("provider"), cand.get("key"), cand.get("model"))
-                        if k not in existing_keys and cand.get("provider") and cand.get("key"):
-                            existing_list.append(copy.deepcopy(cand))
-                            existing_keys.add(k)
+    # 2. Merge candidates (KB mode / Full mode only)
+    if local_run_mode in ("kb", "full"):
+        merged_candidates = merged.setdefault("candidates", {})
+        incoming_candidates = incoming.get("candidates", {})
+        if isinstance(incoming_candidates, dict):
+            for cat in ("chat", "embedding", "reranker", "ocr"):
+                in_list = incoming_candidates.get(cat, [])
+                if isinstance(in_list, list):
+                    existing_list = merged_candidates.setdefault(cat, [])
+                    existing_keys = {(c.get("provider"), c.get("key"), c.get("model")) for c in existing_list if isinstance(c, dict)}
+                    for cand in in_list:
+                        if isinstance(cand, dict):
+                            k = (cand.get("provider"), cand.get("key"), cand.get("model"))
+                            if k not in existing_keys and cand.get("provider") and cand.get("key"):
+                                existing_list.append(copy.deepcopy(cand))
+                                existing_keys.add(k)
+    else:
+        # In Agent mode, strip any candidates
+        merged["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
 
-    # 3. Merge agent_models
-    merged_agent_models = merged.setdefault("agent_models", {})
-    incoming_agent_models = incoming.get("agent_models", {})
-    if isinstance(incoming_agent_models, dict):
-        for m_name, m_val in incoming_agent_models.items():
-            if not isinstance(m_val, dict):
-                continue
-            if m_name not in merged_agent_models:
-                merged_agent_models[m_name] = copy.deepcopy(m_val)
-            else:
-                existing_keys = merged_agent_models[m_name].setdefault("keys", [])
-                existing_set = {(b.get("provider"), b.get("key")) for b in existing_keys if isinstance(b, dict)}
-                for b in m_val.get("keys", []):
-                    if isinstance(b, dict):
-                        sig = (b.get("provider"), b.get("key"))
-                        if sig not in existing_set and b.get("provider") and b.get("key"):
-                            existing_keys.append(copy.deepcopy(b))
-                            existing_set.add(sig)
-                if m_val.get("upstream_model"):
-                    merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
+    # 3. Merge agent_models (Agent mode / Full mode only)
+    if local_run_mode in ("agent", "full"):
+        merged_agent_models = merged.setdefault("agent_models", {})
+        incoming_agent_models = incoming.get("agent_models", {})
+        if isinstance(incoming_agent_models, dict):
+            for m_name, m_val in incoming_agent_models.items():
+                if not isinstance(m_val, dict):
+                    continue
+                if m_name not in merged_agent_models:
+                    merged_agent_models[m_name] = copy.deepcopy(m_val)
+                else:
+                    existing_keys = merged_agent_models[m_name].setdefault("keys", [])
+                    existing_set = {(b.get("provider"), b.get("key")) for b in existing_keys if isinstance(b, dict)}
+                    for b in m_val.get("keys", []):
+                        if isinstance(b, dict):
+                            sig = (b.get("provider"), b.get("key"))
+                            if sig not in existing_set and b.get("provider") and b.get("key"):
+                                existing_keys.append(copy.deepcopy(b))
+                                existing_set.add(sig)
+                    if m_val.get("upstream_model"):
+                        merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
+    else:
+        # In KB mode, strip any agent models
+        merged["agent_models"] = {}
 
-    # 4. Update top-level setting parameters if present in incoming
+    # 4. Update top-level setting parameters if present in incoming (EXCLUDING run_mode)
     setting_keys = [
-        "proxy_api_key", "proxy_keys", "run_mode",
+        "proxy_api_key", "proxy_keys",
         "agent_routing_strategy", "kb_routing_strategy", "auto_restart_enabled",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
@@ -168,6 +176,7 @@ def _merge_configs(base: dict, incoming: dict) -> dict:
         if sk in incoming:
             merged[sk] = incoming[sk]
 
+    merged["run_mode"] = local_run_mode
     return merged
 
 
@@ -179,10 +188,12 @@ async def get_config_endpoint(request: Request):
     try:
         config = await get_config()
         resp_data = dict(config)
-        run_mode = config.get("run_mode") or os.environ.get("RUN_MODE", "full").lower()
+        run_mode = os.environ.get("RUN_MODE") or config.get("run_mode") or "full"
+        run_mode = run_mode.lower().strip()
         if run_mode not in ("agent", "kb", "full"):
             run_mode = "full"
         resp_data["_run_mode"] = run_mode
+        resp_data["run_mode"] = run_mode
         return JSONResponse(content=resp_data)
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
@@ -202,6 +213,12 @@ async def export_config_endpoint(request: Request):
         export_data["_exported_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         export_data["_version"] = "3.3"
         filename = f"ocrproxy_config_{now_str}.json"
+
+        run_mode = (os.environ.get("RUN_MODE") or config.get("run_mode") or "full").lower()
+        if run_mode == "agent":
+            export_data.pop("candidates", None)
+        elif run_mode == "kb":
+            export_data.pop("agent_models", None)
 
         json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
         return Response(
@@ -257,6 +274,9 @@ async def import_config_endpoint(request: Request):
 
     try:
         current_config = await get_config()
+        local_run_mode = (os.environ.get("RUN_MODE") or current_config.get("run_mode") or "full").lower().strip()
+        if local_run_mode not in ("agent", "kb", "full"):
+            local_run_mode = "full"
 
         try:
             config_dir = _get_config_dir()
@@ -269,14 +289,20 @@ async def import_config_endpoint(request: Request):
             logger.warning("Failed to create snapshot backup: %s", bak_err)
 
         if mode == "merge":
-            final_config = _merge_configs(current_config, incoming_config)
+            final_config = _merge_configs(current_config, incoming_config, local_run_mode=local_run_mode)
         else:
             final_config = copy.deepcopy(incoming_config)
+            final_config["run_mode"] = local_run_mode
+            if local_run_mode == "agent":
+                final_config["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+            elif local_run_mode == "kb":
+                final_config["agent_models"] = {}
 
         final_config.pop("_exported_at", None)
         final_config.pop("_version", None)
         final_config.pop("_mode", None)
         final_config.pop("_run_mode", None)
+        final_config["run_mode"] = local_run_mode
 
         if "candidates" not in final_config:
             final_config["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}

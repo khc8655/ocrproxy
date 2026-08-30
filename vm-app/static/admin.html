@@ -916,11 +916,21 @@ function render(){
   if(sa) sa.style.display = (runMode === 'kb') ? 'none' : 'block';
   if(sk) sk.style.display = (runMode === 'agent') ? 'none' : 'block';
 
-  // Models Subtabs visibility
+  // Models Subtabs visibility & mode auto-correction
   const msa = document.getElementById('msub-agents');
   const msk = document.getElementById('msub-kb');
   if(msa) msa.style.display = (runMode === 'kb') ? 'none' : 'inline-block';
   if(msk) msk.style.display = (runMode === 'agent') ? 'none' : 'inline-block';
+
+  if (runMode === 'agent' && state.modelTab === 'kb') state.modelTab = 'providers';
+  if (runMode === 'kb' && state.modelTab === 'agents') state.modelTab = 'providers';
+
+  ['providers', 'agents', 'kb'].forEach(t => {
+    const btn = document.getElementById('msub-' + t);
+    const tabEl = document.getElementById('mtab-' + t);
+    if (btn) btn.classList.toggle('active', state.modelTab === t);
+    if (tabEl) tabEl.classList.toggle('active', state.modelTab === t);
+  });
 
   // Settings visibility
   const sta = document.getElementById('st-group-agent');
@@ -1099,11 +1109,12 @@ async function resetStats(){
 // Models dispatcher
 function switchModelTab(id){
   state.modelTab=id;
-  document.querySelectorAll('#panel-models .model-subtab').forEach(p=>p.classList.remove('active'));
-  document.getElementById('mtab-'+id).classList.add('active');
-  document.querySelectorAll('#panel-models .subtabs button').forEach(b=>b.classList.remove('active'));
-  const idx={providers:0,agents:1,kb:2}[id];
-  document.querySelectorAll('#panel-models .subtabs button')[idx].classList.add('active');
+  ['providers', 'agents', 'kb'].forEach(t => {
+    const btn = document.getElementById('msub-' + t);
+    const tabEl = document.getElementById('mtab-' + t);
+    if (btn) btn.classList.toggle('active', t === id);
+    if (tabEl) tabEl.classList.toggle('active', t === id);
+  });
   renderModels();
 }
 function renderModels(){

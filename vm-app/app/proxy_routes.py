@@ -336,6 +336,12 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
         )
 
 
+def _get_active_run_mode(config: dict) -> str:
+    """Return the active run mode: 'agent', 'kb', or 'full'."""
+    mode = (os.environ.get("RUN_MODE") or config.get("run_mode") or "full").lower().strip()
+    return mode if mode in ("agent", "kb", "full") else "full"
+
+
 @router.get("/models")
 async def list_models(request: Request):
     """List all available models according to active RUN_MODE."""
@@ -343,7 +349,7 @@ async def list_models(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    run_mode = (config.get("run_mode") or os.environ.get("RUN_MODE", "full")).lower()
+    run_mode = _get_active_run_mode(config)
     data = []
 
     # 1. Include real Agent models if in agent or full mode
@@ -408,33 +414,16 @@ async def chat_completions(request: Request):
         return err
     model_name = body.get("model", "")
     is_stream = body.get("stream", False)
-    config = await get_config()
     kb_force_no_reasoning = False
 
-    all_chat_candidates = config.get("candidates", {}).get("chat", [])
+    run_mode = _get_active_run_mode(config)
 
-    if model_name == "chat":
-        # ── KB ingestion mode ──────────────────────────────────────
-        req_category = "kb"
-        req_model_name = "chat"
-        kb_force_no_reasoning = True
-
-        if is_stream:
-            body["stream"] = False
-            is_stream = False
-        try:
-            chat_timeout = max(1.0, float(config.get("chat_fast_timeout", 30)))
-        except (ValueError, TypeError):
-            chat_timeout = 30.0
-
-        candidates_list = all_chat_candidates
-
-    elif model_name in VIRTUAL_ALIASES:
-        # Other virtual aliases are not valid for chat endpoint
-        return _model_not_found_response(model_name)
-
-    else:
-        # ── Agent mode (real model name) ──────────────────────────
+    if run_mode == "agent":
+        if model_name in VIRTUAL_ALIASES:
+            return JSONResponse(
+                status_code=404,
+                content={"error": {"message": f"Virtual model '{model_name}' is not available in Agent mode.", "type": "invalid_request_error"}}
+            )
         req_category = "agent"
         req_model_name = model_name
         agent_models = config.get("agent_models") or {}
@@ -452,14 +441,70 @@ async def chat_completions(request: Request):
                 "key": b["key"],
                 "model": b.get("upstream_model") or default_upstream,
             })
-
         if not candidates_list:
             return _model_not_found_response(model_name)
-
         try:
             chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
         except (ValueError, TypeError):
             chat_timeout = 120.0
+
+    elif run_mode == "kb":
+        if model_name != "chat":
+            return JSONResponse(
+                status_code=404,
+                content={"error": {"message": f"Model '{model_name}' not found. Current server is running in KB (Knowledge Base) mode which only accepts model='chat'.", "type": "invalid_request_error"}}
+            )
+        req_category = "kb"
+        req_model_name = "chat"
+        kb_force_no_reasoning = True
+        if is_stream:
+            body["stream"] = False
+            is_stream = False
+        try:
+            chat_timeout = max(1.0, float(config.get("chat_fast_timeout", 30)))
+        except (ValueError, TypeError):
+            chat_timeout = 30.0
+        candidates_list = config.get("candidates", {}).get("chat", [])
+
+    else:
+        # Full mode: support both
+        if model_name == "chat":
+            req_category = "kb"
+            req_model_name = "chat"
+            kb_force_no_reasoning = True
+            if is_stream:
+                body["stream"] = False
+                is_stream = False
+            try:
+                chat_timeout = max(1.0, float(config.get("chat_fast_timeout", 30)))
+            except (ValueError, TypeError):
+                chat_timeout = 30.0
+            candidates_list = config.get("candidates", {}).get("chat", [])
+        elif model_name in VIRTUAL_ALIASES:
+            return _model_not_found_response(model_name)
+        else:
+            req_category = "agent"
+            req_model_name = model_name
+            agent_models = config.get("agent_models") or {}
+            entry = agent_models.get(model_name) if isinstance(agent_models, dict) else None
+            if not entry:
+                return _model_not_found_response(model_name)
+            default_upstream = entry.get("upstream_model") or model_name
+            candidates_list = []
+            for b in entry.get("keys", []):
+                if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
+                    continue
+                candidates_list.append({
+                    "provider": b["provider"],
+                    "key": b["key"],
+                    "model": b.get("upstream_model") or default_upstream,
+                })
+            if not candidates_list:
+                return _model_not_found_response(model_name)
+            try:
+                chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+            except (ValueError, TypeError):
+                chat_timeout = 120.0
 
     if not candidates_list:
         return JSONResponse(
@@ -556,6 +601,13 @@ async def embeddings(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
+    run_mode = _get_active_run_mode(config)
+    if run_mode == "agent":
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": "Endpoint /v1/embeddings is disabled in Agent mode.", "type": "invalid_request_error"}}
+        )
+
     body, err = await _parse_json_body(request)
     if err:
         return err
@@ -569,7 +621,7 @@ async def embeddings(request: Request):
     elif model_name in VIRTUAL_ALIASES:
         return _model_not_found_response(model_name)
     else:
-        # Agent mode: filter by model name
+        # Filter by model name
         candidates_list = [c for c in all_emb_candidates if c.get("model") == model_name]
         if not candidates_list:
             return _model_not_found_response(model_name)
@@ -630,6 +682,13 @@ async def rerank(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
+    run_mode = _get_active_run_mode(config)
+    if run_mode == "agent":
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": "Endpoint /v1/rerank is disabled in Agent mode.", "type": "invalid_request_error"}}
+        )
+
     body, err = await _parse_json_body(request)
     if err:
         return err
@@ -643,7 +702,7 @@ async def rerank(request: Request):
     elif model_name in VIRTUAL_ALIASES:
         return _model_not_found_response(model_name)
     else:
-        # Agent mode: filter by model name
+        # Filter by model name
         candidates_list = [c for c in all_rerank_candidates if c.get("model") == model_name]
         if not candidates_list:
             return _model_not_found_response(model_name)
@@ -702,6 +761,13 @@ async def ocr(request: Request):
     config = await get_config()
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
+
+    run_mode = _get_active_run_mode(config)
+    if run_mode == "agent":
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": "Endpoint /v1/ocr is disabled in Agent mode.", "type": "invalid_request_error"}}
+        )
 
     body, err = await _parse_json_body(request, max_bytes=_MAX_OCR_BODY_BYTES)
     if err:
