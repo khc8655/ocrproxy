@@ -44,12 +44,13 @@ export async function onRequestPost(context) {
       { status: 400, headers: { 'content-type': 'application/json' } }
     );
   }
-
+  const modelName = String(body?.model || body?.name || '').trim();
   const providerName = String(body?.provider || '').trim();
   const keyLabel = String(body?.key || '').trim();
-  if (!providerName || !keyLabel) {
+
+  if (!modelName && (!providerName || !keyLabel)) {
     return new Response(
-      JSON.stringify({ error: { type: 'invalid_request_error', message: 'Both "provider" and "key" are required.' } }),
+      JSON.stringify({ error: { type: 'invalid_request_error', message: 'Provide either "model" or both "provider" and "key".' } }),
       { status: 400, headers: { 'content-type': 'application/json' } }
     );
   }
@@ -68,6 +69,98 @@ export async function onRequestPost(context) {
     throw e;
   }
 
+  // --- Path A: Model-level parallel probe (matches VM's /api/admin/test-agent-model) ---
+  if (modelName) {
+    const entry = config.agent_models?.[modelName];
+    if (!entry) {
+      return new Response(
+        JSON.stringify({ error: { type: 'not_found', message: `Model "${modelName}" not found in config.` } }),
+        { status: 404, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    const bindings = entry.keys || [];
+    const providers = config.providers || {};
+
+    const probeBinding = async (b) => {
+      const p = providers[b.provider];
+      if (!p) {
+        return { provider: b.provider, key: b.key, ok: false, status: null, latency_ms: null, error: 'Provider not found' };
+      }
+      const apiKey = p.keys?.[b.key];
+      if (!apiKey) {
+        return { provider: b.provider, key: b.key, ok: false, status: null, latency_ms: null, error: 'Key not found' };
+      }
+      const baseUrl = (p.base_url || '').replace(/\/+$/, '');
+      const url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+      const upstreamModel = b.upstream_model || entry.upstream_model || modelName;
+
+      const start = Date.now();
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'authorization': `Bearer ${apiKey}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: upstreamModel,
+            messages: [{ role: 'user', content: 'Hi' }],
+            max_tokens: 16,
+            stream: false,
+          }),
+          eo: {
+            timeoutSetting: {
+              connectTimeout: 5_000,
+              readTimeout: 15_000,
+              writeTimeout: 5_000,
+            },
+          },
+        });
+        const lat = Date.now() - start;
+        const ok = resp.status >= 200 && resp.status < 300;
+        let errText = null;
+        if (!ok) {
+          try {
+            errText = (await resp.text()).slice(0, 200);
+          } catch {}
+        }
+        return {
+          provider: b.provider,
+          key: b.key,
+          ok,
+          status: resp.status,
+          latency_ms: lat,
+          error: ok ? null : (errText || `HTTP ${resp.status}`),
+        };
+      } catch (e) {
+        return {
+          provider: b.provider,
+          key: b.key,
+          ok: false,
+          status: null,
+          latency_ms: Date.now() - start,
+          error: e?.message || String(e),
+        };
+      }
+    };
+
+    const results = await Promise.all(bindings.map(probeBinding));
+    const okCount = results.filter((r) => r.ok).length;
+
+    return new Response(
+      JSON.stringify({
+        success: okCount > 0,
+        model: modelName,
+        total: results.length,
+        ok: okCount,
+        results,
+        checked_at: new Date().toISOString(),
+      }),
+      { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
+    );
+  }
+
+  // --- Path B: Single (provider, key) endpoint probe ---
   const provider = config.providers?.[providerName];
   if (!provider) {
     return new Response(

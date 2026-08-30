@@ -30,6 +30,8 @@ import {
   loadConfig,
   listBindings,
   pickBinding,
+  orderBindings,
+  recordStickySuccess,
   resolveBinding,
   buildChatUrl,
   ConfigError,
@@ -151,11 +153,13 @@ export default async function onRequestPost(context) {
   const tried = new Set();
   let upstreamBody = JSON.parse(JSON.stringify(body)); // deep copy per attempt
 
+  const strategy = config?.agent_routing_strategy || 'sticky_failover';
+  const candidatePool = orderBindings(available, body.model, strategy);
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // Pick from bindings not yet tried in this request
-    const remaining = available.filter((b) => !tried.has(bindingId(b)));
-    if (remaining.length === 0) break;
-    const binding = pickBinding(remaining);
+    // Pick from bindings in strategy order not yet tried in this request
+    const binding = candidatePool.find((b) => !tried.has(bindingId(b)));
+    if (!binding) break;
     tried.add(bindingId(binding));
 
     let resolved;
@@ -181,6 +185,7 @@ export default async function onRequestPost(context) {
     );
 
     if (result.kind === 'success') {
+      recordStickySuccess(body.model, binding, allBindings);
       if (typeof context?.waitUntil === 'function') {
         context.waitUntil(recordSuccess(binding.provider, binding.keyLabel, kv));
       } else {
@@ -374,11 +379,12 @@ function buildOutHeaders(upstreamResp) {
 // Helpers (auth, error responses)
 // ------------------------------------------------------------------------
 
-function checkAuth(request, env) {
-  const need = env?.PROXY_API_KEY;
+function checkAuth(request, env, config) {
+  const need = env?.PROXY_API_KEY || config?.proxy_api_key;
   if (!need) return null;
-  const got = request.headers.get('authorization') || '';
-  if (got !== `Bearer ${need}`) {
+  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+  if (token !== String(need).trim()) {
     return new Response(
       JSON.stringify({
         error: {
