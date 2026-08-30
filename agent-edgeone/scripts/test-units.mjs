@@ -22,6 +22,7 @@ import {
   scanKvBindings,
   kvNotBoundResponse,
   KV_BINDING_CANDIDATES,
+  DEFAULT_SETTINGS,
 } from '../edge-functions/lib/config.js';
 import { normaliseForProvider, rescueToolCallsFromText } from '../edge-functions/lib/normalize.js';
 import {
@@ -973,6 +974,53 @@ test('getPreset: is case-insensitive', () => {
   const p = getPreset('Google');
   truthy(p);
   eq(p.id, 'google');
+});
+
+// ============================================================================
+// Schema v2 Settings & Timeout Defaults Tests
+// ============================================================================
+console.log('\n== Schema v2 Settings ==');
+
+test('DEFAULT_SETTINGS: contains all 10 standard fields', () => {
+  eq(DEFAULT_SETTINGS.request_total_budget_sec, 25);
+  eq(DEFAULT_SETTINGS.upstream_timeout_sec, 15);
+  eq(DEFAULT_SETTINGS.schedule_total_budget, 3);
+  eq(DEFAULT_SETTINGS.max_attempts_per_provider, 2);
+  eq(DEFAULT_SETTINGS.fast_failover_provider_down, true);
+  eq(DEFAULT_SETTINGS.agent_routing_strategy, 'sticky_failover');
+  eq(DEFAULT_SETTINGS.cooldown_429_sec, 60);
+  eq(DEFAULT_SETTINGS.cooldown_5xx_sec, 30);
+  eq(DEFAULT_SETTINGS.cooldown_403_sec, 600);
+  eq(DEFAULT_SETTINGS.circuit_break_threshold, 3);
+});
+
+test('loadConfig: injects default settings when missing', async () => {
+  const env = {
+    AGENT_CONFIG_JSON: JSON.stringify({
+      providers: { p1: { base_url: 'https://p1.com', keys: { k1: 'sk-1' } } },
+      agent_models: { m1: { keys: [{ provider: 'p1', key: 'k1' }] } },
+    }),
+  };
+  const cfg = await loadConfig(env, null);
+  truthy(cfg.settings);
+  eq(cfg.settings.request_total_budget_sec, 25);
+  eq(cfg.settings.max_attempts_per_provider, 2);
+  eq(cfg.settings.fast_failover_provider_down, true);
+});
+
+test('loadConfig: preserves custom settings when provided', async () => {
+  const env = {
+    AGENT_CONFIG_JSON: JSON.stringify({
+      settings: { request_total_budget_sec: 40, max_attempts_per_provider: 1 },
+      providers: { p1: { base_url: 'https://p1.com', keys: { k1: 'sk-1' } } },
+      agent_models: { m1: { keys: [{ provider: 'p1', key: 'k1' }] } },
+    }),
+  };
+  const cfg = await loadConfig(env, null);
+  truthy(cfg.settings);
+  eq(cfg.settings.request_total_budget_sec, 40);
+  eq(cfg.settings.max_attempts_per_provider, 1);
+  eq(cfg.settings.upstream_timeout_sec, 15); // merged default
 });
 
 console.log('\n----');

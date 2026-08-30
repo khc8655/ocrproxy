@@ -15,10 +15,11 @@ import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
+const sharedAdminDir = join(root, '..', 'shared', 'admin');
+const htmlPath = existsSync(join(sharedAdminDir, 'admin.html')) ? join(sharedAdminDir, 'admin.html') : join(root, 'admin.html');
+const cssPath = existsSync(join(sharedAdminDir, 'admin.css')) ? join(sharedAdminDir, 'admin.css') : join(root, 'admin.css');
+const jsPath = existsSync(join(sharedAdminDir, 'admin.js')) ? join(sharedAdminDir, 'admin.js') : join(root, 'admin.js');
 
-const htmlPath = join(root, 'admin.html');
-const cssPath = join(root, 'admin.css');
-const jsPath = join(root, 'admin.js');
 const indexPath = join(root, 'edge-functions', 'index.js');
 const adminPath = join(root, 'edge-functions', 'admin.js');
 

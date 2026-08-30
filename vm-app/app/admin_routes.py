@@ -165,6 +165,8 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "full") -> 
     setting_keys = [
         "proxy_api_key", "proxy_keys",
         "agent_routing_strategy", "kb_routing_strategy", "auto_restart_enabled",
+        "request_total_budget_sec", "upstream_timeout_sec", "max_attempts_per_provider",
+        "fast_failover_provider_down",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
         "schedule_total_budget", "max_concurrency_per_key",
@@ -175,6 +177,14 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "full") -> 
     for sk in setting_keys:
         if sk in incoming:
             merged[sk] = incoming[sk]
+
+    # 5. Merge Schema v2 settings block if present
+    incoming_settings = incoming.get("settings")
+    if isinstance(incoming_settings, dict):
+        merged_settings = merged.setdefault("settings", {})
+        for k, v in incoming_settings.items():
+            merged_settings[k] = v
+            merged[k] = v
 
     merged["run_mode"] = local_run_mode
     return merged

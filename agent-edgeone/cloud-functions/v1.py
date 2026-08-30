@@ -208,18 +208,59 @@ async def post_chat_completions(
             content={"error": {"type": "service_unavailable", "message": "No valid keys configured for model."}}
         )
 
+    settings = config.get("settings") or {}
+    total_budget_sec = float(settings.get("request_total_budget_sec", 25))
+    upstream_timeout_sec = float(settings.get("upstream_timeout_sec", 15))
+    max_attempts = int(settings.get("schedule_total_budget", 3))
+    max_per_prov = int(settings.get("max_attempts_per_provider", 2))
+    fast_failover_down = settings.get("fast_failover_provider_down", True)
+
+    start_time = time.time()
+    deadline = start_time + total_budget_sec
     is_stream = bool(body.get("stream", False))
-    client = httpx.AsyncClient(timeout=httpx.Timeout(UPSTREAM_TIMEOUT_SEC, connect=10.0))
+
+    attempt_log = []
+    provider_attempts = {}
+    down_providers = set()
+    unique_provs = {b["provider"] for b in bindings}
 
     for idx, binding in enumerate(bindings):
-        norm_body = _normalise_for_provider(body, binding["provider"])
+        if len(attempt_log) >= max_attempts:
+            break
+
+        now = time.time()
+        if now >= deadline:
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "error": {
+                        "type": "timeout_error",
+                        "message": f"Gateway timeout ({total_budget_sec}s budget exceeded). Tried: {' -> '.join(attempt_log)}.",
+                        "code": "gateway_timeout",
+                        "trace": attempt_log,
+                    }
+                },
+                headers={
+                    "x-proxy-route": "->".join(attempt_log),
+                    "x-proxy-attempts": str(len(attempt_log)),
+                    "x-proxy-latency-ms": str(int((now - start_time) * 1000)),
+                }
+            )
+
+        prov = binding["provider"]
+        if provider_attempts.get(prov, 0) >= max_per_prov:
+            continue
+        if prov in down_providers and len(unique_provs) > 1:
+            continue
+
+        provider_attempts[prov] = provider_attempts.get(prov, 0) + 1
+        key_label = binding["key_label"]
+
+        norm_body = _normalise_for_provider(body, prov)
         norm_body["model"] = binding["upstream_model"]
-        
+
         url = binding["base_url"]
-        if not url.endswith("/v1"):
-            chat_url = f"{url}/v1/chat/completions"
-        else:
-            chat_url = f"{url}/chat/completions"
+        chat_url = f"{url}/chat/completions" if url.endswith("/v1") else f"{url}/v1/chat/completions"
 
         headers = {
             "Authorization": f"Bearer {binding['api_key']}",
@@ -227,14 +268,23 @@ async def post_chat_completions(
             "Accept": "text/event-stream" if is_stream else "application/json",
         }
 
+        rem_sec = max(3.0, deadline - time.time())
+        attempt_timeout = min(upstream_timeout_sec, rem_sec)
+        client = httpx.AsyncClient(timeout=httpx.Timeout(attempt_timeout, connect=6.0))
+
         try:
             if is_stream:
                 req = client.build_request("POST", chat_url, headers=headers, json=norm_body)
                 resp = await client.send(req, stream=True)
-                if resp.status_code >= 400 and idx < len(bindings) - 1:
+                if resp.status_code >= 400:
                     await resp.aclose()
+                    await client.aclose()
+                    if resp.status_code >= 500 and fast_failover_down:
+                        down_providers.add(prov)
+                    attempt_log.append(f"{prov}/{key_label}=http_{resp.status_code}")
                     continue
 
+                attempt_log.append(f"{prov}/{key_label}=ok")
                 async def sse_gen():
                     try:
                         async for chunk in resp.aiter_bytes():
@@ -247,29 +297,57 @@ async def post_chat_completions(
                     sse_gen(),
                     status_code=resp.status_code,
                     media_type="text/event-stream",
-                    headers={"cache-control": "no-store", "x-accel-buffering": "no"}
+                    headers={
+                        "cache-control": "no-store",
+                        "x-accel-buffering": "no",
+                        "x-proxy-routed-via": f"{prov}/{key_label}",
+                        "x-proxy-route": "->".join(attempt_log),
+                        "x-proxy-attempts": str(len(attempt_log)),
+                        "x-proxy-latency-ms": str(int((time.time() - start_time) * 1000)),
+                    }
                 )
             else:
                 resp = await client.post(chat_url, headers=headers, json=norm_body)
-                if resp.status_code >= 400 and idx < len(bindings) - 1:
-                    continue
                 await client.aclose()
+                if resp.status_code >= 400:
+                    if resp.status_code >= 500 and fast_failover_down:
+                        down_providers.add(prov)
+                    attempt_log.append(f"{prov}/{key_label}=http_{resp.status_code}")
+                    continue
+
+                attempt_log.append(f"{prov}/{key_label}=ok")
+                res_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"text": resp.text}
                 return JSONResponse(
-                    content=resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"text": resp.text},
+                    content=res_data,
                     status_code=resp.status_code,
-                    headers={"cache-control": "no-store"}
+                    headers={
+                        "cache-control": "no-store",
+                        "x-proxy-routed-via": f"{prov}/{key_label}",
+                        "x-proxy-route": "->".join(attempt_log),
+                        "x-proxy-attempts": str(len(attempt_log)),
+                        "x-proxy-latency-ms": str(int((time.time() - start_time) * 1000)),
+                    }
                 )
         except Exception as e:
-            if idx < len(bindings) - 1:
-                continue
             await client.aclose()
-            return JSONResponse(
-                status_code=502,
-                content={"error": {"type": "bad_gateway", "message": f"Upstream error: {e}"}}
-            )
+            if fast_failover_down:
+                down_providers.add(prov)
+            attempt_log.append(f"{prov}/{key_label}=timeout_or_error")
+            continue
 
-    await client.aclose()
     return JSONResponse(
-        status_code=500,
-        content={"error": {"type": "internal_error", "message": "Failed to contact upstream."}}
+        status_code=503,
+        content={
+            "error": {
+                "type": "failover_exhausted",
+                "message": f"All candidate attempts failed. Last trace: {attempt_log[-1] if attempt_log else 'unknown'}.",
+                "code": "service_unavailable",
+                "trace": attempt_log,
+            }
+        },
+        headers={
+            "x-proxy-route": "->".join(attempt_log),
+            "x-proxy-attempts": str(len(attempt_log)),
+            "x-proxy-latency-ms": str(int((time.time() - start_time) * 1000)),
+        }
     )

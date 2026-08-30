@@ -39,6 +39,20 @@ export const KV_BINDING_CANDIDATES = [
   'agentKV', 'MY_KV', 'FREELLM',
 ];
 
+export const DEFAULT_SETTINGS = {
+  agent_routing_strategy: 'sticky_failover',
+  request_total_budget_sec: 25, // 25s budget for EdgeOne to be safely under 30s platform limit
+  upstream_timeout_sec: 15,     // 15s per attempt
+  schedule_total_budget: 3,     // max 3 total attempts per request
+  max_attempts_per_provider: 2, // max 2 attempts per provider to prevent cascading multi-key timeouts
+  fast_failover_provider_down: true, // skip provider on 502/504/timeout if other providers exist
+  cooldown_429_sec: 60,
+  cooldown_5xx_sec: 30,
+  cooldown_403_sec: 600,
+  circuit_break_threshold: 3,
+  circuit_cooldown_sec: 60,
+};
+
 /**
  * Parse + validate a config payload.  Used by both the KV path and the
  * env-var path so the error messages are consistent.
@@ -65,6 +79,15 @@ function parseAndValidateConfig(raw, source) {
   if (!parsed.agent_models || typeof parsed.agent_models !== 'object') {
     throw new ConfigError(`${source} is missing "agent_models".`);
   }
+  
+  // Normalize Schema v2 settings with backwards compatibility
+  parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+  for (const k of Object.keys(DEFAULT_SETTINGS)) {
+    if (parsed[k] !== undefined && (parsed.settings[k] === undefined || parsed.settings[k] === DEFAULT_SETTINGS[k])) {
+      parsed.settings[k] = parsed[k];
+    }
+  }
+
   return parsed;
 }
 

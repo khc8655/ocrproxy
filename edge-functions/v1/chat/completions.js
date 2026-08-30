@@ -97,7 +97,7 @@ export async function onRequestPost(context) {
     return errorResponse(400, 'invalid_request_error', 'Field "model" is required.');
   }
 
-  // ---- Load config -------------------------------------------------------
+  // ---- Load config & settings -------------------------------------------
   let config;
   try {
     config = await loadConfig(env, kv);
@@ -107,6 +107,15 @@ export async function onRequestPost(context) {
     }
     return errorResponse(500, 'config_error', `Config load failed: ${e?.message || e}`);
   }
+
+  const settings = config.settings || {};
+  const totalBudgetSec = Number(settings.request_total_budget_sec || 25);
+  const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 15);
+  const maxRetries = Number(settings.schedule_total_budget || 3);
+  const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
+  const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
+  const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
+  const deadline = startMs + totalBudgetSec * 1000;
 
   // ---- Resolve candidate list -------------------------------------------
   const allBindings = listBindings(config, body.model);
@@ -126,8 +135,6 @@ export async function onRequestPost(context) {
     return exp <= Date.now();
   });
   if (available.length === 0) {
-    // Everyone is in cooldown.  Return 503 with a Retry-After hint.
-    // The operator can also DELETE /api/state to clear all cooldowns.
     return new Response(
       JSON.stringify({
         error: {
@@ -142,31 +149,67 @@ export async function onRequestPost(context) {
           'content-type': 'application/json',
           'retry-after': '30',
           'x-edgeone-relay': 'v8-1',
-          'x-edgeone-state': 'all_in_cooldown',
+          'x-proxy-state': 'all_in_cooldown',
         },
       }
     );
   }
 
-  // ---- Failover loop -----------------------------------------------------
-  const attemptLog = []; // for X-Edgeone-Route-Trace header
-  const tried = new Set();
-  let upstreamBody = JSON.parse(JSON.stringify(body)); // deep copy per attempt
+  // Check unique providers count among available bindings
+  const uniqueProviders = new Set(available.map((b) => b.provider));
+  const hasMultipleProviders = uniqueProviders.size > 1;
 
-  const strategy = config?.agent_routing_strategy || 'sticky_failover';
+  // ---- Failover loop -----------------------------------------------------
+  const attemptLog = [];
+  const tried = new Set();
+  const providerAttempts = new Map(); // provider -> count
+  const downProviders = new Set();    // providers that suffered 5xx/timeout
+  let upstreamBody = JSON.parse(JSON.stringify(body));
+
   const candidatePool = orderBindings(available, body.model, strategy);
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // Pick from bindings in strategy order not yet tried in this request
-    const binding = candidatePool.find((b) => !tried.has(bindingId(b)));
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // 1. Deadline check
+    const now = Date.now();
+    if (now >= deadline) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            type: 'timeout_error',
+            message: `Gateway timeout (${totalBudgetSec}s budget exceeded). Tried: ${attemptLog.join(' -> ')}. Upstream is currently overloaded.`,
+            code: 'gateway_timeout',
+            trace: attemptLog,
+          },
+        }),
+        {
+          status: 504,
+          headers: {
+            'content-type': 'application/json',
+            'x-proxy-route': attemptLog.join('->'),
+            'x-proxy-attempts': String(attemptLog.length),
+            'x-proxy-latency-ms': String(now - startMs),
+          },
+        }
+      );
+    }
+
+    // 2. Pick next candidate respecting provider quotas & fast-failover down list
+    const binding = candidatePool.find((b) => {
+      if (tried.has(bindingId(b))) return false;
+      const provAttempts = providerAttempts.get(b.provider) || 0;
+      if (provAttempts >= maxAttemptsPerProv) return false;
+      if (downProviders.has(b.provider) && hasMultipleProviders) return false;
+      return true;
+    });
+
     if (!binding) break;
     tried.add(bindingId(binding));
+    providerAttempts.set(binding.provider, (providerAttempts.get(binding.provider) || 0) + 1);
 
     let resolved;
     try {
       resolved = resolveBinding(config, binding);
     } catch (e) {
-      // Config drift — write a short cooldown and try the next
       await setCooldown(binding.provider, binding.keyLabel, 30, kv);
       attemptLog.push(`${binding.provider}/${binding.keyLabel}=config_drift`);
       continue;
@@ -176,12 +219,17 @@ export async function onRequestPost(context) {
     upstreamBody.model = resolved.upstreamModel;
     normaliseForProvider(upstreamBody, binding.provider);
 
+    // Calculate dynamic remaining timeout for this attempt
+    const remainingMs = deadline - Date.now();
+    const perAttemptTimeoutMs = Math.min(upstreamTimeoutSec * 1000, Math.max(3000, remainingMs));
+
     const result = await forwardUpstream(
       resolved,
       upstreamBody,
       body.stream === true,
       request,
-      env
+      env,
+      perAttemptTimeoutMs
     );
 
     if (result.kind === 'success') {
@@ -191,12 +239,14 @@ export async function onRequestPost(context) {
       } else {
         await recordSuccess(binding.provider, binding.keyLabel, kv);
       }
+
       // Attach debug headers
       const headers = result.response.headers;
       headers.set('x-edgeone-relay', 'v8-1');
-      headers.set('x-edgeone-routed-via', `${binding.provider}/${binding.keyLabel}`);
-      headers.set('x-edgeone-route-trace', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join(','));
-      headers.set('x-edgeone-relay-latency-ms', String(Date.now() - startMs));
+      headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
+      headers.set('x-proxy-route', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join('->'));
+      headers.set('x-proxy-attempts', String(attemptLog.length + 1));
+      headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
       if (context.request?.eo?.clientIp) headers.set('x-edgeone-client-ip', context.request.eo.clientIp);
       return result.response;
     }
@@ -204,35 +254,48 @@ export async function onRequestPost(context) {
     // Failure path: record + cooldown + retry
     const cooldownSec = classifyFailure(result.status, result.kind);
     if (cooldownSec > 0) {
-      await setCooldown(binding.provider, binding.keyLabel, cooldownSec, kv);
+      if (typeof context?.waitUntil === 'function') {
+        context.waitUntil(setCooldown(binding.provider, binding.keyLabel, cooldownSec, kv));
+      } else {
+        await setCooldown(binding.provider, binding.keyLabel, cooldownSec, kv);
+      }
     }
-    // For 5xx / empty-stream, also bump the failure counter (may trip breaker)
+
+    // For 5xx / timeout / empty stream, mark provider as down if fast-failover is on
     if (result.kind === 'empty_stream' || result.kind === 'read_timeout' ||
         (result.status >= 500 && result.status < 600)) {
-      await recordFailure(binding.provider, binding.keyLabel, kv);
+      if (typeof context?.waitUntil === 'function') {
+        context.waitUntil(recordFailure(binding.provider, binding.keyLabel, kv));
+      } else {
+        await recordFailure(binding.provider, binding.keyLabel, kv);
+      }
+      if (fastFailoverProvDown) {
+        downProviders.add(binding.provider);
+      }
     }
+
     attemptLog.push(
       `${binding.provider}/${binding.keyLabel}=${result.kind || `http_${result.status}`}`
     );
 
-    // Non-retriable?  Stop the loop and return whatever upstream gave us.
+    // Non-retriable? (e.g. 400 bad request) Return immediately
     if (!shouldFailover(result.status, result.kind)) {
       const headers = result.response.headers;
       headers.set('x-edgeone-relay', 'v8-1');
-      headers.set('x-edgeone-routed-via', `${binding.provider}/${binding.keyLabel}`);
-      headers.set('x-edgeone-route-trace', attemptLog.join(','));
-      headers.set('x-edgeone-relay-latency-ms', String(Date.now() - startMs));
+      headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
+      headers.set('x-proxy-route', attemptLog.join('->'));
+      headers.set('x-proxy-attempts', String(attemptLog.length));
+      headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
       return result.response;
     }
-    // Otherwise, continue to the next iteration.
   }
 
-  // All retries exhausted — return the last seen error
+  // All retries exhausted
   return new Response(
     JSON.stringify({
       error: {
         type: 'overloaded',
-        message: `All ${tried.size} candidate keys were tried. Last failure: ${attemptLog[attemptLog.length - 1] || 'unknown'}.`,
+        message: `All ${tried.size} candidate attempts failed. Last failure: ${attemptLog[attemptLog.length - 1] || 'unknown'}.`,
         code: 'failover_exhausted',
         trace: attemptLog,
       },
@@ -242,8 +305,9 @@ export async function onRequestPost(context) {
       headers: {
         'content-type': 'application/json',
         'x-edgeone-relay': 'v8-1',
-        'x-edgeone-route-trace': attemptLog.join(','),
-        'x-edgeone-relay-latency-ms': String(Date.now() - startMs),
+        'x-proxy-route': attemptLog.join('->'),
+        'x-proxy-attempts': String(attemptLog.length),
+        'x-proxy-latency-ms': String(Date.now() - startMs),
       },
     }
   );
@@ -253,7 +317,7 @@ export async function onRequestPost(context) {
 // Upstream forward + first-chunk peek
 // ------------------------------------------------------------------------
 
-async function forwardUpstream(resolved, body, isStream, request, env) {
+async function forwardUpstream(resolved, body, isStream, request, env, perAttemptTimeoutMs) {
   const url = buildChatUrl(resolved.baseUrl);
   const upstreamHeaders = {
     authorization: `Bearer ${resolved.apiKey}`,
@@ -264,7 +328,7 @@ async function forwardUpstream(resolved, body, isStream, request, env) {
     upstreamHeaders['x-request-id'] = request.headers.get('x-request-id');
   }
 
-  const upstreamTimeoutMs = Number(env?.UPSTREAM_TIMEOUT_MS || DEFAULT_UPSTREAM_TIMEOUT_MS);
+  const timeoutMs = perAttemptTimeoutMs || Number(env?.UPSTREAM_TIMEOUT_MS || DEFAULT_UPSTREAM_TIMEOUT_MS);
 
   let upstreamResp;
   try {
@@ -274,14 +338,14 @@ async function forwardUpstream(resolved, body, isStream, request, env) {
       body: JSON.stringify(body),
       eo: {
         timeoutSetting: {
-          connectTimeout: 10_000,
-          readTimeout: upstreamTimeoutMs,
+          connectTimeout: 8_000,
+          readTimeout: timeoutMs,
           writeTimeout: 15_000,
         },
       },
     });
   } catch (e) {
-    // Network / timeout.  Read timeout is the most common case here.
+    // Network / timeout. Read timeout is the most common case here.
     return { kind: 'read_timeout', status: 0, response: null };
   }
 
