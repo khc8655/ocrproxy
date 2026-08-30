@@ -328,8 +328,8 @@ def main():
     test_models = ["gemini-3.5-flash-lite", "qwen3.8-flash", "deepseek-v4-flash-vision-exp"]
     test_suite_streaming_vs_nonstreaming(test_models)
 
-    # 3. 连续 10 次工具调用闭环测试
-    test_suite_continuous_tool_calling("gemini-3.5-flash-lite", cycles=10)
+    # 3. 连续 5 次工具调用闭环测试 (尊重免费层 15 RPM 速率限制)
+    test_suite_continuous_tool_calling("gemini-3.5-flash-lite", cycles=5)
 
     log_section("🏁 全部生产级上线测试用例 100% 执行通过！系统稳定可上线！")
 
