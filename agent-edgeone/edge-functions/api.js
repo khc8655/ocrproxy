@@ -23,7 +23,7 @@ export async function onRequest(context) {
   // /api/config
   if (pathname === '/api/config') {
     if (method === 'GET') return configGet(context);
-    if (method === 'PUT') return configPut(context);
+    if (method === 'PUT' || method === 'POST') return configPut(context);
     if (method === 'DELETE') return configDelete(context);
     return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405 });
   }
