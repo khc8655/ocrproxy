@@ -5,18 +5,12 @@
   "outputDirectory": ".",
   "nodeVersion": "20.18.0",
   "build": {
-    "edgeFunctions": "edge-functions",
-    "cloudFunctions": "cloud-functions"
+    "edgeFunctions": "edge-functions"
   },
   "functions": {
     "edge": {
       "memory": 128,
       "executionTimeout": 30000
-    },
-    "cloud": {
-      "memory": 256,
-      "executionTimeout": 120000,
-      "regions": ["ap-guangzhou", "ap-shanghai", "ap-beijing"]
     }
   },
   "headers": [

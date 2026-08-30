@@ -5,18 +5,12 @@
   "outputDirectory": "agent-edgeone",
   "nodeVersion": "20.18.0",
   "build": {
-    "edgeFunctions": "agent-edgeone/edge-functions",
-    "cloudFunctions": "agent-edgeone/cloud-functions"
+    "edgeFunctions": "agent-edgeone/edge-functions"
   },
   "functions": {
     "edge": {
       "memory": 128,
       "executionTimeout": 30000
-    },
-    "cloud": {
-      "memory": 256,
-      "executionTimeout": 120000,
-      "regions": ["ap-guangzhou", "ap-shanghai", "ap-beijing"]
     }
   },
   "headers": [
