@@ -286,7 +286,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">v3.3</span>
+      <span class="brand-badge" id="topModeBadge">v3.3</span>
     </div>
     <nav id="topNav"></nav>
     <div class="actions">
@@ -300,7 +300,7 @@
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
       <!-- Section 1: Agent Metrics Overview -->
-      <div class="section mb-4">
+      <div class="section mb-4" id="db-section-agent">
         <div class="section-head">
           <div class="section-title">Agent 对话总览</div>
           <span class="badge badge-success">真实路由</span>
@@ -310,7 +310,7 @@
       </div>
 
       <!-- Section 2: KB Metrics Overview -->
-      <div class="section mb-4">
+      <div class="section mb-4" id="db-section-kb">
         <div class="section-head">
           <div class="section-title">知识库入库总览</div>
           <span class="badge badge-neutral">虚拟别名</span>
@@ -343,9 +343,9 @@
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
       <div class="subtabs">
-        <button class="active" onclick="switchModelTab('providers')">供应商与 Key</button>
-        <button onclick="switchModelTab('agents')">Agent 模型</button>
-        <button onclick="switchModelTab('kb')">知识库模型</button>
+        <button id="msub-providers" class="active" onclick="switchModelTab('providers')">供应商与 Key</button>
+        <button id="msub-agents" onclick="switchModelTab('agents')">Agent 模型</button>
+        <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
       </div>
 
       <!-- Sub-tab: Providers -->
@@ -399,10 +399,12 @@
           <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBase">—</span></div>
           <div class="flex-between"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModels">—</span></div>
         </div>
-        <div class="section-title mb-2">Python (OpenAI SDK) 调用示例</div>
-        <div class="code-block"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
+        <div id="acc-section-agent">
+          <div class="section-title mb-2">Python (OpenAI SDK) 调用示例</div>
+          <div class="code-block mb-3"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
+        </div>
       </div>
-      <div class="section">
+      <div class="section" id="acc-section-kb">
         <div class="section-title mb-2">知识库工具接口调用示例</div>
         <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</div>
         <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbChat')">复制</button><pre id="accKbChat"></pre></div>
@@ -416,6 +418,36 @@
     <div id="panel-settings" class="panel">
       <div class="section">
         <div class="section-title mb-3">系统运行与可靠性参数</div>
+
+        <!-- Group 0: Client Authentication & Run Mode -->
+        <div class="card card-pad settings-group mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              客户端连接鉴权与运行模式 (Client Authentication & Run Mode)
+            </h3>
+            <span class="badge badge-primary">全局通用</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item" style="grid-column: 1 / -1;">
+              <label class="form-label">客户端调用密钥 (PROXY_API_KEY)</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="s_proxyApiKey" class="form-control mono" placeholder="sk-..." style="flex:1;">
+                <button class="btn btn-sm" onclick="copyProxyKey()">复制 Key</button>
+                <button class="btn btn-sm" onclick="generateRandomKey()">随机生成</button>
+              </div>
+              <span class="hint">客户端（Cursor / Cline / Dify / OpenAI SDK 等）调用 /v1/* 接口时请求头 <code>Authorization: Bearer &lt;KEY&gt;</code> 传入的密钥。保存在加密配置中，修改立即生效。</span>
+            </div>
+            <div class="setting-item" style="grid-column: 1 / -1; max-width:420px;">
+              <label class="form-label">系统运行模式 (Running Mode)</label>
+              <select id="s_runMode" class="form-control">
+                <option value="full">Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)</option>
+                <option value="agent">Agent 智能体模式 (推荐海外 VM / 纯 Agent 真实模型)</option>
+                <option value="kb">KB 知识库模式 (推荐国内 VM / 4 大入库虚拟模型)</option>
+              </select>
+              <span class="hint">控制管理后台页面自适应展示（隐藏无关参数/Tab）以及 /v1/models 的默认暴露范围。</span>
+            </div>
+          </div>
+        </div>
         
         <!-- Group 1: Global Reliability & Rate Limits -->
         <div class="card card-pad settings-group">
@@ -476,7 +508,7 @@
         </div>
 
         <!-- Group 2: Agent Mode Settings -->
-        <div class="card card-pad settings-group">
+        <div class="card card-pad settings-group" id="st-group-agent">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
               Agent 模式设置 (Agent Mode)
@@ -498,7 +530,7 @@
         </div>
 
         <!-- Group 3: KB Ingestion Settings -->
-        <div class="card card-pad settings-group">
+        <div class="card card-pad settings-group" id="st-group-kb">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
               知识库入库设置 (KB Ingestion)
@@ -529,8 +561,69 @@
           </div>
         </div>
 
+        <!-- Key Routing Strategies -->
+        <div class="card card-pad settings-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              Key 轮换与分流策略 (Key Routing Policy)
+            </h3>
+            <span class="badge badge-primary">分流调度</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item" style="grid-column: 1 / -1; max-width:640px;">
+              <label class="form-label">Agent 模式分流策略 (Agent Routing)</label>
+              <select id="s_agentRouting" class="form-control">
+                <option value="sticky_failover">粘性故障转移 (Sticky Failover - 推荐，固定当前 Key，遇 429 顺延并长期驻留新 Key)</option>
+                <option value="round_robin">轮询负载均衡 (Round Robin - 每次请求依次轮流切换 Key)</option>
+                <option value="priority_fallback">主备优先级降级 (Priority Fallback - 始终优先尝试第 1 个 Key，遇错降级)</option>
+                <option value="latency_based">最低延迟优先 (Latency Based - 自动路由至近期延迟最低的优质 Key)</option>
+              </select>
+              <span class="hint">智能体编程场景（Cursor / Cline）推荐「粘性故障转移」，可保持会话连接与 KV Cache 稳定性，避免频繁切回限流 Key。</span>
+            </div>
+            <div class="setting-item" style="grid-column: 1 / -1; max-width:640px;">
+              <label class="form-label">KB 知识库分流策略 (KB Routing)</label>
+              <select id="s_kbRouting" class="form-control">
+                <option value="round_robin">轮询负载均衡 (Round Robin - 推荐，高并发请求原子轮换分流，充分利用并发与 TPM)</option>
+                <option value="sticky_failover">粘性故障转移 (Sticky Failover - 固定当前 Key 直到限流)</option>
+                <option value="priority_fallback">主备优先级降级 (Priority Fallback - 始终优先尝试第 1 个 Key)</option>
+                <option value="latency_based">最低延迟优先 (Latency Based - 自动路由至延迟最低的 Key)</option>
+              </select>
+              <span class="hint">知识库无状态批量入库（Embedding / OCR / Rerank）推荐「轮询负载均衡」，可均匀打散流量并大幅提升入库吞吐量。</span>
+            </div>
+          </div>
+        </div>
+
         <div style="display:flex;justify-content:flex-end;">
           <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title mb-3">服务运维与系统重启</div>
+        <div class="card card-pad mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:600;color:var(--text);margin-bottom:2px;">每日定时平滑重启 (Daily Auto-Restart)</div>
+              <div class="text-secondary text-sm">每日凌晨 04:00 自动重启服务释放内存堆（Agent 模式推荐关闭以保持会话连续；KB 模式建议开启）</div>
+            </div>
+            <label class="checkbox" style="font-weight:600;">
+              <input type="checkbox" id="s_autoRestart">
+              <span>开启定时重启</span>
+            </label>
+          </div>
+          <div class="hint-box" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:10px 14px;">
+            <b>日志空间保护机制：</b>系统底层配置了 <code>journald</code> 50MB 磁盘配额自动轮转（<code>SystemMaxUse=50M</code>, 7天保留），内存错误日志严格限定在 100 条以内，无需重启即可确保长期运行磁盘与内存零积压。
+          </div>
+        </div>
+        <div class="card card-pad flex-between">
+          <div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:2px;">即时平滑重启服务 / 重载熔断状态</div>
+            <div class="text-secondary text-sm">一键向后台发送平滑重启信号（约 2-3 秒完成），或一键清空所有 Key 的 429 冷却与熔断计数</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-warn" onclick="restartService()">一键平滑重启</button>
+            <button class="btn" onclick="reloadRuntimeState()">重置熔断与冷却</button>
+          </div>
         </div>
       </div>
 
@@ -569,6 +662,7 @@
     <div class="modal-head"><h3 id="keyModalTitle">Key 凭证</h3><button class="modal-close" onclick="closeModal('keyModal')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="k_provider">
+      <input type="hidden" id="k_oldLabel">
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
@@ -729,6 +823,52 @@ async function reloadRuntimeState(){
 // Render dispatcher
 function render(){
   if(!state.config) return;
+
+  const runMode = (state.config.run_mode || state.config._run_mode || 'full').toLowerCase();
+
+  // Top header badge
+  const badge = document.getElementById('topModeBadge');
+  if (badge) {
+    if (runMode === 'agent') {
+      badge.className = 'brand-badge badge badge-success';
+      badge.textContent = 'Agent 智能体模式';
+    } else if (runMode === 'kb') {
+      badge.className = 'brand-badge badge badge-primary';
+      badge.textContent = 'KB 知识库模式';
+    } else {
+      badge.className = 'brand-badge badge badge-neutral';
+      badge.textContent = 'Full 混合模式';
+    }
+  }
+
+  // Log filter bar: in single mode (agent or kb), hide the entire filter bar because all logs belong to that single mode
+  const lfb = document.getElementById('logFilterBar');
+  if(lfb) lfb.style.display = (runMode === 'full') ? 'flex' : 'none';
+
+  // Dashboard visibility
+  const sa = document.getElementById('db-section-agent');
+  const sk = document.getElementById('db-section-kb');
+  if(sa) sa.style.display = (runMode === 'kb') ? 'none' : 'block';
+  if(sk) sk.style.display = (runMode === 'agent') ? 'none' : 'block';
+
+  // Models Subtabs visibility
+  const msa = document.getElementById('msub-agents');
+  const msk = document.getElementById('msub-kb');
+  if(msa) msa.style.display = (runMode === 'kb') ? 'none' : 'inline-block';
+  if(msk) msk.style.display = (runMode === 'agent') ? 'none' : 'inline-block';
+
+  // Settings visibility
+  const sta = document.getElementById('st-group-agent');
+  const stk = document.getElementById('st-group-kb');
+  if(sta) sta.style.display = (runMode === 'kb') ? 'none' : 'block';
+  if(stk) stk.style.display = (runMode === 'agent') ? 'none' : 'block';
+
+  // Access guide visibility
+  const aca = document.getElementById('acc-section-agent');
+  const ack = document.getElementById('acc-section-kb');
+  if(aca) aca.style.display = (runMode === 'kb') ? 'none' : 'block';
+  if(ack) ack.style.display = (runMode === 'agent') ? 'none' : 'block';
+
   if(state.tab==='dashboard') renderDashboard();
   if(state.tab==='models') renderModels();
   if(state.tab==='settings') renderSettings();
@@ -748,9 +888,13 @@ function filterLogs(filter){
 
 function renderLogsTable(){
   const allLogs = state.stats.error_logs || [];
-  const f = state.logFilter || 'all';
-  const filtered = f === 'all' 
-    ? allLogs 
+  const runMode = (state.config.run_mode || state.config._run_mode || 'full').toLowerCase();
+  let f = state.logFilter || 'all';
+  if(runMode === 'agent') f = 'agent';
+  else if(runMode === 'kb') f = 'kb';
+
+  const filtered = (f === 'all' || runMode !== 'full')
+    ? (runMode === 'agent' ? allLogs.filter(l => l.category === 'agent' || l.type === 'agent') : (runMode === 'kb' ? allLogs.filter(l => l.category !== 'agent' && l.type !== 'agent') : allLogs))
     : allLogs.filter(l => l.category === f || (f === 'kb' && l.type !== 'agent') || (f === 'agent' && l.type === 'agent'));
   const logs = filtered.slice(0, 50);
   const tbody = document.getElementById('logsBody');
@@ -1073,8 +1217,27 @@ function deleteProvider(name){
   renderModels();
 }
 
-function openKeyModal(prov){ document.getElementById('keyModalTitle').textContent='新增 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=''; document.getElementById('k_label').disabled=false; document.getElementById('k_value').value=''; document.getElementById('k_skip').checked=false; openModal('keyModal'); }
-function editKey(prov,label){ const p=state.config.providers[prov]; document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; document.getElementById('k_provider').value=prov; document.getElementById('k_label').value=label; document.getElementById('k_label').disabled=true; document.getElementById('k_value').value=p.keys[label]; document.getElementById('k_skip').checked=true; openModal('keyModal'); }
+function openKeyModal(prov){ 
+  document.getElementById('keyModalTitle').textContent='新增 Key 凭证 - '+prov; 
+  document.getElementById('k_provider').value=prov; 
+  document.getElementById('k_oldLabel').value=''; 
+  document.getElementById('k_label').value=''; 
+  document.getElementById('k_label').disabled=false; 
+  document.getElementById('k_value').value=''; 
+  document.getElementById('k_skip').checked=false; 
+  openModal('keyModal'); 
+}
+function editKey(prov,label){ 
+  const p=state.config.providers[prov]||{}; 
+  document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; 
+  document.getElementById('k_provider').value=prov; 
+  document.getElementById('k_oldLabel').value=label; 
+  document.getElementById('k_label').value=label; 
+  document.getElementById('k_label').disabled=false; 
+  document.getElementById('k_value').value=(p.keys&&p.keys[label])||''; 
+  document.getElementById('k_skip').checked=true; 
+  openModal('keyModal'); 
+}
 function deleteKey(prov,label){ 
   if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
@@ -1087,12 +1250,18 @@ function deleteKey(prov,label){
 }
 async function saveKey(){
   const prov=document.getElementById('k_provider').value;
+  const oldLabel=(document.getElementById('k_oldLabel').value||'').trim();
   const label=document.getElementById('k_label').value.trim();
   const val=document.getElementById('k_value').value.trim();
   const skip=document.getElementById('k_skip').checked;
   if(!label||!val){ toast('Key 别名和密钥值不能为空','err'); return; }
-  const isEdit=document.getElementById('k_label').disabled;
-  if(!isEdit&&state.config.providers[prov].keys[label]){ toast('Key 别名已存在','err'); return; }
+
+  // If renaming an existing key and new label conflicts with another existing key
+  if(label !== oldLabel && state.config.providers && state.config.providers[prov] && state.config.providers[prov].keys && state.config.providers[prov].keys[label] !== undefined){
+    toast('Key 别名「'+label+'」已存在，请换一个别名','err'); 
+    return; 
+  }
+
   if(skip){ commitKey(prov,label,val); return; }
   document.getElementById('k_spinner').style.display='block';
   try {
@@ -1110,17 +1279,49 @@ async function saveKey(){
   }
 }
 function commitKey(prov,label,val){ 
+  const oldLabel=(document.getElementById('k_oldLabel').value||'').trim();
   if(!state.config.providers) state.config.providers={};
   if(!state.config.providers[prov]) state.config.providers[prov]={base_url:'',keys:{}};
   if(!state.config.providers[prov].keys) state.config.providers[prov].keys={};
+
+  // If key renamed, delete old key and cascade rename in agent_models and candidates
+  if(oldLabel && oldLabel !== label){
+    delete state.config.providers[prov].keys[oldLabel];
+    // Cascade update agent_models
+    if(state.config.agent_models){
+      Object.values(state.config.agent_models).forEach(m=>{
+        (m.keys||[]).forEach(x=>{
+          if(x.provider===prov && x.key===oldLabel) x.key = label;
+        });
+      });
+    }
+    // Cascade update candidates (KB)
+    if(state.config.candidates){
+      Object.values(state.config.candidates).forEach(list=>{
+        (list||[]).forEach(x=>{
+          if(x.provider===prov && x.key===oldLabel) x.key = label;
+        });
+      });
+    }
+  }
+
   state.config.providers[prov].keys[label]=val; 
   closeModal('keyModal'); 
-  persistConfig(`Key「${label}」已保存并立即生效`); 
+  persistConfig(oldLabel && oldLabel !== label ? `Key 别名已从「${oldLabel}」更新为「${label}」并级联同步至关联模型` : `Key「${label}」已保存并立即生效`); 
   renderModels(); 
 }
 
 // Agent Model Actions
-function openAgentModal(){ document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; document.getElementById('a_oldName').value=''; document.getElementById('a_name').value=''; document.getElementById('a_name').readOnly=false; document.getElementById('a_upstream').value=''; populateProviderSelect('a_provider'); renderAgentKeyChecks(); openModal('agentModal'); }
+function openAgentModal(){ 
+  document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; 
+  document.getElementById('a_oldName').value=''; 
+  document.getElementById('a_name').value=''; 
+  document.getElementById('a_name').readOnly=false; 
+  document.getElementById('a_upstream').value=''; 
+  populateProviderSelect('a_provider'); 
+  renderAgentKeyChecks(); 
+  openModal('agentModal'); 
+}
 function populateProviderSelect(id){ const sel=document.getElementById(id); const names=Object.keys(state.config.providers||{}); sel.innerHTML=names.length?names.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''):'<option value="">无可用供应商</option>'; }
 function renderAgentKeyChecks(){
   const prov=document.getElementById('a_provider').value;
@@ -1130,12 +1331,12 @@ function renderAgentKeyChecks(){
   box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
 }
 function editAgentModel(name){
-  const m=state.config.agent_models[name];
+  const m=state.config.agent_models[name] || {};
   document.getElementById('agentModalTitle').textContent='编辑 Agent 模型';
   document.getElementById('a_oldName').value=name;
   document.getElementById('a_name').value=name;
-  document.getElementById('a_name').readOnly=true;
-  document.getElementById('a_upstream').value=m.upstream_model||'';
+  document.getElementById('a_name').readOnly=false; // Allow editing model name
+  document.getElementById('a_upstream').value=m.upstream_model||''; // Pre-fill upstream model ID
   populateProviderSelect('a_provider');
   const providers=[...new Set((m.keys||[]).map(x=>x.provider))];
   if(providers[0]) document.getElementById('a_provider').value=providers[0];
@@ -1144,6 +1345,7 @@ function editAgentModel(name){
   document.querySelectorAll('#a_keyList input').forEach(inp=>{ const p=document.getElementById('a_provider').value; inp.checked=set.has(p+':'+inp.value); });
   const box=document.getElementById('a_keyList');
   providers.slice(1).forEach(p=>{
+    if(!state.config.providers[p]) return;
     const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label" style="font-weight:700;">${esc(p)}</div>`+Object.keys(state.config.providers[p].keys||{}).map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
     box.appendChild(div);
   });
@@ -1151,7 +1353,7 @@ function editAgentModel(name){
   openModal('agentModal');
 }
 function saveAgentModel(){
-  const oldName=document.getElementById('a_oldName').value;
+  const oldName=(document.getElementById('a_oldName').value||'').trim();
   const name=document.getElementById('a_name').value.trim();
   const upstream=document.getElementById('a_upstream').value.trim();
   if(!name){ toast('模型名称不能为空','err'); return; }
@@ -1161,11 +1363,14 @@ function saveAgentModel(){
   });
   if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
   if(!state.config.agent_models) state.config.agent_models={};
-  if(oldName&&oldName!==name){ delete state.config.agent_models[oldName]; }
-  const entry={keys:bindings}; if(upstream&&upstream!==name) entry.upstream_model=upstream;
+  if(oldName && oldName!==name){ delete state.config.agent_models[oldName]; }
+  const entry={keys:bindings}; 
+  if(upstream && upstream!==name) {
+    entry.upstream_model=upstream;
+  }
   state.config.agent_models[name]=entry;
   closeModal('agentModal');
-  persistConfig(`Agent 模型「${name}」已保存并立即生效`);
+  persistConfig(oldName && oldName!==name ? `Agent 模型已从「${oldName}」重命名为「${name}」并立即生效` : `Agent 模型「${name}」已保存并立即生效`);
   renderAgentModels();
 }
 function deleteAgentModel(name){ 
@@ -1373,6 +1578,16 @@ async function testCandidate(type, i){
 function renderSettings(){
   const c=state.config||{};
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=(v!==undefined && v!==null)?v:''; };
+  
+  // Group 0: Client Auth & Run Mode
+  set('s_proxyApiKey', c.proxy_api_key || '');
+  const modeEl = document.getElementById('s_runMode');
+  if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'full';
+
+  // Key Routing Strategies
+  set('s_agentRouting', c.agent_routing_strategy || 'sticky_failover');
+  set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
+
   // Group 1: Global Reliability
   set('s_concurrency', c.max_concurrency_per_key ?? 3);
   set('s_budget', c.schedule_total_budget ?? 15);
@@ -1384,6 +1599,13 @@ function renderSettings(){
   const latEl=document.getElementById('s_latency');
   if(latEl) latEl.checked=!!c.latency_based_routing;
 
+  // Maintenance: Auto Restart
+  const autoRestartEl=document.getElementById('s_autoRestart');
+  if(autoRestartEl) {
+    const isAgent = (c.run_mode || c._run_mode) === 'agent';
+    autoRestartEl.checked = c.auto_restart_enabled !== undefined ? !!c.auto_restart_enabled : !isAgent;
+  }
+
   // Group 2: Agent Mode
   set('s_chatTimeout', c.upstream_timeout_chat ?? 45);
 
@@ -1393,8 +1615,68 @@ function renderSettings(){
   set('s_embTimeout', c.upstream_timeout_embedding ?? 60);
   set('s_rankTimeout', c.upstream_timeout_rerank ?? 30);
 }
+
+function generateRandomKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let rand = '';
+  for (let i = 0; i < 32; i++) {
+    rand += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  const k = 'sk-ocrproxy-' + rand;
+  const el = document.getElementById('s_proxyApiKey');
+  if (el) el.value = k;
+  toast('已生成新的客户端调用 Key，请点击保存设置生效', 'ok');
+}
+
+function copyProxyKey() {
+  const el = document.getElementById('s_proxyApiKey');
+  if (!el || !el.value) {
+    toast('尚未配置客户端 Key', 'err');
+    return;
+  }
+  navigator.clipboard.writeText(el.value);
+  toast('客户端调用 Key 已复制到剪贴板', 'ok');
+}
+
+async function restartService(){
+  if (!confirm('确定要平滑重启 OCRProxy 服务守护进程吗？（重启耗时约 2-3 秒）')) return;
+  try {
+    const r = await fetch('/api/admin/restart', { method: 'POST', headers: headers() });
+    if (!r.ok) throw new Error('发送重启请求失败');
+    toast('服务正在平滑重启中，3 秒后自动尝试重新连接...', 'ok');
+    setTimeout(async () => {
+      let retries = 5;
+      while (retries > 0) {
+        try {
+          await loadData();
+          toast('服务已成功恢复运行', 'ok');
+          return;
+        } catch(e) {
+          retries--;
+          await new Promise(res => setTimeout(res, 1000));
+        }
+      }
+    }, 2500);
+  } catch(e) {
+    toast('重启失败: ' + e.message, 'err');
+  }
+}
+
 function saveSettings(){
   const c=state.config||{};
+
+  // Group 0: Client Auth & Run Mode
+  const keyEl = document.getElementById('s_proxyApiKey');
+  if (keyEl) c.proxy_api_key = keyEl.value.trim();
+  const modeEl = document.getElementById('s_runMode');
+  if (modeEl) c.run_mode = modeEl.value;
+
+  // Key Routing Strategies
+  const agRouteEl = document.getElementById('s_agentRouting');
+  if (agRouteEl) c.agent_routing_strategy = agRouteEl.value;
+  const kbRouteEl = document.getElementById('s_kbRouting');
+  if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value;
+
   // Group 1: Global Reliability
   c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 3;
   c.schedule_total_budget = Number(document.getElementById('s_budget').value) || 15;
@@ -1406,6 +1688,10 @@ function saveSettings(){
   c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
   c.circuit_cooldown_sec = Number(document.getElementById('s_circuitCooldown').value) || 300;
   c.latency_based_routing = !!document.getElementById('s_latency').checked;
+
+  // Maintenance: Auto Restart
+  const autoRestartEl = document.getElementById('s_autoRestart');
+  if (autoRestartEl) c.auto_restart_enabled = !!autoRestartEl.checked;
 
   // Group 2: Agent Mode
   c.upstream_timeout_chat = Number(document.getElementById('s_chatTimeout').value) || 45;

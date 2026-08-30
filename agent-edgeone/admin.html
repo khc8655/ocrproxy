@@ -260,6 +260,7 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="m_key_prov">
+      <input type="hidden" id="m_key_old_label">
       <div class="form-group">
         <label class="form-label">Key 别名</label>
         <input type="text" id="m_key_label" class="form-control" placeholder="如 自己">
@@ -284,6 +285,7 @@
       <button class="modal-close" onclick="closeModal('agentModal')">关闭</button>
     </div>
     <div class="modal-body">
+      <input type="hidden" id="m_model_old_name">
       <div class="form-group">
         <label class="form-label">供应商快捷筛选与推荐模型</label>
         <select id="m_model_prov_filter" class="form-control" onchange="onModelProvFilterChange()">

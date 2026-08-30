@@ -112,6 +112,10 @@ _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
 _sem_lock = asyncio.Lock()
 
+# Key routing state
+_sticky_agent_indices: Dict[str, int] = {}  # model_name -> active key index for sticky failover
+_rr_kb_indices: Dict[str, int] = {}          # model_type -> round robin cursor for KB
+
 # Config-version tracking: entries in the dicts above are pruned whenever the
 # encrypted config changes on disk (removed keys/providers leave no residue,
 # and a changed max_concurrency_per_key takes effect without a restart).
@@ -245,7 +249,7 @@ def _prune_runtime_state(config: dict):
 
 def reset_runtime_state():
     """Clear ALL runtime scheduling state (cooldowns, circuit breakers,
-    latency history, per-key semaphores).
+    latency history, per-key semaphores, sticky and round-robin indices).
 
     Used by POST /v1/reload to give a freshly reloaded config a clean slate.
     In-flight requests keep references to the old semaphore objects, so the
@@ -256,6 +260,8 @@ def reset_runtime_state():
     _latency_history.clear()
     _semaphores.clear()
     _semaphore_limits.clear()
+    _sticky_agent_indices.clear()
+    _rr_kb_indices.clear()
 
 
 async def _peek_first_chunk(resp: httpx.Response):
@@ -302,12 +308,34 @@ async def schedule(
     if v != _last_config_version:
         _prune_runtime_state(config)
 
-    # Smart ordering: when latency_based_routing is enabled, sort candidates
-    # by recent average latency so the fastest provider is tried first.
-    # Default: OFF – respect the order configured in the admin UI so that
-    # what the user sees is exactly what the scheduler uses.
+    # Determine routing strategy based on category
+    if category == "agent":
+        strategy = config.get("agent_routing_strategy", "sticky_failover")
+    else:
+        strategy = config.get("kb_routing_strategy", "round_robin")
+
+    # Global latency override if explicitly turned on
     if config.get("latency_based_routing", False):
-        candidates = _sort_candidates_by_latency(candidates)
+        strategy = "latency_based"
+
+    # Candidate ordering based on strategy
+    num_cands = len(candidates)
+    ordered_items = list(enumerate(candidates))  # (orig_idx, cand)
+
+    if strategy == "sticky_failover":
+        sticky_idx = _sticky_agent_indices.get(req_model_name, 0) % num_cands
+        ordered_items = ordered_items[sticky_idx:] + ordered_items[:sticky_idx]
+    elif strategy == "round_robin":
+        rr_idx = _rr_kb_indices.get(model_type, 0) % num_cands
+        _rr_kb_indices[model_type] = (rr_idx + 1) % num_cands
+        ordered_items = ordered_items[rr_idx:] + ordered_items[:rr_idx]
+    elif strategy == "latency_based":
+        ordered_items = sorted(
+            ordered_items,
+            key=lambda item: (_get_avg_latency(get_candidate_id(item[1])), item[0])
+        )
+    else:  # "priority_fallback"
+        pass  # keep original configured order
 
     providers = config.get("providers", {})
 
@@ -375,21 +403,22 @@ async def schedule(
     # passes a longer upstream_timeout via config override) gets more time.
     req_timeout = httpx.Timeout(upstream_timeout_sec, connect=min(5.0, upstream_timeout_sec))
 
-    for cand in candidates:
-        # 1. Total budget check
-        elapsed = time.time() - start_time
-        if elapsed >= total_budget_sec:
-            logger.warning(f"Failover budget exhausted. Elapsed: {elapsed:.2f}s >= budget {total_budget_sec}s")
-            errors.append(f"budget_exhausted_after_{elapsed:.2f}s")
-            break
+    for loop_idx in range(2):
+        for orig_idx, cand in ordered_items:
+            # 1. Total budget check
+            elapsed = time.time() - start_time
+            if elapsed >= total_budget_sec:
+                logger.warning(f"Failover budget exhausted. Elapsed: {elapsed:.2f}s >= budget {total_budget_sec}s")
+                errors.append(f"budget_exhausted_after_{elapsed:.2f}s")
+                break
 
-        cand_id = get_candidate_id(cand)
+            cand_id = get_candidate_id(cand)
 
-        # 2. Cooldown check
-        cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
-        if time.time() < cooldown_expiry:
-            logger.info(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
-            continue
+            # 2. Cooldown check
+            cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
+            if time.time() < cooldown_expiry:
+                logger.info(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
+                continue
 
         provider_name = cand["provider"]
         key_label = cand["key"]
@@ -494,6 +523,10 @@ async def schedule(
                                  provider=provider_name, key=key_label,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
+                    # Update sticky cursor for Agent mode if sticky_failover strategy is active
+                    if category == "agent" and strategy == "sticky_failover":
+                        _sticky_agent_indices[req_model_name] = orig_idx
+
                     if is_stream:
                         if handle_stream:
                             try:
@@ -529,10 +562,10 @@ async def schedule(
                     else:
                         resp_data = resp.json()
                         # Always close the upstream response to return the
-                        # connection to the pool immediately.  For OCR / vision
+                        # connection to the pool immediately. For OCR / KB
                         # (large responses) also reclaim heap pages.
                         await resp.aclose()
-                        if model_type == "ocr":
+                        if model_type == "ocr" or category == "kb":
                             await _reclaim_memory()
                         return ScheduleResult(
                             data=resp_data,
@@ -687,7 +720,7 @@ async def schedule(
                 cf = _consecutive_failures.get(cand_id, 0) + 1
                 _consecutive_failures[cand_id] = cf
 
-                cd_sec = cooldown_other
+                cd_sec = cooldown_5xx_sec
                 if cf >= circuit_break_threshold:
                     cd_sec = max(cd_sec, circuit_cooldown)
                     logger.warning(f"Circuit breaker triggered for {cand_id}. Cool down for {cd_sec}s.")
@@ -708,7 +741,19 @@ async def schedule(
         finally:
             sem.release()
 
-    # If all candidates failed or were skipped
+        # Check if all candidates were cooling down and we can wait within budget
+        if not errors and loop_idx == 0:
+            now = time.time()
+            elapsed = now - start_time
+            expiries = [_cooldown_until.get(get_candidate_id(c), 0.0) for _, c in ordered_items]
+            if expiries:
+                min_expiry = min(expiries)
+                wait_time = min_expiry - now
+                if 0 < wait_time <= min(5.0, total_budget_sec - elapsed):
+                    logger.info(f"All candidates cooling down, waiting {wait_time:.2f}s within budget for earliest key...")
+                    await asyncio.sleep(wait_time + 0.1)
+                    continue
+        break
     if errors:
         # Truncate error list to avoid oversized responses when many
         # candidates fail (e.g. 15 candidates × 500 chars each = 7.5KB).

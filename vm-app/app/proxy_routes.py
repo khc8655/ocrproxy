@@ -27,8 +27,11 @@ Chat relay optimisations:
     provider-specific SSE fields (e.g. reasoning_content deltas from
     SenseNova / DeepSeek) reach the client verbatim.
 """
+import os
 import copy
 import json
+import asyncio
+import logging
 import urllib.parse
 import httpx
 from fastapi import APIRouter, Request
@@ -40,11 +43,13 @@ from .scheduler import (
     AllCandidatesFailedError,
     GlobalOverloadError,
     reset_runtime_state,
+    _reclaim_memory,
 )
 from .auth import verify_proxy_auth
 from .upstream import join_upstream
 
 router = APIRouter(prefix="/v1")
+logger = logging.getLogger("proxy_routes")
 
 # Virtual model aliases used for KB ingestion mode.
 # When a client sends one of these as the model name, the proxy uses ALL
@@ -333,34 +338,37 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
 
 @router.get("/models")
 async def list_models(request: Request):
-    """List all available models.
-
-    Returns both real model names (for agent mode) and virtual aliases
-    (for KB ingestion mode).  Real models are collected from all candidate
-    types — each unique model name appears once.
-    """
-    if not verify_proxy_auth(request):
+    """List all available models according to active RUN_MODE."""
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    config = await get_config()
-
-    # Only expose real Agent models from the dedicated agent_models map
-    # (model-centric schema: {name: {keys: [...], upstream_model?}}).
-    # KB ingestion virtual aliases (chat/embedding/reranker/ocr) are NOT
-    # advertised here — ingestion tools configure them directly via examples.
-    agent_models = config.get("agent_models") or {}
-    if isinstance(agent_models, dict):
-        real_models = set(agent_models.keys())
-    else:  # defensive: un-migrated flat list
-        real_models = {c.get("model") for c in agent_models if c.get("model")}
-
+    run_mode = (config.get("run_mode") or os.environ.get("RUN_MODE", "full")).lower()
     data = []
-    for model_id in sorted(m for m in real_models if m):
-        data.append({
-            "id": model_id,
-            "object": "model",
-            "owned_by": "llm-proxy",
-        })
+
+    # 1. Include real Agent models if in agent or full mode
+    if run_mode in ("agent", "full"):
+        agent_models = config.get("agent_models") or {}
+        if isinstance(agent_models, dict):
+            real_models = set(agent_models.keys())
+        else:
+            real_models = {c.get("model") for c in agent_models if c.get("model")}
+        for model_id in sorted(m for m in real_models if m):
+            data.append({
+                "id": model_id,
+                "object": "model",
+                "owned_by": "llm-proxy-agent",
+            })
+
+    # 2. Include 4 virtual aggregation models if in kb or full mode
+    if run_mode in ("kb", "full"):
+        for alias in ("chat", "embedding", "reranker", "ocr"):
+            if not any(d["id"] == alias for d in data):
+                data.append({
+                    "id": alias,
+                    "object": "model",
+                    "owned_by": "llm-proxy-kb",
+                })
 
     return {"object": "list", "data": data}
 
@@ -368,7 +376,8 @@ async def list_models(request: Request):
 @router.post("/reload")
 async def reload_config(request: Request):
     """Force reload configuration from disk."""
-    if not verify_proxy_auth(request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     clear_cache()
@@ -390,7 +399,8 @@ async def reload_config(request: Request):
 
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
-    if not verify_proxy_auth(request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body, err = await _parse_json_body(request)
@@ -542,14 +552,14 @@ async def chat_completions(request: Request):
 
 @router.post("/embeddings")
 async def embeddings(request: Request):
-    if not verify_proxy_auth(request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body, err = await _parse_json_body(request)
     if err:
         return err
     model_name = body.get("model", "")
-    config = await get_config()
 
     all_emb_candidates = config.get("candidates", {}).get("embedding", [])
 
@@ -616,14 +626,14 @@ async def embeddings(request: Request):
 
 @router.post("/rerank")
 async def rerank(request: Request):
-    if not verify_proxy_auth(request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body, err = await _parse_json_body(request)
     if err:
         return err
     model_name = body.get("model", "")
-    config = await get_config()
 
     all_rerank_candidates = config.get("candidates", {}).get("reranker", [])
 
@@ -689,7 +699,8 @@ async def rerank(request: Request):
 
 @router.post("/ocr")
 async def ocr(request: Request):
-    if not verify_proxy_auth(request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
     body, err = await _parse_json_body(request, max_bytes=_MAX_OCR_BODY_BYTES)
@@ -779,3 +790,8 @@ async def ocr(request: Request):
         return _overloaded_response(e)
     except Exception as e:
         return _error_response(e)
+    finally:
+        del img
+        del prompt
+        del build_request
+        asyncio.create_task(_reclaim_memory())

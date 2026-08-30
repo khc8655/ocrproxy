@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OCRProxy 初始化脚本 - 生成加密密钥和初始配置文件。
+OCRProxy 初始化脚本 - 生成加密密钥和通用初始配置文件。
 由 install.sh 调用，不直接运行。
 """
 import os
@@ -8,6 +8,7 @@ import sys
 import json
 import secrets
 import string
+
 
 def generate_random_key(length: int = 40) -> str:
     """Generate a cryptographically secure random string."""
@@ -21,17 +22,20 @@ def generate_fernet_key() -> str:
     return Fernet.generate_key().decode()
 
 
-def create_env_file(env_path: str, config_dir: str, proxy_key: str, admin_pass: str, encrypt_key: str, port: int = 8787):
+def create_env_file(env_path: str, config_dir: str, proxy_key: str, admin_pass: str, encrypt_key: str, port: int = 3000, run_mode: str = "agent"):
     """Create .env file with generated secrets."""
     content = f"""# ocrproxy 环境变量配置
 # 此文件包含敏感密钥，权限已设置为 600
 # 生成时间: 自动安装
 
-# 代理服务监听地址 (仅本地监听，由 Caddy 反向代理)
-APP_HOST=127.0.0.1
+# 运行模式: agent (智能体直连) | kb (知识库入库) | full (混合全功能)
+RUN_MODE={run_mode}
+
+# 代理服务监听地址 (支持 IPv6 与 IPv4 双栈)
+APP_HOST=::
 APP_PORT={port}
 
-# 代理 API Key - 客户端调用 /v1/* 接口时使用的密钥
+# 代理 API Key - 客户端调用 /v1/* 接口时使用的默认密钥 (也可在管理后台修改)
 PROXY_API_KEY={proxy_key}
 
 # 管理员密码 - 登录后台管理面板使用的密码
@@ -48,8 +52,8 @@ CONFIG_DIR={config_dir}
     os.chmod(env_path, 0o600)
 
 
-def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
-    """Create initial encrypted config file."""
+def init_config(config_dir: str, encrypt_key: str, proxy_key: str, run_mode: str = "agent", import_path: str = None):
+    """Create initial universal encrypted config file."""
     from cryptography.fernet import Fernet
 
     os.makedirs(config_dir, exist_ok=True)
@@ -57,19 +61,37 @@ def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
     fernet = Fernet(encrypt_key.encode())
 
     if import_path and os.path.exists(import_path):
-        # Import from existing proxy_config JSON file
         with open(import_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
+        if "proxy_api_key" not in config:
+            config["proxy_api_key"] = proxy_key
+        if "run_mode" not in config:
+            config["run_mode"] = run_mode
         print(f"  [✓] 从 {import_path} 导入现有配置")
     else:
-        # Create minimal template config
+        # Create full universal template config
         config = {
+            "proxy_api_key": proxy_key,
+            "run_mode": run_mode,
+            "agent_routing_strategy": "sticky_failover",
+            "kb_routing_strategy": "round_robin",
+            "auto_restart_enabled": (run_mode != "agent"),
             "upstream_timeout": 12,
+            "upstream_timeout_chat": 45,
+            "chat_fast_timeout": 30,
+            "upstream_timeout_ocr": 60,
+            "upstream_timeout_embedding": 60,
+            "upstream_timeout_rerank": 30,
             "schedule_total_budget": 15,
-            "max_concurrency_per_key": 5,
-            "cooldown_429_sec": 60,
+            "max_concurrency_per_key": 3,
+            "cooldown_tpm_sec": 10,
+            "cooldown_5xx_sec": 30,
             "cooldown_403_sec": 600,
+            "circuit_break_threshold": 3,
+            "circuit_cooldown_sec": 300,
+            "latency_based_routing": False,
             "providers": {},
+            "agent_models": {},
             "candidates": {
                 "chat": [],
                 "embedding": [],
@@ -77,7 +99,7 @@ def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
                 "ocr": []
             }
         }
-        print("  [✓] 创建空白配置模板（请通过管理面板添加供应商和 Key）")
+        print(f"  [✓] 创建通用配置模板 (初始模式: {run_mode})")
 
     data = json.dumps(config, ensure_ascii=False, indent=2).encode('utf-8')
     encrypted = fernet.encrypt(data)
@@ -89,7 +111,7 @@ def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
         os.fsync(f.fileno())
     os.chmod(tmp_file, 0o600)
     os.rename(tmp_file, config_file)
-    # fsync the directory so the rename survives a power loss
+
     dir_fd = os.open(config_dir, os.O_DIRECTORY)
     try:
         os.fsync(dir_fd)
@@ -99,49 +121,53 @@ def init_config(config_dir: str, encrypt_key: str, import_path: str = None):
 
 
 def main():
-    import_path = sys.argv[1] if len(sys.argv) > 1 else None
-    config_dir = sys.argv[2] if len(sys.argv) > 2 else "/opt/ocrproxy/config"
-    env_path = sys.argv[3] if len(sys.argv) > 3 else "/opt/ocrproxy/.env"
-    port = int(sys.argv[4]) if len(sys.argv) > 4 else 8787
+    import_path = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+    config_dir = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else "/opt/ocrproxy/config"
+    env_path = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else "/opt/ocrproxy/.env"
+    port = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 3000
+    run_mode = sys.argv[5].lower() if len(sys.argv) > 5 and sys.argv[5] else "agent"
+    if run_mode not in ("agent", "kb", "full"):
+        run_mode = "agent"
 
     print("\n" + "=" * 60)
-    print("  OCRProxy 初始化 - 生成密钥和配置")
+    print("  OCRProxy 初始化 - 生成密钥与通用配置")
     print("=" * 60)
 
     # Generate secrets
     print("\n[1/3] 生成加密密钥...")
     encrypt_key = generate_fernet_key()
-    proxy_key = generate_random_key(40)
+    proxy_key = f"sk-ocrproxy-{generate_random_key(32)}"
     admin_pass = generate_random_key(24)
     print(f"  [✓] Fernet 加密密钥已生成")
     print(f"  [✓] PROXY_API_KEY: {proxy_key}")
     print(f"  [✓] ADMIN_PASSWORD: {admin_pass}")
 
     # Create .env file
-    print("\n[2/3] 创建环境变量文件...")
-    create_env_file(env_path, config_dir, proxy_key, admin_pass, encrypt_key, port)
+    print(f"\n[2/3] 创建环境变量文件 (端口: {port}, 模式: {run_mode})...")
+    create_env_file(env_path, config_dir, proxy_key, admin_pass, encrypt_key, port, run_mode)
     print(f"  [✓] .env 文件已创建: {env_path} (权限 600)")
 
     # Initialize config
     print("\n[3/3] 创建加密配置文件...")
-    init_config(config_dir, encrypt_key, import_path)
+    init_config(config_dir, encrypt_key, proxy_key, run_mode, import_path)
 
     print("\n" + "=" * 60)
     print("  初始化完成！请妥善保存以下密钥：")
     print("=" * 60)
-    print(f"\n  PROXY_API_KEY  = {proxy_key}")
-    print(f"  ADMIN_PASSWORD = {admin_pass}")
+    print(f"\n  运行模式 (RUN_MODE)   = {run_mode}")
+    print(f"  客户端 Key (PROXY_KEY) = {proxy_key}")
+    print(f"  管理密码 (ADMIN_PASS) = {admin_pass}")
     print(f"\n  配置目录: {config_dir}")
     print(f"  环境变量: {env_path}")
     print("\n" + "=" * 60 + "\n")
 
-    # Return secrets for the caller
     result = {
         "proxy_key": proxy_key,
         "admin_pass": admin_pass,
         "encrypt_key": encrypt_key,
+        "run_mode": run_mode,
+        "port": port
     }
-    # Also write to a temporary file for the install script to read
     secrets_file = os.path.join(config_dir, ".install_secrets.json")
     with open(secrets_file, 'w') as f:
         json.dump(result, f)
