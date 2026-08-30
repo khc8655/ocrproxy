@@ -1,0 +1,26 @@
+{
+  "id": "siliconflow",
+  "name": "硅基流动 (SiliconFlow)",
+  "base_url": "https://api.siliconflow.cn/v1",
+  "description": "硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5 等海量开源模型",
+  "features": {
+    "standard_openai": true
+  },
+  "recommended_models": [
+    {
+      "name": "deepseek-ai/DeepSeek-V3",
+      "upstream_model": "deepseek-ai/DeepSeek-V3",
+      "description": "DeepSeek-V3 全尺寸旗舰模型"
+    },
+    {
+      "name": "deepseek-ai/DeepSeek-R1",
+      "upstream_model": "deepseek-ai/DeepSeek-R1",
+      "description": "DeepSeek-R1 全尺寸深度思考模型"
+    },
+    {
+      "name": "Qwen/Qwen2.5-72B-Instruct",
+      "upstream_model": "Qwen/Qwen2.5-72B-Instruct",
+      "description": "通义千问 72B Instruct 指令模型"
+    }
+  ]
+}

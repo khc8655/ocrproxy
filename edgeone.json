@@ -1,11 +1,11 @@
 {
   "name": "ocrproxy-agent-edgeone",
-  "buildCommand": "cd agent-edgeone && npm run build:admin",
-  "installCommand": "cd agent-edgeone && npm install",
-  "outputDirectory": "agent-edgeone",
+  "buildCommand": "npm run build:admin",
+  "installCommand": "npm install",
+  "outputDirectory": ".",
   "nodeVersion": "20.18.0",
   "build": {
-    "edgeFunctions": "agent-edgeone/edge-functions"
+    "edgeFunctions": "edge-functions"
   },
   "functions": {
     "edge": {

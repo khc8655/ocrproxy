@@ -1,0 +1,21 @@
+{
+  "id": "deepseek",
+  "name": "DeepSeek 官方开放平台",
+  "base_url": "https://api.deepseek.com/v1",
+  "description": "DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存",
+  "features": {
+    "native_thinking": true
+  },
+  "recommended_models": [
+    {
+      "name": "deepseek-chat",
+      "upstream_model": "deepseek-chat",
+      "description": "DeepSeek-V3 快速对话大模型"
+    },
+    {
+      "name": "deepseek-reasoner",
+      "upstream_model": "deepseek-reasoner",
+      "description": "DeepSeek-R1 深度思考推理大模型"
+    }
+  ]
+}
