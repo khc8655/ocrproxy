@@ -62,4 +62,8 @@ export async function onRequestGet(context) {
   });
 }
 
+export async function onRequest(context) {
+  return onRequestGet(context);
+}
+
 export default onRequestGet;
