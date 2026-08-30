@@ -125,9 +125,38 @@ python3 -m venv "$INSTALL_DIR/venv"
 ok "Python 依赖安装完成"
 
 # ============================================================
-# Step 5: 生成密钥和初始化配置
+# Step 5: 选择运行模式与初始化配置
 # ============================================================
-info "Step 5/8: 生成密钥和初始化配置..."
+info "Step 5/8: 配置运行模式与密钥..."
+
+SELECTED_MODE="agent"
+DEFAULT_PORT=3000
+
+echo ""
+echo "------------------------------------------------------------"
+echo "  请选择 OCRProxy 运行模式:"
+echo "  1) Agent 智能体模式 (推荐海外 VM / 直连海外模型 / Cursor / Cline)"
+echo "  2) KB 知识库模式   (推荐国内 VM / 知识库入库 / Dify / FastGPT)"
+echo "  3) Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)"
+echo "------------------------------------------------------------"
+read -p "输入选项 [1-3] (默认: 1): " MODE_CHOICE
+case "$MODE_CHOICE" in
+    2)
+        SELECTED_MODE="kb"
+        DEFAULT_PORT=8000
+        ;;
+    3)
+        SELECTED_MODE="full"
+        DEFAULT_PORT=8000
+        ;;
+    *)
+        SELECTED_MODE="agent"
+        DEFAULT_PORT=3000
+        ;;
+esac
+
+read -p "请输入服务监听端口 (默认: $DEFAULT_PORT): " INPUT_PORT
+APP_PORT=${INPUT_PORT:-$DEFAULT_PORT}
 
 # 检查是否已有 .env 文件（避免覆盖已有配置）
 if [[ -f "$INSTALL_DIR/.env" ]]; then
@@ -135,19 +164,16 @@ if [[ -f "$INSTALL_DIR/.env" ]]; then
     read -p "是否保留现有配置？(Y/n): " KEEP_ENV
     if [[ "${KEEP_ENV:-Y}" =~ ^[Yy]$ ]]; then
         info "保留现有 .env 和配置文件"
-        # 仍然检查配置文件是否存在
         if [[ ! -f "$INSTALL_DIR/config/proxy_config.enc" ]]; then
-            info "配置文件不存在，创建空白模板..."
-            "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT"
+            info "配置文件不存在，创建通用配置模板..."
+            "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT" "$SELECTED_MODE"
         fi
     else
         info "重新生成配置..."
-        
-        # 检查是否有现有 proxy_config 文件可导入
         IMPORT_PATH=""
         for candidate in "$EXTERNAL_CONFIG" "$SCRIPT_DIR/proxy_config" "/root/proxy_config" "/tmp/proxy_config" "./proxy_config"; do
             if [[ -n "$candidate" && -f "$candidate" ]]; then
-                read -p "检测到配置文件 $candidate，是否导入现有配置（含 API Key）？(Y/n): " IMPORT_CONFIG
+                read -p "检测到配置文件 $candidate，是否导入现有配置？(Y/n): " IMPORT_CONFIG
                 if [[ "${IMPORT_CONFIG:-Y}" =~ ^[Yy]$ ]]; then
                     IMPORT_PATH="$candidate"
                     break
@@ -155,14 +181,14 @@ if [[ -f "$INSTALL_DIR/.env" ]]; then
             fi
         done
         
-        "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "$IMPORT_PATH" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT"
+        "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "$IMPORT_PATH" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT" "$SELECTED_MODE"
     fi
 else
     # 首次安装
     IMPORT_PATH=""
     for candidate in "$EXTERNAL_CONFIG" "$SCRIPT_DIR/proxy_config" "/root/proxy_config" "/tmp/proxy_config" "./proxy_config"; do
         if [[ -n "$candidate" && -f "$candidate" ]]; then
-            read -p "检测到配置文件 $candidate，是否导入现有配置（含 API Key）？(Y/n): " IMPORT_CONFIG
+            read -p "检测到配置文件 $candidate，是否导入现有配置？(Y/n): " IMPORT_CONFIG
             if [[ "${IMPORT_CONFIG:-Y}" =~ ^[Yy]$ ]]; then
                 IMPORT_PATH="$candidate"
                 break
@@ -170,13 +196,13 @@ else
         fi
     done
     
-    "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "$IMPORT_PATH" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT"
+    "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/scripts/init_config.py" "$IMPORT_PATH" "$INSTALL_DIR/config" "$INSTALL_DIR/.env" "$APP_PORT" "$SELECTED_MODE"
 fi
 
 # 清理临时密钥文件
 rm -f "$INSTALL_DIR/config/.install_secrets.json"
 
-ok "密钥和配置文件已生成"
+ok "运行模式 [$SELECTED_MODE] 与密钥配置已就绪"
 
 # ============================================================
 # Step 6: 设置文件权限
@@ -205,7 +231,7 @@ ok "文件权限设置完成"
 info "Step 7/8: 配置 systemd 服务..."
 
 # 读取端口配置
-APP_PORT=$(grep -oP 'APP_PORT=\K\d+' "$INSTALL_DIR/.env" || echo "8787")
+APP_PORT=$(grep -oP 'APP_PORT=\K\d+' "$INSTALL_DIR/.env" || echo "$APP_PORT")
 
 # 生成 service 文件
 cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
@@ -223,7 +249,7 @@ EnvironmentFile=${INSTALL_DIR}/.env
 # Cap glibc malloc arenas to 2 — eliminates heap fragmentation from
 # large OCR base64 payloads on low-memory VMs.
 Environment=MALLOC_ARENA_MAX=2
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 1 --limit-concurrency 150 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn app.main:app --host :: --port ${APP_PORT} --workers 1 --limit-concurrency 150 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -295,17 +321,36 @@ Description=Daily restart of OCRProxy to release accumulated heap
 OnCalendar=*-*-* 04:00:00
 Persistent=true
 
-[Install]
-WantedBy=timers.target
+# Journald 磁盘日志配额防护 (限制最大 50MB 自动轮转)
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/ocrproxy.conf << EOF
+[Journal]
+SystemMaxUse=50M
+MaxRetentionSec=7day
 EOF
+systemctl restart systemd-journald 2>/dev/null || true
+
+# 配置 sudoers 权限允许后台进程平滑重启服务
+cat > /etc/sudoers.d/ocrproxy-restart << EOF
+${RUN_USER} ALL=(ALL) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl reload ${SERVICE_NAME}
+EOF
+chmod 0440 /etc/sudoers.d/ocrproxy-restart
 
 # 重新加载 systemd 并启动服务和定时器
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}
 systemctl enable --now ${SERVICE_NAME}-health.timer
-systemctl enable --now ${SERVICE_NAME}-restart.timer
 
-ok "systemd 服务、健康检查、定时重启已配置并设为开机自启"
+if [[ "$SELECTED_MODE" == "agent" ]]; then
+    systemctl disable ${SERVICE_NAME}-restart.timer 2>/dev/null || true
+    systemctl stop ${SERVICE_NAME}-restart.timer 2>/dev/null || true
+    info "Agent 智能体模式：默认关闭每日定时重启定时器，保持长会话连接稳定"
+else
+    systemctl enable --now ${SERVICE_NAME}-restart.timer
+    info "KB / Full 模式：已启用每日凌晨 04:00 定时重启定时器"
+fi
+
+ok "systemd 服务、健康检查、日志配额防护已配置完成"
 
 # ============================================================
 # Step 8: 启动服务并验证
@@ -328,7 +373,7 @@ else
 fi
 
 # 健康检查
-HEALTH_OK=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${APP_PORT}/health" 2>/dev/null || echo "000")
+HEALTH_OK=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${APP_PORT}/health" 2>/dev/null || curl -g -6 -s -o /dev/null -w "%{http_code}" "http://[::1]:${APP_PORT}/health" 2>/dev/null || echo "000")
 if [[ "$HEALTH_OK" == "200" ]]; then
     ok "健康检查通过 (HTTP 200)"
 else

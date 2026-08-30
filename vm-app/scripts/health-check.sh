@@ -11,8 +11,12 @@ if [ -f /opt/ocrproxy/.env ]; then
     [ -n "$ENV_PORT" ] && PORT=$ENV_PORT
 fi
 
-timeout 10 curl -sf http://127.0.0.1:${PORT}/health > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    logger -t ocrproxy-health "Health check FAILED on port ${PORT} — restarting ocrproxy.service"
-    systemctl restart ocrproxy.service
+# Try localhost, IPv6 loopback [::1], then IPv4 127.0.0.1
+if timeout 10 curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1 || \
+   timeout 10 curl -g -6 -sf "http://[::1]:${PORT}/health" > /dev/null 2>&1 || \
+   timeout 10 curl -sf "http://127.0.0.1:${PORT}/health" > /dev/null 2>&1; then
+    exit 0
 fi
+
+logger -t ocrproxy-health "Health check FAILED on port ${PORT} — restarting ocrproxy.service"
+systemctl restart ocrproxy.service

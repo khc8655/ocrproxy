@@ -31,7 +31,6 @@ def _check_ip_address(addr_str: str) -> bool:
     """Check if an IP address is private, loopback, link-local, or multicast."""
     try:
         addr = ipaddress.ip_address(addr_str)
-        # Handle IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
         if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
             addr = addr.ipv4_mapped
         return (
@@ -52,16 +51,13 @@ async def _is_blocked_hostname(hostname: str) -> bool:
         return True
     hostname = hostname.lower().strip()
 
-    # Direct string checks for common patterns
     blocked_exact = {"localhost", "::1", "::", "0.0.0.0"}
     if hostname in blocked_exact:
         return True
 
-    # If it's a direct IP address, check it immediately
     if _check_ip_address(hostname):
         return True
 
-    # DNS resolution check in a thread to prevent blocking the event loop
     try:
         resolved = await asyncio.to_thread(socket.getaddrinfo, hostname, None)
         for info in resolved:
@@ -159,6 +155,8 @@ def _merge_configs(base: dict, incoming: dict) -> dict:
 
     # 4. Update top-level setting parameters if present in incoming
     setting_keys = [
+        "proxy_api_key", "proxy_keys", "run_mode",
+        "agent_routing_strategy", "kb_routing_strategy", "auto_restart_enabled",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
         "schedule_total_budget", "max_concurrency_per_key",
@@ -180,7 +178,12 @@ async def get_config_endpoint(request: Request):
 
     try:
         config = await get_config()
-        return JSONResponse(content=config)
+        resp_data = dict(config)
+        run_mode = config.get("run_mode") or os.environ.get("RUN_MODE", "full").lower()
+        if run_mode not in ("agent", "kb", "full"):
+            run_mode = "full"
+        resp_data["_run_mode"] = run_mode
+        return JSONResponse(content=resp_data)
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
@@ -215,6 +218,7 @@ async def export_config_endpoint(request: Request):
 
 
 @router.post("/config/import")
+@router.post("/import")
 async def import_config_endpoint(request: Request):
     """Import and apply a configuration file with overwrite or merge strategy."""
     if not _check_auth(request):
@@ -236,7 +240,7 @@ async def import_config_endpoint(request: Request):
     if not isinstance(body, dict):
         return JSONResponse(status_code=400, content={"error": "Invalid payload format"})
 
-    mode = body.get("mode", "overwrite")
+    mode = body.get("mode", "merge")
     if mode not in ("overwrite", "merge"):
         return JSONResponse(status_code=400, content={"error": "Invalid mode: must be 'overwrite' or 'merge'"})
 
@@ -244,19 +248,16 @@ async def import_config_endpoint(request: Request):
     if not isinstance(incoming_config, dict):
         return JSONResponse(status_code=400, content={"error": "Missing or invalid 'config' object"})
 
-    # Schema validation: providers and candidates must be objects
     providers = incoming_config.get("providers")
-    candidates = incoming_config.get("candidates")
-    if not isinstance(providers, dict) or not isinstance(candidates, dict):
+    if not isinstance(providers, dict):
         return JSONResponse(
             status_code=400,
-            content={"error": "Invalid configuration: providers and candidates must be objects"}
+            content={"error": "Invalid configuration: providers must be an object"}
         )
 
     try:
         current_config = await get_config()
 
-        # Save snapshot backup before making modifications
         try:
             config_dir = _get_config_dir()
             current_enc_file = os.path.join(config_dir, "proxy_config.enc")
@@ -272,18 +273,21 @@ async def import_config_endpoint(request: Request):
         else:
             final_config = copy.deepcopy(incoming_config)
 
-        # Strip export metadata
         final_config.pop("_exported_at", None)
         final_config.pop("_version", None)
+        final_config.pop("_mode", None)
+        final_config.pop("_run_mode", None)
 
-        # Ensure agent_models is in valid dict format
-        if "agent_models" in final_config and not isinstance(final_config["agent_models"], dict):
+        if "candidates" not in final_config:
+            final_config["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+        if "agent_models" not in final_config:
             final_config["agent_models"] = {}
 
         await save_config(final_config)
         summary = _get_config_summary(final_config)
         return JSONResponse(content={
             "success": True,
+            "status": "success",
             "mode": mode,
             "message": "配置导入成功",
             "summary": summary,
@@ -303,12 +307,16 @@ async def save_config_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    # Validate required structure
-    if not isinstance(body, dict) or not isinstance(body.get("providers"), dict) or not isinstance(body.get("candidates"), dict):
+    if not isinstance(body, dict) or not isinstance(body.get("providers"), dict):
         return JSONResponse(
             status_code=400,
-            content={"error": "Invalid configuration: providers and candidates must be objects"}
+            content={"error": "Invalid configuration: providers must be an object"}
         )
+
+    if "candidates" not in body or not isinstance(body["candidates"], dict):
+        body["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+    if "agent_models" not in body or not isinstance(body["agent_models"], dict):
+        body["agent_models"] = {}
 
     try:
         await save_config(body)
@@ -336,10 +344,9 @@ async def post_stats_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    # Handle reset action
-    if body.get("action") == "reset":
+    if body.get("action") in ("reset", "clear_stats"):
         stats.reset()
-        return JSONResponse(content=stats.get_stats())
+        return JSONResponse(content={"status": "success", "message": "All statistics and error logs have been reset."})
 
     return JSONResponse(status_code=400, content={"error": "Invalid stats action"})
 
@@ -359,48 +366,25 @@ async def verify_key_endpoint(request: Request):
     if not base_url or not api_key:
         return JSONResponse(status_code=400, content={"error": "Missing base_url or api_key"})
 
-    # SSRF protection: validate URL
     try:
         parsed = urlparse(base_url)
     except Exception:
-        return JSONResponse(
-            status_code=400,
-            content={"valid": False, "error": "base_url 格式无效"}
-        )
+        return JSONResponse(status_code=400, content={"valid": False, "error": "base_url 格式无效"})
 
     if parsed.scheme != "https":
-        return JSONResponse(
-            status_code=400,
-            content={"valid": False, "error": "base_url 必须使用 HTTPS 协议"}
-        )
+        return JSONResponse(status_code=400, content={"valid": False, "error": "base_url 必须使用 HTTPS 协议"})
 
     hostname = parsed.hostname.lower() if parsed.hostname else ""
-
     if await _is_blocked_hostname(hostname):
-        return JSONResponse(
-            status_code=400,
-            content={"valid": False, "error": "不允许访问内网或本地地址"}
-        )
+        return JSONResponse(status_code=400, content={"valid": False, "error": "不允许访问内网或本地地址"})
 
-    # Make verification request to upstream
     try:
-        formatted_url = base_url.rstrip("/")
-        models_url = f"{formatted_url}/v1/models"
-
+        url = join_upstream(base_url, "models")
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            resp = await client.get(models_url, headers={
+            resp = await client.get(url, headers={
                 "Authorization": f"Bearer {api_key}",
                 "User-Agent": "ocrproxy-verifier/1.0"
             })
-
-            # If 404, try without /v1 prefix
-            if resp.status_code == 404:
-                models_url = f"{formatted_url}/models"
-                resp = await client.get(models_url, headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "User-Agent": "ocrproxy-verifier/1.0"
-                })
-
             text = resp.text
             status_code = resp.status_code
 
@@ -410,7 +394,6 @@ async def verify_key_endpoint(request: Request):
                 "status": status_code,
                 "note": "Key 鉴权验证通过。此检查仅验证密钥有效性，实际调用可能因限流或服务异常而失败。"
             })
-
         if status_code in (401, 403):
             return JSONResponse(content={
                 "valid": False,
@@ -421,19 +404,12 @@ async def verify_key_endpoint(request: Request):
             "valid": False,
             "error": f"上游返回非预期响应 (HTTP {status_code}): {text[:100]}"
         })
-
     except httpx.ConnectError as e:
         logger.warning("Verify key connect error: %s", e)
-        return JSONResponse(content={
-            "valid": False,
-            "error": "网络连接异常，无法连通上游服务器"
-        })
+        return JSONResponse(content={"valid": False, "error": "网络连接异常，无法连通上游服务器"})
     except Exception as e:
         logger.error("Verify key unexpected error: %s", e, exc_info=True)
-        return JSONResponse(content={
-            "valid": False,
-            "error": "验证请求失败"
-        })
+        return JSONResponse(content={"valid": False, "error": "验证请求失败"})
 
 
 @router.post("/test-candidate")
@@ -449,8 +425,8 @@ async def test_candidate_endpoint(request: Request):
 
     provider_name = body.get("provider")
     key_label = body.get("key")
-    model = body.get("model")
     cand_type = body.get("type", "chat")
+    model = body.get("model")
     category = body.get("category", "kb")
     model_name = body.get("model_name") or model
 
@@ -460,38 +436,29 @@ async def test_candidate_endpoint(request: Request):
     config = await get_config()
     provider = config.get("providers", {}).get(provider_name)
     if not provider:
-        return JSONResponse(content={"success": False, "error": f"Provider '{provider_name}' not found"})
+        return JSONResponse(status_code=400, content={"error": f"Provider '{provider_name}' not found"})
 
     api_key = provider.get("keys", {}).get(key_label)
     if not api_key:
-        return JSONResponse(content={"success": False, "error": f"Key '{key_label}' not found"})
+        return JSONResponse(status_code=400, content={"error": f"Key '{key_label}' not found for provider '{provider_name}'"})
 
     base_url = provider.get("base_url", "")
     try:
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
-            return JSONResponse(content={"success": False, "error": "上游 URL 不合法或为内网地址"})
+            return JSONResponse(status_code=400, content={"valid": False, "error": "Blocked or invalid upstream URL"})
     except Exception:
-        return JSONResponse(content={"success": False, "error": "base_url 格式无效"})
+        return JSONResponse(status_code=400, content={"valid": False, "error": "Invalid upstream URL"})
 
-    url = join_upstream(base_url, "chat/completions")
-
-    # Build minimal test request based on type
-    if cand_type in ("chat", "ocr"):
-        test_body = {
-            "model": model,
-            "messages": [{"role": "user", "content": "Hi" if cand_type == "chat" else "What is in this image?"}],
-            "max_tokens": 5,
-            "stream": False,
-        }
-    elif cand_type == "embedding":
+    if cand_type == "embedding":
         url = join_upstream(base_url, "embeddings")
         test_body = {"model": model, "input": "test"}
     elif cand_type == "reranker":
         url = join_upstream(base_url, "rerank")
         test_body = {"model": model, "query": "test", "documents": ["a"]}
     else:
-        test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5}
+        url = join_upstream(base_url, "chat/completions")
+        test_body = {"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16}
 
     start_t = time.time()
     try:
@@ -504,78 +471,42 @@ async def test_candidate_endpoint(request: Request):
             lat_ms = int(round(lat_sec * 1000))
 
             if 200 <= resp.status_code < 300:
-                # Record successful test in stats so dashboard reflects it
                 if category == "agent":
-                    stats.record_agent(model_name, resp.status_code, lat_sec,
-                                       provider=provider_name, key=key_label)
+                    stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label)
                 else:
-                    stats.record_kb(cand_type, resp.status_code, lat_sec,
-                                    provider=provider_name, key=key_label)
+                    stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label)
                 return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
-            # Record failed test in stats
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
             if category == "agent":
-                stats.record_agent(model_name, resp.status_code, lat_sec,
-                                   provider=provider_name, key=key_label,
-                                   error_msg=f"Manual test failed: {err_text}")
+                stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}")
             else:
-                stats.record_kb(cand_type, resp.status_code, lat_sec,
-                                provider=provider_name, key=key_label,
-                                error_msg=f"Manual test failed: {err_text}")
+                stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}")
             return JSONResponse(content={
                 "success": False,
                 "status": resp.status_code,
                 "latency_ms": lat_ms,
                 "error": resp.text[:500] if resp.text else "No response body"
             })
-
     except httpx.ReadTimeout:
         lat_sec = time.time() - start_t
-        if category == "agent":
-            stats.record_agent(model_name, 500, lat_sec,
-                               provider=provider_name, key=key_label,
-                               error_msg="Manual test timeout (30s)")
-        else:
-            stats.record_kb(cand_type, 500, lat_sec,
-                            provider=provider_name, key=key_label,
-                            error_msg="Manual test timeout (30s)")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg="Manual test timeout (30s)")
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
         lat_sec = time.time() - start_t
-        if category == "agent":
-            stats.record_agent(model_name, 500, lat_sec,
-                               provider=provider_name, key=key_label,
-                               error_msg="Manual test connect error")
-        else:
-            stats.record_kb(cand_type, 500, lat_sec,
-                            provider=provider_name, key=key_label,
-                            error_msg="Manual test connect error")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg="Manual test connect error")
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
         lat_sec = time.time() - start_t
-        if category == "agent":
-            stats.record_agent(model_name, 500, lat_sec,
-                               provider=provider_name, key=key_label,
-                               error_msg=f"Manual test error: {str(e)}")
-        else:
-            stats.record_kb(cand_type, 500, lat_sec,
-                            provider=provider_name, key=key_label,
-                            error_msg=f"Manual test error: {str(e)}")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg=f"Manual test error: {str(e)}")
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={"success": False, "error": "测试失败"})
 
 
 @router.post("/test-agent-model")
 async def test_agent_model_endpoint(request: Request):
-    """Probe ALL keys bound to an agent model in parallel.
-
-    Unlike /test-candidate (single candidate), this checks every key binding of
-    an agent model and reports per-key health — so a model that is "reachable
-    but throttled" (429 quota/TPM exhausted, 503 busy) becomes immediately
-    visible instead of silently failing over during real traffic.
-    """
+    """Probe ALL keys bound to an agent model in parallel."""
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
@@ -619,7 +550,7 @@ async def test_agent_model_endpoint(request: Request):
         model = b.get("upstream_model") or entry.get("upstream_model") or name
         url = join_upstream(base_url, "chat/completions")
         payload = {"model": model, "messages": [{"role": "user", "content": "Hi"}],
-                   "max_tokens": 1, "stream": False}
+                   "max_tokens": 16, "stream": False}
         start = time.time()
         try:
             async with sem:
@@ -677,4 +608,27 @@ async def test_agent_model_endpoint(request: Request):
         "ok": ok_count,
         "results": results,
         "checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+
+@router.post("/restart")
+async def restart_service_endpoint(request: Request):
+    """Gracefully restart the OCRProxy systemd service."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    logger.warning("Admin requested OCRProxy service restart via web interface")
+
+    async def _do_restart():
+        await asyncio.sleep(0.5)
+        try:
+            proc = await asyncio.create_subprocess_exec("sudo", "systemctl", "restart", "ocrproxy")
+            await proc.wait()
+        except Exception as e:
+            logger.error(f"Failed to restart service via systemctl: {e}")
+
+    asyncio.create_task(_do_restart())
+    return JSONResponse(content={
+        "success": True,
+        "message": "服务正在平滑重启中，约 2-3 秒后恢复"
     })

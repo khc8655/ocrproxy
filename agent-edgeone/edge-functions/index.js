@@ -1120,6 +1120,7 @@ tr:hover td, .tbl tbody tr:hover td {
     </div>
     <div class="modal-body">
       <input type="hidden" id="m_key_prov">
+      <input type="hidden" id="m_key_old_label">
       <div class="form-group">
         <label class="form-label">Key 别名</label>
         <input type="text" id="m_key_label" class="form-control" placeholder="如 自己">
@@ -1144,6 +1145,7 @@ tr:hover td, .tbl tbody tr:hover td {
       <button class="modal-close" onclick="closeModal('agentModal')">关闭</button>
     </div>
     <div class="modal-body">
+      <input type="hidden" id="m_model_old_name">
       <div class="form-group">
         <label class="form-label">供应商快捷筛选与推荐模型</label>
         <select id="m_model_prov_filter" class="form-control" onchange="onModelProvFilterChange()">
@@ -1869,6 +1871,7 @@ async function deleteProvider(name) {
 function openAddKeyModal(prov) {
   document.getElementById('keyModalTitle').textContent = \`为 \${prov} 新增 Key\`;
   document.getElementById('m_key_prov').value = prov;
+  document.getElementById('m_key_old_label').value = '';
   document.getElementById('m_key_label').value = '';
   document.getElementById('m_key_val').value = '';
   openModal('keyModal');
@@ -1877,6 +1880,7 @@ function openAddKeyModal(prov) {
 function openEditKeyModal(prov, label, val) {
   document.getElementById('keyModalTitle').textContent = \`编辑 \${prov} Key: \${label}\`;
   document.getElementById('m_key_prov').value = prov;
+  document.getElementById('m_key_old_label').value = label;
   document.getElementById('m_key_label').value = label;
   document.getElementById('m_key_val').value = val;
   openModal('keyModal');
@@ -1884,12 +1888,30 @@ function openEditKeyModal(prov, label, val) {
 
 async function saveKeyModal() {
   const prov = document.getElementById('m_key_prov').value;
+  const oldLabel = (document.getElementById('m_key_old_label').value || '').trim();
   const label = document.getElementById('m_key_label').value.trim();
   const val = document.getElementById('m_key_val').value.trim();
   if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
 
   cfg.providers[prov] = cfg.providers[prov] || { keys: {} };
   cfg.providers[prov].keys = cfg.providers[prov].keys || {};
+
+  if (oldLabel && oldLabel !== label) {
+    if (cfg.providers[prov].keys[label] !== undefined) {
+      toast(\`Key 别名「\${label}」已存在，请换一个别名\`, 'err');
+      return;
+    }
+    delete cfg.providers[prov].keys[oldLabel];
+    // Cascade update agent_models
+    if (cfg.agent_models) {
+      Object.values(cfg.agent_models).forEach(m => {
+        (m.keys || []).forEach(x => {
+          if (x.provider === prov && x.key === oldLabel) x.key = label;
+        });
+      });
+    }
+  }
+
   cfg.providers[prov].keys[label] = val;
 
   closeModal('keyModal');
@@ -1898,7 +1920,14 @@ async function saveKeyModal() {
 
 async function deleteKey(prov, label) {
   if (!confirm(\`删除 Key「\${label}」？\`)) return;
-  delete cfg.providers[prov].keys[label];
+  if (cfg.providers && cfg.providers[prov] && cfg.providers[prov].keys) {
+    delete cfg.providers[prov].keys[label];
+  }
+  if (cfg.agent_models) {
+    Object.values(cfg.agent_models).forEach(m => {
+      m.keys = (m.keys || []).filter(x => !(x.provider === prov && x.key === label));
+    });
+  }
   await persistConfig();
 }
 
@@ -1912,16 +1941,15 @@ function populateModelProvFilter() {
   for (const p of Object.keys(providers)) {
     const opt = document.createElement('option');
     opt.value = p;
-    opt.textContent = \`\${p} (\${Object.keys(providers[p].keys || {}).length} 个 Key)\`;
+    opt.textContent = p;
     select.appendChild(opt);
   }
 }
 
 function onModelProvFilterChange() {
-  const select = document.getElementById('m_model_prov_filter');
-  const prov = select ? select.value : '';
-  renderBindingsCheckboxes(getSelectedBindingsFromDom(), prov);
-  renderQuickModelTags(prov);
+  const filterProv = document.getElementById('m_model_prov_filter').value;
+  renderBindingsCheckboxes(getSelectedBindingsFromDom(), filterProv);
+  renderQuickModelTags(filterProv);
 }
 
 function renderQuickModelTags(prov) {
@@ -1973,8 +2001,9 @@ function toggleProviderKeys(prov, forceCheck = false) {
   });
 }
 
-function openAddModelModal() {
+function openAddAgentModal() {
   document.getElementById('agentModalTitle').textContent = '新增 Agent 模型';
+  document.getElementById('m_model_old_name').value = '';
   document.getElementById('m_model_name').value = '';
   document.getElementById('m_model_name').disabled = false;
   document.getElementById('m_upstream_model').value = '';
@@ -1988,8 +2017,9 @@ function openAddModelModal() {
 
 function openEditModelModal(m) {
   document.getElementById('agentModalTitle').textContent = \`编辑 Agent 模型: \${m}\`;
+  document.getElementById('m_model_old_name').value = m;
   document.getElementById('m_model_name').value = m;
-  document.getElementById('m_model_name').disabled = true;
+  document.getElementById('m_model_name').disabled = false; // Allow renaming
   const item = cfg.agent_models[m] || {};
   document.getElementById('m_upstream_model').value = item.upstream_model || '';
   currentEditingModelKeys = item.keys || [];
@@ -2051,6 +2081,7 @@ function renderBindingsCheckboxes(existingKeys = [], filterProv = '') {
 }
 
 async function saveAgentModal() {
+  const oldName = (document.getElementById('m_model_old_name').value || '').trim();
   const name = document.getElementById('m_model_name').value.trim();
   const upstream = document.getElementById('m_upstream_model').value.trim();
   if (!name) { toast('请输入模型名称', 'err'); return; }
@@ -2067,8 +2098,11 @@ async function saveAgentModal() {
   }
 
   cfg.agent_models = cfg.agent_models || {};
+  if (oldName && oldName !== name) {
+    delete cfg.agent_models[oldName];
+  }
   cfg.agent_models[name] = { keys };
-  if (upstream) cfg.agent_models[name].upstream_model = upstream;
+  if (upstream && upstream !== name) cfg.agent_models[name].upstream_model = upstream;
 
   closeModal('agentModal');
   await persistConfig();

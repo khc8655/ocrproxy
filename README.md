@@ -1,194 +1,149 @@
-# OCRProxy — 统一大模型中转与故障自动切换服务
+# OCRProxy — 大模型中转与智能调度服务 (Monorepo)
 
-提供 **Chat / Embedding / Reranker / OCR** 四类标准大模型能力的统一中转接口，支持多 Key 轮询、自动故障切换、熔断保护。同时提供 **Agent 模式**——Agent 直接使用真实模型名调用标准 OpenAI 接口，429/500 自动切换到同一模型的其他供应商。专为低配 VM 设计，在突发高并发入库场景下保持内存安全。
+本项目采用 **Monorepo** 架构，统一维护一套全功能的 VM 服务端应用 (`vm-app`) 与一套无服务器 EdgeOne 边缘函数版本 (`agent-edgeone`)。所有 VM 模式共用一套通用加密配置 Schema，在保持 100% 完整功能特性的同时，通过 **`RUN_MODE`** 实现界面与路由的动态自适应。
 
-## 核心特性
+---
 
-- **统一接口**：`/v1/chat/completions`、`/v1/embeddings`、`/v1/rerank`、`/v1/ocr` 标准 API，兼容 OpenAI SDK
-- **多 Key 轮询**：按候选序列轮询多个上游 Key，支持拖拽调整优先级
-- **双模式路由**：KB 入库模式（虚拟别名 `chat`/`embedding` 等，独立 candidates 配置）+ Agent 模式（真实模型名，独立 `agent_models` 配置，429/500 自动切换供应商）；`/v1/models` 仅返回 Agent 真实模型
-- **故障自动切换与熔断解耦**：429 TPM 限流采用 10s 轻量避让（不累加熔断计数器，实现平滑多 Key 轮换）、403 鉴权失败与 5 小时配额耗尽冷却 10min（600s）、5xx 服务端故障冷却 30s；400 智能区分 Key/账户问题（冷却 10s 并切换）与请求级错误（参数/格式/内容审核等，立即短路退出不重试）；仅 5xx / 宕机连续失败 3 次才触发 300s 深度熔断
-- **请求级 400 与内容审核精准短路**：当上游返回请求级 400（参数不受支持、上下文超长、内容审核等）时，直接原样返回响应并终止重试，避免在同供应商其他 Key 间无意义来回切换浪费延时
-- **全局并发背压**：最多 30 个在途上游请求，超出自动排队，防止突发入库 OOM
-- **Per-Type 状态分离**：同一 Key 用于 chat 和 OCR 时，状态统计按模型类型独立记录
-- **预算自适应**：故障转移总预算随候选数量自动扩展，确保至少 3 次切换尝试
-- **延迟感知路由**（可选）：根据历史延迟自动排序候选节点
-- **Chat 快速模式**：KB 入库 chat **始终**禁用推理思考、强制非流式（写死，无需配置），单次请求从 30-60s 降至 2-5s；Agent 模式则完全透传（含工具调用）
-- **内存安全**：MALLOC_ARENA_MAX=2 + malloc_trim + 全局并发限制 + 假死自动重启
-- **Web 管理面板**：可视化配置供应商、Key、路由优先级与三段式系统参数（全局高可用 / Agent 专属 / KB 专属），实时统计监控
-- **配置导入与导出**：支持一键导出带时间戳的完整配置 JSON 备份；导入支持“完全覆盖”与“增量合并”双模式，导入前自动生成 `.bak` 快照并严格校验 Schema
-- **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
-- **角色权限隔离**：`/api/admin/*` 严格限制为 `ADMIN_PASSWORD`，普通 `PROXY_API_KEY` 无法越权访问管理接口
-- **安全加固**：systemd 沙箱隔离、SSRF 防护（DNS Rebinding 校验与 302 重定向拦截）、常量时间密钥比较
-
-## 项目结构
+## 架构概览 (Architecture Overview)
 
 ```
-ocrproxy/
-├── vm-app/                        # VM 部署版本（生产环境：KB 模式 + 集中调度）
-│   ├── app/                       # FastAPI 应用与调度引擎
-│   ├── static/                    # 管理面板静态资源
-│   ├── client/                    # Python 客户端封装与示例
-│   └── scripts/                   # 初始化与运维健康检查
-├── edgeone/                       # EdgeOne Makers Serverless 边缘中转版本
-│   ├── edge-functions/            # V8 边缘函数 (/, /v1/*, /api/*, /health, /check-ip)
-│   ├── cloud-functions/           # Python 云函数 (长上下文备用)
-│   ├── admin.html / css / js      # 现代管理后台前端源码 (自动打包为单文件边缘函数)
-│   ├── edgeone.json               # EdgeOne 项目部署配置
-│   ├── package.json               # 构建与自动化测试套件
-│   └── scripts/                   # 构建打包与 Node 单元测试
-├── hermes-gemini-vertex-adaptation.md # Gemini / Vertex AI 适配技术文档
-├── .gitignore
-└── README.md                      # 本文件
+ocrprox (Monorepo)
+├── vm-app/                            # 统一的 VM 核心代码库（单代码库，多模式自适应）
+│   ├── app/                           # 包含全量后端路由、透明调度器、探活与统计
+│   ├── static/admin.html              # 完整版富交互管理后台（根据 RUN_MODE 动态自适应）
+│   ├── install.sh                     # 交互式一键安装脚本（支持交互选择 1:Agent / 2:KB / 3:Full）
+│   ├── requirements.txt               # 依赖列表
+│   └── scripts/                       # 自动化测试与初始化工具
+│
+├── agent-edgeone/                     # 部署于腾讯云 EdgeOne 边缘函数 (Serverless)
+│   ├── edge-functions/                # V8 边缘函数 (OpenAI 兼容 /v1/* 接口)
+│   ├── admin.html / css / js          # 现代化 EdgeOne 管理后台
+│   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
+│
+├── shared/                            # 共享资源与规范文档
+│   ├── presets/                       # 7 大官方供应商标准预设 JSON (Google, OpenAI, SenseNova, SiliconFlow 等)
+│   └── docs/config-schema.md          # 统一配置规范文档
+│
+├── scripts/                           # 运维与发布工具
+│   └── sync-to-freellm.sh             # 一键同步 agent-edgeone 到部署源仓库
+│
+├── index.html                         # 个人博客首页 (腾讯云 VM 80 端口托管)
+└── design-system/                     # UI 设计系统 Tokens 与组件库
 ```
 
-## 快速部署
+---
 
-### 1. 上传到 VM
+## 运行模式对比与自适应行为 (`RUN_MODE`)
 
+无论选择哪种运行模式，底层均运行同一套完整的后端服务与管理前端，**配置文件格式 100% 通用无损**，支持在后台管理界面随时切换运行模式：
+
+| 维度 | `RUN_MODE=agent` (智能体模式) | `RUN_MODE=kb` (知识库模式) | `RUN_MODE=full` (全功能混合模式) |
+| :--- | :--- | :--- | :--- |
+| **典型部署环境** | 海外 Azure / 自建 VM，用于 Cursor / Cline / OpenClaw 直连海外大模型 | 国内腾讯云 VM，用于 Dify / FastGPT / Ragflow 高并发知识库入库 | 单机同时服务智能体编程与知识库检索 |
+| **默认 Key 轮换策略** | **粘性故障转移 (`sticky_failover`)**：固定使用当前 Key，遭遇 429/5xx 顺延切换，且**切换后长期驻留新 Key**，杜绝抖动 | **轮询负载均衡 (`round_robin`)**：原子计数轮询各 Key，最大化利用并发配额 | 支持针对 Agent 与 KB 独立配置分流策略 |
+| **内存治理机制** | 极轻量占用 (~30MB)，零拷贝 SSE 异步流式转发，无需定时重启服务 | 大 payload (OCR / Embedding) 结束立即调用 glibc `malloc_trim(0)` 释放堆内存，杜绝内存膨胀 | 混合感知内存回收，按需释放 |
+| **服务运维与重启** | 默认关闭每日定时重启定时器，保证长连接会话长效稳定 | 默认启用每日凌晨 04:00 重启定时器，重置内存碎片 | 可按需在后台管理面板一键平滑重启服务 |
+| **后台界面自适应** | 隐藏 KB 候选挂载区与 KB 4项入库超时，只展示 Agent 模型、供应商凭证、Agent 监控与接入指南 | 隐藏 Agent 模型区与 Agent 对话超时，只展示 4 大虚拟模型挂载、KB 入库超时与 Dify 接入指南 | **完整展示**（供应商凭证库 + Agent 模型 + KB 虚拟模型 + 全量参数与示例） |
+| **`/v1/models` 返回** | 仅返回 `agent_models` 中的真实模型列表 | 固定返回 4 个虚拟聚合模型 (`chat`, `embedding`, `reranker`, `ocr`) | 联合返回真实模型 + 4 个虚拟聚合模型 |
+| **`/v1/chat/completions`** | 原生透传 tools、reasoning、SSE 流式字节 | 强制禁用思考提速、非流式快速摘要提取 | 若 model 为 `chat` 走 KB 提速策略，若为真实模型走 Agent 原生透传 |
+| **配置数据存储** | **100% 结构通用无损**，任何模式下导入/导出或切换模式**绝不丢弃任何字段** |
+
+---
+
+## Key 调度与分流策略 (Routing & Load Balancing)
+
+在管理后台「系统设置 -> Key 轮换与分流策略」中可随时调整：
+
+1. **`sticky_failover` (粘性故障转移 - 智能体推荐)**：
+   - 默认固定使用当前的可用 Key；
+   - 仅当该 Key 触发 429 限流或 5xx 错误时顺延切换至下一个候选 Key；
+   - **切换后长期驻留新 Key**，即使原 Key 冷却恢复也不会切回，最大程度避免多轮对话中的 Key 频繁抖动。
+2. **`round_robin` (轮询负载均衡 - 知识库推荐)**：
+   - 针对高并发、无状态的碎片化请求，按请求次数原子递增轮询可用 Key，均匀分摊 TPM/RPM 压力。
+3. **`priority_fallback` (优先级优先)**：
+   - 严格按照候选列表的配置顺序发起请求，只要高优先级 Key 恢复即优先使用。
+4. **`latency_based` (时延优先)**：
+   - 结合滑动窗口历史时延统计，优先调度响应速度最快的供应商与 Key。
+
+---
+
+## 快速上手与部署指南
+
+### 1. VM 统一版本部署 (`vm-app`)
+
+#### 一键交互式安装（推荐）
+
+在目标服务器（Ubuntu / Debian）上运行：
 ```bash
-scp -r vm-app/ root@your-server:/tmp/ocrproxy-install
-```
-
-### 2. 一键安装
-
-```bash
-ssh root@your-server
-cd /tmp/ocrproxy-install
+git clone https://github.com/khc8655/ocrproxy.git /tmp/ocrprox
+cd /tmp/ocrprox/vm-app
 sudo bash install.sh
 ```
 
-安装脚本自动完成：创建系统用户、Python 虚拟环境、生成加密密钥、配置 systemd 服务 + 健康检查 + 定时重启并启动。
-
-### 3. 配置 Caddy 反向代理
-
+在安装向导中按需选择模式与端口：
 ```
-your-domain.com {
-    reverse_proxy 127.0.0.1:8787 {
-        flush_interval -1
-    }
-}
+------------------------------------------------------------
+  请选择 OCRProxy 运行模式:
+  1) Agent 智能体模式 (推荐海外 VM / 直连海外模型 / Cursor / Cline)
+  2) KB 知识库模式   (推荐国内 VM / 知识库入库 / Dify / FastGPT)
+  3) Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)
+------------------------------------------------------------
+输入选项 [1-3] (默认: 1): 1
+请输入服务监听端口 (默认: 3000): 3000
 ```
 
+安装脚本将自动：
+1. 配置 `systemd` 服务守护进程（支持 Dual-Stack IPv6/IPv4 `::` 监听）；
+2. 自动配置 `journald` 50MB 磁盘日志配额与 7 天保留策略，彻底防止日志占满磁盘；
+3. 生成加密主密钥并创建通用初始配置文件 `/opt/ocrproxy/config/proxy_config.enc`；
+4. 输出独立的管理员密码（用于 Web 登录）与客户端默认 Key（用于 `/v1/*` 接入）。
+
+---
+
+### 2. EdgeOne 边缘函数版本 (`agent-edgeone`)
+
+进入 `agent-edgeone/` 目录：
 ```bash
-sudo systemctl reload caddy
+cd agent-edgeone
+npm install
+npm test            # 运行 106 项自动化单元测试
+npm run build:admin # 构建单文件管理后台
+npm run deploy      # 一键发布至 EdgeOne
 ```
 
-### 4. 访问管理面板
+---
 
-打开 `https://your-domain.com/`，使用安装时生成的 `ADMIN_PASSWORD` 登录。
+## 生产级测试验证套件
 
-## 接口调用
+本项目提供了两套标准的生产级自动化回归测试套件：
 
-### Chat 对话
-
+### 1. Agent 模式测试套件 (`tests/test_live_models_suite.py`)
 ```bash
-curl -X POST https://your-domain.com/v1/chat/completions \
-  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "chat", "messages": [{"role": "user", "content": "你好"}]}'
+python3 tests/test_live_models_suite.py
+# 或指定目标域名
+TARGET_URL="https://api1.khc6.cn" python3 tests/test_live_models_suite.py
 ```
+- **思考等级 (Reasoning Effort) 验证**：测试 `none` / `low` / `medium` / `high` 各等级下的推理字数与思维链标记；
+- **流式 (SSE) vs 非流式对比验证**：全面测试各模型首字时间 (TTFT < 800ms) 与数据块流式传输；
+- **连续 10 轮工具调用 (Function Calling) 闭环测试**：连续发起函数调用、参数解析、模拟执行并送回结果完成多轮会话闭环，100% 成功率。
 
-### Embedding 向量
-
+### 2. KB 知识库模式测试套件 (`tests/test_live_kb_suite.py`)
 ```bash
-curl -X POST https://your-domain.com/v1/embeddings \
-  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "embedding", "input": "需要向量化的文本"}'
+python3 tests/test_live_kb_suite.py
+# 或指定目标域名
+TARGET_URL="https://api.khc6.cn" python3 tests/test_live_kb_suite.py
 ```
+- **KB 快速对话摘要测试 (`/v1/chat/completions`, model="chat")**：验证非流式、强制关闭/极简思考、极速响应；
+- **文本向量化测试 (`/v1/embeddings`, model="embedding")**：验证单句与批量多文档向量生成、向量维度（如 2560 维）与浮点有效性；
+- **检索重排测试 (`/v1/rerank`, model="reranker")**：验证多文档相似度打分与相关性重排；
+- **多模态 OCR 图文提取测试 (`/v1/ocr`, model="ocr")**：验证 Base64 图像文字识别与 Markdown 输出；
+- **Key 轮询负载均衡测试 (Round-Robin Routing)**：验证高并发下多 Key 均匀分摊与 `X-Routed-Via` 轮换；
+- **全量负向安全鉴权测试 (Security Guard)**：验证空 Key、假 Key、非法 Header 严格 401 拦截。
 
-### Reranker 重排
+---
 
-```bash
-curl -X POST https://your-domain.com/v1/rerank \
-  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "reranker", "query": "查询文本", "documents": ["文档1", "文档2"]}'
-```
+## 客户端与管理鉴权架构
 
-### OCR 识别
-
-```bash
-# base64 图片
-curl -X POST https://your-domain.com/v1/ocr \
-  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"image_base64": "iVBORw0KGgo...", "prompt": "请识别图片中的所有文字内容"}'
-
-# 图片 URL
-curl -X POST https://your-domain.com/v1/ocr \
-  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"image_url": "https://example.com/image.jpg", "prompt": "识别文字"}'
-```
-
-### Python SDK (OpenAI 兼容)
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    api_key="your_proxy_api_key",
-    base_url="https://your-domain.com/v1"
-)
-
-completion = client.chat.completions.create(
-    model="chat",
-    messages=[{"role": "user", "content": "你好"}],
-    stream=True
-)
-for chunk in completion:
-    print(chunk.choices[0].delta.content, end="")
-```
-
-## 运维管理
-
-```bash
-systemctl status ocrproxy              # 查看服务状态
-journalctl -u ocrproxy -f              # 实时日志
-systemctl restart ocrproxy             # 重启服务
-curl http://127.0.0.1:8787/health      # 健康检查
-systemctl list-timers ocrproxy-*       # 查看定时器
-```
-
-## 配置 JSON 结构
-
-管理面板保存的配置 JSON 结构：
-
-```json
-{
-  "max_concurrency_per_key": 3,
-  "schedule_total_budget": 15,
-  "cooldown_tpm_sec": 10,
-  "cooldown_5xx_sec": 30,
-  "cooldown_403_sec": 600,
-  "circuit_break_threshold": 3,
-  "circuit_cooldown_sec": 300,
-  "latency_based_routing": false,
-  "upstream_timeout_chat": 45,
-  "chat_fast_timeout": 30,
-  "upstream_timeout_ocr": 60,
-  "upstream_timeout_embedding": 60,
-  "upstream_timeout_rerank": 30,
-  "providers": {
-    "siliconflow": {
-      "base_url": "https://api.siliconflow.cn",
-      "keys": { "KeyA": "sk-xxxx" }
-    }
-  },
-  "agent_models": {
-    "deepseek-v4-flash": {
-      "keys": [{ "provider": "sensenova", "key": "自己" }]
-    }
-  },
-  "candidates": {
-    "chat": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-V3"}],
-    "embedding": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-m3"}],
-    "reranker": [{"provider": "siliconflow", "key": "KeyA", "model": "BAAI/bge-reranker-v2-m3"}],
-    "ocr": [{"provider": "siliconflow", "key": "KeyA", "model": "deepseek-ai/DeepSeek-OCR"}]
-  }
-}
-```
-
-更多细节请参考 [vm-app/README.md](vm-app/README.md)。
+1. **Web 管理后台登录**：使用安装时生成的独立密码 `ADMIN_PASSWORD` 保护；
+2. **客户端接口调用 (`/v1/*`)**：使用 `PROXY_API_KEY` 进行鉴权；可在 Web 管理后台「系统运行与可靠性参数 -> 客户端连接鉴权」中直接查看、复制、修改或一键随机生成，修改后点击「保存设置」即刻全域生效，无需登录服务器修改环境变量；
+3. **服务平滑重启**：可在 Web 后台「服务运维与系统重启」卡片中一键发起安全重启，耗时约 2-3 秒，自动重连。
