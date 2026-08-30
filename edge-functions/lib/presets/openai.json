@@ -1,0 +1,31 @@
+{
+  "id": "openai",
+  "name": "OpenAI 官方 / 标准兼容中转",
+  "base_url": "https://api.openai.com/v1",
+  "description": "OpenAI 官方 API 或标准兼容中转网关",
+  "features": {
+    "standard_openai": true
+  },
+  "recommended_models": [
+    {
+      "name": "gpt-4o",
+      "upstream_model": "gpt-4o",
+      "description": "OpenAI GPT-4o 旗舰全能大模型"
+    },
+    {
+      "name": "gpt-4o-mini",
+      "upstream_model": "gpt-4o-mini",
+      "description": "OpenAI GPT-4o-mini 高性价比快速模型"
+    },
+    {
+      "name": "o3-mini",
+      "upstream_model": "o3-mini",
+      "description": "OpenAI 最新 o3-mini 快速推理思考模型"
+    },
+    {
+      "name": "o1",
+      "upstream_model": "o1",
+      "description": "OpenAI o1 深度思考推理旗舰模型"
+    }
+  ]
+}

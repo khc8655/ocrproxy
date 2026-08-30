@@ -1,0 +1,10 @@
+{
+  "name": "ocrproxy-agent-edgeone-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:admin": "cd agent-edgeone && node scripts/build-admin.mjs && cp -R edge-functions/* ../edge-functions/",
+    "test": "cd agent-edgeone && npm test"
+  }
+}
