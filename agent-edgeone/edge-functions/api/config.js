@@ -16,6 +16,7 @@ import {
   resolveKvBinding,
   kvNotBoundResponse,
 } from '../lib/config.js';
+import { normaliseForProvider } from '../lib/normalize.js';
 
 const CONFIG_KV_KEY = 'config';
 const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
@@ -50,6 +51,16 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
   // 1. If targetModel is specified, probe chat completions directly for true model latency
   if (targetModel) {
     const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+    let probeBody = {
+      model: targetModel,
+      messages: [{ role: 'user', content: 'hi' }],
+      max_tokens: 16,
+      reasoning_effort: 'none',
+    };
+    try {
+      probeBody = normaliseForProvider(probeBody, providerName);
+    } catch (_) {}
+
     try {
       resp = await fetch(chatUrl, {
         method: 'POST',
@@ -57,15 +68,11 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
           'authorization': `Bearer ${apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          model: targetModel,
-          messages: [{ role: 'user', content: 'hi' }],
-          max_tokens: 1,
-        }),
+        body: JSON.stringify(probeBody),
         eo: {
           timeoutSetting: {
             connectTimeout: 8_000,
-            readTimeout: 12_000,
+            readTimeout: 25_000,
             writeTimeout: 4_000,
           },
         },
