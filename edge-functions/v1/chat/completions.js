@@ -53,16 +53,17 @@ const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000; // 25s upstream timeout to allow fai
 const MAX_RETRIES = 3;
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
-  const startMs = Date.now();
-  // Try common KV binding names (agent_kv, kv, KV, etc.) — see
-  // resolveKvBinding for the full list.
-  const kvRes = resolveKvBinding(context);
-  const kv = kvRes?.kv;
+  try {
+    const { request, env } = context;
+    const startMs = Date.now();
+    // Try common KV binding names (agent_kv, kv, KV, etc.) — see
+    // resolveKvBinding for the full list.
+    const kvRes = resolveKvBinding(context);
+    const kv = kvRes?.kv;
 
-  // ---- Auth --------------------------------------------------------------
-  const authErr = checkAuth(request, env);
-  if (authErr) return authErr;
+    // ---- Auth --------------------------------------------------------------
+    const authErr = checkAuth(request, env);
+    if (authErr) return authErr;
 
   // ---- Pre-flight body size check (use Content-Length) ------------------
   const declaredLen = Number(request.headers.get('content-length') || 0);
@@ -312,6 +313,25 @@ export async function onRequestPost(context) {
       },
     }
   );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'edge_internal_error',
+          message: err?.message || String(err),
+          code: 'edge_function_exception',
+        },
+      }),
+      {
+        status: 500,
+        headers: {
+          'content-type': 'application/json',
+          'x-edgeone-relay': 'v8-1',
+          'x-error-hint': 'caught_in_edge_function',
+        },
+      }
+    );
+  }
 }
 
 // ------------------------------------------------------------------------
@@ -367,11 +387,12 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
         }),
       };
     }
-    // Non-streaming: pass through
+    // Non-streaming: read buffer to prevent stream lock
+    const rawBytes = await upstreamResp.arrayBuffer();
     return {
       kind: 'success',
       status: upstreamResp.status,
-      response: new Response(upstreamResp.body, {
+      response: new Response(rawBytes, {
         status: upstreamResp.status,
         headers: buildOutHeaders(upstreamResp),
       }),
@@ -379,11 +400,11 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
   }
 
   // Non-2xx: buffer the body so we can re-emit it as a Response
-  let errBody = upstreamResp.body;
+  const errBytes = await upstreamResp.arrayBuffer().catch(() => null);
   return {
     kind: 'http',
     status: upstreamResp.status,
-    response: new Response(errBody, {
+    response: new Response(errBytes, {
       status: upstreamResp.status,
       headers: buildOutHeaders(upstreamResp),
     }),
