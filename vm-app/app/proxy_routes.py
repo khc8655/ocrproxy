@@ -86,7 +86,7 @@ VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
 _PROVIDERS_NO_NONE_EFFORT = {"stepfun"}
 
 # Providers that only accept string-form tool_choice (no object form)
-_PROVIDERS_NO_OBJECT_TOOL_CHOICE = {"tokenrhythm"}
+_PROVIDERS_NO_OBJECT_TOOL_CHOICE = {"tokenrhythm", "sensenova", "deepseek"}
 
 # Google Gemini / AI Studio providers
 _GOOGLE_PROVIDERS = {"google", "gemini", "aistudio", "google-ai"}

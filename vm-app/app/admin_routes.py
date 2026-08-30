@@ -8,6 +8,7 @@ import ipaddress
 import socket
 import time
 import httpx
+from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
@@ -208,6 +209,26 @@ async def get_config_endpoint(request: Request):
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
+
+
+@router.get("/presets")
+async def get_presets_endpoint(request: Request):
+    """Return available provider presets for admin console."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    # Try shared/presets or fallback to bundled
+    presets_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+    presets_list = []
+    if presets_dir.exists():
+        for p in sorted(presets_dir.glob("*.json")):
+            try:
+                presets_list.append(json.loads(p.read_text(encoding="utf-8")))
+            except Exception as e:
+                logger.warning("Failed to load preset %s: %s", p, e)
+
+    preset_map = {p["id"]: p for p in presets_list if "id" in p}
+    return JSONResponse(content={"ok": True, "presets": presets_list, "map": preset_map})
 
 
 @router.get("/config/export")
