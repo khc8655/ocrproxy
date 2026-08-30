@@ -24,7 +24,7 @@ app.add_middleware(
 )
 
 PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "sk-ocrproxy-sample-client-token")
-UPSTREAM_TIMEOUT_SEC = float(os.environ.get("UPSTREAM_TIMEOUT_SEC", "30"))
+UPSTREAM_TIMEOUT_SEC = float(os.environ.get("UPSTREAM_TIMEOUT_SEC", "90"))
 
 _cached_config = None
 _cached_time = 0
