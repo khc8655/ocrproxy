@@ -1,22 +1,47 @@
 {
   "id": "stepfun",
   "name": "阶跃星辰 (StepFun)",
+  "protocol": "openai",
   "base_url": "https://api.stepfun.com/step_plan",
-  "description": "阶跃星辰大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
+  "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
+  "description": "阶跃星辰大模型平台，支持 step-3.7-flash 等，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
   "features": {
-    "reasoning_effort_none_to_low": true,
-    "reasoning_format_inject": "deepseek-style"
+    "native_thinking": true,
+    "multimodal": true,
+    "tools": true
   },
   "recommended_models": [
     {
       "name": "step-3.7-flash",
       "upstream_model": "step-3.7-flash",
-      "description": "阶跃最新闪电高速推理大模型"
+      "description": "阶跃最新闪电高速推理大模型 (支持 low/medium/high 思考)"
     },
     {
-      "name": "step-2-16k",
-      "upstream_model": "step-2-16k",
-      "description": "阶跃 Step-2 旗舰大模型"
+      "name": "step-3.5-flash",
+      "upstream_model": "step-3.5-flash",
+      "description": "阶跃 Step-3.5 高性价比推理模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "effort_remapping",
+      "param_name": "reasoning_effort",
+      "supported_levels": ["low", "medium", "high"],
+      "none_fallback": "low",
+      "inject_params": {
+        "reasoning_format": "deepseek-style"
+      }
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }

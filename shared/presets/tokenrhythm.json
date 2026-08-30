@@ -1,12 +1,20 @@
 {
   "id": "tokenrhythm",
   "name": "TokenRhythm",
-  "base_url": "https://api.tokenrhythm.com/v1",
-  "description": "TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换",
+  "protocol": "openai",
+  "base_url": "https://tokenrhythm.studio/v1",
+  "doc_url": "https://tokenrhythm.studio/docs/api-integration",
+  "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，自动适配 tool_choice 字符串转换与思考流提取",
   "features": {
-    "tool_choice_object_to_auto": true
+    "native_thinking": true,
+    "tools": true
   },
   "recommended_models": [
+    {
+      "name": "deepseek-v4-flash",
+      "upstream_model": "deepseek-v4-flash",
+      "description": "DeepSeek V4 Flash 旗舰模型"
+    },
     {
       "name": "claude-3-5-sonnet-20241022",
       "upstream_model": "claude-3-5-sonnet-20241022",
@@ -17,5 +25,22 @@
       "upstream_model": "gpt-4o",
       "description": "OpenAI GPT-4o 旗舰全能模型"
     }
-  ]
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "openai_passthrough",
+      "supported_levels": ["none", "low", "medium", "high"]
+    },
+    "tools": {
+      "normalize_choice_to_string": true,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
 }
