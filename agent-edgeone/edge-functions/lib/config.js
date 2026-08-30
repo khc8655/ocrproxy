@@ -304,9 +304,59 @@ export function listBindings(config, model) {
   return out;
 }
 
+const _stickyAgentIndices = new Map(); // model -> active index
+const _rrAgentIndices = new Map();      // model -> rr index
+
 /**
- * Pick a random binding from a model's binding list.  Uniform random — same
- * shape as VM's `_rotate_candidates` minus the per-key state.
+ * Get ordered candidate bindings based on routing strategy (matches VM scheduler).
+ * Strategies: 'sticky_failover' (default), 'round_robin', 'priority_fallback', 'random'
+ *
+ * @param {Array} bindings - list of valid bindings
+ * @param {string} model - requested model name
+ * @param {string} [strategy] - routing strategy
+ * @returns {Array} ordered bindings
+ */
+export function orderBindings(bindings, model, strategy = 'sticky_failover') {
+  if (!bindings || bindings.length === 0) return [];
+  const n = bindings.length;
+  if (n <= 1) return bindings.slice();
+
+  if (strategy === 'sticky_failover') {
+    const stickyIdx = (_stickyAgentIndices.get(model) || 0) % n;
+    return bindings.slice(stickyIdx).concat(bindings.slice(0, stickyIdx));
+  }
+  if (strategy === 'round_robin') {
+    const rrIdx = (_rrAgentIndices.get(model) || 0) % n;
+    _rrAgentIndices.set(model, (rrIdx + 1) % n);
+    return bindings.slice(rrIdx).concat(bindings.slice(0, rrIdx));
+  }
+  if (strategy === 'random') {
+    const copy = bindings.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+  // 'priority_fallback' or default: keep configured order
+  return bindings.slice();
+}
+
+/**
+ * Record a successful binding index for sticky failover.
+ */
+export function recordStickySuccess(model, binding, allBindings) {
+  if (!model || !binding || !allBindings) return;
+  const idx = allBindings.findIndex(
+    (b) => b.provider === binding.provider && b.keyLabel === binding.keyLabel
+  );
+  if (idx >= 0) {
+    _stickyAgentIndices.set(model, idx);
+  }
+}
+
+/**
+ * Pick a random binding from a model's binding list. Uniform random.
  *
  * @param {Array} bindings - output of listBindings
  * @returns {Object|null}

@@ -10,6 +10,8 @@ import {
   loadConfig,
   listBindings,
   pickBinding,
+  orderBindings,
+  recordStickySuccess,
   resolveBinding,
   buildChatUrl,
   buildModelsList,
@@ -174,6 +176,47 @@ test('pickBinding: returns one of the bindings when multiple', () => {
 
 test('pickBinding: returns null for empty list', () => {
   eq(pickBinding([]), null);
+});
+
+// orderBindings & sticky_failover
+test('orderBindings: priority_fallback maintains original list order', () => {
+  const list = [{ provider: 'p1', keyLabel: 'k1' }, { provider: 'p2', keyLabel: 'k2' }];
+  const ordered = orderBindings(list, 'my-model', 'priority_fallback');
+  eq(ordered[0].provider, 'p1');
+  eq(ordered[1].provider, 'p2');
+});
+
+test('orderBindings: sticky_failover starts at cursor and updates on success', () => {
+  const list = [
+    { provider: 'p1', keyLabel: 'k1' },
+    { provider: 'p2', keyLabel: 'k2' },
+    { provider: 'p3', keyLabel: 'k3' }
+  ];
+  // Initial order
+  let ordered = orderBindings(list, 'test-sticky-model', 'sticky_failover');
+  eq(ordered[0].provider, 'p1');
+
+  // Record success on p2 -> sticky cursor updates to index 1
+  recordStickySuccess('test-sticky-model', list[1], list);
+
+  // Subsequent call starts at p2
+  ordered = orderBindings(list, 'test-sticky-model', 'sticky_failover');
+  eq(ordered[0].provider, 'p2');
+  eq(ordered[1].provider, 'p3');
+  eq(ordered[2].provider, 'p1');
+});
+
+test('orderBindings: round_robin advances cursor sequentially', () => {
+  const list = [
+    { provider: 'p1', keyLabel: 'k1' },
+    { provider: 'p2', keyLabel: 'k2' }
+  ];
+  const o1 = orderBindings(list, 'test-rr-model', 'round_robin');
+  eq(o1[0].provider, 'p1');
+  const o2 = orderBindings(list, 'test-rr-model', 'round_robin');
+  eq(o2[0].provider, 'p2');
+  const o3 = orderBindings(list, 'test-rr-model', 'round_robin');
+  eq(o3[0].provider, 'p1');
 });
 
 // resolveBinding
