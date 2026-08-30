@@ -50,20 +50,32 @@ ocrprox (Monorepo)
 
 ---
 
-## Key 调度与分流策略 (Routing & Load Balancing)
+## Key 调度、超时控制与智能熔断 (Routing, Timeout Budget & Fault Tolerance)
 
-在管理后台「系统设置 -> Key 轮换与分流策略」中可随时调整：
+为了从根源上杜绝在高峰期或上游拥堵时请求挂起数分钟的问题，OCRProxy 实现了全链路统一的 **Schema v2 全局超时控制与智能熔断体系**：
 
-1. **`sticky_failover` (粘性故障转移 - 智能体推荐)**：
-   - 默认固定使用当前的可用 Key；
-   - 仅当该 Key 触发 429 限流或 5xx 错误时顺延切换至下一个候选 Key；
-   - **切换后长期驻留新 Key**，即使原 Key 冷却恢复也不会切回，最大程度避免多轮对话中的 Key 频繁抖动。
-2. **`round_robin` (轮询负载均衡 - 知识库推荐)**：
-   - 针对高并发、无状态的碎片化请求，按请求次数原子递增轮询可用 Key，均匀分摊 TPM/RPM 压力。
-3. **`priority_fallback` (优先级优先)**：
-   - 严格按照候选列表的配置顺序发起请求，只要高优先级 Key 恢复即优先使用。
-4. **`latency_based` (时延优先)**：
-   - 结合滑动窗口历史时延统计，优先调度响应速度最快的供应商与 Key。
+### 1. 分流策略 (`agent_routing_strategy`)
+- **`sticky_failover` (粘性故障转移 - 智能体推荐)**：
+  - 默认固定使用当前的可用 Key；
+  - 仅当该 Key 触发 429 限流或 5xx 错误时顺延切换至下一个候选 Key；
+  - **切换后长期驻留新 Key**，杜绝多轮对话中的 Key 频繁抖动。
+- **`round_robin` (轮询负载均衡)**：原子递增轮询可用 Key，均匀分摊 TPM/RPM 压力。
+- **`priority_fallback` (优先级优先)**：严格按列表顺序尝试。
+
+### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget)
+- **`request_total_budget_sec` (单次请求全局硬预算)**：
+  - **EdgeOne 边缘版**：默认 **`25s`**（在 EdgeOne 平台 30s 强杀前 5s 提前拦截，主动向客户端返回规范的 504 Gateway Timeout 与完整调用链路轨迹，彻底根治 4 分钟卡死）；
+  - **VM 服务端版**：默认 **`45s`**。
+- **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`15s`**，单个 Key 超时立即切换。
+- **`schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
+- **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**（防止同一厂商配置 7 个 Key 时在已宕机源站上死等 7 次导致乘数爆炸）。
+- **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。
+
+### 3. 链路追踪与透明诊断响应头
+每次请求均在 HTTP 响应头中注入实时链路信息：
+- `x-proxy-route`: 如 `sensenova/主号=read_timeout->agnes/主号=ok`
+- `x-proxy-attempts`: 如 `2`
+- `x-proxy-latency-ms`: 如 `3430`
 
 ---
 
