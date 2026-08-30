@@ -166,6 +166,8 @@ export async function onRequestPost(context) {
   const providerAttempts = new Map(); // provider -> count
   const downProviders = new Set();    // providers that suffered 5xx/timeout
   let upstreamBody = JSON.parse(JSON.stringify(body));
+  let lastStatus = 0;
+  let lastErrorText = '';
 
   const candidatePool = orderBindings(available, body.model, strategy);
 
@@ -257,6 +259,7 @@ export async function onRequestPost(context) {
     }
 
     lastErrorText = result.errorText || '';
+    lastStatus = result.status || 0;
     console.warn(`[EdgeOne:Failover] model=${body.model} candidate=${binding.provider}/${binding.keyLabel} failed with status=${result.status} kind=${result.kind}`);
 
     // Failure path: record + cooldown + retry
@@ -298,26 +301,28 @@ export async function onRequestPost(context) {
     }
   }
 
-  // All retries exhausted
+  // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502)
   const lastDetail = lastErrorText ? `: ${lastErrorText.slice(0, 200)}` : '';
-  console.error(`[EdgeOne:FailoverExhausted] model=${body.model} attempts=${attemptLog.join('->')} total_ms=${Date.now() - startMs}`);
+  const finalStatus = (lastStatus >= 400 && lastStatus < 600) ? lastStatus : 503;
+  console.error(`[EdgeOne:FailoverExhausted] model=${body.model} final_status=${finalStatus} attempts=${attemptLog.join('->')} total_ms=${Date.now() - startMs}`);
   return new Response(
     JSON.stringify({
       error: {
-        type: 'overloaded',
-        message: `All ${tried.size} candidate attempts failed. Last failure: ${attemptLog[attemptLog.length - 1] || 'unknown'}${lastDetail}.`,
-        code: 'failover_exhausted',
+        type: finalStatus === 429 ? 'rate_limit_error' : (finalStatus >= 500 ? 'upstream_error' : 'failover_exhausted'),
+        message: `All ${tried.size} candidate attempts failed. Last failure (${finalStatus}): ${attemptLog[attemptLog.length - 1] || 'unknown'}${lastDetail}.`,
+        code: finalStatus === 429 ? 'rate_limit_exceeded' : 'failover_exhausted',
         trace: attemptLog,
       },
     }),
     {
-      status: 503,
+      status: finalStatus,
       headers: {
         'content-type': 'application/json',
         'x-edgeone-relay': 'v8-1',
         'x-proxy-route': attemptLog.join('->'),
         'x-proxy-attempts': String(attemptLog.length),
         'x-proxy-latency-ms': String(Date.now() - startMs),
+        ...(finalStatus === 429 ? { 'retry-after': '5' } : {}),
       },
     }
   );
