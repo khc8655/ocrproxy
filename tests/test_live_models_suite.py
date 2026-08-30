@@ -15,9 +15,9 @@ import urllib.error
 import os
 from typing import Dict, Any, List, Optional
 
-BASE_URL = os.environ.get("TARGET_URL", "http://[2603:1040:603:18::2c4]:3000")
-ADMIN_PASSWORD = "C1WHqcZ2FgvNOXqtlqea4wrV"
-PROXY_API_KEY = "sk-custom-client-token-configured-in-admin-ui"
+BASE_URL = os.environ.get("TARGET_URL", "https://api1.khc6.cn")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "XA43mdHR7N83t7ULDnrFIjuV")
+PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "3q0xqZ7bes6lDUgltZg8uoj6LwXzMpcpwpIQ9wZh")
 
 
 def log_section(title: str):
@@ -300,11 +300,11 @@ def test_suite_continuous_tool_calling(model: str = "gemini-3.5-flash-lite", cyc
 
             print(f"    ✅ 闭环回复: \"{final_msg[:45].replace(chr(10), ' ')}...\" | 闭环总耗时: {cycle_time_ms}ms")
             success_count += 1
-            time.sleep(1.0)  # Pacing between turns to respect free-tier RPM windows
+            time.sleep(2.0)  # Pacing between turns to respect free-tier RPM windows
 
         except Exception as e:
             print(f"    ❌ 本轮发生异常: {e}")
-            time.sleep(1.0)
+            time.sleep(2.0)
 
     avg_ms = int(total_latency_ms / max(1, success_count))
     print(f"\n  📊 工具调用统计: 成功 {success_count}/{cycles} (成功率: {success_count*100/cycles:.1f}%), 平均闭环耗时: {avg_ms}ms")
