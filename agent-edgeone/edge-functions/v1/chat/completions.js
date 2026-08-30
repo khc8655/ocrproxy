@@ -234,6 +234,7 @@ export async function onRequestPost(context) {
       perAttemptTimeoutMs
     );
 
+    let lastErrorText = '';
     if (result.kind === 'success') {
       recordStickySuccess(body.model, binding, allBindings);
       if (typeof context?.waitUntil === 'function') {
@@ -241,6 +242,8 @@ export async function onRequestPost(context) {
       } else {
         await recordSuccess(binding.provider, binding.keyLabel, kv);
       }
+
+      console.log(`[EdgeOne:Success] model=${body.model} routed_via=${binding.provider}/${binding.keyLabel} latency_ms=${Date.now() - startMs}`);
 
       // Attach debug headers
       const headers = result.response.headers;
@@ -252,6 +255,9 @@ export async function onRequestPost(context) {
       if (context.request?.eo?.clientIp) headers.set('x-edgeone-client-ip', context.request.eo.clientIp);
       return result.response;
     }
+
+    lastErrorText = result.errorText || '';
+    console.warn(`[EdgeOne:Failover] model=${body.model} candidate=${binding.provider}/${binding.keyLabel} failed with status=${result.status} kind=${result.kind}`);
 
     // Failure path: record + cooldown + retry
     const cooldownSec = classifyFailure(result.status, result.kind);
@@ -293,11 +299,13 @@ export async function onRequestPost(context) {
   }
 
   // All retries exhausted
+  const lastDetail = lastErrorText ? `: ${lastErrorText.slice(0, 200)}` : '';
+  console.error(`[EdgeOne:FailoverExhausted] model=${body.model} attempts=${attemptLog.join('->')} total_ms=${Date.now() - startMs}`);
   return new Response(
     JSON.stringify({
       error: {
         type: 'overloaded',
-        message: `All ${tried.size} candidate attempts failed. Last failure: ${attemptLog[attemptLog.length - 1] || 'unknown'}.`,
+        message: `All ${tried.size} candidate attempts failed. Last failure: ${attemptLog[attemptLog.length - 1] || 'unknown'}${lastDetail}.`,
         code: 'failover_exhausted',
         trace: attemptLog,
       },
@@ -367,7 +375,8 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
     });
   } catch (e) {
     // Network / timeout. Read timeout is the most common case here.
-    return { kind: 'read_timeout', status: 0, response: null };
+    console.error(`[EdgeOne:NetworkError] fetch url=${url} failed: ${e?.message || e}`);
+    return { kind: 'read_timeout', status: 0, errorText: e?.message || String(e), response: null };
   }
 
   // 2xx — process normally
@@ -376,6 +385,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       const peeked = await peekAndStream(upstreamResp);
       if (!peeked.ok) {
         // 200 + empty stream = provider glitch
+        console.warn(`[EdgeOne:EmptyStream] url=${url} status=200 but stream was empty`);
         return { kind: 'empty_stream', status: 200, response: null };
       }
       return {
@@ -399,11 +409,14 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
     };
   }
 
-  // Non-2xx: buffer the body so we can re-emit it as a Response
+  // Non-2xx: buffer the body so we can re-emit it as a Response and log it
   const errBytes = await upstreamResp.arrayBuffer().catch(() => null);
+  const errText = errBytes ? new TextDecoder().decode(errBytes) : '';
+  console.error(`[EdgeOne:UpstreamHTTPError] url=${url} status=${upstreamResp.status} body=${errText.slice(0, 300)}`);
   return {
     kind: 'http',
     status: upstreamResp.status,
+    errorText: errText,
     response: new Response(errBytes, {
       status: upstreamResp.status,
       headers: buildOutHeaders(upstreamResp),
