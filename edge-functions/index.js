@@ -1738,7 +1738,9 @@ function renderAgentModels() {
     card.className = 'card';
 
     let keysRowsHtml = '';
+    const activeKey = item.active_key || (keys[0] ? keys[0].key : '');
     keys.forEach((b, idx) => {
+      const isActive = (b.key === activeKey);
       const cacheKey = \`model:\${m}:\${b.provider}:\${b.key}\`;
       const latInfo = modelLatencyCache[cacheKey];
       let latBadge = '';
@@ -1748,15 +1750,22 @@ function renderAgentModels() {
           : \`<span class="badge badge-error">\${latInfo.status || 'ERR'}</span>\`;
       }
 
+      const activeBadge = isActive ? \`<span class="badge badge-success" style="font-weight:700;">★ 当前激活</span>\` : '';
+      const setActiveBtn = isActive
+        ? \`<span class="badge badge-primary" style="font-size:11px;padding:2px 6px;">使用中</span>\`
+        : \`<button class="btn btn-ghost btn-sm" onclick="setActiveAgentKey('\${m}', '\${b.key}')" title="设为当前使用 Key" style="font-size:11px;padding:2px 8px;">设为当前</button>\`;
+
       keysRowsHtml += \`
         <div class="provider-row" style="padding:10px 16px;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="badge badge-neutral">#\${idx+1}</span>
             <span style="font-weight:600;">\${b.provider}</span>
             <span class="key-chip">\${b.key}</span>
+            \${activeBadge}
             \${latBadge}
           </div>
           <div style="display:flex;gap:6px;">
+            \${setActiveBtn}
             <button class="btn btn-ghost btn-sm" onclick="testModelKey('\${m}', '\${b.provider}', '\${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('\${m}', \${idx})">移除</button>
           </div>
@@ -2296,6 +2305,14 @@ async function deleteModel(name) {
   if (!confirm(\`删除模型「\${name}」？\`)) return;
   delete cfg.agent_models[name];
   await persistConfig();
+}
+
+async function setActiveAgentKey(modelName, keyLabel) {
+  if (!cfg.agent_models || !cfg.agent_models[modelName]) return;
+  cfg.agent_models[modelName].active_key = keyLabel;
+  renderAgentModels();
+  await persistConfig();
+  toast(\`已将模型 \${modelName} 切换至 Key: [\${keyLabel}]\`, 'ok');
 }
 
 // ---- Clear Cooldowns -----------------------------------------------------

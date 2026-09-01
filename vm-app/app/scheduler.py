@@ -322,7 +322,9 @@ async def schedule(
     num_cands = len(candidates)
     ordered_items = list(enumerate(candidates))  # (orig_idx, cand)
 
-    if strategy == "sticky_failover":
+    if strategy == "manual":
+        ordered_items = ordered_items[:1]
+    elif strategy == "sticky_failover":
         sticky_idx = _sticky_agent_indices.get(req_model_name, 0) % num_cands
         ordered_items = ordered_items[sticky_idx:] + ordered_items[:sticky_idx]
     elif strategy == "round_robin":
@@ -349,6 +351,9 @@ async def schedule(
         total_budget_sec = max(1.0, float(config.get("schedule_total_budget", 15)))
     except (ValueError, TypeError):
         total_budget_sec = 15.0
+
+    if strategy == "manual":
+        total_budget_sec = max(total_budget_sec, upstream_timeout_sec + 5.0)
 
     try:
         concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))
@@ -603,6 +608,14 @@ async def schedule(
                                  provider=provider_name, key=key_label, error_msg=err_msg,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
+                    # In manual mode: transparently raise AllCandidatesFailedError immediately (no failover, no cooldown)
+                    if strategy == "manual":
+                        raise AllCandidatesFailedError(
+                            err_msg,
+                            last_status_code=status_code,
+                            last_response_body=last_err_body,
+                        )
+
                     # --- Classify 400s BEFORE the early-exit check below ---
                     _400_is_key_issue = False
                     _is_content_moderation = False
@@ -682,6 +695,12 @@ async def schedule(
                         _consecutive_failures[cand_id] = 0
 
                 except httpx.ReadTimeout as e:
+                    if strategy == "manual":
+                        raise AllCandidatesFailedError(
+                            f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s",
+                            last_status_code=504,
+                            last_response_body=None,
+                        )
                     # ReadTimeout = model is slow (e.g. reasoning models), not a
                     # key problem.  Use a very short cooldown and do NOT count
                     # toward the circuit breaker so the key stays available.
@@ -702,6 +721,12 @@ async def schedule(
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
                 except httpx.ConnectTimeout as e:
+                    if strategy == "manual":
+                        raise AllCandidatesFailedError(
+                            f"{cand_id} encountered ConnectTimeout: {str(e)}",
+                            last_status_code=502,
+                            last_response_body=None,
+                        )
                     # ConnectTimeout = network issue, short cooldown
                     _cooldown_until[cand_id] = time.time() + 5.0
                     # Record a high latency to deprioritise this candidate
@@ -716,7 +741,16 @@ async def schedule(
                                  provider=provider_name, key=key_label, error_msg=err_msg,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
+                except AllCandidatesFailedError:
+                    raise
+
                 except Exception as e:
+                    if strategy == "manual":
+                        raise AllCandidatesFailedError(
+                            f"{cand_id} encountered {type(e).__name__}: {str(e)}",
+                            last_status_code=500,
+                            last_response_body=None,
+                        )
                     cf = _consecutive_failures.get(cand_id, 0) + 1
                     _consecutive_failures[cand_id] = cf
 
