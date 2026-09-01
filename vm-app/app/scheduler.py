@@ -420,326 +420,326 @@ async def schedule(
                 logger.info(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
                 continue
 
-        provider_name = cand["provider"]
-        key_label = cand["key"]
+            provider_name = cand["provider"]
+            key_label = cand["key"]
 
-        provider = providers.get(provider_name)
-        if not provider:
-            logger.warning(f"Provider {provider_name} not found in config")
-            continue
+            provider = providers.get(provider_name)
+            if not provider:
+                logger.warning(f"Provider {provider_name} not found in config")
+                continue
 
-        api_key = provider.get("keys", {}).get(key_label)
-        if not api_key:
-            logger.warning(f"Key {key_label} not found for provider {provider_name}")
-            continue
+            api_key = provider.get("keys", {}).get(key_label)
+            if not api_key:
+                logger.warning(f"Key {key_label} not found for provider {provider_name}")
+                continue
 
-        base_url = provider.get("base_url", "")
+            base_url = provider.get("base_url", "")
 
-        attempt_seq += 1
+            attempt_seq += 1
 
-        # 3. Concurrency Semaphore acquisition per key
-        sem_id = f"{provider_name}:{key_label}"
-        sem = await get_key_semaphore(sem_id, concurrency_limit)
+            # 3. Concurrency Semaphore acquisition per key
+            sem_id = f"{provider_name}:{key_label}"
+            sem = await get_key_semaphore(sem_id, concurrency_limit)
 
-        logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id}")
+            logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id}")
 
-        cand_start = time.time()
-        # Acquire the per-key semaphore (queueing here preserves agent-mode
-        # behaviour), then the GLOBAL semaphore with a short bounded wait.
-        # The global cap prevents memory exhaustion during burst ingestion
-        # (e.g. dozens of concurrent OCR base64 payloads).  When it is
-        # saturated we fail FAST with 503 + Retry-After instead of queueing
-        # unboundedly — a queued request keeps its parsed body on the heap,
-        # which defeats the cap's purpose.
-        global_sem = _get_global_semaphore()
-        await sem.acquire()
-        global_sem_acquired = False
-        try:
+            cand_start = time.time()
+            # Acquire the per-key semaphore (queueing here preserves agent-mode
+            # behaviour), then the GLOBAL semaphore with a short bounded wait.
+            # The global cap prevents memory exhaustion during burst ingestion
+            # (e.g. dozens of concurrent OCR base64 payloads).  When it is
+            # saturated we fail FAST with 503 + Retry-After instead of queueing
+            # unboundedly — a queued request keeps its parsed body on the heap,
+            # which defeats the cap's purpose.
+            global_sem = _get_global_semaphore()
+            await sem.acquire()
+            global_sem_acquired = False
             try:
-                await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
-                global_sem_acquired = True
-            except asyncio.TimeoutError:
-                raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
-            # Budget re-check AFTER queueing: time spent waiting on the key
-            # semaphore counts toward the total failover budget — otherwise a
-            # long-queued request would still fire upstream long after its
-            # budget (and usually its client's patience) expired.
-            if time.time() - start_time >= total_budget_sec:
-                errors.append(f"budget_exhausted_after_{time.time() - start_time:.2f}s (queue wait)")
-                break
-            try:
-                # Build request arguments (method, url, headers, json_body)
-                method, url, headers, body = build_request(cand, api_key, base_url)
-
-                if is_stream:
-                    req = client.build_request(method, url, headers=headers, json=body)
-                    req.extensions["timeout"] = {
-                        "connect": min(5.0, upstream_timeout_sec),
-                        "read": upstream_timeout_sec,
-                        "write": upstream_timeout_sec,
-                        "pool": 5.0,
-                    }
-                    resp = await client.send(req, stream=True)
-                else:
-                    resp = await client.request(method, url, headers=headers, json=body, timeout=req_timeout)
-
-                status_code = resp.status_code
-
-                # Success path (2xx)
-                if 200 <= status_code < 300:
-                    # For streams, peek the first chunk BEFORE committing to
-                    # this candidate.  Some providers return HTTP 200 and then
-                    # close the stream without sending a byte (or die with a
-                    # protocol error) — treat that as a failure and fail over
-                    # instead of handing the client a dead stream.
-                    first_chunk = b""
-                    remainder = None
-                    if is_stream:
-                        first_chunk, remainder, peek_err = await _peek_first_chunk(resp)
-                        if not first_chunk:
-                            await resp.aclose()
-                            reason = peek_err or "stream closed without sending any data"
-                            err_msg = f"{cand_id} returned HTTP 200 but {reason}"
-                            logger.warning(err_msg)
-                            errors.append(err_msg)
-                            cand_latency = time.time() - cand_start
-                            stats.record(model_type, 502, cand_latency,
-                                         provider=provider_name, key=key_label, error_msg=err_msg,
-                                         category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-                            # Short cooldown — likely a transient provider glitch
-                            _cooldown_until[cand_id] = time.time() + 5.0
-                            continue
-
-                    _consecutive_failures[cand_id] = 0
-                    _cooldown_until[cand_id] = 0.0
-
-                    routed_via = f"{provider_name}/{key_label}"
-                    cand_latency = time.time() - cand_start
-
-                    # Record latency for smart candidate ordering
-                    _record_latency(cand_id, cand_latency)
-
-                    stats.record(model_type, status_code, cand_latency,
-                                 provider=provider_name, key=key_label,
-                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-
-                    # Update sticky cursor for Agent mode if sticky_failover strategy is active
-                    if category == "agent" and strategy == "sticky_failover":
-                        _sticky_agent_indices[req_model_name] = orig_idx
+                try:
+                    await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
+                    global_sem_acquired = True
+                except asyncio.TimeoutError:
+                    raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
+                # Budget re-check AFTER queueing: time spent waiting on the key
+                # semaphore counts toward the total failover budget — otherwise a
+                # long-queued request would still fire upstream long after its
+                # budget (and usually its client's patience) expired.
+                if time.time() - start_time >= total_budget_sec:
+                    errors.append(f"budget_exhausted_after_{time.time() - start_time:.2f}s (queue wait)")
+                    break
+                try:
+                    # Build request arguments (method, url, headers, json_body)
+                    method, url, headers, body = build_request(cand, api_key, base_url)
 
                     if is_stream:
-                        if handle_stream:
-                            try:
-                                stream_result = await handle_stream(resp, first_chunk, remainder)
-                            except Exception:
-                                # handle_stream raised — make sure the
-                                # upstream response is not leaked.
+                        req = client.build_request(method, url, headers=headers, json=body)
+                        req.extensions["timeout"] = {
+                            "connect": min(5.0, upstream_timeout_sec),
+                            "read": upstream_timeout_sec,
+                            "write": upstream_timeout_sec,
+                            "pool": 5.0,
+                        }
+                        resp = await client.send(req, stream=True)
+                    else:
+                        resp = await client.request(method, url, headers=headers, json=body, timeout=req_timeout)
+
+                    status_code = resp.status_code
+
+                    # Success path (2xx)
+                    if 200 <= status_code < 300:
+                        # For streams, peek the first chunk BEFORE committing to
+                        # this candidate.  Some providers return HTTP 200 and then
+                        # close the stream without sending a byte (or die with a
+                        # protocol error) — treat that as a failure and fail over
+                        # instead of handing the client a dead stream.
+                        first_chunk = b""
+                        remainder = None
+                        if is_stream:
+                            first_chunk, remainder, peek_err = await _peek_first_chunk(resp)
+                            if not first_chunk:
                                 await resp.aclose()
-                                raise
+                                reason = peek_err or "stream closed without sending any data"
+                                err_msg = f"{cand_id} returned HTTP 200 but {reason}"
+                                logger.warning(err_msg)
+                                errors.append(err_msg)
+                                cand_latency = time.time() - cand_start
+                                stats.record(model_type, 502, cand_latency,
+                                             provider=provider_name, key=key_label, error_msg=err_msg,
+                                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                # Short cooldown — likely a transient provider glitch
+                                _cooldown_until[cand_id] = time.time() + 5.0
+                                continue
+
+                        _consecutive_failures[cand_id] = 0
+                        _cooldown_until[cand_id] = 0.0
+
+                        routed_via = f"{provider_name}/{key_label}"
+                        cand_latency = time.time() - cand_start
+
+                        # Record latency for smart candidate ordering
+                        _record_latency(cand_id, cand_latency)
+
+                        stats.record(model_type, status_code, cand_latency,
+                                     provider=provider_name, key=key_label,
+                                     category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+
+                        # Update sticky cursor for Agent mode if sticky_failover strategy is active
+                        if category == "agent" and strategy == "sticky_failover":
+                            _sticky_agent_indices[req_model_name] = orig_idx
+
+                        if is_stream:
+                            if handle_stream:
+                                try:
+                                    stream_result = await handle_stream(resp, first_chunk, remainder)
+                                except Exception:
+                                    # handle_stream raised — make sure the
+                                    # upstream response is not leaked.
+                                    await resp.aclose()
+                                    raise
+                                return ScheduleResult(
+                                    stream_resp=stream_result,
+                                    routed_via=routed_via,
+                                    fallback_attempts=attempt_seq - 1
+                                )
+                            # No handle_stream provided: hand back an async
+                            # generator that replays the prefetched chunk and
+                            # continues the live stream (internal callers always
+                            # pass handle_stream for streams).
+                            async def _fallback_gen(first=first_chunk, rem=remainder, r=resp):
+                                try:
+                                    if first:
+                                        yield first
+                                    if rem is not None:
+                                        async for chunk in rem:
+                                            yield chunk
+                                finally:
+                                    await r.aclose()
                             return ScheduleResult(
-                                stream_resp=stream_result,
+                                stream_resp=_fallback_gen(),
                                 routed_via=routed_via,
                                 fallback_attempts=attempt_seq - 1
                             )
-                        # No handle_stream provided: hand back an async
-                        # generator that replays the prefetched chunk and
-                        # continues the live stream (internal callers always
-                        # pass handle_stream for streams).
-                        async def _fallback_gen(first=first_chunk, rem=remainder, r=resp):
-                            try:
-                                if first:
-                                    yield first
-                                if rem is not None:
-                                    async for chunk in rem:
-                                        yield chunk
-                            finally:
-                                await r.aclose()
-                        return ScheduleResult(
-                            stream_resp=_fallback_gen(),
-                            routed_via=routed_via,
-                            fallback_attempts=attempt_seq - 1
-                        )
+                        else:
+                            resp_data = resp.json()
+                            # Always close the upstream response to return the
+                            # connection to the pool immediately. For OCR / KB
+                            # (large responses) also reclaim heap pages.
+                            await resp.aclose()
+                            if model_type == "ocr" or category == "kb":
+                                await _reclaim_memory()
+                            return ScheduleResult(
+                                data=resp_data,
+                                routed_via=routed_via,
+                                fallback_attempts=attempt_seq - 1
+                            )
+
+                    # Failure path (Non-2xx)
+                    if is_stream:
+                        await resp.aread()
+
+                    # Capture upstream error body for forwarding to client
+                    try:
+                        last_err_body = resp.text
+                    except Exception:
+                        last_err_body = None
+                    last_status_code = status_code
+
+                    # Close the response to release the connection back to the
+                    # pool immediately — we no longer need it after capturing
+                    # the error body above.
+                    await resp.aclose()
+
+                    # Build a detailed error message including the upstream response body
+                    upstream_detail = ""
+                    if last_err_body:
+                        # Truncate to keep logs readable but include enough context
+                        upstream_detail = f" | upstream: {last_err_body[:500]}"
+                    err_msg = f"{cand_id} failed with HTTP {status_code}{upstream_detail}"
+                    logger.error(err_msg)
+                    errors.append(err_msg)
+
+                    cand_latency = time.time() - cand_start
+                    stats.record(model_type, status_code, cand_latency,
+                                 provider=provider_name, key=key_label, error_msg=err_msg,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+
+                    # --- Classify 400s BEFORE the early-exit check below ---
+                    _400_is_key_issue = False
+                    _is_content_moderation = False
+                    if status_code == 400 and last_err_body:
+                        body_lower = last_err_body.lower()
+                        # Key/account/subscription problems that repeat across requests
+                        if any(kw in body_lower for kw in [
+                            "subscription", "no active", "api key", "invalid_key",
+                            "unauthorized", "account", "billing", "payment", "plan",
+                        ]):
+                            _400_is_key_issue = True
+                        elif any(kw in body_lower for kw in [
+                            "content_filter", "content management", "content moderation",
+                            "data_inspection", "moderation", "sensitive", "inappropriate",
+                            "pornograph", "审核", "敏感", "违规",
+                        ]):
+                            _is_content_moderation = True
+
+                    # --- Early exit for request-level 400s ---
+                    # If the upstream rejected the request due to client content or format/parameters
+                    # (and NOT a key/account issue), trying other candidates on the same provider with
+                    # the exact same payload is futile. Short-circuit immediately to return 400 without retry.
+                    if status_code == 400 and not _400_is_key_issue:
+                        if _is_content_moderation:
+                            logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
+                            errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                        else:
+                            logger.warning(f"Request-level 400 from {cand_id} — returning immediately without retry: {upstream_detail}")
+                            errors.append(f"{cand_id}: request rejected by upstream ({last_err_body[:200] if last_err_body else '400 Bad Request'})")
+                        _consecutive_failures[cand_id] = 0
+                        break
+
+                    # --- Cooldown & Circuit Breaker Logic (Decoupled) ---
+                    # Policy:
+                    # 1. 429 Rate Limit (TPM/RPM): 10s cooldown, DO NOT increment circuit breaker.
+                    # 2. 429/403 Quota Exhausted: 600s cooldown, DO NOT increment circuit breaker.
+                    # 3. 401/403 Auth Failure: 600s cooldown, DO NOT increment circuit breaker.
+                    # 4. 400 (Key issue): 10s cooldown, DO NOT increment circuit breaker.
+                    # 5. 5xx Server Error: 30s cooldown, INCREMENT circuit breaker (>=3 triggers 300s).
+                    # 6. 404/422 (Request level): No cooldown.
+
+                    if status_code == 429:
+                        _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
+                            "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
+                        ]))
+                        cd_sec = cooldown_quota_sec if _is_quota else cooldown_tpm_sec
+                        _consecutive_failures[cand_id] = 0  # Rate limits do not count as server crash
+                        _cooldown_until[cand_id] = time.time() + cd_sec
+                        logger.info(f"429 on {cand_id} ({'Quota' if _is_quota else 'TPM/RPM'} limit) — cool down {cd_sec}s")
+
+                    elif status_code in (401, 403):
+                        _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
+                            "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
+                        ]))
+                        cd_sec = cooldown_quota_sec if _is_quota else cooldown_403_sec
+                        _consecutive_failures[cand_id] = 0
+                        _cooldown_until[cand_id] = time.time() + cd_sec
+
+                    elif status_code == 400 and _400_is_key_issue:
+                        _consecutive_failures[cand_id] = 0
+                        _cooldown_until[cand_id] = time.time() + 10.0
+
+                    elif status_code >= 500:
+                        cf = _consecutive_failures.get(cand_id, 0) + 1
+                        _consecutive_failures[cand_id] = cf
+                        cd_sec = cooldown_5xx_sec
+
+                        # Circuit breaker escalation only for 5xx server failures
+                        if cf >= circuit_break_threshold:
+                            cd_sec = max(cd_sec, circuit_cooldown)
+                            logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {cd_sec}s.")
+
+                        _cooldown_until[cand_id] = time.time() + cd_sec
+
                     else:
-                        resp_data = resp.json()
-                        # Always close the upstream response to return the
-                        # connection to the pool immediately. For OCR / KB
-                        # (large responses) also reclaim heap pages.
-                        await resp.aclose()
-                        if model_type == "ocr" or category == "kb":
-                            await _reclaim_memory()
-                        return ScheduleResult(
-                            data=resp_data,
-                            routed_via=routed_via,
-                            fallback_attempts=attempt_seq - 1
-                        )
+                        # Non-cooldown cases (404/422 etc.): don't penalise key.
+                        _consecutive_failures[cand_id] = 0
 
-                # Failure path (Non-2xx)
-                if is_stream:
-                    await resp.aread()
+                except httpx.ReadTimeout as e:
+                    # ReadTimeout = model is slow (e.g. reasoning models), not a
+                    # key problem.  Use a very short cooldown and do NOT count
+                    # toward the circuit breaker so the key stays available.
+                    _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
+                    # Record the timeout as latency so this candidate gets
+                    # deprioritised in smart ordering.
+                    _record_latency(cand_id, upstream_timeout_sec)
+                    err_msg = (f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s "
+                               f"(model may be slow, not penalised)")
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
 
-                # Capture upstream error body for forwarding to client
-                try:
-                    last_err_body = resp.text
-                except Exception:
-                    last_err_body = None
-                last_status_code = status_code
+                    cand_latency = time.time() - cand_start
+                    # 599 = pseudo-code for client-side read timeout: keeps the 5xx
+                    # bucket in stats but stays distinguishable from real upstream 5xx.
+                    stats.record(model_type, 599, cand_latency,
+                                 provider=provider_name, key=key_label, error_msg=err_msg,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
-                # Close the response to release the connection back to the
-                # pool immediately — we no longer need it after capturing
-                # the error body above.
-                await resp.aclose()
+                except httpx.ConnectTimeout as e:
+                    # ConnectTimeout = network issue, short cooldown
+                    _cooldown_until[cand_id] = time.time() + 5.0
+                    # Record a high latency to deprioritise this candidate
+                    _record_latency(cand_id, 10.0)
+                    err_msg = f"{cand_id} encountered ConnectTimeout: {str(e)}"
+                    logger.error(err_msg)
+                    errors.append(err_msg)
 
-                # Build a detailed error message including the upstream response body
-                upstream_detail = ""
-                if last_err_body:
-                    # Truncate to keep logs readable but include enough context
-                    upstream_detail = f" | upstream: {last_err_body[:500]}"
-                err_msg = f"{cand_id} failed with HTTP {status_code}{upstream_detail}"
-                logger.error(err_msg)
-                errors.append(err_msg)
+                    cand_latency = time.time() - cand_start
+                    # 598 = pseudo-code for connect timeout (network issue, not upstream 5xx)
+                    stats.record(model_type, 598, cand_latency,
+                                 provider=provider_name, key=key_label, error_msg=err_msg,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
-                cand_latency = time.time() - cand_start
-                stats.record(model_type, status_code, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg,
-                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-
-                # --- Classify 400s BEFORE the early-exit check below ---
-                _400_is_key_issue = False
-                _is_content_moderation = False
-                if status_code == 400 and last_err_body:
-                    body_lower = last_err_body.lower()
-                    # Key/account/subscription problems that repeat across requests
-                    if any(kw in body_lower for kw in [
-                        "subscription", "no active", "api key", "invalid_key",
-                        "unauthorized", "account", "billing", "payment", "plan",
-                    ]):
-                        _400_is_key_issue = True
-                    elif any(kw in body_lower for kw in [
-                        "content_filter", "content management", "content moderation",
-                        "data_inspection", "moderation", "sensitive", "inappropriate",
-                        "pornograph", "审核", "敏感", "违规",
-                    ]):
-                        _is_content_moderation = True
-
-                # --- Early exit for request-level 400s ---
-                # If the upstream rejected the request due to client content or format/parameters
-                # (and NOT a key/account issue), trying other candidates on the same provider with
-                # the exact same payload is futile. Short-circuit immediately to return 400 without retry.
-                if status_code == 400 and not _400_is_key_issue:
-                    if _is_content_moderation:
-                        logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
-                        errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
-                    else:
-                        logger.warning(f"Request-level 400 from {cand_id} — returning immediately without retry: {upstream_detail}")
-                        errors.append(f"{cand_id}: request rejected by upstream ({last_err_body[:200] if last_err_body else '400 Bad Request'})")
-                    _consecutive_failures[cand_id] = 0
-                    break
-
-                # --- Cooldown & Circuit Breaker Logic (Decoupled) ---
-                # Policy:
-                # 1. 429 Rate Limit (TPM/RPM): 10s cooldown, DO NOT increment circuit breaker.
-                # 2. 429/403 Quota Exhausted: 600s cooldown, DO NOT increment circuit breaker.
-                # 3. 401/403 Auth Failure: 600s cooldown, DO NOT increment circuit breaker.
-                # 4. 400 (Key issue): 10s cooldown, DO NOT increment circuit breaker.
-                # 5. 5xx Server Error: 30s cooldown, INCREMENT circuit breaker (>=3 triggers 300s).
-                # 6. 404/422 (Request level): No cooldown.
-
-                if status_code == 429:
-                    _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
-                        "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
-                    ]))
-                    cd_sec = cooldown_quota_sec if _is_quota else cooldown_tpm_sec
-                    _consecutive_failures[cand_id] = 0  # Rate limits do not count as server crash
-                    _cooldown_until[cand_id] = time.time() + cd_sec
-                    logger.info(f"429 on {cand_id} ({'Quota' if _is_quota else 'TPM/RPM'} limit) — cool down {cd_sec}s")
-
-                elif status_code in (401, 403):
-                    _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
-                        "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
-                    ]))
-                    cd_sec = cooldown_quota_sec if _is_quota else cooldown_403_sec
-                    _consecutive_failures[cand_id] = 0
-                    _cooldown_until[cand_id] = time.time() + cd_sec
-
-                elif status_code == 400 and _400_is_key_issue:
-                    _consecutive_failures[cand_id] = 0
-                    _cooldown_until[cand_id] = time.time() + 10.0
-
-                elif status_code >= 500:
+                except Exception as e:
                     cf = _consecutive_failures.get(cand_id, 0) + 1
                     _consecutive_failures[cand_id] = cf
-                    cd_sec = cooldown_5xx_sec
 
-                    # Circuit breaker escalation only for 5xx server failures
+                    cd_sec = cooldown_5xx_sec
                     if cf >= circuit_break_threshold:
                         cd_sec = max(cd_sec, circuit_cooldown)
-                        logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {cd_sec}s.")
+                        logger.warning(f"Circuit breaker triggered for {cand_id}. Cool down for {cd_sec}s.")
 
                     _cooldown_until[cand_id] = time.time() + cd_sec
+                    err_msg = f"{cand_id} encountered {type(e).__name__}: {str(e)}"
+                    logger.error(err_msg)
+                    errors.append(err_msg)
 
-                else:
-                    # Non-cooldown cases (404/422 etc.): don't penalise key.
-                    _consecutive_failures[cand_id] = 0
+                    cand_latency = time.time() - cand_start
+                    stats.record(model_type, 500, cand_latency,
+                                 provider=provider_name, key=key_label, error_msg=err_msg,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
-            except httpx.ReadTimeout as e:
-                # ReadTimeout = model is slow (e.g. reasoning models), not a
-                # key problem.  Use a very short cooldown and do NOT count
-                # toward the circuit breaker so the key stays available.
-                _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
-                # Record the timeout as latency so this candidate gets
-                # deprioritised in smart ordering.
-                _record_latency(cand_id, upstream_timeout_sec)
-                err_msg = (f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s "
-                           f"(model may be slow, not penalised)")
-                logger.warning(err_msg)
-                errors.append(err_msg)
-
-                cand_latency = time.time() - cand_start
-                # 599 = pseudo-code for client-side read timeout: keeps the 5xx
-                # bucket in stats but stays distinguishable from real upstream 5xx.
-                stats.record(model_type, 599, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg,
-                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-
-            except httpx.ConnectTimeout as e:
-                # ConnectTimeout = network issue, short cooldown
-                _cooldown_until[cand_id] = time.time() + 5.0
-                # Record a high latency to deprioritise this candidate
-                _record_latency(cand_id, 10.0)
-                err_msg = f"{cand_id} encountered ConnectTimeout: {str(e)}"
-                logger.error(err_msg)
-                errors.append(err_msg)
-
-                cand_latency = time.time() - cand_start
-                # 598 = pseudo-code for connect timeout (network issue, not upstream 5xx)
-                stats.record(model_type, 598, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg,
-                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-
-            except Exception as e:
-                cf = _consecutive_failures.get(cand_id, 0) + 1
-                _consecutive_failures[cand_id] = cf
-
-                cd_sec = cooldown_5xx_sec
-                if cf >= circuit_break_threshold:
-                    cd_sec = max(cd_sec, circuit_cooldown)
-                    logger.warning(f"Circuit breaker triggered for {cand_id}. Cool down for {cd_sec}s.")
-
-                _cooldown_until[cand_id] = time.time() + cd_sec
-                err_msg = f"{cand_id} encountered {type(e).__name__}: {str(e)}"
-                logger.error(err_msg)
-                errors.append(err_msg)
-
-                cand_latency = time.time() - cand_start
-                stats.record(model_type, 500, cand_latency,
-                             provider=provider_name, key=key_label, error_msg=err_msg,
-                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
-
+                finally:
+                    if global_sem_acquired:
+                        global_sem.release()
             finally:
-                if global_sem_acquired:
-                    global_sem.release()
-        finally:
-            sem.release()
+                sem.release()
 
         # Check if all candidates were cooling down and we can wait within budget
         if not errors and loop_idx == 0:
