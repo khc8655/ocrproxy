@@ -442,6 +442,19 @@ function renderAgentModels() {
 
     let keysRowsHtml = '';
     const activeKey = item.active_key || (keys[0] ? keys[0].key : '');
+    const strategy = cfg.agent_routing_strategy || 'sticky_failover';
+    
+    let strategyLabel = `${keys.length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
+    if(strategy === 'manual'){
+      strategyLabel = `${keys.length} 个 Key · 🔒 纯手动直通 (当前使用: ${activeKey})`;
+    } else if(strategy === 'round_robin'){
+      strategyLabel = `${keys.length} 个 Key · 轮询负载均衡`;
+    } else if(strategy === 'priority_fallback'){
+      strategyLabel = `${keys.length} 个 Key · 主备优先级降级`;
+    } else if(strategy === 'latency_based'){
+      strategyLabel = `${keys.length} 个 Key · 最低延迟优先`;
+    }
+
     keys.forEach((b, idx) => {
       const isActive = (b.key === activeKey);
       const cacheKey = `model:${m}:${b.provider}:${b.key}`;
@@ -453,10 +466,9 @@ function renderAgentModels() {
           : `<span class="badge badge-error">${latInfo.status || 'ERR'}</span>`;
       }
 
-      const activeBadge = isActive ? `<span class="badge badge-success" style="font-weight:700;">★ 当前激活</span>` : '';
       const setActiveBtn = isActive
-        ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 6px;">使用中</span>`
-        : `<button class="btn btn-ghost btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="设为当前使用 Key" style="font-size:11px;padding:2px 8px;">设为当前</button>`;
+        ? `<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>`
+        : `<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="切换使用该 Key" style="font-size:11px;padding:2px 8px;">切</button>`;
 
       keysRowsHtml += `
         <div class="provider-row" style="padding:10px 16px;">
@@ -464,10 +476,9 @@ function renderAgentModels() {
             <span class="badge badge-neutral">#${idx+1}</span>
             <span style="font-weight:600;">${b.provider}</span>
             <span class="key-chip">${b.key}</span>
-            ${activeBadge}
             ${latBadge}
           </div>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;">
             ${setActiveBtn}
             <button class="btn btn-ghost btn-sm" onclick="testModelKey('${m}', '${b.provider}', '${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('${m}', ${idx})">移除</button>
@@ -480,7 +491,7 @@ function renderAgentModels() {
       <div class="card-head">
         <div>
           <h3>${m}</h3>
-        <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${keys.length} 个 Key</div>
+        <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${strategyLabel}</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary btn-sm" onclick="openEditModelModal('${m}')">编辑</button>

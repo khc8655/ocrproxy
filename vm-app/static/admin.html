@@ -291,7 +291,7 @@
     <nav id="topNav"></nav>
     <div class="actions">
       <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()" title="强制重载配置并重置所有 Key 的冷却与熔断状态">清除并重载</button>
-      <button class="btn btn-icon" onclick="loadData()" title="刷新数据">刷新</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
     </div>
   </header>
@@ -1160,16 +1160,30 @@ function renderAgentModels(){
   const names=Object.keys(models);
   if(!names.length){ box.innerHTML='<div class="hint-box">尚未配置 Agent 模型。点击右上角添加您的第一个模型。</div>'; return; }
   const status=state.stats.candidates_status||{};
+  const strategy = state.config.agent_routing_strategy || 'sticky_failover';
   
   box.innerHTML=names.map(name=>{
     const m=models[name]; const upstream=m.upstream_model||name;
     const isProbingAll = state.probingModels.has(name);
+    const activeKey = m.active_key || ((m.keys && m.keys[0]) ? m.keys[0].key : '');
+    
+    let strategyLabel = `${(m.keys||[]).length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
+    if(strategy === 'manual'){
+      strategyLabel = `${(m.keys||[]).length} 个 Key · 🔒 纯手动直通 (当前使用: ${esc(activeKey)})`;
+    } else if(strategy === 'round_robin'){
+      strategyLabel = `${(m.keys||[]).length} 个 Key · 轮询负载均衡 (依次轮流)`;
+    } else if(strategy === 'priority_fallback'){
+      strategyLabel = `${(m.keys||[]).length} 个 Key · 主备优先级降级 (首选降级)`;
+    } else if(strategy === 'latency_based'){
+      strategyLabel = `${(m.keys||[]).length} 个 Key · 最低延迟优先`;
+    }
+
     const rows=(m.keys||[]).map((b,i)=>renderBindingRow(i+1,b,null,name,i,status,true));
     return `<div class="card model-card">
       <div class="card-head">
         <div>
           <div class="model-id" style="font-size:14px;font-weight:700;">${esc(name)} ${upstream!==name?`<span class="badge badge-neutral" style="font-weight:400;margin-left:6px;">上游 ID: ${esc(upstream)}</span>`:''}</div>
-          <div class="meta" style="margin-top:2px;">${(m.keys||[]).length} 个 Key · 自动轮询与故障切换</div>
+          <div class="meta" style="margin-top:2px;">${strategyLabel}</div>
         </div>
         <div class="flex gap-2">
           <button class="btn btn-sm" id="probeAllBtn-${esc(name)}" onclick="testAgentModelAll('${esc(name)}')" ${isProbingAll?'disabled':''}>
@@ -1240,20 +1254,16 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   const probeKeyId = (isAgent ? 'agent:' + modelName : 'kb:' + type) + ':' + binding.provider + ':' + binding.key;
   const isProbing = state.probingKeys.has(probeKeyId);
 
-  let keyBadgeHtml = `<span class="badge badge-neutral">${esc(binding.key)}</span>`;
+  const keyBadgeHtml = `<span class="badge badge-neutral">${esc(binding.key)}</span>`;
   let actions;
   if(isAgent){
     const list = state.config.agent_models[modelName]?.keys || [];
     const activeKey = state.config.agent_models[modelName]?.active_key || (list[0] ? list[0].key : '');
     const isActive = (binding.key === activeKey);
 
-    if(isActive){
-      keyBadgeHtml = `<span class="badge badge-success" style="font-weight:700;">${esc(binding.key)} <span style="font-size:10px;opacity:0.9;">★ 激活</span></span>`;
-    }
-
     const setActiveBtn = isActive
-      ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 6px;">使用中</span>`
-      : `<button class="btn btn-sm btn-ghost" onclick="setActiveAgentKey('${esc(modelName)}','${esc(binding.key)}')" title="手动设为当前使用 Key" style="font-size:11px;padding:2px 6px;">设为当前</button>`;
+      ? `<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>`
+      : `<button class="btn btn-sm btn-secondary" onclick="setActiveAgentKey('${esc(modelName)}','${esc(binding.key)}')" title="切换使用该 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">切</button>`;
 
     actions = `
       ${setActiveBtn}
@@ -1264,14 +1274,13 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
       </button>
       <button class="btn btn-icon btn-sm btn-danger" onclick="deleteAgentKey('${esc(modelName)}',${i})" title="删除绑定">×</button>`;
   } else {
-    const list = state.config.candidates[type];
+    const list = state.config.candidates[type] || [];
     actions = `
       <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},-1)" ${i===0?'disabled':''} title="上移">↑</button>
       <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},1)" ${i===list.length-1?'disabled':''} title="下移">↓</button>
       <button class="btn btn-icon btn-sm" id="probeBtn-${esc(probeKeyId)}" onclick="testCandidate('${type}',${i})" title="快速探活" ${isProbing?'disabled':''}>
         ${isProbing ? '<span class="spinner"></span>' : '测'}
       </button>
-      <button class="btn btn-icon btn-sm" onclick="editCandidate('${type}',${i})" title="编辑">编辑</button>
       <button class="btn btn-icon btn-sm btn-danger" onclick="deleteCandidate('${type}',${i})" title="删除">×</button>`;
   }
   return `<tr>
@@ -1281,7 +1290,7 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
     ${modelCell}
     <td>${badge}</td>
     <td class="text-sm text-secondary">${time}</td>
-    <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end">${actions}</div></td>
+    <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
   </tr>`;
 }
 
