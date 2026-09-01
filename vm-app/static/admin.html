@@ -570,7 +570,7 @@
             <span class="badge badge-primary">分流调度</span>
           </div>
           <div class="settings-grid">
-            <div class="setting-item" style="grid-column: 1 / -1; max-width:640px;">
+            <div class="setting-item" id="st-item-agent-routing" style="grid-column: 1 / -1; max-width:640px;">
               <label class="form-label">Agent 模式分流策略 (Agent Routing)</label>
               <select id="s_agentRouting" class="form-control">
                 <option value="sticky_failover">粘性故障转移 (Sticky Failover - 推荐，固定当前 Key，遇 429 顺延并长期驻留新 Key)</option>
@@ -580,7 +580,7 @@
               </select>
               <span class="hint">智能体编程场景（Cursor / Cline）推荐「粘性故障转移」，可保持会话连接与 KV Cache 稳定性，避免频繁切回限流 Key。</span>
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1; max-width:640px;">
+            <div class="setting-item" id="st-item-kb-routing" style="grid-column: 1 / -1; max-width:640px;">
               <label class="form-label">KB 知识库分流策略 (KB Routing)</label>
               <select id="s_kbRouting" class="form-control">
                 <option value="round_robin">轮询负载均衡 (Round Robin - 推荐，高并发请求原子轮换分流，充分利用并发与 TPM)</option>
@@ -937,6 +937,11 @@ function render(){
   const stk = document.getElementById('st-group-kb');
   if(sta) sta.style.display = (runMode === 'kb') ? 'none' : 'block';
   if(stk) stk.style.display = (runMode === 'agent') ? 'none' : 'block';
+
+  const star = document.getElementById('st-item-agent-routing');
+  const stkr = document.getElementById('st-item-kb-routing');
+  if(star) star.style.display = (runMode === 'kb') ? 'none' : 'block';
+  if(stkr) stkr.style.display = (runMode === 'agent') ? 'none' : 'block';
 
   // Access guide visibility
   const aca = document.getElementById('acc-section-agent');
