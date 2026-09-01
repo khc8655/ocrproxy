@@ -441,6 +441,9 @@ async def chat_completions(request: Request):
             return _model_not_found_response(model_name)
 
         default_upstream = entry.get("upstream_model") or model_name
+        strategy = config.get("agent_routing_strategy", "sticky_failover")
+        active_key = entry.get("active_key")
+
         candidates_list = []
         for b in entry.get("keys", []):
             if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
@@ -450,6 +453,18 @@ async def chat_completions(request: Request):
                 "key": b["key"],
                 "model": b.get("upstream_model") or default_upstream,
             })
+
+        if strategy == "manual":
+            # In manual mode, filter to only the active key (or first key if active_key not found)
+            if active_key:
+                matched = [c for c in candidates_list if c["key"] == active_key]
+                if matched:
+                    candidates_list = matched
+                else:
+                    candidates_list = candidates_list[:1]
+            else:
+                candidates_list = candidates_list[:1]
+
         if not candidates_list:
             return _model_not_found_response(model_name)
         try:

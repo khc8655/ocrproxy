@@ -310,6 +310,9 @@ export function listBindings(config, model) {
   if (!entry || !Array.isArray(entry.keys) || entry.keys.length === 0) {
     return [];
   }
+  const strategy = config.settings?.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
+  const activeKey = entry.active_key;
+
   const out = [];
   for (const k of entry.keys) {
     if (!k || typeof k !== 'object') continue;
@@ -321,9 +324,18 @@ export function listBindings(config, model) {
     out.push({
       provider,
       keyLabel,
-      upstreamModel: k.upstream_model || model,
+      upstreamModel: k.upstream_model || entry.upstream_model || model,
     });
   }
+
+  if (strategy === 'manual') {
+    if (activeKey) {
+      const matched = out.filter(b => b.keyLabel === activeKey);
+      if (matched.length > 0) return matched;
+    }
+    return out.slice(0, 1);
+  }
+
   return out;
 }
 
@@ -332,7 +344,7 @@ const _rrAgentIndices = new Map();      // model -> rr index
 
 /**
  * Get ordered candidate bindings based on routing strategy (matches VM scheduler).
- * Strategies: 'sticky_failover' (default), 'round_robin', 'priority_fallback', 'random'
+ * Strategies: 'manual', 'sticky_failover' (default), 'round_robin', 'priority_fallback', 'random'
  *
  * @param {Array} bindings - list of valid bindings
  * @param {string} model - requested model name
@@ -342,7 +354,7 @@ const _rrAgentIndices = new Map();      // model -> rr index
 export function orderBindings(bindings, model, strategy = 'sticky_failover') {
   if (!bindings || bindings.length === 0) return [];
   const n = bindings.length;
-  if (n <= 1) return bindings.slice();
+  if (n <= 1 || strategy === 'manual') return bindings.slice(0, 1);
 
   if (strategy === 'sticky_failover') {
     const stickyIdx = (_stickyAgentIndices.get(model) || 0) % n;

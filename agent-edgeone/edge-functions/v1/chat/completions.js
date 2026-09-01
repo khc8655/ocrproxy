@@ -289,15 +289,17 @@ export async function onRequestPost(context) {
       `${binding.provider}/${binding.keyLabel}=${result.kind || `http_${result.status}`}`
     );
 
-    // Non-retriable? (e.g. 400 bad request) Return immediately
-    if (!shouldFailover(result.status, result.kind)) {
-      const headers = result.response.headers;
-      headers.set('x-edgeone-relay', 'v8-1');
-      headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
-      headers.set('x-proxy-route', attemptLog.join('->'));
-      headers.set('x-proxy-attempts', String(attemptLog.length));
-      headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
-      return result.response;
+    // Non-retriable? (e.g. 400 bad request, or manual mode) Return immediately
+    if (strategy === 'manual' || !shouldFailover(result.status, result.kind)) {
+      if (result.response) {
+        const headers = result.response.headers;
+        headers.set('x-edgeone-relay', 'v8-1');
+        headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
+        headers.set('x-proxy-route', attemptLog.join('->'));
+        headers.set('x-proxy-attempts', String(attemptLog.length));
+        headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
+        return result.response;
+      }
     }
   }
 
