@@ -482,6 +482,7 @@ async def reload_config(request: Request):
 # ── Chat completions ────────────────────────────────────────────────
 
 @router.post("/chat/completions")
+@router.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     config = await get_config()
     if not verify_proxy_auth(request, config):
@@ -702,6 +703,7 @@ def _anthropic_error(status_code: int, err_type: str, message: str) -> JSONRespo
 
 
 @router.post("/messages")
+@router.post("/v1/messages")
 async def anthropic_messages(request: Request):
     config = await get_config()
     if not verify_proxy_auth(request, config):
