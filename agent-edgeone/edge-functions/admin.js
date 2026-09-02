@@ -894,7 +894,6 @@ tr:hover td, .tbl tbody tr:hover td {
       <button class="active" onclick="switchTab('dashboard')">概览</button>
       <button onclick="switchTab('agents')">Agent 模型</button>
       <button onclick="switchTab('providers')">供应商</button>
-      <button onclick="switchTab('state')">状态</button>
       <button onclick="switchTab('settings')">全局策略</button>
       <button onclick="switchTab('raw')">JSON 配置</button>
       <button onclick="switchTab('access')">接入说明</button>
@@ -902,7 +901,6 @@ tr:hover td, .tbl tbody tr:hover td {
     <div class="actions">
       <button class="btn btn-secondary btn-sm" onclick="exportConfigJson()" title="导出当前完整配置为 JSON 备份文件">导出备份</button>
       <button class="btn btn-secondary btn-sm" onclick="triggerImportConfig()" title="从本地 JSON 备份文件恢复配置">导入配置</button>
-      <button class="btn btn-secondary btn-sm" onclick="clearAllCooldowns()" title="清除当前所有 Key 的冷却与失败状态">清除冷却</button>
       <button class="btn btn-secondary btn-sm" onclick="loadAllData()" title="刷新数据">刷新</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()">退出</button>
     </div>
@@ -917,7 +915,7 @@ tr:hover td, .tbl tbody tr:hover td {
           <div class="section-title">状态总览</div>
           <span id="configSourceBadge" class="badge badge-success">KV 同步中</span>
         </div>
-        <div class="stats-grid">
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
           <div class="stat-card">
             <div class="stat-label">已配置 Agent 模型</div>
             <div class="stat-value" id="statModelCount">0</div>
@@ -927,11 +925,6 @@ tr:hover td, .tbl tbody tr:hover td {
             <div class="stat-label">候选 Key 总数</div>
             <div class="stat-value" id="statTotalKeys">0</div>
             <div class="stat-sub">多 Key 轮询池</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">冷却中 Key</div>
-            <div class="stat-value" id="statCooldowns" style="color:var(--color-primary);">0</div>
-            <div class="stat-sub">故障避让与恢复</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">运行模式</div>
@@ -981,43 +974,6 @@ tr:hover td, .tbl tbody tr:hover td {
           <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
         </div>
         <div id="providersBox"></div>
-      </div>
-    </div>
-
-    <!-- Panel 4: KV State & IP Check -->
-    <div id="panel-state" class="panel">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">出口 IP</div>
-            <div class="section-desc">探测边缘节点出口公网 IP</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="probeEgressIp()">探测 IP</button>
-        </div>
-        <div class="card card-pad mb-3" id="egressIpBox">
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
-            <div><span class="text-secondary text-sm">客户端 IP</span><div class="mono mt-2" id="ipClient">—</div></div>
-            <div><span class="text-secondary text-sm">出口 IP</span><div class="mono mt-2" style="font-weight:700;color:var(--color-primary);" id="ipEgress">—</div></div>
-            <div><span class="text-secondary text-sm">节点 UUID</span><div class="mono mt-2" id="ipNode">—</div></div>
-            <div><span class="text-secondary text-sm">地理位置</span><div class="mono mt-2" id="ipGeo">—</div></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">Key 冷却状态</div>
-            <div class="section-desc">展示 Key 冷却状态与连续失败计数</div>
-          </div>
-          <button class="btn btn-danger btn-sm" onclick="clearAllCooldowns()">清空冷却</button>
-        </div>
-        <div class="card table-wrap">
-          <table>
-            <thead><tr><th>供应商</th><th>Key 别名</th><th>状态</th><th>连续失败</th><th>冷却到期时间</th></tr></thead>
-            <tbody id="stateTableBody"></tbody>
-          </table>
-        </div>
       </div>
     </div>
 
@@ -1470,7 +1426,6 @@ function switchTab(tabId) {
 
   if (tabId === 'raw') renderRawJson();
   if (tabId === 'access') renderAccess();
-  if (tabId === 'state') probeEgressIp();
 }
 
 // ---- Login Flow ----------------------------------------------------------
@@ -1516,10 +1471,9 @@ function doLogout() {
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
-    const [cfgRes, healthRes, stateRes] = await Promise.all([
+    const [cfgRes, healthRes] = await Promise.all([
       api('GET', '/api/config'),
       api('GET', '/health').catch(() => ({})),
-      api('GET', '/api/state').catch(() => ({ cooldowns: [] })),
     ]);
 
     cfg = cfgRes.config || cfgRes;
@@ -1528,7 +1482,6 @@ async function loadAllData() {
       lastModified: cfgRes.last_modified,
     };
     healthData = healthRes;
-    stateData = stateRes.cooldowns || [];
 
     renderAll();
   } catch (e) {
@@ -1537,44 +1490,11 @@ async function loadAllData() {
   }
 }
 
-// ---- Egress IP probe -----------------------------------------------------
-async function probeEgressIp() {
-  const clientEl = document.getElementById('ipClient');
-  const egressEl = document.getElementById('ipEgress');
-  const nodeEl = document.getElementById('ipNode');
-  const geoEl = document.getElementById('ipGeo');
-
-  if (clientEl) clientEl.textContent = '探测中...';
-  if (egressEl) egressEl.textContent = '探测中...';
-
-  try {
-    const data = await api('GET', '/check-ip');
-    ipData = data;
-    const clientIp = data.clientIp || data.client_ip || '—';
-    const egressIp = data.egressIp || data.egress_ip || '—';
-    const nodeUuid = data.nodeUuid || data.node_uuid || '—';
-    const geoText = (typeof data.geo === 'object' && data.geo)
-      ? \`\${data.geo.country || ''} \${data.geo.region || ''} \${data.geo.city || ''}\`.trim()
-      : (data.geo || '边缘节点网络');
-
-    if (clientEl) clientEl.textContent = clientIp;
-    if (egressEl) egressEl.textContent = egressIp;
-    if (nodeEl) nodeEl.textContent = nodeUuid;
-    if (geoEl) geoEl.textContent = geoText || '边缘节点网络';
-    toast(\`已刷新节点 IP: 出口 \${egressIp} (\${geoText || '边缘'})\`, 'ok');
-  } catch (e) {
-    if (clientEl) clientEl.textContent = '获取失败';
-    if (egressEl) egressEl.textContent = '获取失败';
-    toast(\`探测 IP 异常: \${e?.message || e}\`, 'err');
-  }
-}
-
 // ---- Rendering -----------------------------------------------------------
 function renderAll() {
   renderDashboard();
   renderAgentModels();
   renderProviders();
-  renderStateTable();
   renderSettings();
   renderRawJson();
   renderAccess();
@@ -1652,11 +1572,8 @@ function renderDashboard() {
     totalKeys += Object.keys(p.keys || {}).length;
   }
 
-  const activeCooldowns = stateData.filter(s => s.expiresAt > Date.now());
-
   document.getElementById('statModelCount').textContent = models.length;
   document.getElementById('statTotalKeys').textContent = totalKeys;
-  document.getElementById('statCooldowns').textContent = activeCooldowns.length;
 
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
@@ -1688,34 +1605,6 @@ function renderDashboard() {
     }
   }
 }
-
-function renderStateTable() {
-  const tbody = document.getElementById('stateTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (!stateData || stateData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-secondary" style="text-align:center;padding:24px;">无冷却记录</td></tr>';
-    return;
-  }
-
-  const now = Date.now();
-  for (const c of stateData) {
-    const isCooling = c.expiresAt > now;
-    const remainingSec = isCooling ? Math.round((c.expiresAt - now) / 1000) : 0;
-    const expStr = isCooling ? \`\${remainingSec}s 后恢复\` : '已解冻';
-    const badgeHtml = isCooling
-      ? \`<span class="badge badge-warning">冷却中 (\${c.cooldownSec || remainingSec}s)</span>\`
-      : \`<span class="badge badge-success">正常就绪</span>\`;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = \`
-      <td style="font-weight:600;">\${c.provider}</td>
-      <td class="mono">\${c.keyLabel}</td>
-      <td>\${badgeHtml}</td>
-      <td class="mono">\${c.failCount || 0} 次</td>
-      <td class="mono">\${expStr}</td>
-    \`;
     tbody.appendChild(tr);
   }
 }
@@ -2326,17 +2215,6 @@ async function setActiveAgentKey(modelName, keyLabel) {
   toast(\`已将模型 \${modelName} 切换至 Key: [\${keyLabel}]\`, 'ok');
 }
 
-// ---- Clear Cooldowns -----------------------------------------------------
-async function clearAllCooldowns() {
-  if (!confirm('清空全部 Key 冷却与失败计数？')) return;
-  try {
-    await api('DELETE', '/api/state');
-    toast('冷却已清空', 'ok');
-    await loadAllData();
-  } catch (e) {
-    toast('操作失败: ' + (e?.message || e), 'err');
-  }
-}
 
 // ---- Config Export & Import (JSON / Blob) --------------------------------
 function exportConfigJson() {
