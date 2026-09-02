@@ -78,18 +78,28 @@ bg3 = {"model": "gemini-3.5-flash", "reasoning_effort": "none"}
 _normalise_for_provider(bg3, "google")
 test("normalize google: none -> include_thoughts: False", bg3.get("extra_body", {}).get("google", {}).get("thinking_config", {}).get("include_thoughts") is False)
 
-# 5. Google Schema Sanitization
+# 5. Google Schema Sanitization & Thinking Headroom
 bg4 = {
     "model": "gemini-3.5-flash",
+    "reasoning_effort": "high",
+    "max_tokens": 2048,
     "tools": [{
         "type": "function",
         "function": {
-            "name": "search",
+            "name": "complex_tool",
             "parameters": {
                 "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": False,
+                "$defs": {"MyDef": {"type": "string"}},
+                "$ref": "#/$defs/MyDef",
                 "type": "object",
+                "required": ["q", "ghost"],
                 "properties": {
-                    "q": {"type": "string", "$schema": "..."}
+                    "q": {
+                        "type": "string",
+                        "$schema": "...",
+                        "additionalProperties": False,
+                    }
                 }
             }
         }
@@ -98,7 +108,14 @@ bg4 = {
 _normalise_for_provider(bg4, "google")
 clean_params = bg4["tools"][0]["function"]["parameters"]
 test("normalize google: strip $schema root", "$schema" not in clean_params)
-test("normalize google: strip $schema property", "$schema" not in clean_params["properties"]["q"])
+test("normalize google: strip additionalProperties", "additionalProperties" not in clean_params)
+test("normalize google: strip $defs & $ref", "$defs" not in clean_params and "$ref" not in clean_params)
+test("normalize google: prune invalid required", clean_params.get("required") == ["q"])
+test("normalize google: elevate max_tokens for thinking", bg4.get("max_tokens") == 65535)
+
+bg5 = {"model": "gemma-2-27b-it", "reasoning_effort": "high"}
+_normalise_for_provider(bg5, "google")
+test("normalize google: skip thinking_config for gemma", "thinking_config" not in bg5.get("extra_body", {}).get("google", {}))
 
 print("\n== vm-app: _disable_thinking_for_kb ==")
 kb_sf = {"model": "step-3.7-flash"}

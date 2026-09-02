@@ -380,6 +380,63 @@ test('normalize: google strips $schema from tool parameters', () => {
   eq(body.tools[0].function.parameters.properties.location.$schema, undefined);
 });
 
+test('normalize: google deep schema sanitization (additionalProperties, $defs, $ref, invalid required)', () => {
+  const body = {
+    model: 'gemini-3.5-flash',
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'complex_tool',
+          parameters: {
+            $schema: 'http://json-schema.org/draft-07/schema#',
+            additionalProperties: false,
+            $defs: { CustomType: { type: 'string' } },
+            $ref: '#/$defs/CustomType',
+            type: 'object',
+            required: ['valid_field', 'ghost_field'],
+            properties: {
+              valid_field: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['sub_ghost'],
+                properties: {
+                  sub_field: { type: 'string' }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  };
+  normaliseForProvider(body, 'google');
+  const params = body.tools[0].function.parameters;
+  eq(params.$schema, undefined);
+  eq(params.additionalProperties, undefined);
+  eq(params.$defs, undefined);
+  eq(params.$ref, undefined);
+  deepEq(params.required, ['valid_field']);
+  eq(params.properties.valid_field.additionalProperties, undefined);
+  eq(params.properties.valid_field.required, undefined);
+});
+
+test('normalize: google elevates max_tokens when thinking is active', () => {
+  const body1 = { model: 'gemini-3.5-flash', reasoning_effort: 'high', max_tokens: 2048 };
+  normaliseForProvider(body1, 'google');
+  eq(body1.max_tokens, 65535);
+
+  const body2 = { model: 'gemini-3.5-flash', reasoning_effort: 'none', max_tokens: 2048 };
+  normaliseForProvider(body2, 'google');
+  eq(body2.max_tokens, 2048);
+});
+
+test('normalize: google skips thinking_config for gemma models', () => {
+  const body = { model: 'gemma-2-27b-it', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'google');
+  eq(body.extra_body?.google?.thinking_config, undefined);
+});
+
 // normaliseForProvider — Agnes AI
 test('normalize: agnes reasoning "high" → chat_template_kwargs.enable_thinking: true', () => {
   const body = { model: 'agnes-2.5-flash', reasoning_effort: 'high' };

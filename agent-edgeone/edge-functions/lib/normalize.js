@@ -27,16 +27,38 @@ export function sanitizeGeminiSchema(schema) {
   }
   const clean = { ...schema };
   delete clean['$schema'];
+  delete clean['additionalProperties'];
+  delete clean['$defs'];
+  delete clean['$ref'];
+
   if (clean.properties && typeof clean.properties === 'object') {
     const props = {};
     for (const [k, v] of Object.entries(clean.properties)) {
       props[k] = sanitizeGeminiSchema(v);
     }
     clean.properties = props;
+
+    // Validate required array: only retain properties that actually exist
+    if (Array.isArray(clean.required)) {
+      clean.required = clean.required.filter(r => Object.prototype.hasOwnProperty.call(clean.properties, r));
+      if (clean.required.length === 0) {
+        delete clean.required;
+      }
+    }
+  } else if (clean.required && (!clean.properties || Object.keys(clean.properties).length === 0)) {
+    delete clean.required;
   }
+
   if (clean.items) {
     clean.items = sanitizeGeminiSchema(clean.items);
   }
+
+  for (const unionKey of ['anyOf', 'allOf', 'oneOf']) {
+    if (Array.isArray(clean[unionKey])) {
+      clean[unionKey] = clean[unionKey].map(sanitizeGeminiSchema);
+    }
+  }
+
   return clean;
 }
 
@@ -51,6 +73,7 @@ export function sanitizeGeminiSchema(schema) {
 export function normaliseForProvider(body, provider, configOverride = null) {
   if (!body || typeof body !== 'object') return body;
   const p = String(provider || '').toLowerCase();
+  const modelName = String(body.model || '').toLowerCase();
 
   // 1. Resolve preset & rules (declarative schema)
   const preset = getPreset(p) || {};
@@ -58,36 +81,40 @@ export function normaliseForProvider(body, provider, configOverride = null) {
 
   // 2. Reasoning / Thinking level adapter
   const reasoningRules = rules.reasoning || {};
+  const isGoogle = reasoningRules.strategy === 'gemini_thinking_matrix' || p.includes('google') || modelName.startsWith('gemini');
+
   if (body.reasoning_effort !== undefined) {
     const rawEffort = String(body.reasoning_effort).toLowerCase();
 
-    if (reasoningRules.strategy === 'gemini_thinking_matrix' || p.includes('google') || String(body.model || '').toLowerCase().startsWith('gemini')) {
-      body.extra_body = body.extra_body || {};
-      body.extra_body.google = body.extra_body.google || {};
-      const modelName = String(body.model || '').toLowerCase();
-      const isGemini25 = modelName.startsWith('gemini-2.5-');
-      const isPro = modelName.includes('pro');
+    if (isGoogle) {
+      const isGemma = modelName.startsWith('gemma');
+      if (!isGemma) {
+        body.extra_body = body.extra_body || {};
+        body.extra_body.google = body.extra_body.google || {};
+        const isGemini25 = modelName.startsWith('gemini-2.5-');
+        const isPro = modelName.includes('pro');
 
-      if (rawEffort === 'none' || rawEffort === 'false') {
-        body.extra_body.google.thinking_config = { include_thoughts: false };
-      } else if (isGemini25) {
-        body.extra_body.google.thinking_config = { include_thoughts: true };
-      } else {
-        let thinkingLevel = 'low';
-        if (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max') {
-          thinkingLevel = 'high';
-        } else if (rawEffort === 'medium' && !isPro) {
-          thinkingLevel = 'medium';
+        if (rawEffort === 'none' || rawEffort === 'false') {
+          body.extra_body.google.thinking_config = { include_thoughts: false };
+        } else if (isGemini25) {
+          body.extra_body.google.thinking_config = { include_thoughts: true };
         } else {
-          thinkingLevel = 'low';
+          let thinkingLevel = 'low';
+          if (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max') {
+            thinkingLevel = 'high';
+          } else if (rawEffort === 'medium' && !isPro) {
+            thinkingLevel = 'medium';
+          } else {
+            thinkingLevel = 'low';
+          }
+          body.extra_body.google.thinking_config = {
+            include_thoughts: true,
+            thinking_level: thinkingLevel,
+          };
         }
-        body.extra_body.google.thinking_config = {
-          include_thoughts: true,
-          thinking_level: thinkingLevel,
-        };
       }
       delete body.reasoning_effort;
-    } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || String(body.model || '').toLowerCase().startsWith('agnes')) {
+    } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes')) {
       body.chat_template_kwargs = body.chat_template_kwargs || {};
       const enableKey = reasoningRules.enable_key || 'enable_thinking';
       if (body.chat_template_kwargs[enableKey] === undefined) {
@@ -118,6 +145,20 @@ export function normaliseForProvider(body, provider, configOverride = null) {
     }
   }
 
+  // Max output tokens headroom elevation for Google Gemini thinking
+  if (isGoogle) {
+    const thinkingCfg = body.extra_body?.google?.thinking_config;
+    const isThinkingOn = thinkingCfg?.include_thoughts !== false && (thinkingCfg?.include_thoughts === true || thinkingCfg?.thinking_level);
+    if (isThinkingOn) {
+      if (typeof body.max_tokens === 'number' && body.max_tokens < 16384) {
+        body.max_tokens = 65535;
+      }
+      if (typeof body.max_completion_tokens === 'number' && body.max_completion_tokens < 16384) {
+        body.max_completion_tokens = 65535;
+      }
+    }
+  }
+
   // 3. Tool Calling adapter
   const toolRules = rules.tools || {};
   if (toolRules.normalize_choice_to_string || p === 'tokenrhythm' || p === 'sensenova' || p === 'deepseek') {
@@ -126,7 +167,7 @@ export function normaliseForProvider(body, provider, configOverride = null) {
     }
   }
 
-  if (toolRules.strip_json_schema || p.includes('google') || String(body.model || '').toLowerCase().startsWith('gemini')) {
+  if (toolRules.strip_json_schema || isGoogle) {
     if (Array.isArray(body.tools)) {
       body.tools = body.tools.map((t) => {
         if (t && t.type === 'function' && t.function && t.function.parameters) {
