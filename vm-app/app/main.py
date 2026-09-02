@@ -74,12 +74,6 @@ async def security_headers_middleware(request: Request, call_next):
 app.include_router(proxy_router)
 app.include_router(proxy_router, prefix="/api")
 
-# Tolerant root-level alias for clients that send directly to /messages
-@app.post("/messages")
-async def messages_root_alias(request: Request):
-    from app.proxy_routes import anthropic_messages
-    return await anthropic_messages(request)
-
 # Admin routes at /api/admin/*
 app.include_router(admin_router)
 
