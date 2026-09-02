@@ -1,12 +1,36 @@
+import os
 import sys
 import copy
 from unittest.mock import MagicMock
 from pathlib import Path
 
-# Create lightweight mocks for external web packages if not present
-for mod in ["httpx", "fastapi", "fastapi.responses", "fastapi.routing", "cryptography", "cryptography.fernet"]:
+class FakeFastAPI:
+    def __init__(self, *args, **kwargs):
+        self.docs_url = kwargs.get("docs_url")
+        self.openapi_url = kwargs.get("openapi_url")
+        self.redoc_url = kwargs.get("redoc_url")
+    def middleware(self, *args, **kwargs):
+        return lambda fn: fn
+    def include_router(self, *args, **kwargs):
+        pass
+    def mount(self, *args, **kwargs):
+        pass
+    def get(self, *args, **kwargs):
+        return lambda fn: fn
+
+for mod in ["httpx", "fastapi.responses", "fastapi.routing", "fastapi.staticfiles", "cryptography", "cryptography.fernet"]:
     if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
+        m = MagicMock()
+        m.__path__ = []
+        sys.modules[mod] = m
+
+if "fastapi" not in sys.modules:
+    fastapi_mock = MagicMock()
+    fastapi_mock.__path__ = []
+    fastapi_mock.FastAPI = FakeFastAPI
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.APIRouter = MagicMock
+    sys.modules["fastapi"] = fastapi_mock
 
 # Add vm-app to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "vm-app"))
@@ -147,6 +171,39 @@ test("_merge_configs: preserves KB candidates in KB mode", "chat" in merged.get(
 test("_merge_configs: merges incoming providers", "p2" in merged.get("providers", {}))
 test("_merge_configs: updates Schema v2 settings", merged.get("settings", {}).get("request_total_budget_sec") == 25)
 test("_merge_configs: sets run_mode", merged.get("run_mode") == "kb")
+
+print("\n== vm-app: Security by Default ==")
+from app.main import app
+from app.auth import verify_admin_auth, is_ip_blocked, record_admin_auth_result
+from fastapi import Request
+
+test("security: docs_url disabled by default", app.docs_url is None)
+test("security: openapi_url disabled by default", app.openapi_url is None)
+
+# Test brute-force rate limiter
+class DummyRequest:
+    def __init__(self, ip="192.168.1.100", auth=None):
+        self.headers = {"Authorization": auth} if auth else {}
+        self.client = type("Client", (), {"host": ip})()
+
+os.environ["ADMIN_PASSWORD"] = "correct_secret_pass"
+
+req_fail = DummyRequest(ip="10.0.0.99", auth="Bearer wrong_pass")
+for _ in range(4):
+    test_res = verify_admin_auth(req_fail)
+    test("auth: fails on wrong password", test_res is False)
+
+test("auth: not yet blocked after 4 fails", is_ip_blocked(req_fail) is False)
+
+# 5th failed attempt triggers block
+verify_admin_auth(req_fail)
+test("auth: blocked after 5 fails", is_ip_blocked(req_fail) is True)
+
+req_correct_but_blocked = DummyRequest(ip="10.0.0.99", auth="Bearer correct_secret_pass")
+test("auth: correct password rejected when IP is blocked", verify_admin_auth(req_correct_but_blocked) is False)
+
+req_other_ip = DummyRequest(ip="10.0.0.100", auth="Bearer correct_secret_pass")
+test("auth: other IP with correct pass succeeds", verify_admin_auth(req_other_ip) is True)
 
 print(f"\n----------------------------------------")
 print(f"PASS: {passed}")

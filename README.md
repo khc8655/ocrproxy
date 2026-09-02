@@ -98,6 +98,13 @@ ocrprox (Monorepo)
   - **文本 Tool Call 拯救**：自动捕获模型在文本中输出的代码块与 XML 标签并提取为标准 OpenAI `tool_calls`。
 - **智能 URL 端点补齐**：自动感知供应商是否包含 `/v1` 后缀并智能规整拼接。
 
+### 5. 生产级默认安全加固体系 (Security by Default)
+系统遵循开箱即安全的原则，在代码层面与一键部署中默认启用全方位加固：
+- **公网文档与元数据彻底隐藏**：生产环境默认关闭 `/docs`、`/redoc` 与 `/openapi.json`（返回 404），彻底阻断外部扫描器侦察接口结构；
+- **全局企业级安全响应头**：所有 HTTP 响应默认注入 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`X-XSS-Protection`、`Referrer-Policy`，并剥除 `Server: uvicorn` 框架指纹；
+- **管理后台防暴力破解与防时序攻击**：针对 `/api/admin/*` 连续 5 次错误尝试自动触发 10 分钟 IP 级滑动窗口临时阻断，强制使用 `hmac.compare_digest` 防御时序侧信道攻击；
+- **系统沙箱与权限隔离**：Systemd 默认开启 `NoNewPrivileges=true`、`ProtectSystem=strict`、`PrivateTmp=true`，配置文件严格锁定 `600` / `700`。
+
 ---
 
 ## 快速上手与部署指南

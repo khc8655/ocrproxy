@@ -1,10 +1,65 @@
 """
 Authentication utilities for proxy and admin endpoints in vm-app.
+Includes Security-by-Default anti-bruteforce rate limiting and timing attack protection.
 """
 import os
+import time
 import hmac
+from collections import defaultdict
 from typing import Optional, Union, List, Dict
 from fastapi import Request
+
+# Anti-bruteforce rate-limiting for admin authentication:
+# Track failed attempts per client IP in a sliding window.
+_FAILED_ATTEMPTS = defaultdict(list)  # ip -> [timestamp, timestamp, ...]
+_BLOCKED_IPS = {}  # ip -> block_until_timestamp
+_MAX_FAILED_ATTEMPTS = 5
+_WINDOW_SECONDS = 600  # 10 minutes window
+_BLOCK_SECONDS = 600  # 10 minutes block
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP considering reverse proxies (X-Forwarded-For / X-Real-IP)."""
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    x_real_ip = request.headers.get("X-Real-IP")
+    if x_real_ip:
+        return x_real_ip.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
+
+
+def is_ip_blocked(request: Request) -> bool:
+    """Check if the requesting client IP is currently blocked due to failed attempts."""
+    ip = _get_client_ip(request)
+    now = time.time()
+    block_until = _BLOCKED_IPS.get(ip, 0)
+    if block_until > now:
+        return True
+    if ip in _BLOCKED_IPS:
+        del _BLOCKED_IPS[ip]
+    return False
+
+
+def record_admin_auth_result(request: Request, success: bool) -> None:
+    """Record auth outcome. If failed repeatedly, temporarily blocks the IP."""
+    ip = _get_client_ip(request)
+    now = time.time()
+
+    if success:
+        _FAILED_ATTEMPTS.pop(ip, None)
+        _BLOCKED_IPS.pop(ip, None)
+        return
+
+    # Clean old attempts outside window
+    attempts = [t for t in _FAILED_ATTEMPTS[ip] if now - t < _WINDOW_SECONDS]
+    attempts.append(now)
+    _FAILED_ATTEMPTS[ip] = attempts
+
+    if len(attempts) >= _MAX_FAILED_ATTEMPTS:
+        _BLOCKED_IPS[ip] = now + _BLOCK_SECONDS
 
 
 def _extract_token(request: Request) -> Optional[str]:
@@ -78,10 +133,17 @@ def verify_admin_auth(request: Request) -> bool:
     """
     Verify admin authentication for web console and /api/admin/* endpoints.
     Strictly accepts ADMIN_PASSWORD to protect management actions.
+    Enforces anti-bruteforce protection.
     """
+    if is_ip_blocked(request):
+        return False
+
     admin_pass = os.environ.get("ADMIN_PASSWORD")
     if not admin_pass:
         return False
 
     token = _extract_token(request)
-    return _safe_compare(token, admin_pass)
+    ok = _safe_compare(token, admin_pass)
+    record_admin_auth_result(request, ok)
+    return ok
+

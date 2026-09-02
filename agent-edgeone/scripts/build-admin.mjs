@@ -76,6 +76,10 @@ const functionCode =
   '    headers: {\n' +
   '      "content-type": "text/html; charset=utf-8",\n' +
   '      "cache-control": "no-store",\n' +
+  '      "x-content-type-options": "nosniff",\n' +
+  '      "x-frame-options": "DENY",\n' +
+  '      "x-xss-protection": "1; mode=block",\n' +
+  '      "referrer-policy": "strict-origin-when-cross-origin"\n' +
   '    },\n' +
   '  });\n' +
   '}\n';
