@@ -242,7 +242,6 @@ export async function onRequestPost(context) {
       }
     }
   }
-  }
 
   // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502, 504)
   const lastDetail = lastErrorText ? `: ${lastErrorText.slice(0, 200)}` : '';

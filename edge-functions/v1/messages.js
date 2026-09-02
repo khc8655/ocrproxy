@@ -20,11 +20,11 @@ import {
   buildMessagesUrl,
   ConfigError,
   resolveKvBinding,
-} from '../../lib/config.js';
+} from '../lib/config.js';
 import {
   shouldFailover,
   bindingId,
-} from '../../lib/cooldowns.js';
+} from '../lib/cooldowns.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000;
