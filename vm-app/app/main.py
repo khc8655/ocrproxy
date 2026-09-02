@@ -6,7 +6,12 @@ import os
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,9 +20,6 @@ from .proxy_routes import router as proxy_router
 from .admin_routes import router as admin_router
 from .scheduler import close_client
 from .config_store import clear_cache, get_config
-
-# Load .env file
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -40,7 +42,32 @@ async def lifespan(app: FastAPI):
     logger.info("OCRProxy shutdown complete.")
 
 
-app = FastAPI(title="OCRProxy VM", version="3.1.0", lifespan=lifespan)
+# Security by Default: Disable OpenAPI docs and Swagger UI in production
+# unless explicitly enabled for development via ENABLE_DOCS=true.
+_enable_docs = os.environ.get("ENABLE_DOCS", "").strip().lower() in ("true", "1", "yes")
+
+app = FastAPI(
+    title="OCRProxy VM",
+    version="3.3.0",
+    docs_url="/docs" if _enable_docs else None,
+    redoc_url="/redoc" if _enable_docs else None,
+    openapi_url="/openapi.json" if _enable_docs else None,
+    lifespan=lifespan,
+)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Enforce enterprise security headers on all responses and mask server fingerprint."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Server"] = "webserver"
+    return response
+
 
 # Mount routers
 # Proxy routes at /v1/* (and /api/v1/* for transparent routing)

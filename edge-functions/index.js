@@ -2464,6 +2464,10 @@ export function onRequestGet(context) {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "x-xss-protection": "1; mode=block",
+      "referrer-policy": "strict-origin-when-cross-origin"
     },
   });
 }
