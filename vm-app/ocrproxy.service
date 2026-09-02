@@ -18,7 +18,7 @@ Environment=MALLOC_ARENA_MAX=2
 # --limit-concurrency 150: uvicorn rejects connections beyond this with 503
 # BEFORE the request body is parsed — complements the in-app global semaphore
 # (30 in-flight upstream calls) and protects the heap from oversized bursts.
-ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1 --limit-concurrency 150 --timeout-keep-alive 30 --timeout-graceful-shutdown 10
+ExecStart=/opt/ocrproxy/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --workers 1 --limit-concurrency 150 --timeout-keep-alive 30 --timeout-graceful-shutdown 10 --no-server-header
 Restart=always
 RestartSec=5
 StandardOutput=journal
