@@ -659,6 +659,9 @@
         <label class="form-label">推荐官方适配模板 (自动填入参数与模型)</label>
         <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
           <option value="">-- 自定义配置 (手动输入) --</option>
+          <option value="minimax">MiniMax (官方开放平台 / M3 系列)</option>
+          <option value="bai">B.AI (双协议兼容中转)</option>
+          <option value="agnes">Agnes AI (爱格尼斯海外智能体)</option>
           <option value="google">Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)</option>
           <option value="sensenova">商汤日日新 (SenseNova GLM-5.2 / DeepSeek)</option>
           <option value="stepfun">阶跃星辰 (StepFun Step-3.7-Flash / Step-2)</option>
@@ -1133,9 +1136,12 @@ function renderProviders(){
   box.innerHTML=names.map(name=>{
     const prov=p[name]; const keys=Object.keys(prov.keys||{});
     const keyChips=keys.map(k=>`<span class="key-chip"><b>${esc(k)}</b><button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button><button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button></span>`).join('');
+    const isDual = (name.toLowerCase() === 'minimax' || name.toLowerCase() === 'bai' || Boolean(prov.anthropic_base_url));
+    const dualBadge = isDual ? `<span class="badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-size:11px;margin-left:6px;">OpenAI + Messages 双协议</span>` : '';
+    const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${esc(prov.anthropic_base_url)}` : '';
     return `<div class="provider-row">
       <div>
-        <div class="provider-name">${esc(name)} <span class="provider-url">${esc(prov.base_url)}</span></div>
+        <div class="provider-name">${esc(name)}${dualBadge} <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span></div>
         <div class="key-list">${keyChips||'<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
       </div>
       <div class="flex gap-2">
@@ -1289,6 +1295,40 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
 
 // ---- Provider Presets Database -------------------------------------------
 const PRESET_DEFINITIONS = {
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax (官方开放平台 / M3 系列)',
+    base_url: 'https://api.minimaxi.com/v1',
+    anthropic_base_url: 'https://api.minimax.cn/anthropic',
+    description: 'MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通。',
+    recommended_models: [
+      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态通用模型 (支持超长思考，Messages 原生兼容)', checked: true, kb_type: 'chat' }
+    ]
+  },
+  bai: {
+    id: 'bai',
+    name: 'B.AI (双协议兼容中转)',
+    base_url: 'https://api.b.ai/v1',
+    anthropic_base_url: 'https://api.b.ai/v1',
+    description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。',
+    recommended_models: [
+      { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true, kb_type: 'chat' },
+      { name: 'qwen3.8-flash', upstream: 'qwen3.8-flash', desc: '通义千问 3.8 Flash 高速推理模型', checked: true, kb_type: 'chat' },
+      { name: 'claude-3-5-sonnet', upstream: 'claude-3-5-sonnet', desc: 'Claude 3.5 Sonnet 编程模型', checked: false, kb_type: 'chat' },
+      { name: 'deepseek-v3', upstream: 'deepseek-v3', desc: 'DeepSeek V3 全能大模型', checked: false, kb_type: 'chat' }
+    ]
+  },
+  agnes: {
+    id: 'agnes',
+    name: 'Agnes AI (爱格尼斯海外智能体)',
+    base_url: 'https://apihub.agnes-ai.com/v1',
+    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
+    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)，支持 chat_template_kwargs 思考扩展。',
+    recommended_models: [
+      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true, kb_type: 'chat' },
+      { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false, kb_type: 'chat' }
+    ]
+  },
   google: {
     id: 'google',
     name: 'Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)',
@@ -1458,6 +1498,10 @@ function saveProvider(){
     state.config.providers[name].base_url = url;
   } else {
     state.config.providers[name] = { base_url: url, keys: {} };
+    const presetId = document.getElementById('p_preset').value;
+    if(presetId && PRESET_DEFINITIONS[presetId] && PRESET_DEFINITIONS[presetId].anthropic_base_url){
+      state.config.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
+    }
     // Process optional initial Key
     const initLabel = (document.getElementById('p_init_label').value || 'default').trim();
     const initVal = (document.getElementById('p_init_val').value || '').trim();

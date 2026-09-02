@@ -14,6 +14,40 @@ const TOKEN_KEY = 'ocrproxy_edge_token';
 
 // ---- Provider Presets Database -------------------------------------------
 const PRESET_DEFINITIONS = {
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax (官方开放平台 / M3 系列)',
+    base_url: 'https://api.minimaxi.com/v1',
+    anthropic_base_url: 'https://api.minimax.cn/anthropic',
+    description: 'MiniMax 官方国内订阅平台，支持 MiniMax-M3 系列，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通',
+    recommended_models: [
+      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态通用模型 (支持超长思考，兼容 Messages)', checked: true },
+    ]
+  },
+  bai: {
+    id: 'bai',
+    name: 'B.AI (双协议兼容中转)',
+    base_url: 'https://api.b.ai/v1',
+    anthropic_base_url: 'https://api.b.ai/v1',
+    description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道',
+    recommended_models: [
+      { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true },
+      { name: 'qwen3.8-flash', upstream: 'qwen3.8-flash', desc: '通义千问 3.8 Flash 高速推理模型', checked: true },
+      { name: 'claude-3-5-sonnet', upstream: 'claude-3-5-sonnet', desc: 'Claude 3.5 Sonnet 编程模型', checked: false },
+      { name: 'deepseek-v3', upstream: 'deepseek-v3', desc: 'DeepSeek V3 全能大模型', checked: false },
+    ]
+  },
+  agnes: {
+    id: 'agnes',
+    name: 'Agnes AI (爱格尼斯海外智能体)',
+    base_url: 'https://apihub.agnes-ai.com/v1',
+    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
+    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)',
+    recommended_models: [
+      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true },
+      { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false },
+    ]
+  },
   google: {
     id: 'google',
     name: 'Google AI Studio (Gemini)',
@@ -173,7 +207,6 @@ function switchTab(tabId) {
 
   if (tabId === 'raw') renderRawJson();
   if (tabId === 'access') renderAccess();
-  if (tabId === 'state') probeEgressIp();
 }
 
 // ---- Login Flow ----------------------------------------------------------
@@ -219,10 +252,9 @@ function doLogout() {
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
-    const [cfgRes, healthRes, stateRes] = await Promise.all([
+    const [cfgRes, healthRes] = await Promise.all([
       api('GET', '/api/config'),
       api('GET', '/health').catch(() => ({})),
-      api('GET', '/api/state').catch(() => ({ cooldowns: [] })),
     ]);
 
     cfg = cfgRes.config || cfgRes;
@@ -231,7 +263,6 @@ async function loadAllData() {
       lastModified: cfgRes.last_modified,
     };
     healthData = healthRes;
-    stateData = stateRes.cooldowns || [];
 
     renderAll();
   } catch (e) {
@@ -240,46 +271,78 @@ async function loadAllData() {
   }
 }
 
-// ---- Egress IP probe -----------------------------------------------------
-async function probeEgressIp() {
-  const clientEl = document.getElementById('ipClient');
-  const egressEl = document.getElementById('ipEgress');
-  const nodeEl = document.getElementById('ipNode');
-  const geoEl = document.getElementById('ipGeo');
-
-  if (clientEl) clientEl.textContent = '探测中...';
-  if (egressEl) egressEl.textContent = '探测中...';
-
-  try {
-    const data = await api('GET', '/check-ip');
-    ipData = data;
-    const clientIp = data.clientIp || data.client_ip || '—';
-    const egressIp = data.egressIp || data.egress_ip || '—';
-    const nodeUuid = data.nodeUuid || data.node_uuid || '—';
-    const geoText = (typeof data.geo === 'object' && data.geo)
-      ? `${data.geo.country || ''} ${data.geo.region || ''} ${data.geo.city || ''}`.trim()
-      : (data.geo || '边缘节点网络');
-
-    if (clientEl) clientEl.textContent = clientIp;
-    if (egressEl) egressEl.textContent = egressIp;
-    if (nodeEl) nodeEl.textContent = nodeUuid;
-    if (geoEl) geoEl.textContent = geoText || '边缘节点网络';
-    toast(`已刷新节点 IP: 出口 ${egressIp} (${geoText || '边缘'})`, 'ok');
-  } catch (e) {
-    if (clientEl) clientEl.textContent = '获取失败';
-    if (egressEl) egressEl.textContent = '获取失败';
-    toast(`探测 IP 异常: ${e?.message || e}`, 'err');
-  }
-}
-
 // ---- Rendering -----------------------------------------------------------
 function renderAll() {
   renderDashboard();
   renderAgentModels();
   renderProviders();
-  renderStateTable();
+  renderSettings();
   renderRawJson();
   renderAccess();
+}
+
+function renderSettings() {
+  const s = cfg.settings || {};
+  const elStrat = document.getElementById('set_routing_strategy');
+  if (elStrat) elStrat.value = s.agent_routing_strategy || cfg.agent_routing_strategy || 'sticky_failover';
+
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  if (elBudget) elBudget.value = s.request_total_budget_sec || 25;
+
+  const elUpstream = document.getElementById('set_upstream_timeout_sec');
+  if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 15;
+
+  const elRetries = document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = s.schedule_total_budget || 3;
+
+  const elProvMax = document.getElementById('set_max_attempts_per_provider');
+  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 2;
+
+  const elFastFail = document.getElementById('set_fast_failover_provider_down');
+  if (elFastFail) elFastFail.checked = s.fast_failover_provider_down !== false;
+
+  const elCd429 = document.getElementById('set_cooldown_429_sec');
+  if (elCd429) elCd429.value = s.cooldown_429_sec || 60;
+
+  const elCd5xx = document.getElementById('set_cooldown_5xx_sec');
+  if (elCd5xx) elCd5xx.value = s.cooldown_5xx_sec || 30;
+
+  const elCircuit = document.getElementById('set_circuit_break_threshold');
+  if (elCircuit) elCircuit.value = s.circuit_break_threshold || 3;
+
+  const elCd403 = document.getElementById('set_cooldown_403_sec');
+  if (elCd403) elCd403.value = s.cooldown_403_sec || 600;
+}
+
+async function saveSettings() {
+  cfg.settings = {
+    agent_routing_strategy: document.getElementById('set_routing_strategy').value,
+    request_total_budget_sec: Number(document.getElementById('set_request_total_budget_sec').value) || 25,
+    upstream_timeout_sec: Number(document.getElementById('set_upstream_timeout_sec').value) || 15,
+    schedule_total_budget: Number(document.getElementById('set_schedule_total_budget').value) || 3,
+    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
+    fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
+    cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
+    cooldown_5xx_sec: Number(document.getElementById('set_cooldown_5xx_sec').value) || 30,
+    circuit_break_threshold: Number(document.getElementById('set_circuit_break_threshold').value) || 3,
+    cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
+  };
+  await persistConfig();
+  toast('全局策略设置已保存生效', 'ok');
+}
+
+function resetSettingsToDefault() {
+  document.getElementById('set_routing_strategy').value = 'sticky_failover';
+  document.getElementById('set_request_total_budget_sec').value = 25;
+  document.getElementById('set_upstream_timeout_sec').value = 15;
+  document.getElementById('set_schedule_total_budget').value = 3;
+  document.getElementById('set_max_attempts_per_provider').value = 2;
+  document.getElementById('set_fast_failover_provider_down').checked = true;
+  document.getElementById('set_cooldown_429_sec').value = 60;
+  document.getElementById('set_cooldown_5xx_sec').value = 30;
+  document.getElementById('set_circuit_break_threshold').value = 3;
+  document.getElementById('set_cooldown_403_sec').value = 600;
+  toast('已填入推荐默认值，请点击保存生效', 'ok');
 }
 
 function renderDashboard() {
@@ -290,11 +353,8 @@ function renderDashboard() {
     totalKeys += Object.keys(p.keys || {}).length;
   }
 
-  const activeCooldowns = stateData.filter(s => s.expiresAt > Date.now());
-
   document.getElementById('statModelCount').textContent = models.length;
   document.getElementById('statTotalKeys').textContent = totalKeys;
-  document.getElementById('statCooldowns').textContent = activeCooldowns.length;
 
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
@@ -327,37 +387,6 @@ function renderDashboard() {
   }
 }
 
-function renderStateTable() {
-  const tbody = document.getElementById('stateTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (!stateData || stateData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-secondary" style="text-align:center;padding:24px;">无冷却记录</td></tr>';
-    return;
-  }
-
-  const now = Date.now();
-  for (const c of stateData) {
-    const isCooling = c.expiresAt > now;
-    const remainingSec = isCooling ? Math.round((c.expiresAt - now) / 1000) : 0;
-    const expStr = isCooling ? `${remainingSec}s 后恢复` : '已解冻';
-    const badgeHtml = isCooling
-      ? `<span class="badge badge-warning">冷却中 (${c.cooldownSec || remainingSec}s)</span>`
-      : `<span class="badge badge-success">正常就绪</span>`;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="font-weight:600;">${c.provider}</td>
-      <td class="mono">${c.keyLabel}</td>
-      <td>${badgeHtml}</td>
-      <td class="mono">${c.failCount || 0} 次</td>
-      <td class="mono">${expStr}</td>
-    `;
-    tbody.appendChild(tr);
-  }
-}
-
 function renderAgentModels() {
   const box = document.getElementById('agentModelsBox');
   if (!box) return;
@@ -376,7 +405,22 @@ function renderAgentModels() {
     card.className = 'card';
 
     let keysRowsHtml = '';
+    const activeKey = item.active_key || (keys[0] ? keys[0].key : '');
+    const strategy = cfg.agent_routing_strategy || 'sticky_failover';
+    
+    let strategyLabel = `${keys.length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
+    if(strategy === 'manual'){
+      strategyLabel = `${keys.length} 个 Key · 🔒 纯手动直通 (当前使用: ${activeKey})`;
+    } else if(strategy === 'round_robin'){
+      strategyLabel = `${keys.length} 个 Key · 轮询负载均衡`;
+    } else if(strategy === 'priority_fallback'){
+      strategyLabel = `${keys.length} 个 Key · 主备优先级降级`;
+    } else if(strategy === 'latency_based'){
+      strategyLabel = `${keys.length} 个 Key · 最低延迟优先`;
+    }
+
     keys.forEach((b, idx) => {
+      const isActive = (b.key === activeKey);
       const cacheKey = `model:${m}:${b.provider}:${b.key}`;
       const latInfo = modelLatencyCache[cacheKey];
       let latBadge = '';
@@ -386,6 +430,10 @@ function renderAgentModels() {
           : `<span class="badge badge-error">${latInfo.status || 'ERR'}</span>`;
       }
 
+      const setActiveBtn = isActive
+        ? `<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>`
+        : `<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="切换使用该 Key" style="font-size:11px;padding:2px 8px;">切</button>`;
+
       keysRowsHtml += `
         <div class="provider-row" style="padding:10px 16px;">
           <div style="display:flex;align-items:center;gap:10px;">
@@ -394,7 +442,8 @@ function renderAgentModels() {
             <span class="key-chip">${b.key}</span>
             ${latBadge}
           </div>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${setActiveBtn}
             <button class="btn btn-ghost btn-sm" onclick="testModelKey('${m}', '${b.provider}', '${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('${m}', ${idx})">移除</button>
           </div>
@@ -406,7 +455,7 @@ function renderAgentModels() {
       <div class="card-head">
         <div>
           <h3>${m}</h3>
-        <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${keys.length} 个 Key</div>
+        <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${strategyLabel}</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary btn-sm" onclick="openEditModelModal('${m}')">编辑</button>
@@ -467,11 +516,15 @@ function renderProviders() {
       `;
     });
 
+    const isDual = (p.toLowerCase() === 'minimax' || p.toLowerCase() === 'bai' || Boolean(prov.anthropic_base_url));
+    const dualBadge = isDual ? `<span class="badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-size:11px;margin-left:6px;">OpenAI + Messages 双协议</span>` : '';
+    const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${prov.anthropic_base_url}` : '';
+
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>${p}</h3>
-        <div class="meta mono mt-2">${prov.base_url || '—'} · ${keyLabels.length} 个 Key</div>
+          <h3>${p}${dualBadge}</h3>
+        <div class="meta mono mt-2">${prov.base_url || '—'}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${p}')">+ 新增 Key</button>
@@ -638,6 +691,11 @@ async function saveProviderModal() {
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].base_url = url;
+
+  const presetId = document.getElementById('m_prov_preset')?.value;
+  if (presetId && PRESET_DEFINITIONS[presetId]?.anthropic_base_url) {
+    cfg.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
+  }
 
   const keyLabel = document.getElementById('m_prov_key_label').value.trim() || 'default';
   const keyVal = document.getElementById('m_prov_key_val').value.trim();
@@ -936,17 +994,14 @@ async function deleteModel(name) {
   await persistConfig();
 }
 
-// ---- Clear Cooldowns -----------------------------------------------------
-async function clearAllCooldowns() {
-  if (!confirm('清空全部 Key 冷却与失败计数？')) return;
-  try {
-    await api('DELETE', '/api/state');
-    toast('冷却已清空', 'ok');
-    await loadAllData();
-  } catch (e) {
-    toast('操作失败: ' + (e?.message || e), 'err');
-  }
+async function setActiveAgentKey(modelName, keyLabel) {
+  if (!cfg.agent_models || !cfg.agent_models[modelName]) return;
+  cfg.agent_models[modelName].active_key = keyLabel;
+  renderAgentModels();
+  await persistConfig();
+  toast(`已将模型 ${modelName} 切换至 Key: [${keyLabel}]`, 'ok');
 }
+
 
 // ---- Config Export & Import (JSON / Blob) --------------------------------
 function exportConfigJson() {
