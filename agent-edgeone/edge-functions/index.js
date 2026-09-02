@@ -1139,6 +1139,9 @@ tr:hover td, .tbl tbody tr:hover td {
         <label class="form-label">预置模板</label>
         <select id="m_prov_preset" class="form-control" onchange="onPresetSelected()">
           <option value="">-- 自定义配置 (手动输入) --</option>
+          <option value="minimax">MiniMax (官方开放平台 / M3 系列)</option>
+          <option value="bai">B.AI (双协议兼容中转)</option>
+          <option value="agnes">Agnes AI (爱格尼斯海外智能体)</option>
           <option value="google">Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)</option>
           <option value="sensenova">商汤日日新 (SenseNova GLM-5.2 / DeepSeek)</option>
           <option value="stepfun">阶跃星辰 (StepFun Step-3.7-Flash / Step-2)</option>
@@ -1267,6 +1270,40 @@ const TOKEN_KEY = 'ocrproxy_edge_token';
 
 // ---- Provider Presets Database -------------------------------------------
 const PRESET_DEFINITIONS = {
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax (官方开放平台 / M3 系列)',
+    base_url: 'https://api.minimaxi.com/v1',
+    anthropic_base_url: 'https://api.minimax.cn/anthropic',
+    description: 'MiniMax 官方国内订阅平台，支持 MiniMax-M3 系列，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通',
+    recommended_models: [
+      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态通用模型 (支持超长思考，兼容 Messages)', checked: true },
+    ]
+  },
+  bai: {
+    id: 'bai',
+    name: 'B.AI (双协议兼容中转)',
+    base_url: 'https://api.b.ai/v1',
+    anthropic_base_url: 'https://api.b.ai/v1',
+    description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道',
+    recommended_models: [
+      { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true },
+      { name: 'qwen3.8-flash', upstream: 'qwen3.8-flash', desc: '通义千问 3.8 Flash 高速推理模型', checked: true },
+      { name: 'claude-3-5-sonnet', upstream: 'claude-3-5-sonnet', desc: 'Claude 3.5 Sonnet 编程模型', checked: false },
+      { name: 'deepseek-v3', upstream: 'deepseek-v3', desc: 'DeepSeek V3 全能大模型', checked: false },
+    ]
+  },
+  agnes: {
+    id: 'agnes',
+    name: 'Agnes AI (爱格尼斯海外智能体)',
+    base_url: 'https://apihub.agnes-ai.com/v1',
+    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
+    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)',
+    recommended_models: [
+      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true },
+      { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false },
+    ]
+  },
   google: {
     id: 'google',
     name: 'Google AI Studio (Gemini)',
@@ -1735,11 +1772,15 @@ function renderProviders() {
       \`;
     });
 
+    const isDual = (p.toLowerCase() === 'minimax' || p.toLowerCase() === 'bai' || Boolean(prov.anthropic_base_url));
+    const dualBadge = isDual ? \`<span class="badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-size:11px;margin-left:6px;">OpenAI + Messages 双协议</span>\` : '';
+    const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? \` · Messages: \${prov.anthropic_base_url}\` : '';
+
     card.innerHTML = \`
       <div class="card-head">
         <div>
-          <h3>\${p}</h3>
-        <div class="meta mono mt-2">\${prov.base_url || '—'} · \${keyLabels.length} 个 Key</div>
+          <h3>\${p}\${dualBadge}</h3>
+        <div class="meta mono mt-2">\${prov.base_url || '—'}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${p}')">+ 新增 Key</button>
@@ -1906,6 +1947,11 @@ async function saveProviderModal() {
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].base_url = url;
+
+  const presetId = document.getElementById('m_prov_preset')?.value;
+  if (presetId && PRESET_DEFINITIONS[presetId]?.anthropic_base_url) {
+    cfg.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
+  }
 
   const keyLabel = document.getElementById('m_prov_key_label').value.trim() || 'default';
   const keyVal = document.getElementById('m_prov_key_val').value.trim();
