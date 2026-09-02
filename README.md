@@ -21,7 +21,7 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
 │
 ├── shared/                            # 共享资源与规范文档
-│   ├── presets/                       # 8 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, DeepSeek, OpenAI)
+│   ├── presets/                       # 10 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, DeepSeek, OpenAI, MiniMax, B.AI)
 │   ├── admin/                         # 跨端共用的现代化 Web 管理后台前端 (HTML / CSS / JS)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
@@ -47,6 +47,7 @@ ocrprox (Monorepo)
 | **后台界面自适应** | 隐藏 KB 候选挂载区与 KB 4项入库超时，只展示 Agent 模型、供应商凭证、Agent 监控与接入指南 | 隐藏 Agent 模型区与 Agent 对话超时，只展示 4 大虚拟模型挂载、KB 入库超时与 Dify 接入指南 | **完整展示**（供应商凭证库 + Agent 模型 + KB 虚拟模型 + 全量参数与示例） |
 | **`/v1/models` 返回** | 仅返回 `agent_models` 中的真实模型列表 | 固定返回 4 个虚拟聚合模型 (`chat`, `embedding`, `reranker`, `ocr`) | 联合返回真实模型 + 4 个虚拟聚合模型 |
 | **`/v1/chat/completions`** | 原生透传 tools、reasoning、SSE 流式字节 | 强制禁用思考提速、非流式快速摘要提取 | 若 model 为 `chat` 走 KB 提速策略，若为真实模型走 Agent 原生透传 |
+| **`/v1/messages`** | **原生支持 Anthropic Messages 协议** (专为 MiniMax-M3, B.AI, Claude SDK 直通) | 知识库模式禁用 (返回 404) | 原生支持真实 Agent 模型直通转发 |
 | **配置数据存储** | **100% 结构通用无损**，任何模式下导入/导出或切换模式**绝不丢弃任何字段** |
 
 ---
@@ -92,6 +93,12 @@ ocrprox (Monorepo)
   - **Google AI Studio (Gemini)**：
     - **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`，Gemma 模型自动规避；
     - **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考 Token 耗尽导致的空响应与截断；
+  - **MiniMax (国内官方订阅 & Anthropic Messages 双通道)**：
+    - **双通道直通**：OpenAI 协议直通 `https://api.minimaxi.com/v1/chat/completions`，Messages 协议直通 `https://api.minimax.cn/anthropic/v1/messages`；
+    - **非标参数清洗**：自动剥离 Claude 3.7 专有的 `output_config` 等非标字段（防止 MiniMax 报 400 错误）；
+    - **大小写严格保护**：强制确保模型名称保留为官方要求的 `MiniMax-M3`；
+    - **Thinking 规范化**：自动规整 `budget_tokens` 并补全 `type: "enabled"`，无缝支持 Thinking 内容块输出；
+  - **B.AI (双协议兼容网关)**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通。
 - **特殊工具调用 (Tool Calling)**：
   - **`tool_choice` 规整**：TokenRhythm / SenseNova / DeepSeek 严禁对象形式，自动转为 `"auto"` 字符串；
   - **深度 Schema 清洗**：针对 Google Gemini 递归剔除 `$schema`、`additionalProperties`、`$defs`、`$ref`，并自动校验清理不在 `properties` 中的多余 `required` 声明；

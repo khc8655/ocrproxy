@@ -22,3 +22,21 @@ def join_upstream(base_url: str, path: str) -> str:
 
     # Default to injecting /v1/
     return f"{base}/v1/{clean_path}"
+
+
+def build_messages_upstream(base_url: str, anthropic_base_url: str = None, provider: str = None) -> str:
+    """Build upstream URL for Anthropic Messages API (/v1/messages).
+
+    Handles provider-specific conventions and explicit anthropic_base_url configs.
+    """
+    if anthropic_base_url:
+        return join_upstream(anthropic_base_url, "messages")
+
+    p = (provider or "").lower().strip()
+    if p == "minimax":
+        b = (base_url or "").lower()
+        if "minimax.io" in b:
+            return "https://api.minimax.io/anthropic/v1/messages"
+        return "https://api.minimax.cn/anthropic/v1/messages"
+
+    return join_upstream(base_url, "messages")

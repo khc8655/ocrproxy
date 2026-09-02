@@ -14,6 +14,7 @@ import {
   recordStickySuccess,
   resolveBinding,
   buildChatUrl,
+  buildMessagesUrl,
   buildModelsList,
   ConfigError,
   sanitizeJsonString,
@@ -256,6 +257,15 @@ test('buildChatUrl: intelligently formats /v1/chat/completions', () => {
   eq(buildChatUrl('https://api.siliconflow.cn/v1'), 'https://api.siliconflow.cn/v1/chat/completions');
   eq(buildChatUrl('https://api.stepfun.com/step_plan'), 'https://api.stepfun.com/step_plan/v1/chat/completions');
   eq(buildChatUrl('https://generativelanguage.googleapis.com/v1beta/openai'), 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+});
+
+// buildMessagesUrl
+test('buildMessagesUrl: intelligently formats /v1/messages', () => {
+  eq(buildMessagesUrl('https://api.b.ai/v1'), 'https://api.b.ai/v1/messages');
+  eq(buildMessagesUrl('https://api.b.ai/v1/'), 'https://api.b.ai/v1/messages');
+  eq(buildMessagesUrl('https://api.minimaxi.com/v1', null, 'minimax'), 'https://api.minimax.cn/anthropic/v1/messages');
+  eq(buildMessagesUrl('https://api.minimax.io/v1', null, 'minimax'), 'https://api.minimax.io/anthropic/v1/messages');
+  eq(buildMessagesUrl('https://api.minimaxi.com/v1', 'https://api.minimax.cn/anthropic', 'minimax'), 'https://api.minimax.cn/anthropic/v1/messages');
 });
 
 // buildModelsList
@@ -1031,6 +1041,27 @@ test('PRESETS: contains all 8 major providers', () => {
   truthy(ids.includes('deepseek'));
   truthy(ids.includes('openai'));
   truthy(ids.includes('agnes'));
+  truthy(ids.includes('minimax'));
+  truthy(ids.includes('bai'));
+});
+
+test('getPreset: finds minimax preset with MiniMax-M3 and domestic anthropic endpoint', () => {
+  const p = getPreset('minimax');
+  truthy(p);
+  eq(p.name, 'MiniMax');
+  eq(p.base_url, 'https://api.minimaxi.com/v1');
+  eq(p.anthropic_base_url, 'https://api.minimax.cn/anthropic');
+  const m = p.recommended_models.find(x => x.name === 'MiniMax-M3');
+  truthy(m);
+  eq(m.upstream_model, 'MiniMax-M3');
+});
+
+test('getPreset: finds bai preset with dual completions and messages support', () => {
+  const p = getPreset('bai');
+  truthy(p);
+  eq(p.name, 'B.AI');
+  eq(p.base_url, 'https://api.b.ai/v1');
+  eq(p.anthropic_base_url, 'https://api.b.ai/v1');
 });
 
 test('getPreset: finds google preset with recommended models', () => {

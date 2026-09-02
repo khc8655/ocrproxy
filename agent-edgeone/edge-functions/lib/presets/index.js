@@ -419,6 +419,83 @@ export const PRESETS = [
         "unsupported_params": []
       }
     }
+  },
+  {
+    "id": "minimax",
+    "name": "MiniMax",
+    "protocol": "openai",
+    "base_url": "https://api.minimaxi.com/v1",
+    "anthropic_base_url": "https://api.minimax.cn/anthropic",
+    "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
+    "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
+    "features": {
+      "native_thinking": true,
+      "multimodal": true,
+      "tools": true,
+      "anthropic_messages": true
+    },
+    "recommended_models": [
+      {
+        "name": "MiniMax-M3",
+        "upstream_model": "MiniMax-M3",
+        "description": "MiniMax-M3 多模态通用旗舰模型（支持超长思考与图片理解，原生兼容 Messages）"
+      }
+    ],
+    "adapter_rules": {
+      "reasoning": {
+        "strategy": "anthropic_thinking",
+        "supported_types": [
+          "enabled",
+          "disabled",
+          "adaptive"
+        ]
+      },
+      "sanitization": {
+        "strip_params": [
+          "output_config"
+        ]
+      },
+      "case_sensitive_models": true
+    }
+  },
+  {
+    "id": "bai",
+    "name": "B.AI",
+    "protocol": "openai",
+    "base_url": "https://api.b.ai/v1",
+    "anthropic_base_url": "https://api.b.ai/v1",
+    "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
+    "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "anthropic_messages": true
+    },
+    "recommended_models": [
+      {
+        "name": "claude-3-5-sonnet",
+        "upstream_model": "claude-3-5-sonnet",
+        "description": "Claude 3.5 Sonnet 模型（B.AI 兼容端点）"
+      },
+      {
+        "name": "deepseek-v3",
+        "upstream_model": "deepseek-v3",
+        "description": "DeepSeek V3 模型（B.AI 兼容端点）"
+      }
+    ],
+    "adapter_rules": {
+      "reasoning": {
+        "strategy": "openai_passthrough"
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "strip_json_schema": false,
+        "rescue_from_text": true
+      },
+      "sanitization": {
+        "unsupported_params": []
+      }
+    }
   }
 ];
 

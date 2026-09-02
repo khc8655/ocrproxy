@@ -445,6 +445,35 @@ export function buildChatUrl(baseUrl) {
 }
 
 /**
+ * Intelligently construct the Anthropic Messages endpoint (/v1/messages)
+ * from a provider's base_url or anthropic_base_url.
+ */
+export function buildMessagesUrl(baseUrl, anthropicBaseUrl, provider) {
+  if (anthropicBaseUrl) {
+    const cleaned = String(anthropicBaseUrl || '').replace(/\/+$/, '');
+    if (cleaned.endsWith('/messages')) return cleaned;
+    if (cleaned.endsWith('/v1') || cleaned.includes('/v1/')) return `${cleaned}/messages`;
+    return `${cleaned}/v1/messages`;
+  }
+  const p = String(provider || '').toLowerCase().trim();
+  if (p === 'minimax') {
+    const b = String(baseUrl || '').toLowerCase();
+    if (b.includes('minimax.io')) {
+      return 'https://api.minimax.io/anthropic/v1/messages';
+    }
+    return 'https://api.minimax.cn/anthropic/v1/messages';
+  }
+  const cleaned = String(baseUrl || '').replace(/\/+$/, '');
+  if (cleaned.endsWith('/messages')) {
+    return cleaned;
+  }
+  if (cleaned.endsWith('/v1') || cleaned.includes('/v1/')) {
+    return `${cleaned}/messages`;
+  }
+  return `${cleaned}/v1/messages`;
+}
+
+/**
  * Build the OpenAI-compatible /v1/models response body from agent_models.
  * Each model gets an `id` (the public name) and a stub `object` field.
  */

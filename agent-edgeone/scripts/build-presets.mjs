@@ -14,6 +14,8 @@ const presetIds = [
   'deepseek',
   'openai',
   'agnes',
+  'minimax',
+  'bai',
 ];
 
 const presets = presetIds.map((id) => {
