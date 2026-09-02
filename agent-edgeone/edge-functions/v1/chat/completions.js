@@ -39,11 +39,6 @@ import {
 } from '../../lib/config.js';
 import { normaliseForProvider } from '../../lib/normalize.js';
 import {
-  getCooldownsBatch,
-  setCooldown,
-  recordFailure,
-  recordSuccess,
-  classifyFailure,
   shouldFailover,
   bindingId,
 } from '../../lib/cooldowns.js';
@@ -56,8 +51,6 @@ export async function onRequestPost(context) {
   try {
     const { request, env } = context;
     const startMs = Date.now();
-    // Try common KV binding names (agent_kv, kv, KV, etc.) — see
-    // resolveKvBinding for the full list.
     const kvRes = resolveKvBinding(context);
     const kv = kvRes?.kv;
 
@@ -129,47 +122,19 @@ export async function onRequestPost(context) {
     );
   }
 
-  // ---- Read cooldowns, filter to available -------------------------------
-  const cooldownMap = await getCooldownsBatch(allBindings, kv);
-  const available = allBindings.filter((b) => {
-    const exp = cooldownMap.get(bindingId(b)) || 0;
-    return exp <= Date.now();
-  });
-  if (available.length === 0) {
-    return new Response(
-      JSON.stringify({
-        error: {
-          type: 'overloaded',
-          message: 'All candidate keys are in cooldown. Please retry shortly.',
-          code: 'all_keys_in_cooldown',
-        },
-      }),
-      {
-        status: 503,
-        headers: {
-          'content-type': 'application/json',
-          'retry-after': '30',
-          'x-edgeone-relay': 'v8-1',
-          'x-proxy-state': 'all_in_cooldown',
-        },
-      }
-    );
-  }
-
   // Check unique providers count among available bindings
-  const uniqueProviders = new Set(available.map((b) => b.provider));
+  const uniqueProviders = new Set(allBindings.map((b) => b.provider));
   const hasMultipleProviders = uniqueProviders.size > 1;
 
-  // ---- Failover loop -----------------------------------------------------
+  // ---- Stateless in-memory failover loop ----------------------------------
   const attemptLog = [];
   const tried = new Set();
   const providerAttempts = new Map(); // provider -> count
-  const downProviders = new Set();    // providers that suffered 5xx/timeout
-  let upstreamBody = JSON.parse(JSON.stringify(body));
+  const downProviders = new Set();    // providers that suffered 5xx/timeout in this request
   let lastStatus = 0;
   let lastErrorText = '';
 
-  const candidatePool = orderBindings(available, body.model, strategy);
+  const candidatePool = orderBindings(allBindings, body.model, strategy);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // 1. Deadline check
@@ -213,7 +178,6 @@ export async function onRequestPost(context) {
     try {
       resolved = resolveBinding(config, binding);
     } catch (e) {
-      await setCooldown(binding.provider, binding.keyLabel, 30, kv);
       attemptLog.push(`${binding.provider}/${binding.keyLabel}=config_drift`);
       continue;
     }
@@ -236,16 +200,8 @@ export async function onRequestPost(context) {
       perAttemptTimeoutMs
     );
 
-    let lastErrorText = '';
     if (result.kind === 'success') {
       recordStickySuccess(body.model, binding, allBindings);
-      if (typeof context?.waitUntil === 'function') {
-        context.waitUntil(recordSuccess(binding.provider, binding.keyLabel, kv));
-      } else {
-        await recordSuccess(binding.provider, binding.keyLabel, kv);
-      }
-
-      console.log(`[EdgeOne:Success] model=${body.model} routed_via=${binding.provider}/${binding.keyLabel} latency_ms=${Date.now() - startMs}`);
 
       // Attach debug headers
       const headers = result.response.headers;
@@ -260,26 +216,10 @@ export async function onRequestPost(context) {
 
     lastErrorText = result.errorText || '';
     lastStatus = result.status || 0;
-    console.warn(`[EdgeOne:Failover] model=${body.model} candidate=${binding.provider}/${binding.keyLabel} failed with status=${result.status} kind=${result.kind}`);
-
-    // Failure path: record + cooldown + retry
-    const cooldownSec = classifyFailure(result.status, result.kind);
-    if (cooldownSec > 0) {
-      if (typeof context?.waitUntil === 'function') {
-        context.waitUntil(setCooldown(binding.provider, binding.keyLabel, cooldownSec, kv));
-      } else {
-        await setCooldown(binding.provider, binding.keyLabel, cooldownSec, kv);
-      }
-    }
 
     // For 5xx / timeout / empty stream, mark provider as down if fast-failover is on
     if (result.kind === 'empty_stream' || result.kind === 'read_timeout' ||
         (result.status >= 500 && result.status < 600)) {
-      if (typeof context?.waitUntil === 'function') {
-        context.waitUntil(recordFailure(binding.provider, binding.keyLabel, kv));
-      } else {
-        await recordFailure(binding.provider, binding.keyLabel, kv);
-      }
       if (fastFailoverProvDown) {
         downProviders.add(binding.provider);
       }
@@ -301,6 +241,7 @@ export async function onRequestPost(context) {
         return result.response;
       }
     }
+  }
   }
 
   // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502, 504)

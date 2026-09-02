@@ -173,7 +173,6 @@ function switchTab(tabId) {
 
   if (tabId === 'raw') renderRawJson();
   if (tabId === 'access') renderAccess();
-  if (tabId === 'state') probeEgressIp();
 }
 
 // ---- Login Flow ----------------------------------------------------------
@@ -219,10 +218,9 @@ function doLogout() {
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
-    const [cfgRes, healthRes, stateRes] = await Promise.all([
+    const [cfgRes, healthRes] = await Promise.all([
       api('GET', '/api/config'),
       api('GET', '/health').catch(() => ({})),
-      api('GET', '/api/state').catch(() => ({ cooldowns: [] })),
     ]);
 
     cfg = cfgRes.config || cfgRes;
@@ -231,7 +229,6 @@ async function loadAllData() {
       lastModified: cfgRes.last_modified,
     };
     healthData = healthRes;
-    stateData = stateRes.cooldowns || [];
 
     renderAll();
   } catch (e) {
@@ -240,44 +237,11 @@ async function loadAllData() {
   }
 }
 
-// ---- Egress IP probe -----------------------------------------------------
-async function probeEgressIp() {
-  const clientEl = document.getElementById('ipClient');
-  const egressEl = document.getElementById('ipEgress');
-  const nodeEl = document.getElementById('ipNode');
-  const geoEl = document.getElementById('ipGeo');
-
-  if (clientEl) clientEl.textContent = '探测中...';
-  if (egressEl) egressEl.textContent = '探测中...';
-
-  try {
-    const data = await api('GET', '/check-ip');
-    ipData = data;
-    const clientIp = data.clientIp || data.client_ip || '—';
-    const egressIp = data.egressIp || data.egress_ip || '—';
-    const nodeUuid = data.nodeUuid || data.node_uuid || '—';
-    const geoText = (typeof data.geo === 'object' && data.geo)
-      ? `${data.geo.country || ''} ${data.geo.region || ''} ${data.geo.city || ''}`.trim()
-      : (data.geo || '边缘节点网络');
-
-    if (clientEl) clientEl.textContent = clientIp;
-    if (egressEl) egressEl.textContent = egressIp;
-    if (nodeEl) nodeEl.textContent = nodeUuid;
-    if (geoEl) geoEl.textContent = geoText || '边缘节点网络';
-    toast(`已刷新节点 IP: 出口 ${egressIp} (${geoText || '边缘'})`, 'ok');
-  } catch (e) {
-    if (clientEl) clientEl.textContent = '获取失败';
-    if (egressEl) egressEl.textContent = '获取失败';
-    toast(`探测 IP 异常: ${e?.message || e}`, 'err');
-  }
-}
-
 // ---- Rendering -----------------------------------------------------------
 function renderAll() {
   renderDashboard();
   renderAgentModels();
   renderProviders();
-  renderStateTable();
   renderSettings();
   renderRawJson();
   renderAccess();
@@ -355,11 +319,8 @@ function renderDashboard() {
     totalKeys += Object.keys(p.keys || {}).length;
   }
 
-  const activeCooldowns = stateData.filter(s => s.expiresAt > Date.now());
-
   document.getElementById('statModelCount').textContent = models.length;
   document.getElementById('statTotalKeys').textContent = totalKeys;
-  document.getElementById('statCooldowns').textContent = activeCooldowns.length;
 
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
@@ -391,34 +352,6 @@ function renderDashboard() {
     }
   }
 }
-
-function renderStateTable() {
-  const tbody = document.getElementById('stateTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (!stateData || stateData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-secondary" style="text-align:center;padding:24px;">无冷却记录</td></tr>';
-    return;
-  }
-
-  const now = Date.now();
-  for (const c of stateData) {
-    const isCooling = c.expiresAt > now;
-    const remainingSec = isCooling ? Math.round((c.expiresAt - now) / 1000) : 0;
-    const expStr = isCooling ? `${remainingSec}s 后恢复` : '已解冻';
-    const badgeHtml = isCooling
-      ? `<span class="badge badge-warning">冷却中 (${c.cooldownSec || remainingSec}s)</span>`
-      : `<span class="badge badge-success">正常就绪</span>`;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="font-weight:600;">${c.provider}</td>
-      <td class="mono">${c.keyLabel}</td>
-      <td>${badgeHtml}</td>
-      <td class="mono">${c.failCount || 0} 次</td>
-      <td class="mono">${expStr}</td>
-    `;
     tbody.appendChild(tr);
   }
 }
@@ -1029,17 +962,6 @@ async function setActiveAgentKey(modelName, keyLabel) {
   toast(`已将模型 ${modelName} 切换至 Key: [${keyLabel}]`, 'ok');
 }
 
-// ---- Clear Cooldowns -----------------------------------------------------
-async function clearAllCooldowns() {
-  if (!confirm('清空全部 Key 冷却与失败计数？')) return;
-  try {
-    await api('DELETE', '/api/state');
-    toast('冷却已清空', 'ok');
-    await loadAllData();
-  } catch (e) {
-    toast('操作失败: ' + (e?.message || e), 'err');
-  }
-}
 
 // ---- Config Export & Import (JSON / Blob) --------------------------------
 function exportConfigJson() {

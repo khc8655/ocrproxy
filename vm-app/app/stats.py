@@ -19,7 +19,6 @@ def _empty_metric_stats() -> dict:
         "403": 0,
         "4xx": 0,
         "5xx": 0,
-        "total_latency": 0.0,
         "count": 0,
         "fallback_count": 0,
     }
@@ -33,7 +32,6 @@ def _empty_agent_model_stats() -> dict:
         "403": 0,
         "4xx": 0,
         "5xx": 0,
-        "total_latency": 0.0,
         "fallback_count": 0,
         "last_error": None,
         "last_error_time": None,
@@ -49,7 +47,6 @@ def _get_empty_stats() -> dict:
             "403": 0,
             "4xx": 0,
             "5xx": 0,
-            "total_latency": 0.0,
             "fallback_count": 0,
             "models": {}
         },
@@ -114,7 +111,6 @@ def record_agent(
         # 1. Update Agent Global Total
         ag = _stats["agent"]
         ag["count"] += 1
-        ag["total_latency"] += lat
         if is_fallback:
             ag["fallback_count"] += 1
 
@@ -135,7 +131,6 @@ def record_agent(
 
         m_stats = ag["models"][model_name]
         m_stats["count"] += 1
-        m_stats["total_latency"] += lat
         if is_fallback:
             m_stats["fallback_count"] += 1
 
@@ -210,7 +205,6 @@ def record_kb(
 
         t_stats = _stats["kb"][kb_type]
         t_stats["count"] += 1
-        t_stats["total_latency"] += lat
         if is_fallback:
             t_stats["fallback_count"] += 1
 

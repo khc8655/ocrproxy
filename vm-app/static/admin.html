@@ -170,6 +170,7 @@
 
     /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    #agentStatsGrid { grid-template-columns: repeat(3, 1fr); }
     .stat { padding: 16px 20px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
     .stat-label { font-size: 12px; font-weight: 500; color: var(--text-tertiary); margin-bottom: 4px; }
     .stat-value { font-size: 22px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
@@ -1009,12 +1010,11 @@ function renderLogsTable(){
 // Dashboard
 function renderDashboard(){
   const st = state.stats || {};
-  const ag = st.agent || { count: 0, success: 0, total_latency: 0, fallback_count: 0, '429': 0, '5xx': 0, '403': 0, '4xx': 0, models: {} };
+  const ag = st.agent || { count: 0, success: 0, fallback_count: 0, '429': 0, '5xx': 0, '403': 0, '4xx': 0, models: {} };
   const kb = st.kb || { chat: st.chat||{}, embedding: st.embedding||{}, reranker: st.reranker||{}, ocr: st.ocr||{} };
 
-  // 1. Agent Stats Grid
+  // 1. Agent Stats Grid (3 Clean Cards)
   const agRate = ag.count ? ((ag.success / ag.count) * 100).toFixed(1) : '0.0';
-  const agAvg = ag.count ? ((ag.total_latency / ag.count) * 1000).toFixed(0) : '0';
   const agErrors = (ag['429'] || 0) + (ag['5xx'] || 0) + (ag['403'] || 0) + (ag['4xx'] || 0);
 
   const agGrid = document.getElementById('agentStatsGrid');
@@ -1031,11 +1031,6 @@ function renderDashboard(){
         <div class="stat-sub">429: <b>${ag['429'] || 0}</b> · 5xx: <b>${ag['5xx'] || 0}</b></div>
       </div>
       <div class="stat">
-        <div class="stat-label">平均响应延迟</div>
-        <div class="stat-value">${agAvg}<span style="font-size:14px;font-weight:500;color:var(--text-secondary);margin-left:2px;">ms</span></div>
-        <div class="stat-sub">端到端往返耗时</div>
-      </div>
-      <div class="stat">
         <div class="stat-label">Key 故障轮换 (Failovers)</div>
         <div class="stat-value" style="color:${ag.fallback_count ? '#f59e0b' : 'var(--text)'};">${ag.fallback_count || 0}</div>
         <div class="stat-sub">429 / 5xx 自动避让切换</div>
@@ -1050,8 +1045,7 @@ function renderDashboard(){
     const modelEntries = Object.keys(statModels).map(name => {
       const m = statModels[name];
       const rate = m.count ? ((m.success / m.count) * 100).toFixed(1) : '0.0';
-      const avg = m.count ? ((m.total_latency / m.count) * 1000).toFixed(0) : '0';
-      return { name, count: m.count || 0, success: m.success || 0, fallback: m.fallback_count || 0, rate, avg };
+      return { name, count: m.count || 0, success: m.success || 0, fallback: m.fallback_count || 0, rate };
     }).filter(m => m.count > 0);
 
     modelEntries.sort((a, b) => b.count - a.count);
@@ -1073,7 +1067,6 @@ function renderDashboard(){
             <span class="rank">#${idx + 1}</span>
             <span class="mono" style="font-weight:700;color:var(--text);">${esc(m.name)}</span>
             <span class="badge badge-primary">${m.count} 次 (${pct}%)</span>
-            <span class="latency">${m.avg}ms</span>
           </div>
         `;
       }).join('');
@@ -1094,18 +1087,18 @@ function renderDashboard(){
   const kbGrid = document.getElementById('kbStatsGrid');
   if(kbGrid) {
     kbGrid.innerHTML = KB_TYPES.map(t => {
-      const s = kb[t] || { count: 0, success: 0, total_latency: 0 };
+      const s = kb[t] || { count: 0, success: 0 };
       const rate = s.count ? ((s.success / s.count) * 100).toFixed(1) : '0.0';
-      const avg = s.count ? ((s.total_latency / s.count) * 1000).toFixed(0) : '0';
+      const errors = (s['429'] || 0) + (s['5xx'] || 0) + (s['403'] || 0) + (s['4xx'] || 0);
       return `<div class="stat">
         <div class="stat-label">${KB_LABELS[t]}</div>
         <div class="stat-value">${s.count || 0}</div>
-        <div class="stat-sub">成功率 <b>${rate}%</b> · 平均 <b>${avg}ms</b></div>
+        <div class="stat-sub">成功 <b>${s.success || 0}</b> · 异常 <b>${errors}</b> (成功率 <b>${rate}%</b>)</div>
       </div>`;
     }).join('');
   }
 
-  // 5. Render Filtered Logs Table
+  // 4. Render Filtered Logs Table
   renderLogsTable();
 }
 
