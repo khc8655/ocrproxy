@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy 控制台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
   <style>
     :root {
       /* KHC Admin Design System Tokens */
@@ -269,16 +270,16 @@
 
 <!-- Login -->
 <div id="loginOverlay" class="login-overlay">
-  <div class="login-box">
+  <form class="login-box" onsubmit="event.preventDefault(); login();">
     <h2>OCRProxy</h2>
     <p>OCRProxy 控制台</p>
     <div class="form-group">
-      <label class="form-label">管理员密码</label>
-      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD" onkeydown="if(event.key==='Enter')login()">
+      <label class="form-label" for="loginKey">管理员密码</label>
+      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD" autocomplete="current-password">
     </div>
-    <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="login()">进入控制台</button>
+    <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
     <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
-  </div>
+  </form>
 </div>
 
 <!-- App -->
@@ -494,17 +495,6 @@
               <input type="number" id="s_circuitCooldown" class="form-control" placeholder="默认 300">
               <span class="hint">触发深度熔断后该候选节点的休眠锁定时间（5分钟）</span>
             </div>
-          </div>
-
-          <div class="toggle-card mt-3">
-            <div class="toggle-card-info">
-              <h4>启用延迟感知智能路由 (Latency-Based Routing)</h4>
-              <p>根据历史真实响应延迟动态排序候选节点，优先选用响应速度最快的优质节点</p>
-            </div>
-            <label class="checkbox" style="font-weight:600;">
-              <input type="checkbox" id="s_latency">
-              <span>开启</span>
-            </label>
           </div>
         </div>
 
@@ -2136,7 +2126,7 @@ function saveSettings(){
   c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
   c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
   c.circuit_cooldown_sec = Number(document.getElementById('s_circuitCooldown').value) || 300;
-  c.latency_based_routing = !!document.getElementById('s_latency').checked;
+  delete c.latency_based_routing;
 
   // Maintenance: Auto Restart
   const autoRestartEl = document.getElementById('s_autoRestart');

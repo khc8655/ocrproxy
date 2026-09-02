@@ -314,10 +314,6 @@ async def schedule(
     else:
         strategy = config.get("kb_routing_strategy", "round_robin")
 
-    # Global latency override if explicitly turned on
-    if config.get("latency_based_routing", False):
-        strategy = "latency_based"
-
     # Candidate ordering based on strategy
     num_cands = len(candidates)
     ordered_items = list(enumerate(candidates))  # (orig_idx, cand)

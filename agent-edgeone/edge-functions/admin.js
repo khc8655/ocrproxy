@@ -12,6 +12,7 @@ function pageHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy EdgeOne 控制台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
   <style>
 /* ═══════════════════════════════════════════════════════════════
    KHC Web Design System — OCRProxy EdgeOne Admin Stylesheet
@@ -870,16 +871,16 @@ tr:hover td, .tbl tbody tr:hover td {
 
 <!-- Login Overlay -->
 <div id="loginOverlay" class="login-overlay">
-  <div class="login-box">
+  <form class="login-box" onsubmit="event.preventDefault(); doLogin();">
     <h2>OCRProxy</h2>
     <p>OCRProxy EdgeOne 控制台</p>
     <div class="form-group">
-      <label class="form-label">管理员凭证 (PROXY_API_KEY)</label>
-      <input type="password" id="loginKey" class="form-control" placeholder="请输入 PROXY_API_KEY" onkeydown="if(event.key==='Enter')doLogin()">
+      <label class="form-label" for="loginKey">管理员凭证 (PROXY_API_KEY)</label>
+      <input type="password" id="loginKey" class="form-control" placeholder="请输入 PROXY_API_KEY" autocomplete="current-password">
     </div>
-    <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="doLogin()">进入控制台</button>
-    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-sm);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
-  </div>
+    <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
+    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--color-danger-50);border:1px solid var(--color-danger-500);color:var(--color-danger-500);font-size:12px;text-align:center;"></div>
+  </form>
 </div>
 
 <!-- App -->
@@ -942,7 +943,7 @@ tr:hover td, .tbl tbody tr:hover td {
         </div>
         <div class="card table-wrap">
           <table>
-            <thead><tr><th>模型名称</th><th>候选 Key 数量</th><th>供应商</th><th>上游映射</th></tr></thead>
+            <thead><tr><th>模型名称</th><th>上游映射</th><th>候选 Key 数量</th><th>操作</th></tr></thead>
             <tbody id="quickModelsBody"></tbody>
           </table>
         </div>
@@ -1700,6 +1701,8 @@ function renderAgentModels() {
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             \${setActiveBtn}
+            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('\${m}', \${idx}, -1)" \${idx === 0 ? 'disabled' : ''} title="上移">↑</button>
+            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('\${m}', \${idx}, 1)" \${idx === keys.length - 1 ? 'disabled' : ''} title="下移">↓</button>
             <button class="btn btn-ghost btn-sm" onclick="testModelKey('\${m}', '\${b.provider}', '\${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('\${m}', \${idx})">移除</button>
           </div>
@@ -1714,6 +1717,7 @@ function renderAgentModels() {
         <div class="meta mono mt-2">上游映射: \${item.upstream_model || m} · \${strategyLabel}</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="testAllKeysForModel('\${m}')">探活全部</button>
           <button class="btn btn-primary btn-sm" onclick="openEditModelModal('\${m}')">编辑</button>
           <button class="btn btn-danger btn-sm" onclick="deleteModel('\${m}')">删除</button>
         </div>
@@ -2130,6 +2134,10 @@ function toggleProviderKeys(prov, forceCheck = false) {
   });
 }
 
+function openAddModelModal() {
+  openAddAgentModal();
+}
+
 function openAddAgentModal() {
   document.getElementById('agentModalTitle').textContent = '新增 Agent 模型';
   document.getElementById('m_model_old_name').value = '';
@@ -2242,6 +2250,27 @@ async function removeModelKeyBinding(modelName, index) {
     cfg.agent_models[modelName].keys.splice(index, 1);
     await persistConfig();
   }
+}
+
+async function moveModelKeyBinding(modelName, index, dir) {
+  if (!cfg.agent_models || !cfg.agent_models[modelName]) return;
+  const list = cfg.agent_models[modelName].keys || [];
+  const target = index + dir;
+  if (target < 0 || target >= list.length) return;
+  const [item] = list.splice(index, 1);
+  list.splice(target, 0, item);
+  cfg.agent_models[modelName].keys = list;
+  renderAgentModels();
+  await persistConfig();
+  toast('已调整 Key 优先级', 'ok');
+}
+
+async function testAllKeysForModel(modelName) {
+  const item = cfg.agent_models?.[modelName];
+  if (!item || !item.keys || !item.keys.length) return;
+  toast(\`正在并发探活 \${modelName} 的 \${item.keys.length} 个 Key...\`, 'info');
+  await Promise.all(item.keys.map(b => testModelKey(modelName, b.provider, b.key)));
+  toast(\`\${modelName} 探活完成\`, 'ok');
 }
 
 async function deleteModel(name) {
