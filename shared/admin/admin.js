@@ -352,9 +352,6 @@ function renderDashboard() {
     }
   }
 }
-    tbody.appendChild(tr);
-  }
-}
 
 function renderAgentModels() {
   const box = document.getElementById('agentModelsBox');

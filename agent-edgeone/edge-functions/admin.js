@@ -1605,9 +1605,6 @@ function renderDashboard() {
     }
   }
 }
-    tbody.appendChild(tr);
-  }
-}
 
 function renderAgentModels() {
   const box = document.getElementById('agentModelsBox');
@@ -2348,4 +2345,8 @@ export function onRequestGet(context) {
       "referrer-policy": "strict-origin-when-cross-origin"
     },
   });
+}
+
+export function onRequestHead(context) {
+  return onRequestGet(context);
 }
