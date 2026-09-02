@@ -1,0 +1,39 @@
+{
+  "id": "bai",
+  "name": "B.AI",
+  "protocol": "openai",
+  "base_url": "https://api.b.ai/v1",
+  "anthropic_base_url": "https://api.b.ai/v1",
+  "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
+  "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+  "features": {
+    "native_thinking": true,
+    "tools": true,
+    "anthropic_messages": true
+  },
+  "recommended_models": [
+    {
+      "name": "claude-3-5-sonnet",
+      "upstream_model": "claude-3-5-sonnet",
+      "description": "Claude 3.5 Sonnet 模型（B.AI 兼容端点）"
+    },
+    {
+      "name": "deepseek-v3",
+      "upstream_model": "deepseek-v3",
+      "description": "DeepSeek V3 模型（B.AI 兼容端点）"
+    }
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "openai_passthrough"
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": false,
+      "rescue_from_text": true
+    },
+    "sanitization": {
+      "unsupported_params": []
+    }
+  }
+}

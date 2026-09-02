@@ -46,7 +46,7 @@ from .scheduler import (
     _reclaim_memory,
 )
 from .auth import verify_proxy_auth
-from .upstream import join_upstream
+from .upstream import join_upstream, build_messages_upstream
 
 router = APIRouter(prefix="/v1")
 logger = logging.getLogger("proxy_routes")
@@ -226,6 +226,34 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
             ctk = out.setdefault("chat_template_kwargs", {})
             if "enable_thinking" not in ctk:
                 ctk["enable_thinking"] = effort not in ("none", "false")
+
+    # 6. MiniMax: preserve model case (MiniMax-M3) and strip non-standard fields
+    if p == "minimax":
+        m = str(out.get("model", ""))
+        if m.lower() == "minimax-m3":
+            out["model"] = "MiniMax-M3"
+        out.pop("output_config", None)
+
+
+def _normalise_messages_for_provider(out: dict, provider: str) -> None:
+    """Normalise Anthropic Messages request body fields before forwarding to upstream."""
+    p = str(provider or "").lower()
+
+    if p == "minimax":
+        # 1. Model casing: MiniMax is strictly case-sensitive, must be "MiniMax-M3"
+        m = str(out.get("model", ""))
+        if m.lower() == "minimax-m3":
+            out["model"] = "MiniMax-M3"
+
+        # 2. Strip Claude-specific non-standard fields like output_config (causes 400 on MiniMax)
+        out.pop("output_config", None)
+
+        # 3. Thinking parameter normalization
+        thinking = out.get("thinking")
+        if isinstance(thinking, dict):
+            # If client passed budget_tokens without type, default to "enabled"
+            if "budget_tokens" in thinking and "type" not in thinking:
+                thinking["type"] = "enabled"
 
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
@@ -643,6 +671,170 @@ async def chat_completions(request: Request):
     try:
         sr = await schedule(
             req_config, "chat", build_request,
+            category=req_category,
+            request_model=req_model_name,
+        )
+        resp = JSONResponse(content=sr.data)
+        resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+        resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        return resp
+    except AllCandidatesFailedError as e:
+        return _error_response(e)
+    except GlobalOverloadError as e:
+        return _overloaded_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+# ── Anthropic Messages ──────────────────────────────────────────────
+
+def _anthropic_error(status_code: int, err_type: str, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "type": "error",
+            "error": {
+                "type": err_type,
+                "message": message,
+            }
+        }
+    )
+
+
+@router.post("/messages")
+async def anthropic_messages(request: Request):
+    config = await get_config()
+    if not verify_proxy_auth(request, config):
+        return _anthropic_error(401, "authentication_error", "Invalid or missing proxy API key")
+
+    body, err = await _parse_json_body(request)
+    if err:
+        return err
+
+    model_name = body.get("model", "")
+    if not model_name or not isinstance(model_name, str):
+        return _anthropic_error(400, "invalid_request_error", "Field 'model' is required.")
+
+    run_mode = _get_active_run_mode(config)
+    if run_mode == "kb":
+        return _anthropic_error(
+            404, "not_found_error",
+            f"Endpoint /v1/messages is not available in KB mode. Model '{model_name}' must be called via /v1/chat/completions with model='chat'."
+        )
+
+    is_stream = body.get("stream", False)
+    req_category = "agent"
+    req_model_name = model_name
+
+    agent_models = config.get("agent_models") or {}
+    entry = None
+    if isinstance(agent_models, dict):
+        entry = agent_models.get(model_name)
+        if not entry:
+            # Case-insensitive fallback lookup (e.g. minimax-m3 vs MiniMax-M3)
+            for k, v in agent_models.items():
+                if k.lower() == model_name.lower():
+                    entry = v
+                    break
+
+    if not entry:
+        return _anthropic_error(404, "not_found_error", f"The model '{model_name}' does not exist or is not configured.")
+
+    default_upstream = entry.get("upstream_model") or model_name
+    strategy = config.get("agent_routing_strategy", "sticky_failover")
+    active_key = entry.get("active_key")
+
+    candidates_list = []
+    for b in entry.get("keys", []):
+        if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
+            continue
+        candidates_list.append({
+            "provider": b["provider"],
+            "key": b["key"],
+            "model": b.get("upstream_model") or default_upstream,
+        })
+
+    if strategy == "manual":
+        if active_key:
+            matched = [c for c in candidates_list if c["key"] == active_key]
+            candidates_list = matched if matched else candidates_list[:1]
+        else:
+            candidates_list = candidates_list[:1]
+
+    if not candidates_list:
+        return _anthropic_error(404, "not_found_error", f"No valid keys configured for model '{model_name}'.")
+
+    try:
+        chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+    except (ValueError, TypeError):
+        chat_timeout = 120.0
+
+    req_config = {
+        **config,
+        "upstream_timeout": chat_timeout,
+        "schedule_total_budget": _scale_budget(config, chat_timeout, len(candidates_list)),
+        "candidates": {"messages": candidates_list},
+    }
+
+    anthropic_version = request.headers.get("anthropic-version") or "2023-06-01"
+
+    def build_request(cand, api_key, upstream_base_url):
+        out = dict(body)
+        out["model"] = cand["model"]
+        provider = cand.get("provider", "")
+
+        _normalise_messages_for_provider(out, provider)
+
+        prov_cfg = (config.get("providers") or {}).get(provider, {})
+        anthropic_base = prov_cfg.get("anthropic_base_url")
+
+        url = build_messages_upstream(upstream_base_url, anthropic_base_url=anthropic_base, provider=provider)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "x-api-key": api_key,
+            "anthropic-version": anthropic_version,
+            "Content-Type": "application/json",
+        }
+        return "POST", url, headers, out
+
+    if is_stream:
+        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
+            async def event_generator():
+                try:
+                    if first_chunk:
+                        yield first_chunk
+                    if remainder is not None:
+                        async for chunk in remainder:
+                            yield chunk
+                finally:
+                    await resp.aclose()
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream",
+                headers={"X-Accel-Buffering": "no"},
+            )
+
+        try:
+            sr = await schedule(
+                req_config, "messages", build_request,
+                handle_stream=handle_stream,
+                is_stream=True,
+                category=req_category,
+                request_model=req_model_name,
+            )
+            sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+            sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+            return sr.stream_resp
+        except AllCandidatesFailedError as e:
+            return _error_response(e)
+        except GlobalOverloadError as e:
+            return _overloaded_response(e)
+        except Exception as e:
+            return _error_response(e)
+
+    try:
+        sr = await schedule(
+            req_config, "messages", build_request,
             category=req_category,
             request_model=req_model_name,
         )
