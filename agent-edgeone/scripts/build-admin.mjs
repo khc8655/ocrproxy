@@ -82,6 +82,9 @@ const functionCode =
   '      "referrer-policy": "strict-origin-when-cross-origin"\n' +
   '    },\n' +
   '  });\n' +
+  '}\n\n' +
+  'export function onRequestHead(context) {\n' +
+  '  return onRequestGet(context);\n' +
   '}\n';
 
 const rootProject = join(root, '..');
