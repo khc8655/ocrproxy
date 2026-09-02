@@ -9,7 +9,7 @@ export const PRESETS = [
     "name": "Google AI Studio (Gemini)",
     "protocol": "google_openai",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-    "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix 与 Schema 裁剪",
+    "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -41,6 +41,7 @@ export const PRESETS = [
       "reasoning": {
         "strategy": "gemini_thinking_matrix",
         "none_action": "include_thoughts_false",
+        "headroom_elevation": true,
         "model_matrix": {
           "flash": [
             "minimal",
@@ -57,6 +58,7 @@ export const PRESETS = [
       "tools": {
         "normalize_choice_to_string": false,
         "strip_json_schema": true,
+        "deep_schema_sanitization": true,
         "rescue_from_text": true
       },
       "user_tracking": {

@@ -89,10 +89,12 @@ ocrprox (Monorepo)
   - **SenseNova (商汤)**：原生支持标准 `reasoning_effort` (`none/low/medium/high`)，支持 `sensenova-6.8-flash-lite`, `deepseek-v4-flash`, `glm-5.2`；
   - **StepFun (阶跃)**：`none` 自动映射为 `low` 降级（防止上游 400），自动注入 `reasoning_format: "deepseek-style"` 以在 SSE 流中返回 `reasoning_content`；
   - **Agnes AI**：OpenAI 协议下自动映射为 `chat_template_kwargs: {"enable_thinking": true/false}`；
-  - **Google AI Studio (Gemini)**：动态 Thinking Matrix，Flash 支持 `medium`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`。
+  - **Google AI Studio (Gemini)**：
+    - **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`，Gemma 模型自动规避；
+    - **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考 Token 耗尽导致的空响应与截断；
 - **特殊工具调用 (Tool Calling)**：
   - **`tool_choice` 规整**：TokenRhythm / SenseNova / DeepSeek 严禁对象形式，自动转为 `"auto"` 字符串；
-  - **Schema 清洗**：针对 Google Gemini 递归剔除禁止出现的 `$schema` 关键字；
+  - **深度 Schema 清洗**：针对 Google Gemini 递归剔除 `$schema`、`additionalProperties`、`$defs`、`$ref`，并自动校验清理不在 `properties` 中的多余 `required` 声明；
   - **文本 Tool Call 拯救**：自动捕获模型在文本中输出的代码块与 XML 标签并提取为标准 OpenAI `tool_calls`。
 - **智能 URL 端点补齐**：自动感知供应商是否包含 `/v1` 后缀并智能规整拼接。
 

@@ -93,17 +93,38 @@ _GOOGLE_PROVIDERS = {"google", "gemini", "aistudio", "google-ai"}
 
 
 def _sanitize_gemini_schema(schema):
-    """Recursively strip $schema and non-standard fields that Gemini rejects."""
+    """Recursively strip $schema, additionalProperties, $defs, $ref and validate required properties."""
     if not isinstance(schema, dict):
+        if isinstance(schema, list):
+            return [_sanitize_gemini_schema(x) for x in schema]
         return schema
     clean = copy.deepcopy(schema)
     clean.pop("$schema", None)
+    clean.pop("additionalProperties", None)
+    clean.pop("$defs", None)
+    clean.pop("$ref", None)
+
+    # Sanitize properties recursively
     if "properties" in clean and isinstance(clean["properties"], dict):
         clean["properties"] = {
             k: _sanitize_gemini_schema(v) for k, v in clean["properties"].items()
         }
-    if "items" in clean and isinstance(clean["items"], dict):
+        # Verify required array: only retain properties that actually exist
+        if "required" in clean and isinstance(clean["required"], list):
+            clean["required"] = [r for r in clean["required"] if r in clean["properties"]]
+            if not clean["required"]:
+                clean.pop("required", None)
+    elif "required" in clean and not ("properties" in clean and clean["properties"]):
+        # Discard standalone required if no properties exist (avoids Gemini 400 'property is not defined')
+        clean.pop("required", None)
+
+    if "items" in clean:
         clean["items"] = _sanitize_gemini_schema(clean["items"])
+
+    for union_key in ("anyOf", "allOf", "oneOf"):
+        if union_key in clean and isinstance(clean[union_key], list):
+            clean[union_key] = [_sanitize_gemini_schema(x) for x in clean[union_key]]
+
     return clean
 
 
@@ -135,31 +156,51 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
             out["reasoning_format"] = "deepseek-style"
 
     # 4. Google AI Studio / Gemini Adaptation (Gemini 2.5 / 3 / 3.5+)
-    is_google = p in _GOOGLE_PROVIDERS or str(out.get("model", "")).lower().startswith("gemini")
+    model_name = str(out.get("model", "")).lower()
+    is_google = p in _GOOGLE_PROVIDERS or model_name.startswith("gemini")
     if is_google:
-        # Map reasoning_effort to extra_body.google.thinking_config
-        re = out.pop("reasoning_effort", None)
-        if re is not None:
-            effort = str(re).lower()
-            extra = out.setdefault("extra_body", {}).setdefault("google", {})
-            model_name = str(out.get("model", "")).lower()
-            is_gemini_25 = model_name.startswith("gemini-2.5-")
-            is_pro = "pro" in model_name
+        is_gemma = model_name.startswith("gemma")
+        thinking_enabled = False
 
-            if effort in ("none", "false"):
-                extra["thinking_config"] = {"include_thoughts": False}
-            elif is_gemini_25:
-                extra["thinking_config"] = {"include_thoughts": True}
+        # Only inject thinking_config for Gemini models (Gemma does not support thinking_config)
+        if not is_gemma:
+            re = out.pop("reasoning_effort", None)
+            if re is not None:
+                effort = str(re).lower()
+                extra = out.setdefault("extra_body", {}).setdefault("google", {})
+                is_gemini_25 = model_name.startswith("gemini-2.5-")
+                is_pro = "pro" in model_name
+
+                if effort in ("none", "false"):
+                    extra["thinking_config"] = {"include_thoughts": False}
+                elif is_gemini_25:
+                    extra["thinking_config"] = {"include_thoughts": True}
+                    thinking_enabled = True
+                else:
+                    thinking_level = "low"
+                    if effort in ("high", "xhigh", "max"):
+                        thinking_level = "high"
+                    elif effort == "medium" and not is_pro:
+                        thinking_level = "medium"
+                    extra["thinking_config"] = {
+                        "include_thoughts": True,
+                        "thinking_level": thinking_level,
+                    }
+                    thinking_enabled = True
             else:
-                thinking_level = "low"
-                if effort in ("high", "xhigh", "max"):
-                    thinking_level = "high"
-                elif effort == "medium" and not is_pro:
-                    thinking_level = "medium"
-                extra["thinking_config"] = {
-                    "include_thoughts": True,
-                    "thinking_level": thinking_level,
-                }
+                # Check if client explicitly sent extra_body.google.thinking_config
+                cfg = out.get("extra_body", {}).get("google", {}).get("thinking_config", {})
+                if cfg.get("include_thoughts") is not False and cfg.get("thinking_level"):
+                    thinking_enabled = True
+
+        # Max output tokens headroom elevation:
+        # Gemini counts thinking tokens against maxOutputTokens. If thinking is active
+        # and client passed a low max_tokens cap, elevate headroom to avoid truncated/empty output.
+        if thinking_enabled:
+            if "max_tokens" in out and isinstance(out["max_tokens"], int) and out["max_tokens"] < 16384:
+                out["max_tokens"] = 65535
+            if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
+                out["max_completion_tokens"] = 65535
 
         # Sanitize tool schemas
         tools = out.get("tools")
