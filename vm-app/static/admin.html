@@ -408,7 +408,15 @@
       </div>
       <div class="section" id="acc-section-kb">
         <div class="section-title mb-2">知识库工具接口调用示例</div>
-        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</    <!-- Panel 4: System Settings -->
+        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</div>
+        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbChat')">复制</button><pre id="accKbChat"></pre></div>
+        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbEmb')">复制</button><pre id="accKbEmb"></pre></div>
+        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbRank')">复制</button><pre id="accKbRank"></pre></div>
+        <div class="code-block"><button class="copy-btn" onclick="copy('accKbOcr')">复制</button><pre id="accKbOcr"></pre></div>
+      </div>
+    </div>
+
+    <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
@@ -2323,9 +2331,11 @@ function updateAccess(){
   const base=window.location.origin+'/v1';
   const models=Object.keys(state.config.agent_models||{});
   const demo=models[0]||'deepseek-v4-flash';
-  document.getElementById('accBase').textContent=base;
-  document.getElementById('accModels').textContent=models.length?models.join('、'):'（未配置）';
-  document.getElementById('accPy').textContent=`from openai import OpenAI
+  const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+  setText('accBase', base);
+  setText('accModels', models.length ? models.join('、') : '（未配置）');
+  setText('accPy', `from openai import OpenAI
 
 client = OpenAI(
     api_key="your_proxy_api_key",
@@ -2341,31 +2351,31 @@ response = client.chat.completions.create(
 
 for chunk in response:
     content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)`;
+    print(content, end="", flush=True)`);
 
-  document.getElementById('accKbChat').textContent=`# 1. 知识库对话与摘要 (固定别名 model="chat")
+  setText('accKbChat', `# 1. 知识库对话与摘要 (固定别名 model="chat")
 curl -X POST "${base}/chat/completions" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"chat","messages":[{"role":"user","content":"请总结以下文档核心观点"}]}'`;
+  -d '{"model":"chat","messages":[{"role":"user","content":"请总结以下文档核心观点"}]}'`);
 
-  document.getElementById('accKbEmb').textContent=`# 2. 向量化计算 (固定别名 model="embedding")
+  setText('accKbEmb', `# 2. 向量化计算 (固定别名 model="embedding")
 curl -X POST "${base}/embeddings" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"embedding","input":["这是待向量化的第一段文本","第二段文本"]}'`;
+  -d '{"model":"embedding","input":["这是待向量化的第一段文本","第二段文本"]}'`);
 
-  document.getElementById('accKbRank').textContent=`# 3. 结果精排 (固定别名 model="reranker")
+  setText('accKbRank', `# 3. 结果精排 (固定别名 model="reranker")
 curl -X POST "${base}/rerank" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"reranker","query":"如何配置中转服务？","documents":["文档A描述配置方法...","文档B描述退款政策..."]}'`;
+  -d '{"model":"reranker","query":"如何配置中转服务？","documents":["文档A描述配置方法...","文档B描述退款政策..."]}'`);
 
-  document.getElementById('accKbOcr').textContent=`# 4. 图文识别与文档理解 (固定别名 model="ocr")
+  setText('accKbOcr', `# 4. 图文识别与文档理解 (固定别名 model="ocr")
 curl -X POST "${base}/ocr" \\
   -H "Authorization: Bearer your_proxy_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"ocr","image_base64":"<Base64图片数据>","prompt":"请识别图片中的所有文字与表格内容"}'`;
+  -d '{"model":"ocr","image_base64":"<Base64图片数据>","prompt":"请识别图片中的所有文字与表格内容"}'`);
 }
 
 // Backup & Import
