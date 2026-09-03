@@ -21,12 +21,9 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
 │
 ├── shared/                            # 共享资源与规范文档
-│   ├── presets/                       # 10 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, DeepSeek, OpenAI, MiniMax, B.AI)
+│   ├── presets/                       # 8 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, MiniMax, B.AI)
 │   ├── admin/                         # 跨端共用的现代化 Web 管理后台前端 (HTML / CSS / JS)
 │   └── docs/config-schema.md          # 统一配置规范文档
-│
-├── scripts/                           # 运维与发布工具
-│   └── sync-to-freellm.sh             # 一键同步 agent-edgeone 到部署源仓库
 │
 ├── index.html                         # 个人博客首页 (腾讯云 VM 80 端口托管)
 └── design-system/                     # UI 设计系统 Tokens 与组件库

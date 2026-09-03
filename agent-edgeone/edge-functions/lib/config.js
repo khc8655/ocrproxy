@@ -34,9 +34,9 @@ let _cache = { value: null, expires: 0 };
 /** Candidate KV binding names.  Exported so the error helpers can list
  *  them and so /api/debug can show what was tried. */
 export const KV_BINDING_CANDIDATES = [
-  'agent_kv', 'my_kv', 'freellm', 'kv', 'KV',
+  'agent_kv', 'my_kv', 'ocrproxy_kv', 'kv', 'KV',
   'KV_NAMESPACE', 'NAMESPACE', 'storage', 'STORE',
-  'agentKV', 'MY_KV', 'FREELLM',
+  'agentKV', 'MY_KV',
 ];
 
 export const DEFAULT_SETTINGS = {
