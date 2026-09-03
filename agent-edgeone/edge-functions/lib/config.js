@@ -461,7 +461,7 @@ export function buildMessagesUrl(baseUrl, anthropicBaseUrl, provider) {
     if (b.includes('minimax.io')) {
       return 'https://api.minimax.io/anthropic/v1/messages';
     }
-    return 'https://api.minimax.cn/anthropic/v1/messages';
+    return 'https://api.minimaxi.com/anthropic/v1/messages';
   }
   const cleaned = String(baseUrl || '').replace(/\/+$/, '');
   if (cleaned.endsWith('/messages')) {

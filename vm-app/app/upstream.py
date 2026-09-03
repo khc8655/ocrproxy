@@ -37,6 +37,6 @@ def build_messages_upstream(base_url: str, anthropic_base_url: str = None, provi
         b = (base_url or "").lower()
         if "minimax.io" in b:
             return "https://api.minimax.io/anthropic/v1/messages"
-        return "https://api.minimax.cn/anthropic/v1/messages"
+        return "https://api.minimaxi.com/anthropic/v1/messages"
 
     return join_upstream(base_url, "messages")

@@ -164,13 +164,12 @@ export function normaliseForProvider(body, provider, configOverride = null) {
           body.reasoning_split = true;
           body.thinking = { type: 'adaptive' };
         }
-      } else if (body.chat_template_kwargs?.enable_thinking === true || body.extra_body?.enable_thinking === true) {
-        body.reasoning_split = true;
-        body.thinking = { type: 'adaptive' };
       } else {
-        // Client did not request reasoning: explicitly disable thinking to avoid <think> in content
-        body.thinking = { type: 'disabled' };
-        delete body.reasoning_split;
+        // Default for MiniMax-M3 in OpenAI mode: enable reasoning_split so Hermes and standard OpenAI clients receive reasoning_content cleanly
+        body.reasoning_split = true;
+        if (!body.thinking) {
+          body.thinking = { type: 'adaptive' };
+        }
       }
     } else if (reasoningRules.inject_params) {
       for (const [ik, iv] of Object.entries(reasoningRules.inject_params)) {

@@ -263,9 +263,9 @@ test('buildChatUrl: intelligently formats /v1/chat/completions', () => {
 test('buildMessagesUrl: intelligently formats /v1/messages', () => {
   eq(buildMessagesUrl('https://api.b.ai/v1'), 'https://api.b.ai/v1/messages');
   eq(buildMessagesUrl('https://api.b.ai/v1/'), 'https://api.b.ai/v1/messages');
-  eq(buildMessagesUrl('https://api.minimaxi.com/v1', null, 'minimax'), 'https://api.minimax.cn/anthropic/v1/messages');
+  eq(buildMessagesUrl('https://api.minimaxi.com/v1', null, 'minimax'), 'https://api.minimaxi.com/anthropic/v1/messages');
   eq(buildMessagesUrl('https://api.minimax.io/v1', null, 'minimax'), 'https://api.minimax.io/anthropic/v1/messages');
-  eq(buildMessagesUrl('https://api.minimaxi.com/v1', 'https://api.minimax.cn/anthropic', 'minimax'), 'https://api.minimax.cn/anthropic/v1/messages');
+  eq(buildMessagesUrl('https://api.minimaxi.com/v1', 'https://api.minimaxi.com/anthropic', 'minimax'), 'https://api.minimaxi.com/anthropic/v1/messages');
 });
 
 // buildModelsList
@@ -479,12 +479,12 @@ test('normalize: minimax with reasoning_effort "medium" enables reasoning_split 
   eq(body.reasoning_effort, undefined);
 });
 
-test('normalize: minimax without reasoning params disables thinking and omits reasoning_split', () => {
+test('normalize: minimax standard chat defaults to reasoning_split=true for clean agent reasoning_content', () => {
   const body = { model: 'MiniMax-M3', messages: [{ role: 'user', content: 'hello' }] };
   normaliseForProvider(body, 'minimax');
   eq(body.model, 'MiniMax-M3');
-  deepEq(body.thinking, { type: 'disabled' });
-  eq(body.reasoning_split, undefined);
+  eq(body.reasoning_split, true);
+  deepEq(body.thinking, { type: 'adaptive' });
 });
 
 test('normalize: minimax with reasoning_effort "none" explicitly disables thinking', () => {

@@ -235,20 +235,17 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
         out.pop("output_config", None)
 
         re = out.pop("reasoning_effort", None)
-        wants_thinking = False
-        if re is not None:
-            wants_thinking = str(re).lower() not in ("none", "false")
-        elif "thinking" in out and isinstance(out["thinking"], dict):
-            wants_thinking = str(out["thinking"].get("type", "")).lower() != "disabled"
-        elif out.get("chat_template_kwargs", {}).get("enable_thinking") is True or out.get("extra_body", {}).get("enable_thinking") is True:
-            wants_thinking = True
-
-        if wants_thinking:
-            out["reasoning_split"] = True
-            out["thinking"] = {"type": "adaptive"}
-        else:
+        if re is not None and str(re).lower() in ("none", "false"):
             out["thinking"] = {"type": "disabled"}
             out.pop("reasoning_split", None)
+        elif "thinking" in out and isinstance(out["thinking"], dict) and str(out["thinking"].get("type", "")).lower() == "disabled":
+            out["thinking"] = {"type": "disabled"}
+            out.pop("reasoning_split", None)
+        else:
+            # Default for MiniMax-M3 in OpenAI mode: enable reasoning_split so Hermes and standard OpenAI clients receive reasoning_content cleanly
+            out["reasoning_split"] = True
+            if "thinking" not in out:
+                out["thinking"] = {"type": "adaptive"}
 
 
 def _normalise_messages_for_provider(out: dict, provider: str) -> None:
