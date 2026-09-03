@@ -698,6 +698,30 @@
         <label class="form-label">Base URL 接口基础地址</label>
         <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">
       </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_chat" checked>
+            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
+            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_messages" onchange="onProviderProtoMessagesChange()">
+            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
+            <span class="text-secondary text-sm">(/v1/messages)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_responses">
+            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
+            <span class="text-secondary text-sm">(/v1/responses)</span>
+          </label>
+        </div>
+        <div id="p_anthropic_url_wrap" style="display:none;margin-top:10px;">
+          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL (可选，若与基础地址不同则填写)</label>
+          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
+        </div>
+      </div>
       <div id="p_init_key_wrap" class="form-group" style="margin-top:14px;">
         <label class="form-label">初始 API Key (可选)</label>
         <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;">
@@ -743,8 +767,12 @@
         <input type="text" id="a_upstream" class="form-control" placeholder="例如 DeepSeek-V3-Flash">
       </div>
       <div class="form-group">
-        <label class="form-label">选择供应商并勾选绑定 Key</label>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="margin-bottom:0;">选择供应商并勾选绑定 Key</label>
+          <span id="a_provider_protos"></span>
+        </div>
         <select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select>
+        <div id="a_model_proto_info" class="text-secondary text-sm mt-1" style="font-size:12px;"></div>
       </div>
       <div id="a_quickModels" class="mb-2" style="display:none;">
         <div class="text-xs text-secondary mb-1">官方推荐模型 (点击自动填入)：</div>
@@ -1155,9 +1183,15 @@ const PROTOCOLS = {
 
 function getProviderProtocols(name, provObj){
   const p = provObj || (state.config && state.config.providers && state.config.providers[name]) || {};
+  // 1. If user explicitly configured protocols array, strictly honor it
+  if (Array.isArray(p.protocols) && p.protocols.length > 0) {
+    return p.protocols;
+  }
+  // 2. Dynamic fallback based on presets & feature flags
   const protos = ['chat'];
   const lower = (name || '').toLowerCase();
-  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url) {
+  const preset = PRESET_DEFINITIONS[lower];
+  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
     protos.push('messages');
   }
   if (p.openai_responses || p.supports_responses) {
@@ -1169,12 +1203,12 @@ function getProviderProtocols(name, provObj){
 function getModelProtocols(modelName){
   const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
   if (!m || !m.keys || !m.keys.length) return ['chat'];
-  const set = new Set(['chat']);
+  const set = new Set();
   for (const b of m.keys) {
     const provProtos = getProviderProtocols(b.provider);
     provProtos.forEach(pr => set.add(pr));
   }
-  return Array.from(set);
+  return set.size ? Array.from(set) : ['chat'];
 }
 
 function renderProtocolBadges(protoList, isShort=true){
@@ -1482,6 +1516,11 @@ const PRESET_DEFINITIONS = {
 };
 
 // Preset Selection Handler
+function onProviderProtoMessagesChange(){
+  const isChecked = document.getElementById('p_proto_messages').checked;
+  document.getElementById('p_anthropic_url_wrap').style.display = isChecked ? 'block' : 'none';
+}
+
 function onProviderPresetChange(){
   const presetId = document.getElementById('p_preset').value;
   const nameInput = document.getElementById('p_name');
@@ -1504,6 +1543,14 @@ function onProviderPresetChange(){
   urlInput.value = preset.base_url;
   descEl.textContent = preset.description || '';
   descEl.style.display = 'block';
+
+  // Preset protocols sync
+  const presetProtos = preset.protocols || (preset.anthropic_base_url ? ['chat', 'messages'] : ['chat']);
+  document.getElementById('p_proto_chat').checked = presetProtos.includes('chat');
+  document.getElementById('p_proto_messages').checked = presetProtos.includes('messages');
+  document.getElementById('p_proto_responses').checked = presetProtos.includes('responses');
+  document.getElementById('p_anthropic_url_wrap').style.display = presetProtos.includes('messages') ? 'block' : 'none';
+  document.getElementById('p_anthropic_url').value = preset.anthropic_base_url || '';
 
   modelsList.innerHTML = '';
   if(preset.recommended_models && preset.recommended_models.length > 0){
@@ -1536,6 +1583,11 @@ function openProviderModal(){
   document.getElementById('p_name').value = '';
   document.getElementById('p_name').disabled = false;
   document.getElementById('p_url').value = '';
+  document.getElementById('p_proto_chat').checked = true;
+  document.getElementById('p_proto_messages').checked = false;
+  document.getElementById('p_proto_responses').checked = false;
+  document.getElementById('p_anthropic_url_wrap').style.display = 'none';
+  document.getElementById('p_anthropic_url').value = '';
   document.getElementById('p_init_key_wrap').style.display = 'block';
   document.getElementById('p_init_label').value = 'default';
   document.getElementById('p_init_val').value = '';
@@ -1551,7 +1603,15 @@ function editProvider(name){
   document.getElementById('p_desc').style.display = 'none';
   document.getElementById('p_name').value = name;
   document.getElementById('p_name').disabled = true;
-  document.getElementById('p_url').value = p.base_url;
+  document.getElementById('p_url').value = p.base_url || '';
+
+  const protos = getProviderProtocols(name, p);
+  document.getElementById('p_proto_chat').checked = protos.includes('chat');
+  document.getElementById('p_proto_messages').checked = protos.includes('messages');
+  document.getElementById('p_proto_responses').checked = protos.includes('responses');
+  document.getElementById('p_anthropic_url_wrap').style.display = protos.includes('messages') ? 'block' : 'none';
+  document.getElementById('p_anthropic_url').value = p.anthropic_base_url || '';
+
   document.getElementById('p_init_key_wrap').style.display = 'none';
   document.getElementById('p_models_wrap').style.display = 'none';
   openModal('providerModal');
@@ -1561,15 +1621,39 @@ function saveProvider(){
   const name = document.getElementById('p_name').value.trim();
   const url = document.getElementById('p_url').value.trim();
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
+
+  const selectedProtos = [];
+  if(document.getElementById('p_proto_chat').checked) selectedProtos.push('chat');
+  if(document.getElementById('p_proto_messages').checked) selectedProtos.push('messages');
+  if(document.getElementById('p_proto_responses').checked) selectedProtos.push('responses');
+  if(!selectedProtos.length){ toast('请至少选择一种支持的协议类型', 'err'); return; }
+
+  const anthropicUrl = document.getElementById('p_anthropic_url').value.trim();
   const isEdit = document.getElementById('p_name').disabled;
   if(!isEdit && state.config.providers && state.config.providers[name]){ toast('供应商已存在', 'err'); return; }
   if(!state.config.providers) state.config.providers = {};
+
   if(isEdit) {
     state.config.providers[name].base_url = url;
+    state.config.providers[name].protocols = selectedProtos;
+    state.config.providers[name].anthropic_messages = selectedProtos.includes('messages');
+    if(selectedProtos.includes('messages') && anthropicUrl){
+      state.config.providers[name].anthropic_base_url = anthropicUrl;
+    } else if(!selectedProtos.includes('messages')) {
+      delete state.config.providers[name].anthropic_base_url;
+    }
   } else {
-    state.config.providers[name] = { base_url: url, keys: {} };
+    state.config.providers[name] = { 
+      base_url: url, 
+      keys: {}, 
+      protocols: selectedProtos,
+      anthropic_messages: selectedProtos.includes('messages')
+    };
+    if(selectedProtos.includes('messages') && anthropicUrl){
+      state.config.providers[name].anthropic_base_url = anthropicUrl;
+    }
     const presetId = document.getElementById('p_preset').value;
-    if(presetId && PRESET_DEFINITIONS[presetId] && PRESET_DEFINITIONS[presetId].anthropic_base_url){
+    if(presetId && PRESET_DEFINITIONS[presetId] && PRESET_DEFINITIONS[presetId].anthropic_base_url && !anthropicUrl){
       state.config.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
     }
     // Process optional initial Key
@@ -1590,7 +1674,6 @@ function saveProvider(){
     });
 
     if(checkedModels.length > 0 && initVal){
-      // 1. Agent models auto-creation
       if(!state.config.agent_models) state.config.agent_models = {};
       checkedModels.forEach(m => {
         if(!state.config.agent_models[m.name]){
@@ -1607,7 +1690,6 @@ function saveProvider(){
         }
       });
 
-      // 2. KB models auto-creation (if kb_type is present)
       if(!state.config.candidates) state.config.candidates = {};
       checkedModels.forEach(m => {
         if(m.kb_type && ['chat', 'embedding', 'reranker', 'ocr'].includes(m.kb_type)){
@@ -1751,20 +1833,46 @@ function openAgentModal(){
   renderAgentKeyChecks(); 
   openModal('agentModal'); 
 }
-function populateProviderSelect(id){ const sel=document.getElementById(id); const names=Object.keys(state.config.providers||{}); sel.innerHTML=names.length?names.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join(''):'<option value="">无可用供应商</option>'; }
-function renderAgentKeyChecks(){
-  const prov=document.getElementById('a_provider').value;
-  const box=document.getElementById('a_keyList');
-  const quickBox=document.getElementById('a_quickModels');
-  const quickTags=document.getElementById('a_quickTags');
+function populateProviderSelect(id){ 
+  const sel = document.getElementById(id); 
+  const names = Object.keys(state.config.providers||{}); 
+  sel.innerHTML = names.length ? names.map(p => {
+    const protos = getProviderProtocols(p);
+    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    return `<option value="${esc(p)}">${esc(p)} [${protoStr}]</option>`;
+  }).join('') : '<option value="">无可用供应商</option>'; 
+}
 
-  if(!prov||!state.config.providers[prov]){ 
-    box.innerHTML='<div class="hint">请先在上方选择供应商</div>'; 
-    if(quickBox) quickBox.style.display='none';
+function renderAgentKeyChecks(){
+  const prov = document.getElementById('a_provider').value;
+  const box = document.getElementById('a_keyList');
+  const quickBox = document.getElementById('a_quickModels');
+  const quickTags = document.getElementById('a_quickTags');
+  const protosBadgeEl = document.getElementById('a_provider_protos');
+  const protoInfoEl = document.getElementById('a_model_proto_info');
+
+  if(!prov || !state.config.providers[prov]){ 
+    box.innerHTML = '<div class="hint">请先在上方选择供应商</div>'; 
+    if(quickBox) quickBox.style.display = 'none';
+    if(protosBadgeEl) protosBadgeEl.innerHTML = '';
+    if(protoInfoEl) protoInfoEl.innerHTML = '';
     return; 
   }
-  const keys=Object.keys(state.config.providers[prov].keys||{});
-  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
+
+  const provProtos = getProviderProtocols(prov);
+  if(protosBadgeEl) {
+    protosBadgeEl.innerHTML = renderProtocolBadges(provProtos, true);
+  }
+  if(protoInfoEl) {
+    if(provProtos.includes('messages')) {
+      protoInfoEl.innerHTML = `💡 供应商 <b>${esc(prov)}</b> 支持 <span class="badge badge-warning" style="font-size:11px;padding:1px 6px;">Anthropic Messages</span>，该模型将同时在 <code>/v1/chat/completions</code> 与 <code>/v1/messages</code> 双协议中可用。`;
+    } else {
+      protoInfoEl.innerHTML = `💡 供应商 <b>${esc(prov)}</b> 支持 <span class="badge badge-success" style="font-size:11px;padding:1px 6px;">OpenAI Chat</span> 协议格式。`;
+    }
+  }
+
+  const keys = Object.keys(state.config.providers[prov].keys || {});
+  box.innerHTML = keys.length ? keys.map(k => `<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('') : '<div class="hint">该供应商下暂无可用 Key</div>';
 
   // Render quick tags
   const preset = PRESET_DEFINITIONS[prov.toLowerCase()];

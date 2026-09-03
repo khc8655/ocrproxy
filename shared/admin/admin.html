@@ -313,7 +313,30 @@
         <label class="form-label">Base URL (API 端点地址)</label>
         <input type="text" id="m_prov_url" class="form-control" placeholder="如 https://generativelanguage.googleapis.com/v1beta/openai">
       </div>
-
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="m_prov_proto_chat" checked>
+            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
+            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="m_prov_proto_messages" onchange="onEdgeOneProtoMessagesChange()">
+            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
+            <span class="text-secondary text-sm">(/v1/messages)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="m_prov_proto_responses">
+            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
+            <span class="text-secondary text-sm">(/v1/responses)</span>
+          </label>
+        </div>
+        <div id="m_prov_anthropic_url_wrap" style="display:none;margin-top:10px;">
+          <label class="form-label" style="font-size:12px;color:var(--color-text-2);">Anthropic Messages 独立 Base URL (可选，若与基础地址不同则填写)</label>
+          <input type="text" id="m_prov_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
+        </div>
+      </div>
       <div id="m_prov_init_key_wrap" class="form-group" style="margin-top:14px;">
         <label class="form-label">初始 API Key（可选）</label>
         <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;">
