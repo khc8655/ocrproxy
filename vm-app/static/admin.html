@@ -165,9 +165,10 @@
     .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap; flex-shrink: 0; min-width: 28px; }
     .badge-neutral { background: var(--khc-neutral-100); color: var(--text-tertiary); }
     .badge-success { background: var(--khc-success-50); color: var(--success); }
-    .badge-warn { background: var(--khc-warning-50); color: var(--warn); }
+    .badge-warn, .badge-warning { background: var(--khc-warning-50); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
     .badge-error { background: var(--khc-danger-50); color: var(--error); }
     .badge-primary { background: var(--primary-soft); color: var(--primary); }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; border: 1px solid rgba(126,34,206,0.2); }
 
     /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
@@ -399,11 +400,38 @@
         <div class="section-title mb-2">接入网关信息</div>
         <div class="card card-pad mb-3">
           <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBase">—</span></div>
-          <div class="flex-between"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModels">—</span></div>
+          <div class="flex-between mb-2"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModels">—</span></div>
+          <div class="flex-between"><span class="text-secondary">网关已支持协议</span><span id="accProtocols" style="display:flex;gap:6px;">—</span></div>
         </div>
         <div id="acc-section-agent">
-          <div class="section-title mb-2">Python (OpenAI SDK) 调用示例</div>
-          <div class="code-block mb-3"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
+          <!-- 1. OpenAI Chat -->
+          <div class="card card-pad mb-3">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-weight:700;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;">
+                <span>1. OpenAI 格式调用 (Chat Completions)</span>
+                <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
+              </div>
+              <span class="text-secondary text-sm">端点：<code>POST /v1/chat/completions</code></span>
+            </div>
+            <div class="text-secondary text-sm mb-2">适用生态：Cursor / Cline (OpenAI 模式) / OpenAI SDK / NextChat / Dify 等全部兼容客户端</div>
+            <div class="code-block"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
+          </div>
+
+          <!-- 2. Anthropic Messages -->
+          <div class="card card-pad mb-3" id="acc-messages-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-weight:700;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;">
+                <span>2. Claude 格式调用 (Anthropic Messages)</span>
+                <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
+              </div>
+              <span class="text-secondary text-sm">端点：<code>POST /v1/messages</code></span>
+            </div>
+            <div class="text-secondary text-sm mb-2">适用生态：Claude Code / Cline (Claude 模式) / Anthropic SDK 原生直通（支持 MiniMax、B.AI 等已适配提供商）</div>
+            <div class="hint-box mb-2" style="font-size:12px;background:var(--bg-subtle);">
+              当前支持 Messages 协议的模型：<b id="accMessagesModels">—</b>
+            </div>
+            <div class="code-block"><button class="copy-btn" onclick="copy('accMessagesPy')">复制</button><pre id="accMessagesPy"></pre></div>
+          </div>
         </div>
       </div>
       <div class="section" id="acc-section-kb">
@@ -817,7 +845,7 @@ const KB_LABELS = { chat:'Chat 对话', embedding:'Embedding 向量', reranker:'
 const KB_COLORS = { chat:'#2563eb', embedding:'#10b981', reranker:'#f59e0b', ocr:'#8b5cf6' };
 
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
-function esc(s) { const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML.replace(/'/g,'&#39;'); }
+function esc(s) { if(s===null||s===undefined)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function fmtTime(ms) { if(!ms)return '—'; const d=Date.now()-ms; if(d<0)return '刚刚'; if(d<60000)return Math.floor(d/1000)+'s前'; if(d<3600000)return Math.floor(d/60000)+'m前'; if(d<86400000)return Math.floor(d/3600000)+'h前'; return new Date(ms).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
 
 // Init
@@ -1118,6 +1146,44 @@ function renderModels(){
   if(state.modelTab==='kb') renderKbModels();
 }
 
+// Protocol Metadata & Helpers (Factual Badges)
+const PROTOCOLS = {
+  chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: '支持 OpenAI Chat 格式 (/v1/chat/completions)' },
+  messages: { label: 'Anthropic Messages', short: 'Messages', badgeClass: 'badge-warning', title: '支持 Anthropic Claude Messages 格式 (/v1/messages)' },
+  responses: { label: 'OpenAI Responses', short: 'Responses', badgeClass: 'badge-purple', title: '支持 OpenAI Responses 格式 (/v1/responses)' }
+};
+
+function getProviderProtocols(name, provObj){
+  const p = provObj || (state.config && state.config.providers && state.config.providers[name]) || {};
+  const protos = ['chat'];
+  const lower = (name || '').toLowerCase();
+  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url) {
+    protos.push('messages');
+  }
+  if (p.openai_responses || p.supports_responses) {
+    protos.push('responses');
+  }
+  return protos;
+}
+
+function getModelProtocols(modelName){
+  const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
+  if (!m || !m.keys || !m.keys.length) return ['chat'];
+  const set = new Set(['chat']);
+  for (const b of m.keys) {
+    const provProtos = getProviderProtocols(b.provider);
+    provProtos.forEach(pr => set.add(pr));
+  }
+  return Array.from(set);
+}
+
+function renderProtocolBadges(protoList, isShort=true){
+  return (protoList || ['chat']).map(pr => {
+    const meta = PROTOCOLS[pr] || { label: pr, short: pr, badgeClass: 'badge-neutral', title: pr };
+    return `<span class="badge ${meta.badgeClass}" title="${esc(meta.title)}" style="font-weight:600;font-size:11px;padding:2px 7px;">${esc(isShort ? meta.short : meta.label)}</span>`;
+  }).join(' ');
+}
+
 function renderProviders(){
   const box=document.getElementById('providersBox');
   const p=state.config.providers||{};
@@ -1126,13 +1192,17 @@ function renderProviders(){
   box.innerHTML=names.map(name=>{
     const prov=p[name]; const keys=Object.keys(prov.keys||{});
     const keyChips=keys.map(k=>`<span class="key-chip"><b>${esc(k)}</b><button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button><button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button></span>`).join('');
-    const isDual = (name.toLowerCase() === 'minimax' || name.toLowerCase() === 'bai' || Boolean(prov.anthropic_base_url));
-    const dualBadge = isDual ? `<span class="badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-size:11px;margin-left:6px;">OpenAI + Messages 双协议</span>` : '';
+    const protos = getProviderProtocols(name, prov);
+    const protoBadges = renderProtocolBadges(protos, false);
     const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${esc(prov.anthropic_base_url)}` : '';
     return `<div class="provider-row">
       <div>
-        <div class="provider-name">${esc(name)}${dualBadge} <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span></div>
-        <div class="key-list">${keyChips||'<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
+        <div class="provider-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:14px;font-weight:700;">${esc(name)}</span>
+          <span style="display:inline-flex;gap:4px;">${protoBadges}</span>
+          <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span>
+        </div>
+        <div class="key-list" style="margin-top:6px;">${keyChips||'<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
       </div>
       <div class="flex gap-2">
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
@@ -1155,6 +1225,8 @@ function renderAgentModels(){
     const m=models[name]; const upstream=m.upstream_model||name;
     const isProbingAll = state.probingModels.has(name);
     const activeKey = m.active_key || ((m.keys && m.keys[0]) ? m.keys[0].key : '');
+    const modelProtos = getModelProtocols(name);
+    const protoBadges = renderProtocolBadges(modelProtos, true);
     
     let strategyLabel = `${(m.keys||[]).length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
     if(strategy === 'manual'){
@@ -1171,7 +1243,11 @@ function renderAgentModels(){
     return `<div class="card model-card">
       <div class="card-head">
         <div>
-          <div class="model-id" style="font-size:14px;font-weight:700;">${esc(name)} ${upstream!==name?`<span class="badge badge-neutral" style="font-weight:400;margin-left:6px;">上游 ID: ${esc(upstream)}</span>`:''}</div>
+          <div class="model-id" style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>${esc(name)}</span>
+            ${upstream!==name?`<span class="badge badge-neutral" style="font-weight:400;">上游 ID: ${esc(upstream)}</span>`:''}
+            <span style="display:inline-flex;gap:4px;">${protoBadges}</span>
+          </div>
           <div class="meta" style="margin-top:2px;">${strategyLabel}</div>
         </div>
         <div class="flex gap-2" style="flex-wrap:wrap;">
@@ -2293,19 +2369,37 @@ async function runLiveTest(modelName){
 function updateAccess(){
   const base=window.location.origin+'/v1';
   const models=Object.keys(state.config.agent_models||{});
-  const demo=models[0]||'deepseek-v4-flash';
+  const demo=models[0]||'qwen3.8-flash';
+  const messagesModels=models.filter(m => getModelProtocols(m).includes('messages'));
+  const demoMessages = messagesModels[0] || demo;
+  const proxyKey = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : 'your_proxy_api_key';
   const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
   setText('accBase', base);
   setText('accModels', models.length ? models.join('、') : '（未配置）');
+  setText('accMessagesModels', messagesModels.length ? messagesModels.join('、') : '暂无可用的 Messages 模型（请为模型绑定 MiniMax 或 B.AI 供应商）');
+
+  const protoContainer = document.getElementById('accProtocols');
+  if (protoContainer) {
+    const activeProtos = new Set(['chat']);
+    if (messagesModels.length || Object.entries(state.config.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('messages'))) {
+      activeProtos.add('messages');
+    }
+    if (Object.entries(state.config.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('responses'))) {
+      activeProtos.add('responses');
+    }
+    protoContainer.innerHTML = renderProtocolBadges(Array.from(activeProtos), false);
+  }
+
+  // 1. OpenAI Chat SDK Example
   setText('accPy', `from openai import OpenAI
 
 client = OpenAI(
-    api_key="your_proxy_api_key",
+    api_key="${proxyKey}",
     base_url="${base}"
 )
 
-# 直接使用您在后台配置的 Agent 真实模型名
+# 兼容所有已配置的 Agent 真实模型名
 response = client.chat.completions.create(
     model="${demo}",
     messages=[{"role": "user", "content": "你好，请用一句话介绍你自己"}],
@@ -2316,27 +2410,51 @@ for chunk in response:
     content = chunk.choices[0].delta.content or ""
     print(content, end="", flush=True)`);
 
+  // 2. Anthropic Claude Messages SDK Example
+  setText('accMessagesPy', `import anthropic
+
+client = anthropic.Anthropic(
+    api_key="${proxyKey}",
+    base_url="${base}"  # 直连本网关
+)
+
+# 使用支持 Messages 协议的模型（当前支持：${messagesModels.join(', ') || demoMessages}）
+response = client.messages.create(
+    model="${demoMessages}",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "你好，请用一句话介绍你自己"}]
+)
+
+print(response.content[0].text)
+
+# 官方 cURL 标准调用命令：
+# curl -X POST "${base}/messages" \\
+#   -H "x-api-key: ${proxyKey}" \\
+#   -H "anthropic-version: 2023-06-01" \\
+#   -H "Content-Type: application/json" \\
+#   -d '{"model":"${demoMessages}","max_tokens":1024,"messages":[{"role":"user","content":"你好"}]}'`);
+
   setText('accKbChat', `# 1. 知识库对话与摘要 (固定别名 model="chat")
 curl -X POST "${base}/chat/completions" \\
-  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Authorization: Bearer ${proxyKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"chat","messages":[{"role":"user","content":"请总结以下文档核心观点"}]}'`);
 
   setText('accKbEmb', `# 2. 向量化计算 (固定别名 model="embedding")
 curl -X POST "${base}/embeddings" \\
-  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Authorization: Bearer ${proxyKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"embedding","input":["这是待向量化的第一段文本","第二段文本"]}'`);
 
   setText('accKbRank', `# 3. 结果精排 (固定别名 model="reranker")
 curl -X POST "${base}/rerank" \\
-  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Authorization: Bearer ${proxyKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"reranker","query":"如何配置中转服务？","documents":["文档A描述配置方法...","文档B描述退款政策..."]}'`);
 
   setText('accKbOcr', `# 4. 图文识别与文档理解 (固定别名 model="ocr")
 curl -X POST "${base}/ocr" \\
-  -H "Authorization: Bearer your_proxy_api_key" \\
+  -H "Authorization: Bearer ${proxyKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"ocr","image_base64":"<Base64图片数据>","prompt":"请识别图片中的所有文字与表格内容"}'`);
 }
