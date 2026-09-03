@@ -746,13 +746,29 @@ async def anthropic_messages(request: Request):
     default_upstream = entry.get("upstream_model") or model_name
     strategy = config.get("agent_routing_strategy", "sticky_failover")
     active_key = entry.get("active_key")
+    providers_cfg = config.get("providers") or {}
+
+    def _supports_messages(p_name: str) -> bool:
+        p_cfg = providers_cfg.get(p_name) or {}
+        if not isinstance(p_cfg, dict):
+            return False
+        protos = p_cfg.get("protocols")
+        if isinstance(protos, list):
+            return "messages" in protos
+        if p_cfg.get("anthropic_messages"):
+            return True
+        p_lower = (p_name or "").lower().strip()
+        return p_lower in ("minimax", "bai") or bool(p_cfg.get("anthropic_base_url"))
 
     candidates_list = []
     for b in entry.get("keys", []):
         if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
             continue
+        p_name = b["provider"]
+        if not _supports_messages(p_name):
+            continue
         candidates_list.append({
-            "provider": b["provider"],
+            "provider": p_name,
             "key": b["key"],
             "model": b.get("upstream_model") or default_upstream,
         })
@@ -770,7 +786,10 @@ async def anthropic_messages(request: Request):
             candidates_list = matched + others
 
     if not candidates_list:
-        return _anthropic_error(404, "not_found_error", f"No valid keys configured for model '{model_name}'.")
+        return _anthropic_error(
+            400, "invalid_request_error",
+            f"Model '{model_name}' does not have any keys from providers supporting Anthropic Messages protocol."
+        )
 
     try:
         chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))

@@ -396,9 +396,13 @@ const PROTOCOLS = {
 
 function getProviderProtocols(name, provObj){
   const p = provObj || (cfg && cfg.providers && cfg.providers[name]) || {};
+  if (Array.isArray(p.protocols) && p.protocols.length > 0) {
+    return p.protocols;
+  }
   const protos = ['chat'];
   const lower = (name || '').toLowerCase();
-  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url) {
+  const preset = PRESET_DEFINITIONS[lower];
+  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
     protos.push('messages');
   }
   if (p.openai_responses || p.supports_responses) {
@@ -410,12 +414,12 @@ function getProviderProtocols(name, provObj){
 function getModelProtocols(modelName){
   const m = cfg && cfg.agent_models ? cfg.agent_models[modelName] : null;
   if (!m || !m.keys || !m.keys.length) return ['chat'];
-  const set = new Set(['chat']);
+  const set = new Set();
   for (const b of m.keys) {
     const provProtos = getProviderProtocols(b.provider);
     provProtos.forEach(pr => set.add(pr));
   }
-  return Array.from(set);
+  return set.size ? Array.from(set) : ['chat'];
 }
 
 function renderProtocolBadges(protoList, isShort=true){
@@ -724,6 +728,14 @@ function onPresetSelected() {
   descEl.textContent = preset.description || '';
   descEl.style.display = 'block';
 
+  // Preset protocols sync
+  const presetProtos = preset.protocols || (preset.anthropic_base_url ? ['chat', 'messages'] : ['chat']);
+  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = presetProtos.includes('chat');
+  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = presetProtos.includes('messages');
+  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = presetProtos.includes('responses');
+  const wrap = document.getElementById('m_prov_anthropic_url_wrap'); if(wrap) wrap.style.display = presetProtos.includes('messages') ? 'block' : 'none';
+  const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = preset.anthropic_base_url || '';
+
   // Render recommended models checklist
   modelsList.innerHTML = '';
   if (preset.recommended_models && preset.recommended_models.length > 0) {
@@ -747,6 +759,12 @@ function onPresetSelected() {
   }
 }
 
+function onEdgeOneProtoMessagesChange() {
+  const isChecked = document.getElementById('m_prov_proto_messages')?.checked;
+  const wrap = document.getElementById('m_prov_anthropic_url_wrap');
+  if (wrap) wrap.style.display = isChecked ? 'block' : 'none';
+}
+
 function openAddProviderModal() {
   document.getElementById('providerModalTitle').textContent = '新增供应商';
   document.getElementById('presetSelectGroup').style.display = 'block';
@@ -754,6 +772,11 @@ function openAddProviderModal() {
   document.getElementById('m_prov_name').value = '';
   document.getElementById('m_prov_name').disabled = false;
   document.getElementById('m_prov_url').value = '';
+  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = true;
+  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = false;
+  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = false;
+  const wrap = document.getElementById('m_prov_anthropic_url_wrap'); if(wrap) wrap.style.display = 'none';
+  const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = '';
   document.getElementById('m_prov_key_label').value = 'default';
   document.getElementById('m_prov_key_val').value = '';
   document.getElementById('m_prov_init_key_wrap').style.display = 'block';
@@ -767,12 +790,27 @@ async function saveProviderModal() {
   const url = document.getElementById('m_prov_url').value.trim();
   if (!name || !url) { toast('请填写供应商与 Base URL', 'err'); return; }
 
+  const selectedProtos = [];
+  if (document.getElementById('m_prov_proto_chat')?.checked) selectedProtos.push('chat');
+  if (document.getElementById('m_prov_proto_messages')?.checked) selectedProtos.push('messages');
+  if (document.getElementById('m_prov_proto_responses')?.checked) selectedProtos.push('responses');
+  if (!selectedProtos.length) { toast('请至少选择一种支持的协议类型', 'err'); return; }
+
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].base_url = url;
+  cfg.providers[name].protocols = selectedProtos;
+  cfg.providers[name].anthropic_messages = selectedProtos.includes('messages');
+
+  const anthropicUrl = document.getElementById('m_prov_anthropic_url')?.value.trim();
+  if (selectedProtos.includes('messages') && anthropicUrl) {
+    cfg.providers[name].anthropic_base_url = anthropicUrl;
+  } else if (!selectedProtos.includes('messages')) {
+    delete cfg.providers[name].anthropic_base_url;
+  }
 
   const presetId = document.getElementById('m_prov_preset')?.value;
-  if (presetId && PRESET_DEFINITIONS[presetId]?.anthropic_base_url) {
+  if (presetId && PRESET_DEFINITIONS[presetId]?.anthropic_base_url && !anthropicUrl && selectedProtos.includes('messages')) {
     cfg.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
   }
 
