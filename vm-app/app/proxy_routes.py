@@ -250,6 +250,11 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
 
 def _normalise_messages_for_provider(out: dict, provider: str) -> None:
     """Normalise Anthropic Messages request body fields before forwarding to upstream."""
+    # Ensure max_tokens is present (Anthropic API specification mandatory field)
+    mt = out.get("max_tokens")
+    if not isinstance(mt, int) or mt <= 0:
+        out["max_tokens"] = 4096
+
     p = str(provider or "").lower()
 
     if p == "minimax":
