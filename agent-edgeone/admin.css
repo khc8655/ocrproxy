@@ -513,6 +513,12 @@ nav#topNav button.active {
   color: var(--color-info);
 }
 
+.badge-purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid rgba(126,34,206,0.2);
+}
+
 /* ── Forms ── */
 .form-group, .form-field {
   margin-bottom: var(--space-4);
