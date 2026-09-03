@@ -82,6 +82,15 @@ export function normaliseForProvider(body, provider, configOverride = null) {
   // 2. Reasoning / Thinking level adapter
   const reasoningRules = rules.reasoning || {};
   const isGoogle = reasoningRules.strategy === 'gemini_thinking_matrix' || p.includes('google') || modelName.startsWith('gemini');
+  const isMiniMax = reasoningRules.strategy === 'minimax_adaptive' || p === 'minimax' || modelName.startsWith('minimax');
+
+  // MiniMax model casing and parameter sanitization
+  if (p === 'minimax' || isMiniMax) {
+    if (String(body.model || '').toLowerCase() === 'minimax-m3') {
+      body.model = 'MiniMax-M3';
+    }
+    delete body.output_config;
+  }
 
   if (body.reasoning_effort !== undefined) {
     const rawEffort = String(body.reasoning_effort).toLowerCase();
@@ -114,6 +123,15 @@ export function normaliseForProvider(body, provider, configOverride = null) {
         }
       }
       delete body.reasoning_effort;
+    } else if (isMiniMax) {
+      if (rawEffort === 'none' || rawEffort === 'false') {
+        body.thinking = { type: 'disabled' };
+        delete body.reasoning_split;
+      } else {
+        body.reasoning_split = true;
+        body.thinking = { type: 'adaptive' };
+      }
+      delete body.reasoning_effort;
     } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes')) {
       body.chat_template_kwargs = body.chat_template_kwargs || {};
       const enableKey = reasoningRules.enable_key || 'enable_thinking';
@@ -135,8 +153,26 @@ export function normaliseForProvider(body, provider, configOverride = null) {
       }
     }
   } else {
-    // If client did not specify reasoning_effort, check if default inject_params needed (e.g. StepFun)
-    if (reasoningRules.inject_params) {
+    // If client did not specify reasoning_effort:
+    if (isMiniMax) {
+      if (body.thinking && typeof body.thinking === 'object') {
+        const t = String(body.thinking.type || '').toLowerCase();
+        if (t === 'disabled') {
+          body.thinking = { type: 'disabled' };
+          delete body.reasoning_split;
+        } else {
+          body.reasoning_split = true;
+          body.thinking = { type: 'adaptive' };
+        }
+      } else if (body.chat_template_kwargs?.enable_thinking === true || body.extra_body?.enable_thinking === true) {
+        body.reasoning_split = true;
+        body.thinking = { type: 'adaptive' };
+      } else {
+        // Client did not request reasoning: explicitly disable thinking to avoid <think> in content
+        body.thinking = { type: 'disabled' };
+        delete body.reasoning_split;
+      }
+    } else if (reasoningRules.inject_params) {
       for (const [ik, iv] of Object.entries(reasoningRules.inject_params)) {
         if (body[ik] === undefined) {
           body[ik] = iv;

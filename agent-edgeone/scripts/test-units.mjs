@@ -469,6 +469,38 @@ test('normalize: sensenova object tool_choice → "auto"', () => {
   eq(body.tool_choice, 'auto');
 });
 
+// normaliseForProvider — MiniMax
+test('normalize: minimax with reasoning_effort "medium" enables reasoning_split and adaptive thinking', () => {
+  const body = { model: 'minimax-m3', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'minimax');
+  eq(body.model, 'MiniMax-M3');
+  eq(body.reasoning_split, true);
+  deepEq(body.thinking, { type: 'adaptive' });
+  eq(body.reasoning_effort, undefined);
+});
+
+test('normalize: minimax without reasoning params disables thinking and omits reasoning_split', () => {
+  const body = { model: 'MiniMax-M3', messages: [{ role: 'user', content: 'hello' }] };
+  normaliseForProvider(body, 'minimax');
+  eq(body.model, 'MiniMax-M3');
+  deepEq(body.thinking, { type: 'disabled' });
+  eq(body.reasoning_split, undefined);
+});
+
+test('normalize: minimax with reasoning_effort "none" explicitly disables thinking', () => {
+  const body = { model: 'MiniMax-M3', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'minimax');
+  deepEq(body.thinking, { type: 'disabled' });
+  eq(body.reasoning_split, undefined);
+  eq(body.reasoning_effort, undefined);
+});
+
+test('normalize: minimax strips output_config', () => {
+  const body = { model: 'minimax-m3', output_config: { format: 'text' } };
+  normaliseForProvider(body, 'minimax');
+  eq(body.output_config, undefined);
+});
+
 test('rescueToolCallsFromText: extracts markdown json tool call', () => {
   const text = 'Here is the tool call:\n```json\n{"name": "fetch_weather", "arguments": {"city": "Shanghai"}}\n```';
   const rescued = rescueToolCallsFromText(text);
