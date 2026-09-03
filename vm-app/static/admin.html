@@ -607,70 +607,33 @@
           </div>
         </div>
 
+        <!-- Card 5: Backup & Migration -->
+        <div class="card card-pad settings-group mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              5. 配置备份与迁移 (Backup & Migration)
+            </h3>
+            <span class="badge badge-primary">备份管理</span>
+          </div>
+          <div class="flex-between">
+            <div>
+              <div style="font-weight:600;color:var(--text);margin-bottom:2px;">导出 / 导入完整系统配置</div>
+              <div class="text-secondary text-sm">支持下载带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" onclick="exportConfig()">导出配置</button>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('importFile').click()">导入配置</button>
+              <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+            </div>
+          </div>
+        </div>
+
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap;">
           <button class="btn btn-secondary" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
           <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
           <button class="btn btn-success" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:4px;font-weight:600;">
             <span>⚡️</span> 保存并实测验证
           </button>
-        </div>
-      </div>
-    </div>n">轮询负载均衡 (Round Robin - 推荐，高并发请求原子轮换分流，充分利用并发与 TPM)</option>
-                <option value="sticky_failover">粘性故障转移 (Sticky Failover - 固定当前 Key 直到限流)</option>
-                <option value="priority_fallback">主备优先级降级 (Priority Fallback - 始终优先尝试第 1 个 Key)</option>
-                <option value="latency_based">最低延迟优先 (Latency Based - 自动路由至延迟最低的 Key)</option>
-              </select>
-              <span class="hint">知识库无状态批量入库（Embedding / OCR / Rerank）推荐「轮询负载均衡」，可均匀打散流量并大幅提升入库吞吐量。</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:flex-end;">
-          <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title mb-3">服务运维与系统重启</div>
-        <div class="card card-pad mb-3">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <div>
-              <div style="font-weight:600;color:var(--text);margin-bottom:2px;">每日定时平滑重启 (Daily Auto-Restart)</div>
-              <div class="text-secondary text-sm">每日凌晨 04:00 自动重启服务释放内存堆（Agent 模式推荐关闭以保持会话连续；KB 模式建议开启）</div>
-            </div>
-            <label class="checkbox" style="font-weight:600;">
-              <input type="checkbox" id="s_autoRestart">
-              <span>开启定时重启</span>
-            </label>
-          </div>
-          <div class="hint-box" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:10px 14px;">
-            <b>日志空间保护机制：</b>系统底层配置了 <code>journald</code> 50MB 磁盘配额自动轮转（<code>SystemMaxUse=50M</code>, 7天保留），内存错误日志严格限定在 100 条以内，无需重启即可确保长期运行磁盘与内存零积压。
-          </div>
-        </div>
-        <div class="card card-pad flex-between">
-          <div>
-            <div style="font-weight:600;color:var(--text);margin-bottom:2px;">即时平滑重启服务 / 重载熔断状态</div>
-            <div class="text-secondary text-sm">一键向后台发送平滑重启信号（约 2-3 秒完成），或一键清空所有 Key 的 429 冷却与熔断计数</div>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-warn" onclick="restartService()">一键平滑重启</button>
-            <button class="btn" onclick="reloadRuntimeState()">重置熔断与冷却</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title mb-3">配置备份与迁移</div>
-        <div class="card card-pad flex-between">
-          <div>
-            <div style="font-weight:600;color:var(--text);margin-bottom:2px;">导出 / 导入完整系统配置</div>
-            <div class="text-secondary text-sm">支持下载带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</div>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn" onclick="exportConfig()">导出配置</button>
-            <button class="btn btn-primary" onclick="document.getElementById('importFile').click()">导入配置</button>
-            <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
-          </div>
         </div>
       </div>
     </div>
