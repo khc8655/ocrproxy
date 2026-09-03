@@ -677,16 +677,14 @@
         <label class="form-label">推荐官方适配模板 (自动填入参数与模型)</label>
         <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
           <option value="">-- 自定义配置 (手动输入) --</option>
-          <option value="minimax">MiniMax (官方开放平台 / M3 系列)</option>
-          <option value="bai">B.AI (双协议兼容中转)</option>
-          <option value="agnes">Agnes AI (爱格尼斯海外智能体)</option>
-          <option value="google">Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)</option>
-          <option value="sensenova">商汤日日新 (SenseNova GLM-5.2 / DeepSeek)</option>
-          <option value="stepfun">阶跃星辰 (StepFun Step-3.7-Flash / Step-2)</option>
-          <option value="siliconflow">硅基流动 (SiliconFlow DeepSeek / Qwen / 向量重排)</option>
-          <option value="tokenrhythm">TokenRhythm (Claude / GPT 系列)</option>
-          <option value="deepseek">DeepSeek 官方开放平台</option>
-          <option value="openai">OpenAI 官方 / 标准中转</option>
+          <option value="minimax">MiniMax</option>
+          <option value="bai">B.AI</option>
+          <option value="agnes">Agnes AI</option>
+          <option value="google">Google AI Studio</option>
+          <option value="sensenova">SenseNova</option>
+          <option value="stepfun">StepFun</option>
+          <option value="siliconflow">SiliconFlow</option>
+          <option value="tokenrhythm">TokenRhythm</option>
         </select>
         <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
       </div>
@@ -707,7 +705,7 @@
             <span class="text-secondary text-sm">(/v1/chat/completions)</span>
           </label>
           <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_messages" onchange="onProviderProtoMessagesChange()">
+            <input type="checkbox" id="p_proto_messages">
             <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
             <span class="text-secondary text-sm">(/v1/messages)</span>
           </label>
@@ -717,20 +715,20 @@
             <span class="text-secondary text-sm">(/v1/responses)</span>
           </label>
         </div>
-        <div id="p_anthropic_url_wrap" style="display:none;margin-top:10px;">
-          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL (可选，若与基础地址不同则填写)</label>
-          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
-        </div>
       </div>
-      <div id="p_init_key_wrap" class="form-group" style="margin-top:14px;">
-        <label class="form-label">初始 API Key (可选)</label>
-        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;">
-          <input type="text" id="p_init_label" class="form-control" placeholder="别名(如主账号)" value="default">
-          <input type="text" id="p_init_val" class="form-control" placeholder="API Key 密钥明文 (sk-...)">
+      <div class="form-group" id="p_custom_url_wrap" style="margin-top:14px;">
+        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="p_custom_url_toggle" onchange="onCustomUrlToggleChange()">
+          <span>自定义协议独立端点 / 路径 (高级配置)</span>
+        </label>
+        <div id="p_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL</label>
+          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
+          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
         </div>
       </div>
       <div id="p_models_wrap" class="form-group" style="display:none;margin-top:14px;">
-        <label class="form-label">自动创建并绑定推荐模型</label>
+        <label class="form-label">自动创建推荐模型</label>
         <div id="p_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--bg-subtle);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
       </div>
     </div>
@@ -744,10 +742,12 @@
     <div class="modal-body">
       <input type="hidden" id="k_provider">
       <input type="hidden" id="k_oldLabel">
+      <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
-      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验 Key 有效性...</div>
+      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
+      <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal('keyModal')">取消</button><button class="btn btn-primary" onclick="saveKey()">保存</button></div>
   </div>
@@ -1402,19 +1402,21 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
 const PRESET_DEFINITIONS = {
   minimax: {
     id: 'minimax',
-    name: 'MiniMax (官方开放平台 / M3 系列)',
+    name: 'MiniMax',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
-    description: 'MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通。',
+    protocols: ['chat', 'messages'],
+    description: 'MiniMax 官方开放平台，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通。',
     recommended_models: [
-      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态通用模型 (支持超长思考，Messages 原生兼容)', checked: true, kb_type: 'chat' }
+      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态模型 (支持超长思考，Messages 原生兼容)', checked: true, kb_type: 'chat' }
     ]
   },
   bai: {
     id: 'bai',
-    name: 'B.AI (双协议兼容中转)',
+    name: 'B.AI',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
+    protocols: ['chat', 'messages'],
     description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。',
     recommended_models: [
       { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true, kb_type: 'chat' },
@@ -1425,10 +1427,10 @@ const PRESET_DEFINITIONS = {
   },
   agnes: {
     id: 'agnes',
-    name: 'Agnes AI (爱格尼斯海外智能体)',
+    name: 'Agnes AI',
     base_url: 'https://apihub.agnes-ai.com/v1',
-    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
-    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)，支持 chat_template_kwargs 思考扩展。',
+    protocols: ['chat'],
+    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)。',
     recommended_models: [
       { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true, kb_type: 'chat' },
       { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false, kb_type: 'chat' }
@@ -1436,92 +1438,72 @@ const PRESET_DEFINITIONS = {
   },
   google: {
     id: 'google',
-    name: 'Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)',
+    name: 'Google AI Studio',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射与 Tool Schema 自动裁剪适配。',
+    protocols: ['chat'],
+    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射。',
     recommended_models: [
       { name: 'gemini-3.5-flash', upstream: 'gemini-3.5-flash', desc: '最新高性价比推理模型 (支持 low/medium/high 思考等级)', checked: true, kb_type: 'chat' },
       { name: 'gemini-3.5-pro', upstream: 'gemini-3.5-pro', desc: '最新旗舰强推理模型 (支持 low/high 思考等级)', checked: true, kb_type: 'chat' },
-      { name: 'gemini-2.5-flash', upstream: 'gemini-2.5-flash', desc: '经典多模态快速模型', checked: false, kb_type: 'ocr' },
-      { name: 'gemini-2.5-pro', upstream: 'gemini-2.5-pro', desc: '经典多模态深度思考模型', checked: false, kb_type: 'chat' }
+      { name: 'gemini-2.5-flash', upstream: 'gemini-2.5-flash', desc: '经典多模态快速模型', checked: false, kb_type: 'ocr' }
     ]
   },
   sensenova: {
     id: 'sensenova',
-    name: '商汤日日新 (SenseNova GLM-5.2 / DeepSeek)',
+    name: 'SenseNova',
     base_url: 'https://token.sensenova.cn/v1',
-    description: '商汤日日新开放平台，支持 GLM-5.2、DeepSeek-V3/R1、多模态 OCR 等，原生支持 reasoning_effort 思考控制。',
+    protocols: ['chat'],
+    description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1、多模态 OCR 等。',
     recommended_models: [
-      { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '智谱/商汤最新 GLM-5.2 旗舰推理大模型', checked: true, kb_type: 'chat' },
-      { name: 'sensenova-6.8-flash-lite', upstream: 'sensenova-6.8-flash-lite', desc: 'SenseNova 多模态 OCR 高速识别模型', checked: false, kb_type: 'ocr' },
-      { name: 'deepseek-v3', upstream: 'DeepSeek-V3', desc: 'DeepSeek-V3 基础推理模型', checked: false, kb_type: 'chat' },
-      { name: 'deepseek-r1', upstream: 'DeepSeek-R1', desc: 'DeepSeek-R1 深度思考推理模型', checked: false, kb_type: 'chat' }
+      { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '商汤/智谱 GLM-5.2 旗舰推理大模型', checked: true, kb_type: 'chat' },
+      { name: 'sensenova-6.8-flash-lite', upstream: 'sensenova-6.8-flash-lite', desc: 'SenseNova 多模态 OCR 高速识别模型', checked: false, kb_type: 'ocr' }
     ]
   },
   stepfun: {
     id: 'stepfun',
-    name: '阶跃星辰 (StepFun Step-3.7-Flash / Step-2)',
+    name: 'StepFun',
     base_url: 'https://api.stepfun.com/v1',
-    description: '阶跃星辰大模型平台，系统已内置 reasoning_effort none->low 降级兼容与 deepseek-style 思考格式自动注入。',
+    protocols: ['chat'],
+    description: '阶跃星辰 StepFun 大模型平台，系统内置 reasoning_effort none->low 降级兼容与 deepseek 思考格式注入。',
     recommended_models: [
-      { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: '阶跃最新闪电高速推理大模型', checked: true, kb_type: 'chat' },
-      { name: 'step-2-16k', upstream: 'step-2-16k', desc: '阶跃 Step-2 旗舰大模型', checked: false, kb_type: 'chat' }
+      { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: 'Step-3.7-Flash 闪电高速推理大模型', checked: true, kb_type: 'chat' },
+      { name: 'step-2-16k', upstream: 'step-2-16k', desc: 'Step-2 旗舰大模型', checked: false, kb_type: 'chat' }
     ]
   },
   siliconflow: {
     id: 'siliconflow',
-    name: '硅基流动 (SiliconFlow DeepSeek / Qwen / 向量重排)',
+    name: 'SiliconFlow',
     base_url: 'https://api.siliconflow.cn/v1',
-    description: '硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5/Qwen3 等海量开源模型及向量/重排模型。',
+    protocols: ['chat'],
+    description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型及向量/重排模型。',
     recommended_models: [
       { name: 'deepseek-ai/DeepSeek-V3', upstream: 'deepseek-ai/DeepSeek-V3', desc: 'DeepSeek-V3 全尺寸旗舰模型', checked: true, kb_type: 'chat' },
       { name: 'deepseek-ai/DeepSeek-R1', upstream: 'deepseek-ai/DeepSeek-R1', desc: 'DeepSeek-R1 全尺寸深度思考模型', checked: false, kb_type: 'chat' },
       { name: 'Qwen/Qwen2.5-72B-Instruct', upstream: 'Qwen/Qwen2.5-72B-Instruct', desc: '通义千问 72B Instruct 指令模型', checked: false, kb_type: 'chat' },
-      { name: 'Qwen/Qwen3-Embedding-4B', upstream: 'Qwen/Qwen3-Embedding-4B', desc: '通义千问高性能向量嵌入模型 (2560 维)', checked: false, kb_type: 'embedding' },
+      { name: 'Qwen/Qwen3-Embedding-4B', upstream: 'Qwen/Qwen3-Embedding-4B', desc: '通义千问高性能向量嵌入模型', checked: false, kb_type: 'embedding' },
       { name: 'Qwen/Qwen3-Reranker-0.6B', upstream: 'Qwen/Qwen3-Reranker-0.6B', desc: '通义千问高精度检索重排序模型', checked: false, kb_type: 'reranker' }
     ]
   },
   tokenrhythm: {
     id: 'tokenrhythm',
-    name: 'TokenRhythm (Claude / GPT 系列)',
+    name: 'TokenRhythm',
     base_url: 'https://api.tokenrhythm.com/v1',
-    description: 'TokenRhythm 聚合大模型路由网关，系统已内置 tool_choice 对象转字符串自动清洗。',
+    protocols: ['chat'],
+    description: 'TokenRhythm 聚合大模型路由网关，系统内置 tool_choice 对象转字符串自动清洗。',
     recommended_models: [
       { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true, kb_type: 'chat' },
       { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false, kb_type: 'chat' }
     ]
-  },
-  deepseek: {
-    id: 'deepseek',
-    name: 'DeepSeek 官方开放平台',
-    base_url: 'https://api.deepseek.com/v1',
-    description: 'DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存。',
-    recommended_models: [
-      { name: 'deepseek-chat', upstream: 'deepseek-chat', desc: 'DeepSeek-V3 快速对话大模型', checked: true, kb_type: 'chat' },
-      { name: 'deepseek-reasoner', upstream: 'deepseek-reasoner', desc: 'DeepSeek-R1 深度思考推理大模型', checked: true, kb_type: 'chat' }
-    ]
-  },
-  openai: {
-    id: 'openai',
-    name: 'OpenAI 官方 / 标准中转',
-    base_url: 'https://api.openai.com/v1',
-    description: 'OpenAI 官方 API 或标准兼容中转网关。',
-    recommended_models: [
-      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能大模型', checked: true, kb_type: 'chat' },
-      { name: 'gpt-4o-mini', upstream: 'gpt-4o-mini', desc: 'OpenAI GPT-4o-mini 高性价比快速模型', checked: true, kb_type: 'chat' },
-      { name: 'o3-mini', upstream: 'o3-mini', desc: 'OpenAI 最新 o3-mini 快速推理思考模型', checked: false, kb_type: 'chat' },
-      { name: 'o1', upstream: 'o1', desc: 'OpenAI o1 深度思考推理旗舰模型', checked: false, kb_type: 'chat' },
-      { name: 'text-embedding-3-small', upstream: 'text-embedding-3-small', desc: 'OpenAI 向量嵌入模型', checked: false, kb_type: 'embedding' }
-    ]
   }
 };
 
-// Preset Selection Handler
-function onProviderProtoMessagesChange(){
-  const isChecked = document.getElementById('p_proto_messages').checked;
-  document.getElementById('p_anthropic_url_wrap').style.display = isChecked ? 'block' : 'none';
+// Custom URL Toggle Handler
+function onCustomUrlToggleChange(){
+  const isChecked = document.getElementById('p_custom_url_toggle').checked;
+  document.getElementById('p_custom_url_section').style.display = isChecked ? 'block' : 'none';
 }
 
+// Preset Selection Handler
 function onProviderPresetChange(){
   const presetId = document.getElementById('p_preset').value;
   const nameInput = document.getElementById('p_name');
@@ -1536,6 +1518,9 @@ function onProviderPresetChange(){
     descEl.style.display = 'none';
     modelsWrap.style.display = 'none';
     modelsList.innerHTML = '';
+    document.getElementById('p_custom_url_toggle').checked = false;
+    document.getElementById('p_custom_url_section').style.display = 'none';
+    document.getElementById('p_anthropic_url').value = '';
     return;
   }
 
@@ -1550,8 +1535,17 @@ function onProviderPresetChange(){
   document.getElementById('p_proto_chat').checked = presetProtos.includes('chat');
   document.getElementById('p_proto_messages').checked = presetProtos.includes('messages');
   document.getElementById('p_proto_responses').checked = presetProtos.includes('responses');
-  document.getElementById('p_anthropic_url_wrap').style.display = presetProtos.includes('messages') ? 'block' : 'none';
-  document.getElementById('p_anthropic_url').value = preset.anthropic_base_url || '';
+
+  // Custom Anthropic URL
+  if(preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url){
+    document.getElementById('p_custom_url_toggle').checked = true;
+    document.getElementById('p_custom_url_section').style.display = 'block';
+    document.getElementById('p_anthropic_url').value = preset.anthropic_base_url;
+  } else {
+    document.getElementById('p_custom_url_toggle').checked = false;
+    document.getElementById('p_custom_url_section').style.display = 'none';
+    document.getElementById('p_anthropic_url').value = '';
+  }
 
   modelsList.innerHTML = '';
   if(preset.recommended_models && preset.recommended_models.length > 0){
@@ -1587,11 +1581,9 @@ function openProviderModal(){
   document.getElementById('p_proto_chat').checked = true;
   document.getElementById('p_proto_messages').checked = false;
   document.getElementById('p_proto_responses').checked = false;
-  document.getElementById('p_anthropic_url_wrap').style.display = 'none';
+  document.getElementById('p_custom_url_toggle').checked = false;
+  document.getElementById('p_custom_url_section').style.display = 'none';
   document.getElementById('p_anthropic_url').value = '';
-  document.getElementById('p_init_key_wrap').style.display = 'block';
-  document.getElementById('p_init_label').value = 'default';
-  document.getElementById('p_init_val').value = '';
   document.getElementById('p_models_wrap').style.display = 'none';
   document.getElementById('p_models_list').innerHTML = '';
   openModal('providerModal');
@@ -1610,10 +1602,17 @@ function editProvider(name){
   document.getElementById('p_proto_chat').checked = protos.includes('chat');
   document.getElementById('p_proto_messages').checked = protos.includes('messages');
   document.getElementById('p_proto_responses').checked = protos.includes('responses');
-  document.getElementById('p_anthropic_url_wrap').style.display = protos.includes('messages') ? 'block' : 'none';
-  document.getElementById('p_anthropic_url').value = p.anthropic_base_url || '';
 
-  document.getElementById('p_init_key_wrap').style.display = 'none';
+  if(p.anthropic_base_url){
+    document.getElementById('p_custom_url_toggle').checked = true;
+    document.getElementById('p_custom_url_section').style.display = 'block';
+    document.getElementById('p_anthropic_url').value = p.anthropic_base_url;
+  } else {
+    document.getElementById('p_custom_url_toggle').checked = false;
+    document.getElementById('p_custom_url_section').style.display = 'none';
+    document.getElementById('p_anthropic_url').value = '';
+  }
+
   document.getElementById('p_models_wrap').style.display = 'none';
   openModal('providerModal');
 }
@@ -1629,7 +1628,9 @@ function saveProvider(){
   if(document.getElementById('p_proto_responses').checked) selectedProtos.push('responses');
   if(!selectedProtos.length){ toast('请至少选择一种支持的协议类型', 'err'); return; }
 
-  const anthropicUrl = document.getElementById('p_anthropic_url').value.trim();
+  const customUrlOpen = document.getElementById('p_custom_url_toggle').checked;
+  const anthropicUrl = customUrlOpen ? document.getElementById('p_anthropic_url').value.trim() : '';
+
   const isEdit = document.getElementById('p_name').disabled;
   if(!isEdit && state.config.providers && state.config.providers[name]){ toast('供应商已存在', 'err'); return; }
   if(!state.config.providers) state.config.providers = {};
@@ -1640,31 +1641,21 @@ function saveProvider(){
     state.config.providers[name].anthropic_messages = selectedProtos.includes('messages');
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
-    } else if(!selectedProtos.includes('messages')) {
+    } else {
       delete state.config.providers[name].anthropic_base_url;
     }
   } else {
     state.config.providers[name] = { 
       base_url: url, 
-      keys: {}, 
+      keys: (state.config.providers[name] && state.config.providers[name].keys) || {}, 
       protocols: selectedProtos,
       anthropic_messages: selectedProtos.includes('messages')
     };
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
     }
-    const presetId = document.getElementById('p_preset').value;
-    if(presetId && PRESET_DEFINITIONS[presetId] && PRESET_DEFINITIONS[presetId].anthropic_base_url && !anthropicUrl){
-      state.config.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
-    }
-    // Process optional initial Key
-    const initLabel = (document.getElementById('p_init_label').value || 'default').trim();
-    const initVal = (document.getElementById('p_init_val').value || '').trim();
-    if(initVal){
-      state.config.providers[name].keys[initLabel] = initVal;
-    }
 
-    // Process auto-creation of recommended models
+    // Process optional recommended models creation
     const checkedModels = [];
     document.querySelectorAll('#p_models_list input[type="checkbox"]:checked').forEach(cb => {
       checkedModels.push({
@@ -1674,31 +1665,14 @@ function saveProvider(){
       });
     });
 
-    if(checkedModels.length > 0 && initVal){
+    if(checkedModels.length > 0){
       if(!state.config.agent_models) state.config.agent_models = {};
       checkedModels.forEach(m => {
         if(!state.config.agent_models[m.name]){
           state.config.agent_models[m.name] = {
-            keys: [{ provider: name, key: initLabel }],
+            keys: [],
             upstream_model: m.upstream
           };
-        } else {
-          const keys = state.config.agent_models[m.name].keys || [];
-          if(!keys.some(k => k.provider === name && k.key === initLabel)){
-            keys.push({ provider: name, key: initLabel });
-            state.config.agent_models[m.name].keys = keys;
-          }
-        }
-      });
-
-      if(!state.config.candidates) state.config.candidates = {};
-      checkedModels.forEach(m => {
-        if(m.kb_type && ['chat', 'embedding', 'reranker', 'ocr'].includes(m.kb_type)){
-          if(!state.config.candidates[m.kb_type]) state.config.candidates[m.kb_type] = [];
-          const list = state.config.candidates[m.kb_type];
-          if(!list.some(c => c.provider === name && c.key === initLabel && c.model === m.upstream)){
-            list.push({ provider: name, key: initLabel, model: m.upstream });
-          }
         }
       });
     }
@@ -1732,6 +1706,13 @@ function openKeyModal(prov){
   document.getElementById('k_label').disabled=false; 
   document.getElementById('k_value').value=''; 
   document.getElementById('k_skip').checked=false; 
+  const diagBox = document.getElementById('k_diag_box');
+  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+  const hintEl = document.getElementById('k_proto_hint');
+  if(hintEl) {
+    const protos = getProviderProtocols(prov);
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+  }
   openModal('keyModal'); 
 }
 function editKey(prov,label){ 
@@ -1743,6 +1724,13 @@ function editKey(prov,label){
   document.getElementById('k_label').disabled=false; 
   document.getElementById('k_value').value=(p.keys&&p.keys[label])||''; 
   document.getElementById('k_skip').checked=true; 
+  const diagBox = document.getElementById('k_diag_box');
+  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+  const hintEl = document.getElementById('k_proto_hint');
+  if(hintEl) {
+    const protos = getProviderProtocols(prov);
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+  }
   openModal('keyModal'); 
 }
 function deleteKey(prov,label){ 
@@ -1761,6 +1749,9 @@ async function saveKey(){
   const label=document.getElementById('k_label').value.trim();
   const val=document.getElementById('k_value').value.trim();
   const skip=document.getElementById('k_skip').checked;
+  const diagBox=document.getElementById('k_diag_box');
+  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+
   if(!label||!val){ toast('Key 别名和密钥值不能为空','err'); return; }
 
   // If renaming an existing key and new label conflicts with another existing key
@@ -1770,17 +1761,64 @@ async function saveKey(){
   }
 
   if(skip){ commitKey(prov,label,val); return; }
+
+  const pObj = (state.config.providers && state.config.providers[prov]) || {};
+  const protos = getProviderProtocols(prov, pObj);
+
   document.getElementById('k_spinner').style.display='block';
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
-    const r=await fetch('/api/admin/verify-key',{method:'POST',headers:headers(),body:JSON.stringify({base_url:state.config.providers[prov].base_url,api_key:val}), signal: controller.signal});
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch('/api/admin/verify-key', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        base_url: pObj.base_url,
+        anthropic_base_url: pObj.anthropic_base_url,
+        api_key: val,
+        provider: prov,
+        protocols: protos
+      }),
+      signal: controller.signal
+    });
     clearTimeout(timer);
-    const d=await r.json();
-    if(d.valid){ toast('连通性校验通过','ok'); commitKey(prov,label,val); }
-    else if(confirm('连通性校验失败: '+(d.error||'响应异常')+'\n是否仍要强制保存？')) commitKey(prov,label,val);
+    const d = await r.json();
+
+    if(d.valid){
+      const latList = [];
+      for(const pr of protos){
+        const res = (d.protocols && d.protocols[pr]);
+        if(res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
+      }
+      toast(`✅ Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
+      commitKey(prov,label,val);
+    } else {
+      // Scheme A: strict block with detailed per-protocol diagnostics
+      if(diagBox){
+        let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--danger);display:flex;align-items:center;gap:6px;">⚠️ 协议连通性未完全通过 (已阻止保存)</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
+        for(const pr of protos){
+          const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
+          const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
+          if(res.valid){
+            html += `<div style="display:flex;align-items:center;gap:6px;color:var(--success);"><span>🟢</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
+          } else {
+            html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--danger);"><span>🔴</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
+          }
+        }
+        html += '</div>';
+        html += '<div class="text-secondary mt-2" style="font-size:11px;border-top:1px solid var(--border);padding-top:6px;">提示：请核对并修改密钥；若确属离线/受限网络，请勾选上方「跳过连通性在线校验」后重新点击保存。</div>';
+        diagBox.innerHTML = html;
+        diagBox.style.display = 'block';
+      }
+      toast('协议校验存在失败项，已阻止保存', 'err');
+    }
   } catch(e){ 
-    if(confirm('网络请求异常: '+e.message+'\n是否仍要强制保存？')) commitKey(prov,label,val); 
+    if(diagBox){
+      diagBox.innerHTML = `<div style="color:var(--danger);font-size:12px;">❌ 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+      diagBox.style.display = 'block';
+    }
+    toast('网络请求异常: ' + e.message, 'err');
   } finally {
     document.getElementById('k_spinner').style.display='none';
   }

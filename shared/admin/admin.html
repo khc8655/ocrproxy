@@ -291,16 +291,14 @@
         <label class="form-label">预置模板</label>
         <select id="m_prov_preset" class="form-control" onchange="onPresetSelected()">
           <option value="">-- 自定义配置 (手动输入) --</option>
-          <option value="minimax">MiniMax (官方开放平台 / M3 系列)</option>
-          <option value="bai">B.AI (双协议兼容中转)</option>
-          <option value="agnes">Agnes AI (爱格尼斯海外智能体)</option>
-          <option value="google">Google AI Studio (Gemini 2.5 / 3 / 3.5 系列)</option>
-          <option value="sensenova">商汤日日新 (SenseNova GLM-5.2 / DeepSeek)</option>
-          <option value="stepfun">阶跃星辰 (StepFun Step-3.7-Flash / Step-2)</option>
-          <option value="siliconflow">硅基流动 (SiliconFlow DeepSeek / Qwen)</option>
-          <option value="tokenrhythm">TokenRhythm (Claude / GPT 系列)</option>
-          <option value="deepseek">DeepSeek 官方开放平台</option>
-          <option value="openai">OpenAI 官方 / 标准中转</option>
+          <option value="minimax">MiniMax</option>
+          <option value="bai">B.AI</option>
+          <option value="agnes">Agnes AI</option>
+          <option value="google">Google AI Studio</option>
+          <option value="sensenova">SenseNova</option>
+          <option value="stepfun">StepFun</option>
+          <option value="siliconflow">SiliconFlow</option>
+          <option value="tokenrhythm">TokenRhythm</option>
         </select>
         <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);"></div>
       </div>
@@ -322,7 +320,7 @@
             <span class="text-secondary text-sm">(/v1/chat/completions)</span>
           </label>
           <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="m_prov_proto_messages" onchange="onEdgeOneProtoMessagesChange()">
+            <input type="checkbox" id="m_prov_proto_messages">
             <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
             <span class="text-secondary text-sm">(/v1/messages)</span>
           </label>
@@ -332,21 +330,21 @@
             <span class="text-secondary text-sm">(/v1/responses)</span>
           </label>
         </div>
-        <div id="m_prov_anthropic_url_wrap" style="display:none;margin-top:10px;">
-          <label class="form-label" style="font-size:12px;color:var(--color-text-2);">Anthropic Messages 独立 Base URL (可选，若与基础地址不同则填写)</label>
-          <input type="text" id="m_prov_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
-        </div>
       </div>
-      <div id="m_prov_init_key_wrap" class="form-group" style="margin-top:14px;">
-        <label class="form-label">初始 API Key（可选）</label>
-        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;">
-          <input type="text" id="m_prov_key_label" class="form-control" placeholder="别名(如主账号)" value="default">
-          <input type="text" id="m_prov_key_val" class="form-control" placeholder="API Key 密钥明文 (sk-...)">
+      <div class="form-group" id="m_prov_custom_url_wrap" style="margin-top:14px;">
+        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="m_prov_custom_url_toggle" onchange="onEdgeOneCustomUrlToggleChange()">
+          <span>自定义协议独立端点 / 路径 (高级配置)</span>
+        </label>
+        <div id="m_prov_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+          <label class="form-label" style="font-size:12px;color:var(--color-text-2);">Anthropic Messages 独立 Base URL</label>
+          <input type="text" id="m_prov_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
+          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
         </div>
       </div>
 
       <div id="m_prov_models_wrap" class="form-group" style="display:none;margin-top:16px;">
-        <label class="form-label">自动创建并绑定推荐模型</label>
+        <label class="form-label">自动创建推荐模型</label>
         <div id="m_prov_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--color-bg-page);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);"></div>
       </div>
     </div>
@@ -367,6 +365,7 @@
     <div class="modal-body">
       <input type="hidden" id="m_key_prov">
       <input type="hidden" id="m_key_old_label">
+      <div id="m_key_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);"></div>
       <div class="form-group">
         <label class="form-label">Key 别名</label>
         <input type="text" id="m_key_label" class="form-control" placeholder="如 自己">
@@ -375,6 +374,9 @@
         <label class="form-label">API Key 密钥明文 (sk-...)</label>
         <input type="text" id="m_key_val" class="form-control" placeholder="sk-...">
       </div>
+      <label class="checkbox"><input type="checkbox" id="m_key_skip"> <span>跳过连通性在线校验</span></label>
+      <div id="m_key_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
+      <div id="m_key_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-bg-page);"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('keyModal')">取消</button>

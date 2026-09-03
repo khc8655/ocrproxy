@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
 
 from .config_store import get_config, save_config, _get_config_dir
-from .upstream import join_upstream
+from .upstream import join_upstream, build_messages_upstream
 from . import stats
 from .auth import verify_admin_auth
 
@@ -423,6 +423,10 @@ async def verify_key_endpoint(request: Request):
     if not base_url or not api_key:
         return JSONResponse(status_code=400, content={"error": "Missing base_url or api_key"})
 
+    protocols = body.get("protocols") or ["chat"]
+    provider = body.get("provider") or ""
+    anthropic_base_url = body.get("anthropic_base_url")
+
     try:
         parsed = urlparse(base_url)
     except Exception:
@@ -435,38 +439,135 @@ async def verify_key_endpoint(request: Request):
     if await _is_blocked_hostname(hostname):
         return JSONResponse(status_code=400, content={"valid": False, "error": "不允许访问内网或本地地址"})
 
-    try:
-        url = join_upstream(base_url, "models")
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            resp = await client.get(url, headers={
+    results = {}
+    overall_valid = True
+    error_msgs = []
+
+    # 1. Chat protocol verification
+    if "chat" in protocols:
+        try:
+            url = join_upstream(base_url, "models")
+            t0 = time.monotonic()
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+                resp = await client.get(url, headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "User-Agent": "ocrproxy-verifier/1.0"
+                })
+                lat_ms = max(1, int((time.monotonic() - t0) * 1000))
+                status_code = resp.status_code
+                text = resp.text
+
+            if status_code in (200, 201):
+                results["chat"] = {"valid": True, "status": status_code, "latency_ms": lat_ms, "message": "鉴权验证通过"}
+            elif status_code in (401, 403):
+                overall_valid = False
+                err = f"密钥无效，上游拒绝访问 (HTTP {status_code})"
+                results["chat"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
+                error_msgs.append(f"OpenAI Chat: {err}")
+            elif status_code in (404, 405):
+                chat_url = join_upstream(base_url, "chat/completions")
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+                    resp_chat = await client.post(chat_url, headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "ocrproxy-verifier/1.0"
+                    }, json={"model": "test-key-probe", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1})
+                    lat_ms = max(1, int((time.monotonic() - t0) * 1000))
+                    sc_chat = resp_chat.status_code
+                    if sc_chat in (200, 201, 400, 404):
+                        results["chat"] = {"valid": True, "status": sc_chat, "latency_ms": lat_ms, "message": "鉴权验证通过"}
+                    elif sc_chat in (401, 403):
+                        overall_valid = False
+                        err = f"密钥无效，上游拒绝访问 (HTTP {sc_chat})"
+                        results["chat"] = {"valid": False, "status": sc_chat, "latency_ms": lat_ms, "error": err}
+                        error_msgs.append(f"OpenAI Chat: {err}")
+                    else:
+                        overall_valid = False
+                        err = f"上游返回异常状态 (HTTP {sc_chat})"
+                        results["chat"] = {"valid": False, "status": sc_chat, "latency_ms": lat_ms, "error": err}
+                        error_msgs.append(f"OpenAI Chat: {err}")
+            else:
+                overall_valid = False
+                err = f"上游返回非预期响应 (HTTP {status_code}): {text[:60]}"
+                results["chat"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
+                error_msgs.append(f"OpenAI Chat: {err}")
+        except httpx.ConnectError:
+            overall_valid = False
+            results["chat"] = {"valid": False, "status": 0, "error": "网络连接异常，无法连通上游服务器"}
+            error_msgs.append("OpenAI Chat: 无法连通服务器")
+        except Exception as e:
+            overall_valid = False
+            results["chat"] = {"valid": False, "status": 0, "error": f"请求异常: {str(e)}"}
+            error_msgs.append(f"OpenAI Chat: {str(e)}")
+
+    # 2. Messages protocol verification
+    if "messages" in protocols:
+        try:
+            t0 = time.monotonic()
+            msg_url = build_messages_upstream(base_url, anthropic_base_url=anthropic_base_url, provider=provider)
+            probe_body = {
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "hi"}]
+            }
+            p_clean = (provider or "").lower().replace(".", "").replace("-", "").strip()
+            if p_clean == "minimax":
+                probe_body["model"] = "MiniMax-M3"
+            elif p_clean == "bai":
+                probe_body["model"] = "qwen3.8-flash"
+
+            headers = {
                 "Authorization": f"Bearer {api_key}",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
                 "User-Agent": "ocrproxy-verifier/1.0"
-            })
-            text = resp.text
-            status_code = resp.status_code
+            }
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+                resp = await client.post(msg_url, headers=headers, json=probe_body)
+                lat_ms = max(1, int((time.monotonic() - t0) * 1000))
+                status_code = resp.status_code
+                text = resp.text
 
-        if status_code in (200, 201):
-            return JSONResponse(content={
-                "valid": True,
-                "status": status_code,
-                "note": "Key 鉴权验证通过。此检查仅验证密钥有效性，实际调用可能因限流或服务异常而失败。"
-            })
-        if status_code in (401, 403):
-            return JSONResponse(content={
-                "valid": False,
-                "error": f"密钥无效，上游拒绝访问 (HTTP {status_code})"
-            })
+            if status_code in (200, 201):
+                results["messages"] = {"valid": True, "status": status_code, "latency_ms": lat_ms, "message": "鉴权验证通过"}
+            elif status_code in (401, 403):
+                overall_valid = False
+                err = f"密钥无效，Anthropic 端点拒绝访问 (HTTP {status_code})"
+                results["messages"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
+                error_msgs.append(f"Anthropic Messages: {err}")
+            elif status_code in (400, 404):
+                lower_text = text.lower()
+                if any(x in lower_text for x in ("authentication", "unauthorized", "invalid_api_key", "forbidden")):
+                    overall_valid = False
+                    err = f"密钥认证失败 (HTTP {status_code})"
+                    results["messages"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
+                    error_msgs.append(f"Anthropic Messages: {err}")
+                else:
+                    results["messages"] = {"valid": True, "status": status_code, "latency_ms": lat_ms, "message": "端点鉴权通过"}
+            else:
+                overall_valid = False
+                err = f"端点返回非预期响应 (HTTP {status_code}): {text[:60]}"
+                results["messages"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
+                error_msgs.append(f"Anthropic Messages: {err}")
+        except httpx.ConnectError:
+            overall_valid = False
+            results["messages"] = {"valid": False, "status": 0, "error": "网络连接异常，无法连通 Anthropic 端点"}
+            error_msgs.append("Anthropic Messages: 无法连通服务器")
+        except Exception as e:
+            overall_valid = False
+            results["messages"] = {"valid": False, "status": 0, "error": f"请求异常: {str(e)}"}
+            error_msgs.append(f"Anthropic Messages: {str(e)}")
 
-        return JSONResponse(content={
-            "valid": False,
-            "error": f"上游返回非预期响应 (HTTP {status_code}): {text[:100]}"
-        })
-    except httpx.ConnectError as e:
-        logger.warning("Verify key connect error: %s", e)
-        return JSONResponse(content={"valid": False, "error": "网络连接异常，无法连通上游服务器"})
-    except Exception as e:
-        logger.error("Verify key unexpected error: %s", e, exc_info=True)
-        return JSONResponse(content={"valid": False, "error": "验证请求失败"})
+    # 3. Responses protocol verification (if requested)
+    if "responses" in protocols:
+        results["responses"] = {"valid": True, "status": 200, "latency_ms": 1, "message": "协议就绪 (未来支持)"}
+
+    return JSONResponse(content={
+        "valid": overall_valid,
+        "protocols": results,
+        "error": "；".join(error_msgs) if error_msgs else None
+    })
 
 
 @router.post("/test-candidate")

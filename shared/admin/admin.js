@@ -16,9 +16,10 @@ const TOKEN_KEY = 'ocrproxy_edge_token';
 const PRESET_DEFINITIONS = {
   minimax: {
     id: 'minimax',
-    name: 'MiniMax (官方开放平台 / M3 系列)',
+    name: 'MiniMax',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
+    protocols: ['chat', 'messages'],
     description: 'MiniMax 官方国内订阅平台，支持 MiniMax-M3 系列，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通',
     recommended_models: [
       { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态通用模型 (支持超长思考，兼容 Messages)', checked: true },
@@ -26,9 +27,10 @@ const PRESET_DEFINITIONS = {
   },
   bai: {
     id: 'bai',
-    name: 'B.AI (双协议兼容中转)',
+    name: 'B.AI',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
+    protocols: ['chat', 'messages'],
     description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道',
     recommended_models: [
       { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true },
@@ -39,9 +41,9 @@ const PRESET_DEFINITIONS = {
   },
   agnes: {
     id: 'agnes',
-    name: 'Agnes AI (爱格尼斯海外智能体)',
+    name: 'Agnes AI',
     base_url: 'https://apihub.agnes-ai.com/v1',
-    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
+    protocols: ['chat'],
     description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)',
     recommended_models: [
       { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true },
@@ -50,9 +52,10 @@ const PRESET_DEFINITIONS = {
   },
   google: {
     id: 'google',
-    name: 'Google AI Studio (Gemini)',
+    name: 'Google AI Studio',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射与 Schema 裁剪适配',
+    protocols: ['chat'],
+    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射',
     recommended_models: [
       { name: 'gemini-3.5-flash', upstream: 'gemini-3.5-flash', desc: '最新高性价比推理模型 (支持 low/medium/high 思考等级)', checked: true },
       { name: 'gemini-3.5-pro', upstream: 'gemini-3.5-pro', desc: '最新旗舰强推理模型 (支持 low/high 思考等级)', checked: true },
@@ -62,9 +65,10 @@ const PRESET_DEFINITIONS = {
   },
   sensenova: {
     id: 'sensenova',
-    name: '商汤日日新 (SenseNova)',
+    name: 'SenseNova',
     base_url: 'https://token.sensenova.cn/v1',
-    description: '商汤日日新大模型开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
+    protocols: ['chat'],
+    description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
     recommended_models: [
       { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '智谱/商汤最新 GLM-5.2 旗舰推理大模型', checked: true },
       { name: 'deepseek-v3', upstream: 'DeepSeek-V3', desc: 'DeepSeek-V3 基础推理模型', checked: false },
@@ -73,9 +77,10 @@ const PRESET_DEFINITIONS = {
   },
   stepfun: {
     id: 'stepfun',
-    name: '阶跃星辰 (StepFun)',
+    name: 'StepFun',
     base_url: 'https://api.stepfun.com/v1',
-    description: '阶跃星辰大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入',
+    protocols: ['chat'],
+    description: '阶跃星辰 StepFun 大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek 思考格式注入',
     recommended_models: [
       { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: '阶跃最新闪电高速推理大模型', checked: true },
       { name: 'step-2-16k', upstream: 'step-2-16k', desc: '阶跃 Step-2 旗舰大模型', checked: false },
@@ -83,9 +88,10 @@ const PRESET_DEFINITIONS = {
   },
   siliconflow: {
     id: 'siliconflow',
-    name: '硅基流动 (SiliconFlow)',
+    name: 'SiliconFlow',
     base_url: 'https://api.siliconflow.cn/v1',
-    description: '硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5 等海量开源模型',
+    protocols: ['chat'],
+    description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型',
     recommended_models: [
       { name: 'deepseek-ai/DeepSeek-V3', upstream: 'deepseek-ai/DeepSeek-V3', desc: 'DeepSeek-V3 全尺寸旗舰模型', checked: true },
       { name: 'deepseek-ai/DeepSeek-R1', upstream: 'deepseek-ai/DeepSeek-R1', desc: 'DeepSeek-R1 全尺寸深度思考模型', checked: false },
@@ -96,32 +102,11 @@ const PRESET_DEFINITIONS = {
     id: 'tokenrhythm',
     name: 'TokenRhythm',
     base_url: 'https://api.tokenrhythm.com/v1',
+    protocols: ['chat'],
     description: 'TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换',
     recommended_models: [
       { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true },
       { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false },
-    ]
-  },
-  deepseek: {
-    id: 'deepseek',
-    name: 'DeepSeek 官方开放平台',
-    base_url: 'https://api.deepseek.com/v1',
-    description: 'DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存',
-    recommended_models: [
-      { name: 'deepseek-chat', upstream: 'deepseek-chat', desc: 'DeepSeek-V3 快速对话大模型', checked: true },
-      { name: 'deepseek-reasoner', upstream: 'deepseek-reasoner', desc: 'DeepSeek-R1 深度思考推理大模型', checked: true },
-    ]
-  },
-  openai: {
-    id: 'openai',
-    name: 'OpenAI 官方 / 标准中转',
-    base_url: 'https://api.openai.com/v1',
-    description: 'OpenAI 官方 API 或标准兼容中转网关',
-    recommended_models: [
-      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能大模型', checked: true },
-      { name: 'gpt-4o-mini', upstream: 'gpt-4o-mini', desc: 'OpenAI GPT-4o-mini 高性价比快速模型', checked: true },
-      { name: 'o3-mini', upstream: 'o3-mini', desc: 'OpenAI 最新 o3-mini 快速推理思考模型', checked: false },
-      { name: 'o1', upstream: 'o1', desc: 'OpenAI o1 深度思考推理旗舰模型', checked: false },
     ]
   }
 };
@@ -734,8 +719,20 @@ function onPresetSelected() {
   const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = presetProtos.includes('chat');
   const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = presetProtos.includes('messages');
   const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = presetProtos.includes('responses');
-  const wrap = document.getElementById('m_prov_anthropic_url_wrap'); if(wrap) wrap.style.display = presetProtos.includes('messages') ? 'block' : 'none';
-  const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = preset.anthropic_base_url || '';
+
+  // Custom Anthropic URL
+  const customToggle = document.getElementById('m_prov_custom_url_toggle');
+  const customSection = document.getElementById('m_prov_custom_url_section');
+  const customUrlInput = document.getElementById('m_prov_anthropic_url');
+  if (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) {
+    if (customToggle) customToggle.checked = true;
+    if (customSection) customSection.style.display = 'block';
+    if (customUrlInput) customUrlInput.value = preset.anthropic_base_url;
+  } else {
+    if (customToggle) customToggle.checked = false;
+    if (customSection) customSection.style.display = 'none';
+    if (customUrlInput) customUrlInput.value = '';
+  }
 
   // Render recommended models checklist
   modelsList.innerHTML = '';
@@ -760,9 +757,9 @@ function onPresetSelected() {
   }
 }
 
-function onEdgeOneProtoMessagesChange() {
-  const isChecked = document.getElementById('m_prov_proto_messages')?.checked;
-  const wrap = document.getElementById('m_prov_anthropic_url_wrap');
+function onEdgeOneCustomUrlToggleChange() {
+  const isChecked = document.getElementById('m_prov_custom_url_toggle')?.checked;
+  const wrap = document.getElementById('m_prov_custom_url_section');
   if (wrap) wrap.style.display = isChecked ? 'block' : 'none';
 }
 
@@ -776,11 +773,9 @@ function openAddProviderModal() {
   const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = true;
   const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = false;
   const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = false;
-  const wrap = document.getElementById('m_prov_anthropic_url_wrap'); if(wrap) wrap.style.display = 'none';
+  const customToggle = document.getElementById('m_prov_custom_url_toggle'); if(customToggle) customToggle.checked = false;
+  const customSection = document.getElementById('m_prov_custom_url_section'); if(customSection) customSection.style.display = 'none';
   const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = '';
-  document.getElementById('m_prov_key_label').value = 'default';
-  document.getElementById('m_prov_key_val').value = '';
-  document.getElementById('m_prov_init_key_wrap').style.display = 'block';
   document.getElementById('m_prov_desc').style.display = 'none';
   document.getElementById('m_prov_models_wrap').style.display = 'none';
   openModal('providerModal');
@@ -803,48 +798,26 @@ async function saveProviderModal() {
   cfg.providers[name].protocols = selectedProtos;
   cfg.providers[name].anthropic_messages = selectedProtos.includes('messages');
 
-  const anthropicUrl = document.getElementById('m_prov_anthropic_url')?.value.trim();
+  const customToggle = document.getElementById('m_prov_custom_url_toggle');
+  const anthropicUrl = customToggle?.checked ? document.getElementById('m_prov_anthropic_url')?.value.trim() : '';
   if (selectedProtos.includes('messages') && anthropicUrl) {
     cfg.providers[name].anthropic_base_url = anthropicUrl;
-  } else if (!selectedProtos.includes('messages')) {
+  } else {
     delete cfg.providers[name].anthropic_base_url;
   }
 
-  const presetId = document.getElementById('m_prov_preset')?.value;
-  if (presetId && PRESET_DEFINITIONS[presetId]?.anthropic_base_url && !anthropicUrl && selectedProtos.includes('messages')) {
-    cfg.providers[name].anthropic_base_url = PRESET_DEFINITIONS[presetId].anthropic_base_url;
-  }
-
-  const keyLabel = document.getElementById('m_prov_key_label').value.trim() || 'default';
-  const keyVal = document.getElementById('m_prov_key_val').value.trim();
-
-  // If initial API Key provided, save it
-  if (keyVal) {
-    cfg.providers[name].keys = cfg.providers[name].keys || {};
-    cfg.providers[name].keys[keyLabel] = keyVal;
-  }
-
-  // If recommended models were checked, auto-register / bind them
+  // If recommended models were checked, auto-register them
   const checkedModels = document.querySelectorAll('#m_prov_models_list input[type="checkbox"]:checked');
   if (checkedModels.length > 0) {
     cfg.agent_models = cfg.agent_models || {};
-    const keyToBind = keyVal ? keyLabel : Object.keys(cfg.providers[name].keys || {})[0] || 'default';
-
     checkedModels.forEach((cb) => {
       const modelName = cb.dataset.model;
       const upstream = cb.dataset.upstream || modelName;
-
       if (!cfg.agent_models[modelName]) {
         cfg.agent_models[modelName] = {
           upstream_model: upstream,
-          keys: [{ provider: name, key: keyToBind }],
+          keys: [],
         };
-      } else {
-        const existingKeys = cfg.agent_models[modelName].keys || [];
-        if (!existingKeys.some((b) => b.provider === name && b.key === keyToBind)) {
-          existingKeys.push({ provider: name, key: keyToBind });
-          cfg.agent_models[modelName].keys = existingKeys;
-        }
       }
     });
   }
@@ -865,6 +838,13 @@ function openAddKeyModal(prov) {
   document.getElementById('m_key_old_label').value = '';
   document.getElementById('m_key_label').value = '';
   document.getElementById('m_key_val').value = '';
+  const skipCb = document.getElementById('m_key_skip'); if (skipCb) skipCb.checked = false;
+  const diagBox = document.getElementById('m_key_diag_box'); if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
+  const hintEl = document.getElementById('m_key_proto_hint');
+  if (hintEl) {
+    const protos = getProviderProtocols(prov);
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+  }
   openModal('keyModal');
 }
 
@@ -874,6 +854,13 @@ function openEditKeyModal(prov, label, val) {
   document.getElementById('m_key_old_label').value = label;
   document.getElementById('m_key_label').value = label;
   document.getElementById('m_key_val').value = val;
+  const skipCb = document.getElementById('m_key_skip'); if (skipCb) skipCb.checked = true;
+  const diagBox = document.getElementById('m_key_diag_box'); if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
+  const hintEl = document.getElementById('m_key_proto_hint');
+  if (hintEl) {
+    const protos = getProviderProtocols(prov);
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+  }
   openModal('keyModal');
 }
 
@@ -882,6 +869,10 @@ async function saveKeyModal() {
   const oldLabel = (document.getElementById('m_key_old_label').value || '').trim();
   const label = document.getElementById('m_key_label').value.trim();
   const val = document.getElementById('m_key_val').value.trim();
+  const skip = document.getElementById('m_key_skip')?.checked;
+  const diagBox = document.getElementById('m_key_diag_box');
+  if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
+
   if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
 
   cfg.providers[prov] = cfg.providers[prov] || { keys: {} };
@@ -892,8 +883,75 @@ async function saveKeyModal() {
       toast(`Key 别名「${label}」已存在，请换一个别名`, 'err');
       return;
     }
+  }
+
+  // If online verification not skipped, test protocols
+  if (!skip) {
+    const spinner = document.getElementById('m_key_spinner');
+    if (spinner) spinner.style.display = 'block';
+    const pObj = cfg.providers[prov] || {};
+    const protos = getProviderProtocols(prov, pObj);
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const r = await fetch('/api/admin/verify-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getKey()}` },
+        body: JSON.stringify({
+          base_url: pObj.base_url,
+          anthropic_base_url: pObj.anthropic_base_url,
+          api_key: val,
+          provider: prov,
+          protocols: protos
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      const d = await r.json();
+
+      if (d.valid) {
+        const latList = [];
+        for (const pr of protos) {
+          const res = (d.protocols && d.protocols[pr]);
+          if (res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
+        }
+        toast(`✅ Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
+      } else {
+        if (diagBox) {
+          let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--color-danger);display:flex;align-items:center;gap:6px;">⚠️ 协议连通性未完全通过 (已阻止保存)</div>';
+          html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
+          for (const pr of protos) {
+            const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
+            const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
+            if (res.valid) {
+              html += `<div style="display:flex;align-items:center;gap:6px;color:var(--color-success);"><span>🟢</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
+            } else {
+              html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--color-danger);"><span>🔴</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
+            }
+          }
+          html += '</div>';
+          html += '<div class="text-secondary mt-2" style="font-size:11px;border-top:1px solid var(--color-border);padding-top:6px;">提示：请核对并修改密钥；若确属受限网络，请勾选上方「跳过连通性在线校验」后重新点击保存。</div>';
+          diagBox.innerHTML = html;
+          diagBox.style.display = 'block';
+        }
+        toast('协议校验存在失败项，已阻止保存', 'err');
+        return;
+      }
+    } catch (e) {
+      if (diagBox) {
+        diagBox.innerHTML = `<div style="color:var(--color-danger);font-size:12px;">❌ 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+        diagBox.style.display = 'block';
+      }
+      toast('网络请求异常: ' + e.message, 'err');
+      return;
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  if (oldLabel && oldLabel !== label) {
     delete cfg.providers[prov].keys[oldLabel];
-    // Cascade update agent_models
     if (cfg.agent_models) {
       Object.values(cfg.agent_models).forEach(m => {
         (m.keys || []).forEach(x => {
@@ -904,7 +962,6 @@ async function saveKeyModal() {
   }
 
   cfg.providers[prov].keys[label] = val;
-
   closeModal('keyModal');
   await persistConfig();
 }
