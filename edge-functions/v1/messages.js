@@ -249,6 +249,12 @@ export async function onRequestPost(context) {
 
 function normaliseMessagesForProvider(out, provider) {
   const p = String(provider || '').toLowerCase().trim();
+
+  // Ensure max_tokens is present (Anthropic API specification mandatory field)
+  if (!out.max_tokens || typeof out.max_tokens !== 'number' || out.max_tokens <= 0) {
+    out.max_tokens = 4096;
+  }
+
   if (p === 'minimax') {
     const m = String(out.model || '');
     if (m.toLowerCase() === 'minimax-m3') {
