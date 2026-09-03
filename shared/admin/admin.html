@@ -257,10 +257,21 @@
         <div class="section-title mb-2">接入网关</div>
         <div class="card card-pad mb-3">
           <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBaseUrl">—</span></div>
-          <div class="flex-between"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModelsList">—</span></div>
+          <div class="flex-between mb-2"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModelsList">—</span></div>
+          <div class="flex-between"><span class="text-secondary">网关已支持协议</span><span id="accProtocols" style="display:flex;gap:6px;">—</span></div>
         </div>
-        <div class="section-title mb-2">Python SDK 示例</div>
-        <div class="code-block"><button class="copy-btn" onclick="copySnippet('accPy')">复制</button><pre id="accPy"></pre></div>
+        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
+          <span>1. OpenAI 格式调用 (Chat Completions)</span>
+          <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
+        </div>
+        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accPy')">复制</button><pre id="accPy"></pre></div>
+        
+        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
+          <span>2. Claude 格式调用 (Anthropic Messages)</span>
+          <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
+        </div>
+        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accMessagesPy')">复制</button><pre id="accMessagesPy"></pre></div>
+
         <div class="section-title mb-2">cURL 示例</div>
         <div class="code-block"><button class="copy-btn" onclick="copySnippet('accCurl')">复制</button><pre id="accCurl"></pre></div>
       </div>

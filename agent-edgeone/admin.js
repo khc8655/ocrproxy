@@ -387,6 +387,44 @@ function renderDashboard() {
   }
 }
 
+// Protocol Metadata & Helpers (Factual Badges)
+const PROTOCOLS = {
+  chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: '支持 OpenAI Chat 格式 (/v1/chat/completions)' },
+  messages: { label: 'Anthropic Messages', short: 'Messages', badgeClass: 'badge-warning', title: '支持 Anthropic Claude Messages 格式 (/v1/messages)' },
+  responses: { label: 'OpenAI Responses', short: 'Responses', badgeClass: 'badge-purple', title: '支持 OpenAI Responses 格式 (/v1/responses)' }
+};
+
+function getProviderProtocols(name, provObj){
+  const p = provObj || (cfg && cfg.providers && cfg.providers[name]) || {};
+  const protos = ['chat'];
+  const lower = (name || '').toLowerCase();
+  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url) {
+    protos.push('messages');
+  }
+  if (p.openai_responses || p.supports_responses) {
+    protos.push('responses');
+  }
+  return protos;
+}
+
+function getModelProtocols(modelName){
+  const m = cfg && cfg.agent_models ? cfg.agent_models[modelName] : null;
+  if (!m || !m.keys || !m.keys.length) return ['chat'];
+  const set = new Set(['chat']);
+  for (const b of m.keys) {
+    const provProtos = getProviderProtocols(b.provider);
+    provProtos.forEach(pr => set.add(pr));
+  }
+  return Array.from(set);
+}
+
+function renderProtocolBadges(protoList, isShort=true){
+  return (protoList || ['chat']).map(pr => {
+    const meta = PROTOCOLS[pr] || { label: pr, short: pr, badgeClass: 'badge-neutral', title: pr };
+    return `<span class="badge ${meta.badgeClass}" title="${esc(meta.title)}" style="font-weight:600;font-size:11px;padding:2px 7px;">${esc(isShort ? meta.short : meta.label)}</span>`;
+  }).join(' ');
+}
+
 function renderAgentModels() {
   const box = document.getElementById('agentModelsBox');
   if (!box) return;
@@ -456,7 +494,7 @@ function renderAgentModels() {
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>${m}</h3>
+          <h3>${m} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${renderProtocolBadges(getModelProtocols(m), true)}</span></h3>
         <div class="meta mono mt-2">上游映射: ${item.upstream_model || m} · ${strategyLabel}</div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -519,14 +557,14 @@ function renderProviders() {
       `;
     });
 
-    const isDual = (p.toLowerCase() === 'minimax' || p.toLowerCase() === 'bai' || Boolean(prov.anthropic_base_url));
-    const dualBadge = isDual ? `<span class="badge" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-size:11px;margin-left:6px;">OpenAI + Messages 双协议</span>` : '';
+    const protos = getProviderProtocols(p, prov);
+    const protoBadges = renderProtocolBadges(protos, false);
     const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${prov.anthropic_base_url}` : '';
 
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>${p}${dualBadge}</h3>
+          <h3>${p} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges}</span></h3>
         <div class="meta mono mt-2">${prov.base_url || '—'}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -547,19 +585,38 @@ function renderRawJson() {
 
 function renderAccess() {
   const origin = window.location.origin;
-  document.getElementById('accBaseUrl').textContent = `${origin}/v1`;
+  const base = `${origin}/v1`;
   const models = Object.keys(cfg.agent_models || {});
-  document.getElementById('accModelsList').textContent = models.join(', ') || '—';
+  const messagesModels = models.filter(m => getModelProtocols(m).includes('messages'));
+  const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
+  const proxyKey = getKey() || 'YOUR_PROXY_API_KEY';
 
+  const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  setT('accBaseUrl', base);
+  setT('accModelsList', models.join(', ') || '—');
+
+  const protoContainer = document.getElementById('accProtocols');
+  if (protoContainer) {
+    const activeProtos = new Set(['chat']);
+    if (messagesModels.length || Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('messages'))) {
+      activeProtos.add('messages');
+    }
+    if (Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('responses'))) {
+      activeProtos.add('responses');
+    }
+    protoContainer.innerHTML = renderProtocolBadges(Array.from(activeProtos), false);
+  }
+
+  // 1. OpenAI Chat
   const pySample = `from openai import OpenAI
 
 client = OpenAI(
-    api_key="${getKey() || 'YOUR_PROXY_API_KEY'}",
-    base_url="${origin}/v1"
+    api_key="${proxyKey}",
+    base_url="${base}"
 )
 
 response = client.chat.completions.create(
-    model="${models[0] || 'glm-5.2'}",
+    model="${models[0] || 'qwen3.8-flash'}",
     messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
     stream=True
 )
@@ -568,17 +625,36 @@ for chunk in response:
     content = chunk.choices[0].delta.content or ""
     print(content, end="", flush=True)
 `;
-  document.getElementById('accPy').textContent = pySample;
+  setT('accPy', pySample);
 
-  const curlSample = `curl -X POST ${origin}/v1/chat/completions \\
-  -H "Authorization: Bearer ${getKey() || 'YOUR_PROXY_API_KEY'}" \\
+  // 2. Anthropic Messages
+  const messagesPySample = `import anthropic
+
+client = anthropic.Anthropic(
+    api_key="${proxyKey}",
+    base_url="${base}"  # 直连本网关
+)
+
+# 使用支持 Messages 协议的模型（当前支持：${messagesModels.join(', ') || demoMessages}）
+response = client.messages.create(
+    model="${demoMessages}",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "你好，请介绍你自己。"}]
+)
+
+print(response.content[0].text)
+`;
+  setT('accMessagesPy', messagesPySample);
+
+  const curlSample = `curl -X POST ${base}/chat/completions \\
+  -H "Authorization: Bearer ${proxyKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "${models[0] || 'glm-5.2'}",
+    "model": "${models[0] || 'qwen3.8-flash'}",
     "messages": [{"role": "user", "content": "1+1="}],
     "stream": true
   }'`;
-  document.getElementById('accCurl').textContent = curlSample;
+  setT('accCurl', curlSample);
 }
 
 // ---- Key & Model Test ---------------------------------------------------
