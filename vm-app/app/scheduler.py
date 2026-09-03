@@ -339,14 +339,30 @@ async def schedule(
 
     # Load settings from config with safe fallback and clamping
     try:
-        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout", 12)))
+        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout", 15))))
     except (ValueError, TypeError):
-        upstream_timeout_sec = 12.0
+        upstream_timeout_sec = 15.0
 
     try:
-        total_budget_sec = max(1.0, float(config.get("schedule_total_budget", 15)))
+        total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 45))))
     except (ValueError, TypeError):
-        total_budget_sec = 15.0
+        total_budget_sec = 45.0
+
+    # Max candidate retries per request
+    try:
+        max_retries = max(1, int(config.get("max_retries", config.get("schedule_total_budget_count", 3))))
+    except (ValueError, TypeError):
+        max_retries = 3
+
+    # Max attempts per individual provider
+    try:
+        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 2)))
+    except (ValueError, TypeError):
+        max_attempts_per_provider = 2
+
+    fast_failover_provider_down = bool(config.get("fast_failover_provider_down", True))
+    provider_attempts: Dict[str, int] = {}
+    down_providers: Set[str] = set()
 
     if strategy == "manual":
         total_budget_sec = max(total_budget_sec, upstream_timeout_sec + 5.0)
@@ -356,11 +372,11 @@ async def schedule(
     except (ValueError, TypeError):
         concurrency_limit = 5
 
-    # 429 TPM Rate Limit Cooldown (default 10s, non-circuit-breaking)
+    # 429 TPM Rate Limit Cooldown (default 60s)
     try:
-        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_tpm_sec", config.get("cooldown_429_sec", 10))))
+        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 60))))
     except (ValueError, TypeError):
-        cooldown_tpm_sec = 10.0
+        cooldown_tpm_sec = 60.0
 
     # 429/403 Quota Exhaustion Cooldown (default 600s)
     try:
@@ -406,6 +422,12 @@ async def schedule(
 
     for loop_idx in range(2):
         for orig_idx, cand in ordered_items:
+            # Check maximum retry budget
+            if attempt_seq >= max_retries:
+                logger.info("Reached maximum candidate retry limit (%d attempts)", max_retries)
+                errors.append(f"max_retries_{max_retries}_reached")
+                break
+
             # 1. Total budget check
             elapsed = time.time() - start_time
             if elapsed >= total_budget_sec:
@@ -414,6 +436,18 @@ async def schedule(
                 break
 
             cand_id = get_candidate_id(cand)
+            provider_name = cand["provider"]
+            key_label = cand["key"]
+
+            # Provider down fast failover
+            if fast_failover_provider_down and provider_name in down_providers:
+                logger.info("Skipping candidate %s — provider %s marked down for this request", cand_id, provider_name)
+                continue
+
+            # Per-provider attempt limit
+            if provider_attempts.get(provider_name, 0) >= max_attempts_per_provider:
+                logger.info("Skipping candidate %s — reached max %d attempts for provider %s", cand_id, max_attempts_per_provider, provider_name)
+                continue
 
             # 2. Cooldown check
             cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
@@ -437,6 +471,7 @@ async def schedule(
             base_url = provider.get("base_url", "")
 
             attempt_seq += 1
+            provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
 
             # 3. Concurrency Semaphore acquisition per key
             sem_id = f"{provider_name}:{key_label}"
@@ -686,11 +721,17 @@ async def schedule(
 
                         _cooldown_until[cand_id] = time.time() + cd_sec
 
+                        if fast_failover_provider_down and status_code in (502, 503, 504):
+                            down_providers.add(provider_name)
+                            logger.warning(f"Fast failover: provider {provider_name} returned {status_code}, skipping remaining keys for this request")
+
                     else:
                         # Non-cooldown cases (404/422 etc.): don't penalise key.
                         _consecutive_failures[cand_id] = 0
 
                 except httpx.ReadTimeout as e:
+                    if fast_failover_provider_down:
+                        down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
                             f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s",
@@ -717,6 +758,8 @@ async def schedule(
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
 
                 except httpx.ConnectTimeout as e:
+                    if fast_failover_provider_down:
+                        down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
                             f"{cand_id} encountered ConnectTimeout: {str(e)}",
