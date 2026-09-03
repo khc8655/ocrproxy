@@ -401,8 +401,9 @@ function getProviderProtocols(name, provObj){
   }
   const protos = ['chat'];
   const lower = (name || '').toLowerCase();
-  const preset = PRESET_DEFINITIONS[lower];
-  if (p.anthropic_messages || lower === 'minimax' || lower === 'bai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
+  const clean = lower.replace(/[^a-z0-9]/g, '');
+  const preset = PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower];
+  if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
     protos.push('messages');
   }
   if (p.openai_responses || p.supports_responses) {
