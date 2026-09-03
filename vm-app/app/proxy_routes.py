@@ -527,19 +527,22 @@ async def chat_completions(request: Request):
             # In manual mode, filter to only the active key (or first key if active_key not found)
             if active_key:
                 matched = [c for c in candidates_list if c["key"] == active_key]
-                if matched:
-                    candidates_list = matched
-                else:
-                    candidates_list = candidates_list[:1]
+                candidates_list = matched if matched else candidates_list[:1]
             else:
                 candidates_list = candidates_list[:1]
+        elif active_key:
+            # Reorder candidates so active_key is attempted first
+            matched = [c for c in candidates_list if c["key"] == active_key]
+            others = [c for c in candidates_list if c["key"] != active_key]
+            if matched:
+                candidates_list = matched + others
 
         if not candidates_list:
             return _model_not_found_response(model_name)
         try:
-            chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+            chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
         except (ValueError, TypeError):
-            chat_timeout = 120.0
+            chat_timeout = 15.0
 
     elif run_mode == "kb":
         if model_name != "chat":
@@ -595,9 +598,9 @@ async def chat_completions(request: Request):
             if not candidates_list:
                 return _model_not_found_response(model_name)
             try:
-                chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+                chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
             except (ValueError, TypeError):
-                chat_timeout = 120.0
+                chat_timeout = 15.0
 
     if not candidates_list:
         return JSONResponse(
@@ -760,14 +763,19 @@ async def anthropic_messages(request: Request):
             candidates_list = matched if matched else candidates_list[:1]
         else:
             candidates_list = candidates_list[:1]
+    elif active_key:
+        matched = [c for c in candidates_list if c["key"] == active_key]
+        others = [c for c in candidates_list if c["key"] != active_key]
+        if matched:
+            candidates_list = matched + others
 
     if not candidates_list:
         return _anthropic_error(404, "not_found_error", f"No valid keys configured for model '{model_name}'.")
 
     try:
-        chat_timeout = max(1.0, float(config.get("upstream_timeout_chat", 120)))
+        chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
     except (ValueError, TypeError):
-        chat_timeout = 120.0
+        chat_timeout = 15.0
 
     req_config = {
         **config,
@@ -893,7 +901,7 @@ async def embeddings(request: Request):
     # global default (12s) — one timeout would burn the whole failover
     # budget and the remaining keys would never be tried.
     try:
-        emb_timeout = max(1.0, float(config.get("upstream_timeout_embedding", 60)))
+        emb_timeout = max(1.0, float(config.get("upstream_timeout_kb", config.get("upstream_timeout_embedding", 60))))
     except (ValueError, TypeError):
         emb_timeout = 60.0
 
@@ -973,7 +981,7 @@ async def rerank(request: Request):
     # Rerank requests can also be slow on long candidate lists — same
     # per-type timeout + budget treatment as embeddings.
     try:
-        rerank_timeout = max(1.0, float(config.get("upstream_timeout_rerank", 30)))
+        rerank_timeout = max(1.0, float(config.get("upstream_timeout_kb", config.get("upstream_timeout_rerank", 30))))
     except (ValueError, TypeError):
         rerank_timeout = 30.0
 
@@ -1087,7 +1095,7 @@ async def ocr(request: Request):
 
     # OCR / vision models need a longer timeout than chat
     try:
-        ocr_timeout = max(1.0, float(config.get("upstream_timeout_ocr", 60)))
+        ocr_timeout = max(1.0, float(config.get("upstream_timeout_kb", config.get("upstream_timeout_ocr", 60))))
     except (ValueError, TypeError):
         ocr_timeout = 60.0
 

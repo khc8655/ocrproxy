@@ -408,30 +408,34 @@
       </div>
       <div class="section" id="acc-section-kb">
         <div class="section-title mb-2">知识库工具接口调用示例</div>
-        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbChat')">复制</button><pre id="accKbChat"></pre></div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbEmb')">复制</button><pre id="accKbEmb"></pre></div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbRank')">复制</button><pre id="accKbRank"></pre></div>
-        <div class="code-block"><button class="copy-btn" onclick="copy('accKbOcr')">复制</button><pre id="accKbOcr"></pre></div>
-      </div>
-    </div>
-
-    <!-- Panel: Settings -->
+        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</    <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
-        <div class="section-title mb-3">系统运行与可靠性参数</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div class="section-title">系统运行与可靠性参数</div>
+            <div class="section-desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存设置</button>
+            <button class="btn btn-success btn-sm" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:4px;font-weight:600;">
+              <span>⚡️</span> 保存并实测验证
+            </button>
+          </div>
+        </div>
 
-        <!-- Group 0: Client Authentication & Run Mode -->
+        <!-- Card 1: Client Auth & Run Mode -->
         <div class="card card-pad settings-group mb-3">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
-              客户端连接鉴权与运行模式 (Client Authentication & Run Mode)
+              1. 运行模式与客户端鉴权 (Run Mode & Client Auth)
             </h3>
             <span class="badge badge-primary">全局通用</span>
           </div>
           <div class="settings-grid">
             <div class="setting-item" style="grid-column: 1 / -1;">
-              <label class="form-label">客户端调用密钥 (PROXY_API_KEY)</label>
+              <label class="form-label" for="s_proxyApiKey">客户端调用密钥 (PROXY_API_KEY)</label>
               <div style="display:flex;gap:8px;">
                 <input type="text" id="s_proxyApiKey" class="form-control mono" placeholder="sk-..." style="flex:1;">
                 <button class="btn btn-sm" onclick="copyProxyKey()">复制 Key</button>
@@ -439,146 +443,171 @@
               </div>
               <span class="hint">客户端（Cursor / Cline / Dify / OpenAI SDK 等）调用 /v1/* 接口时请求头 <code>Authorization: Bearer &lt;KEY&gt;</code> 传入的密钥。保存在加密配置中，修改立即生效。</span>
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1; max-width:420px;">
-              <label class="form-label">系统运行模式 (Running Mode)</label>
-              <select id="s_runMode" class="form-control">
+            <div class="setting-item" style="grid-column: 1 / -1; max-width:480px;">
+              <label class="form-label" for="s_runMode">系统运行模式 (Running Mode)</label>
+              <select id="s_runMode" class="form-control" onchange="onRunModeChange()">
+                <option value="agent">Agent 智能体模式 (推荐海外 VM / 专精 Cursor、Cline 真实模型)</option>
+                <option value="kb">KB 知识库模式 (推荐国内 VM / 4 大入库专用虚拟模型)</option>
                 <option value="full">Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)</option>
-                <option value="agent">Agent 智能体模式 (推荐海外 VM / 纯 Agent 真实模型)</option>
-                <option value="kb">KB 知识库模式 (推荐国内 VM / 4 大入库虚拟模型)</option>
               </select>
-              <span class="hint">控制管理后台页面自适应展示（隐藏无关参数/Tab）以及 /v1/models 的默认暴露范围。</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Group 1: Global Reliability & Rate Limits -->
-        <div class="card card-pad settings-group">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
-              全局高可用与限流熔断 (Global Reliability)
-            </h3>
-            <span class="badge badge-primary">全局通用</span>
-          </div>
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="form-label">单 Key 最大并发限制</label>
-              <input type="number" id="s_concurrency" class="form-control" placeholder="默认 3">
-              <span class="hint">每个 API Key 在途最大并发保护，防止打崩配额</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">故障转移总预算 (s)</label>
-              <input type="number" id="s_budget" class="form-control" placeholder="默认 15">
-              <span class="hint">单次请求在多候选 Key 之间轮换的最长等待窗口</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">429 TPM 速率限流短期冷却 (s)</label>
-              <input type="number" id="s_cooldownTpm" class="form-control" placeholder="默认 10">
-              <span class="hint">针对 429001/TPM 超限的轻量避让，不累加熔断计数器</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">5xx 服务端故障冷却 (s)</label>
-              <input type="number" id="s_cooldown5xx" class="form-control" placeholder="默认 30">
-              <span class="hint">上游 500/502/503/504 等服务异常时的临时避让时间</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">403 鉴权失败 / 额度耗尽冷却 (s)</label>
-              <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600">
-              <span class="hint">Key 无效或 5小时配额用尽时的长期屏蔽（10分钟）</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">5xx 严重故障熔断阈值 (次)</label>
-              <input type="number" id="s_circuitThreshold" class="form-control" placeholder="默认 3">
-              <span class="hint">连续 5xx / 宕机达到该次数时触发深度熔断（429 限流不计入）</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">严重故障熔断时长 (s)</label>
-              <input type="number" id="s_circuitCooldown" class="form-control" placeholder="默认 300">
-              <span class="hint">触发深度熔断后该候选节点的休眠锁定时间（5分钟）</span>
+              <span class="hint">控制管理后台页面自适应展示（隐藏无关参数/Tab）以及 /v1/models 的暴露范围。</span>
             </div>
           </div>
         </div>
 
-        <!-- Group 2: Agent Mode Settings -->
-        <div class="card card-pad settings-group" id="st-group-agent">
+        <!-- Card 2: Key Routing Policy -->
+        <div class="card card-pad settings-group mb-3">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
-              Agent 模式设置 (Agent Mode)
-            </h3>
-            <span class="badge badge-success">Agent 真实模型</span>
-          </div>
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="form-label">Agent 对话与推理读超时 (s)</label>
-              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 45">
-              <span class="hint">Agent 工具调用、深度思考推理等长耗时请求的响应超时</span>
-            </div>
-          </div>
-          <div class="hint-box mt-3" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:12px 14px;">
-            <b>Agent 模式机制说明：</b><br>
-            • <b>纯透传</b>：原生透传 <code>tools</code> / <code>tool_choice</code> 函数调用、<code>reasoning_content</code> 深度推理过程与流式 SSE 字节流。<br>
-            • <b>多 Key 轮询</b>：单个 Key 遇到 429 TPM 超限时快速避让 10 秒并自动轮换至下一个 Key，不再死锁熔断。
-          </div>
-        </div>
-
-        <!-- Group 3: KB Ingestion Settings -->
-        <div class="card card-pad settings-group" id="st-group-kb">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
-              知识库入库设置 (KB Ingestion)
-            </h3>
-            <span class="badge badge-neutral">KB 虚拟别名</span>
-          </div>
-          <div class="settings-grid">
-            <div class="setting-item">
-              <label class="form-label">KB Chat 快速对话超时 (s)</label>
-              <input type="number" id="s_fastTimeout" class="form-control" placeholder="默认 30">
-              <span class="hint">知识库入库摘要提取的短超时（写死禁用思考 + 强制非流式）</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">OCR 图像识别超时 (s)</label>
-              <input type="number" id="s_ocrTimeout" class="form-control" placeholder="默认 60">
-              <span class="hint">大图识图或多页文档视觉模型识别超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">Embedding 向量化超时 (s)</label>
-              <input type="number" id="s_embTimeout" class="form-control" placeholder="默认 60">
-              <span class="hint">批量文本向量计算超时</span>
-            </div>
-            <div class="setting-item">
-              <label class="form-label">Reranker 重排打分超时 (s)</label>
-              <input type="number" id="s_rankTimeout" class="form-control" placeholder="默认 30">
-              <span class="hint">检索召回文档重排计算超时</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Key Routing Strategies -->
-        <div class="card card-pad settings-group">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
-              Key 轮换与分流策略 (Key Routing Policy)
+              2. 核心分流调度策略 (Key Routing Strategy)
             </h3>
             <span class="badge badge-primary">分流调度</span>
           </div>
           <div class="settings-grid">
-            <div class="setting-item" id="st-item-agent-routing" style="grid-column: 1 / -1; max-width:640px;">
-              <label class="form-label">Agent 模式分流策略 (Agent Routing)</label>
+            <div class="setting-item" id="st-item-agent-routing" style="grid-column: 1 / -1; max-width:680px;">
+              <label class="form-label" for="s_agentRouting">Agent 模式分流策略 (agent_routing_strategy)</label>
               <select id="s_agentRouting" class="form-control" onchange="onAgentRoutingChange()">
-                <option value="sticky_failover">粘性故障转移 (Sticky Failover - 推荐，固定当前 Key，遇 429 顺延并长期驻留新 Key)</option>
-                <option value="manual">🔒 纯手动直通 (Manual - 锁定当前选中 Key，绝不自动切换，上游状态纯透传)</option>
-                <option value="round_robin">轮询负载均衡 (Round Robin - 每次请求依次轮流切换 Key)</option>
-                <option value="priority_fallback">主备优先级降级 (Priority Fallback - 始终优先尝试第 1 个 Key，遇错降级)</option>
-                <option value="latency_based">最低延迟优先 (Latency Based - 自动路由至近期延迟最低的优质 Key)</option>
+                <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐，固定当前 Key，遇 429 顺延并长期驻留新 Key</option>
+                <option value="manual">🔒 纯手动直通 (manual) — 锁定当前激活 Key，绝不自动切换，上游状态纯透传</option>
+                <option value="round_robin">轮询负载均衡 (round_robin) — 每次请求依次轮流切换 Key，均衡摊销</option>
+                <option value="priority_fallback">主备优先级降级 (priority_fallback) — 严格优先尝试 #1 Key，遇错降级</option>
+                <option value="latency_based">最低延迟优先 (latency_based) — 自动路由至近期延迟最低的优质 Key</option>
               </select>
               <div id="manual-routing-tip" class="hint-box mt-2" style="display:none;color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:10px 14px;font-size:12px;">
                 🔒 <b>纯手动直通模式已生效</b>：系统将直接使用各 Agent 模型指定的当前激活 Key，绝不进行自动切换；所有自动重试、熔断与冷却避让已自动停用，上游响应（含 200/429/500）完全 100% 原始透传。
               </div>
               <span class="hint" id="agent-routing-hint">智能体编程场景（Cursor / Cline）推荐「粘性故障转移」，可保持会话连接与 KV Cache 稳定性，避免频繁切回限流 Key。</span>
             </div>
-            <div class="setting-item" id="st-item-kb-routing" style="grid-column: 1 / -1; max-width:640px;">
-              <label class="form-label">KB 知识库分流策略 (KB Routing)</label>
+            <div class="setting-item" id="st-item-kb-routing" style="grid-column: 1 / -1; max-width:680px;">
+              <label class="form-label" for="s_kbRouting">KB 知识库分流策略 (kb_routing_strategy)</label>
               <select id="s_kbRouting" class="form-control">
-                <option value="round_robin">轮询负载均衡 (Round Robin - 推荐，高并发请求原子轮换分流，充分利用并发与 TPM)</option>
+                <option value="round_robin">轮询负载均衡 (round_robin) — 推荐，高并发请求原子轮换分流，充分利用并发与 TPM</option>
+                <option value="sticky_failover">粘性故障转移 (sticky_failover) — 固定当前 Key 直到限流</option>
+                <option value="priority_fallback">主备优先级降级 (priority_fallback) — 始终优先尝试第 1 个 Key</option>
+                <option value="latency_based">最低延迟优先 (latency_based) — 自动路由至延迟最低的 Key</option>
+              </select>
+              <span class="hint">知识库无状态批量入库（Embedding / OCR / Rerank）推荐「轮询负载均衡」，可均匀打散流量并大幅提升入库吞吐量。</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Timeouts & Budget -->
+        <div class="card card-pad settings-group mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              3. 超时时钟与重试预算 (Timeouts & Retry Budget)
+            </h3>
+            <span class="badge badge-primary">超时控制</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="form-label" for="s_chatTimeout">单次上游等待超时 (upstream_timeout_sec)</label>
+              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 15" min="5" max="180">
+              <span class="hint">向上游单一 Key 发起请求的等待上限（秒），超时后立即切换下一候选 Key（默认 15s）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_budget">全局请求硬超时预算 (request_total_budget_sec)</label>
+              <input type="number" id="s_budget" class="form-control" placeholder="默认 45" min="10" max="300">
+              <span class="hint">单次客户端请求在多候选 Key 之间轮换尝试的最长总时钟（秒，默认 45s）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_maxRetries">单请求最大重试候选数 (max_retries)</label>
+              <input type="number" id="s_maxRetries" class="form-control" placeholder="默认 3" min="1" max="10">
+              <span class="hint">单次请求最多允许尝试的候选 Key 数量上限（默认 3 次，避免无限死等）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_maxAttemptsPerProvider">单厂商最大尝试次数 (max_attempts_per_provider)</label>
+              <input type="number" id="s_maxAttemptsPerProvider" class="form-control" placeholder="默认 2" min="1" max="5">
+              <span class="hint">单厂商多个 Key 故障时最多尝试次数（默认 2 次），防止单个厂商死等超时</span>
+            </div>
+            <div class="setting-item" id="st-item-kb-timeout">
+              <label class="form-label" for="s_kbTimeout">KB 入库批处理超时 (upstream_timeout_kb)</label>
+              <input type="number" id="s_kbTimeout" class="form-control" placeholder="默认 60" min="10" max="300">
+              <span class="hint">Embedding / OCR / Reranker 等大文档批处理耗时计算超时（默认 60s）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_concurrency">单 Key 最大并发保护 (max_concurrency_per_key)</label>
+              <input type="number" id="s_concurrency" class="form-control" placeholder="默认 5" min="1" max="50">
+              <span class="hint">每个 API Key 在途最大并发保护，防止瞬间突发打崩配额</span>
+            </div>
+            <div class="setting-item" style="grid-column: 1 / -1;">
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                <input type="checkbox" id="s_fastFailover" checked style="width:16px;height:16px;cursor:pointer;">
+                <label for="s_fastFailover" style="font-weight:600;cursor:pointer;">开启跨厂商快速熔断 (fast_failover_provider_down)</label>
+              </div>
+              <span class="hint">遇到上游 502/504/连接超时且存在其他备用厂商时，直接跳过当前厂商所有剩余 Key 秒级切走，极大提升可用率。</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Fault Tolerance & Maintenance -->
+        <div class="card card-pad settings-group mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              4. 故障避让与系统运维 (Fault Tolerance & Maintenance)
+            </h3>
+            <span class="badge badge-primary">容灾运维</span>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="form-label" for="s_cooldown429">429 限流冷却时长 (cooldown_429_sec)</label>
+              <input type="number" id="s_cooldown429" class="form-control" placeholder="默认 60" min="5" max="600">
+              <span class="hint">命中 RPM / TPM 速率限制时的临时避让时长（秒，默认 60s）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_cooldown5xx">5xx 服务端故障冷却 (cooldown_5xx_sec)</label>
+              <input type="number" id="s_cooldown5xx" class="form-control" placeholder="默认 30" min="5" max="300">
+              <span class="hint">上游 500/502/503/504 服务异常时的避让冷却时长（秒，默认 30s）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_circuitThreshold">连续失败熔断阈值 (circuit_break_threshold)</label>
+              <input type="number" id="s_circuitThreshold" class="form-control" placeholder="默认 3" min="1" max="10">
+              <span class="hint">连续 5xx / 宕机达到该次数时触发断路器熔断（默认 3 次）</span>
+            </div>
+            <div class="setting-item">
+              <label class="form-label" for="s_cooldown403">403 鉴权失败 / 额度耗尽隔离 (cooldown_403_sec)</label>
+              <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600" min="60" max="3600">
+              <span class="hint">Key 无效或额度用尽时的主动隔离时长（秒，默认 600s / 10分钟）</span>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:2px;">每日定时平滑重启 (Daily Auto-Restart)</div>
+                <div class="text-secondary text-sm">每日凌晨 04:00 自动重启服务释放内存堆（Agent 模式推荐关闭以保持会话连续；KB 模式建议开启）</div>
+              </div>
+              <label class="checkbox" style="font-weight:600;">
+                <input type="checkbox" id="s_autoRestart">
+                <span>开启定时重启</span>
+              </label>
+            </div>
+            <div class="hint-box mt-3" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:10px 14px;">
+              <b>日志空间保护机制：</b>系统底层配置了 <code>journald</code> 50MB 磁盘配额自动轮转（<code>SystemMaxUse=50M</code>, 7天保留），内存错误日志严格限定在 100 条以内，无需重启即可确保长期运行磁盘与内存零积压。
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div style="font-weight:600;color:var(--text);margin-bottom:2px;">即时平滑重启服务 / 重载熔断状态</div>
+              <div class="text-secondary text-sm">向后台发送平滑重启信号（约 2-3 秒完成），或一键清空所有 Key 的 429 冷却与熔断计数</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-warn btn-sm" onclick="restartService()">一键平滑重启</button>
+              <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">重置熔断与冷却</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+          <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+          <button class="btn btn-success" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:4px;font-weight:600;">
+            <span>⚡️</span> 保存并实测验证
+          </button>
+        </div>
+      </div>
+    </div>n">轮询负载均衡 (Round Robin - 推荐，高并发请求原子轮换分流，充分利用并发与 TPM)</option>
                 <option value="sticky_failover">粘性故障转移 (Sticky Failover - 固定当前 Key 直到限流)</option>
                 <option value="priority_fallback">主备优先级降级 (Priority Fallback - 始终优先尝试第 1 个 Key)</option>
                 <option value="latency_based">最低延迟优先 (Latency Based - 自动路由至延迟最低的 Key)</option>
@@ -1174,11 +1203,14 @@ function renderAgentModels(){
           <div class="model-id" style="font-size:14px;font-weight:700;">${esc(name)} ${upstream!==name?`<span class="badge badge-neutral" style="font-weight:400;margin-left:6px;">上游 ID: ${esc(upstream)}</span>`:''}</div>
           <div class="meta" style="margin-top:2px;">${strategyLabel}</div>
         </div>
-        <div class="flex gap-2">
-          <button class="btn btn-sm" id="probeAllBtn-${esc(name)}" onclick="testAgentModelAll('${esc(name)}')" ${isProbingAll?'disabled':''}>
+        <div class="flex gap-2" style="flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" id="liveTestBtn-${esc(name)}" onclick="runLiveTest('${esc(name)}')" style="display:flex;align-items:center;gap:4px;font-weight:600;">
+            <span>⚡️</span> 实机验证
+          </button>
+          <button class="btn btn-secondary btn-sm" id="probeAllBtn-${esc(name)}" onclick="testAgentModelAll('${esc(name)}')" ${isProbingAll?'disabled':''}>
             ${isProbingAll ? '<span class="spinner"></span> 探测中...' : '探活全部'}
           </button>
-          <button class="btn btn-sm" onclick="editAgentModel('${esc(name)}')">编辑</button>
+          <button class="btn btn-secondary btn-sm" onclick="editAgentModel('${esc(name)}')">编辑</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAgentModel('${esc(name)}')">删除</button>
         </div>
       </div>
@@ -1188,6 +1220,7 @@ function renderAgentModels(){
           <tbody>${rows.length ? rows.join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
         </table>
       </div>
+      <div id="liveTestRes-${esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle);background:var(--bg-subtle);font-size:12px;"></div>
       <div id="agentProbe-${esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle);background:var(--bg-subtle);font-size:12px;"></div>
     </div>`;
   }).join('');
@@ -1985,25 +2018,30 @@ function renderSettings(){
   const c=state.config||{};
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=(v!==undefined && v!==null)?v:''; };
   
-  // Group 0: Client Auth & Run Mode
+  // Card 1: Client Auth & Run Mode
   set('s_proxyApiKey', c.proxy_api_key || '');
   const modeEl = document.getElementById('s_runMode');
-  if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'full';
+  if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'agent';
 
-  // Key Routing Strategies
+  // Card 2: Routing Strategies
   set('s_agentRouting', c.agent_routing_strategy || 'sticky_failover');
   set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
 
-  // Group 1: Global Reliability
-  set('s_concurrency', c.max_concurrency_per_key ?? 3);
-  set('s_budget', c.schedule_total_budget ?? 15);
-  set('s_cooldownTpm', c.cooldown_tpm_sec ?? c.cooldown_429_sec ?? 10);
+  // Card 3: Timeouts & Budget
+  set('s_chatTimeout', c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 15);
+  set('s_budget', c.request_total_budget_sec ?? c.schedule_total_budget ?? 45);
+  set('s_maxRetries', c.max_retries ?? 3);
+  set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 2);
+  set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
+  set('s_concurrency', c.max_concurrency_per_key ?? 5);
+  const ffEl = document.getElementById('s_fastFailover');
+  if (ffEl) ffEl.checked = c.fast_failover_provider_down !== undefined ? !!c.fast_failover_provider_down : true;
+
+  // Card 4: Fault Tolerance & Cooldown
+  set('s_cooldown429', c.cooldown_429_sec ?? c.cooldown_tpm_sec ?? 60);
   set('s_cooldown5xx', c.cooldown_5xx_sec ?? c.cooldown_duration ?? 30);
-  set('s_cooldown403', c.cooldown_403_sec ?? 600);
   set('s_circuitThreshold', c.circuit_break_threshold ?? 3);
-  set('s_circuitCooldown', c.circuit_cooldown_sec ?? 300);
-  const latEl=document.getElementById('s_latency');
-  if(latEl) latEl.checked=!!c.latency_based_routing;
+  set('s_cooldown403', c.cooldown_403_sec ?? 600);
 
   // Maintenance: Auto Restart
   const autoRestartEl=document.getElementById('s_autoRestart');
@@ -2012,16 +2050,21 @@ function renderSettings(){
     autoRestartEl.checked = c.auto_restart_enabled !== undefined ? !!c.auto_restart_enabled : !isAgent;
   }
 
-  // Group 2: Agent Mode
-  set('s_chatTimeout', c.upstream_timeout_chat ?? 45);
-
-  // Group 3: KB Ingestion
-  set('s_fastTimeout', c.chat_fast_timeout ?? 30);
-  set('s_ocrTimeout', c.upstream_timeout_ocr ?? 60);
-  set('s_embTimeout', c.upstream_timeout_embedding ?? 60);
-  set('s_rankTimeout', c.upstream_timeout_rerank ?? 30);
-
+  onRunModeChange();
   updateRoutingSettingsState();
+}
+
+function onRunModeChange(){
+  const modeEl = document.getElementById('s_runMode');
+  if(!modeEl) return;
+  const isKb = modeEl.value === 'kb';
+  const isAgent = modeEl.value === 'agent';
+  const kbItem = document.getElementById('st-item-kb-routing');
+  const agItem = document.getElementById('st-item-agent-routing');
+  const kbTimeout = document.getElementById('st-item-kb-timeout');
+  if(kbItem) kbItem.style.display = isAgent ? 'none' : 'block';
+  if(agItem) agItem.style.display = isKb ? 'none' : 'block';
+  if(kbTimeout) kbTimeout.style.display = isAgent ? 'none' : 'block';
 }
 
 function onAgentRoutingChange(){
@@ -2038,8 +2081,9 @@ function updateRoutingSettingsState(){
   if(hintEl) hintEl.style.display = isManual ? 'none' : 'block';
 
   const disabledSettingIds = [
-    's_budget', 's_cooldownTpm', 's_cooldown5xx', 's_cooldown403',
-    's_circuitThreshold', 's_circuitCooldown', 's_latency'
+    's_budget', 's_maxRetries', 's_maxAttemptsPerProvider',
+    's_cooldown429', 's_cooldown5xx', 's_cooldown403',
+    's_circuitThreshold', 's_fastFailover'
   ];
 
   disabledSettingIds.forEach(id => {
@@ -2048,11 +2092,28 @@ function updateRoutingSettingsState(){
       el.disabled = isManual;
       const parent = el.closest('.setting-item') || el.closest('.toggle-card');
       if(parent){
-        parent.style.opacity = isManual ? '0.4' : '1';
+        parent.style.opacity = isManual ? '0.45' : '1';
         parent.style.pointerEvents = isManual ? 'none' : 'auto';
       }
     }
   });
+}
+
+function restoreDefaultSettings(){
+  if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
+  set('s_chatTimeout', 15);
+  set('s_budget', 45);
+  set('s_maxRetries', 3);
+  set('s_maxAttemptsPerProvider', 2);
+  set('s_kbTimeout', 60);
+  set('s_concurrency', 5);
+  const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
+  set('s_cooldown429', 60);
+  set('s_cooldown5xx', 30);
+  set('s_circuitThreshold', 3);
+  set('s_cooldown403', 600);
+  toast('已填入官方推荐默认参数，请点击「保存设置」生效', 'ok');
 }
 
 function generateRandomKey() {
@@ -2101,47 +2162,160 @@ async function restartService(){
   }
 }
 
-function saveSettings(){
+async function saveSettings(silent=false){
   const c=state.config||{};
 
-  // Group 0: Client Auth & Run Mode
+  // Card 1: Client Auth & Run Mode
   const keyEl = document.getElementById('s_proxyApiKey');
   if (keyEl) c.proxy_api_key = keyEl.value.trim();
   const modeEl = document.getElementById('s_runMode');
   if (modeEl) c.run_mode = modeEl.value;
 
-  // Key Routing Strategies
+  // Card 2: Key Routing Strategies
   const agRouteEl = document.getElementById('s_agentRouting');
   if (agRouteEl) c.agent_routing_strategy = agRouteEl.value;
   const kbRouteEl = document.getElementById('s_kbRouting');
   if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value;
 
-  // Group 1: Global Reliability
-  c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 3;
-  c.schedule_total_budget = Number(document.getElementById('s_budget').value) || 15;
-  c.cooldown_tpm_sec = Number(document.getElementById('s_cooldownTpm').value) || 10;
-  c.cooldown_429_sec = c.cooldown_tpm_sec; // backward compatibility
+  // Card 3: Timeouts & Budget
+  c.upstream_timeout_sec = Number(document.getElementById('s_chatTimeout').value) || 15;
+  c.upstream_timeout_chat = c.upstream_timeout_sec; // backward compatibility
+  c.request_total_budget_sec = Number(document.getElementById('s_budget').value) || 45;
+  c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
+  c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
+  c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 2;
+  const kbTimeoutEl = document.getElementById('s_kbTimeout');
+  c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
+  c.upstream_timeout_ocr = c.upstream_timeout_kb;
+  c.upstream_timeout_embedding = c.upstream_timeout_kb;
+  c.upstream_timeout_rerank = Math.min(30, c.upstream_timeout_kb);
+  c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 5;
+  const ffEl = document.getElementById('s_fastFailover');
+  c.fast_failover_provider_down = ffEl ? !!ffEl.checked : true;
+
+  // Card 4: Fault Tolerance & Cooldown
+  c.cooldown_429_sec = Number(document.getElementById('s_cooldown429').value) || 60;
+  c.cooldown_tpm_sec = c.cooldown_429_sec; // backward compatibility
   c.cooldown_5xx_sec = Number(document.getElementById('s_cooldown5xx').value) || 30;
   c.cooldown_duration = c.cooldown_5xx_sec; // backward compatibility
-  c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
   c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
-  c.circuit_cooldown_sec = Number(document.getElementById('s_circuitCooldown').value) || 300;
+  c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
   delete c.latency_based_routing;
 
   // Maintenance: Auto Restart
   const autoRestartEl = document.getElementById('s_autoRestart');
   if (autoRestartEl) c.auto_restart_enabled = !!autoRestartEl.checked;
 
-  // Group 2: Agent Mode
-  c.upstream_timeout_chat = Number(document.getElementById('s_chatTimeout').value) || 45;
+  await persistConfig(silent ? null : '系统参数已保存并立即生效');
+}
 
-  // Group 3: KB Ingestion
-  c.chat_fast_timeout = Number(document.getElementById('s_fastTimeout').value) || 30;
-  c.upstream_timeout_ocr = Number(document.getElementById('s_ocrTimeout').value) || 60;
-  c.upstream_timeout_embedding = Number(document.getElementById('s_embTimeout').value) || 60;
-  c.upstream_timeout_rerank = Number(document.getElementById('s_rankTimeout').value) || 30;
+async function saveSettingsAndVerify(){
+  await saveSettings(true);
+  const models = Object.keys(state.config.agent_models || {});
+  if(!models.length){
+    toast('配置已保存。当前未配置任何 Agent 模型进行测试', 'info');
+    return;
+  }
+  const testModel = models[0];
+  switchTab('models');
+  switchModelTab('agents');
+  toast(`配置已保存！正在对首选模型 [${testModel}] 进行端到端生产连通性实测...`, 'info');
+  setTimeout(() => {
+    runLiveTest(testModel);
+  }, 350);
+}
 
-  persistConfig('系统参数已保存并立即生效');
+async function runLiveTest(modelName){
+  const resBox = document.getElementById('liveTestRes-' + modelName);
+  const btn = document.getElementById('liveTestBtn-' + modelName);
+  if(!resBox) return;
+
+  resBox.style.display = 'block';
+  resBox.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+      <span class="spinner"></span>
+      <span>正在向生产端点发起真实测试请求 (POST /v1/chat/completions)...</span>
+    </div>
+  `;
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 测试中'; }
+
+  const start = Date.now();
+  try {
+    const apiKey = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : (state.adminPassword || '');
+    const resp = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [{ role: 'user', content: '1+1等于几？请仅回复一个数字。' }],
+        max_tokens: 15,
+        stream: false
+      })
+    });
+
+    const elapsed = Date.now() - start;
+    const rawRouted = resp.headers.get('X-Routed-Via') || '';
+    let routedVia = rawRouted;
+    try { routedVia = decodeURIComponent(rawRouted); } catch(e) {}
+    const fallbacks = resp.headers.get('X-Fallback-Attempts') || '0';
+
+    if(resp.ok){
+      const data = await resp.json();
+      const content = data?.choices?.[0]?.message?.content || '(无返回文本)';
+      resBox.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="badge badge-success" style="font-weight:700;">HTTP 200 OK</span>
+              <span style="font-weight:600;color:var(--text);">实际调用节点:</span>
+              <span class="badge badge-primary" style="font-family:monospace;font-size:12px;padding:2px 8px;">${esc(routedVia || '默认节点')}</span>
+              <span style="color:var(--text-secondary);font-size:12px;">往返耗时: <b>${elapsed}ms</b></span>
+              ${Number(fallbacks) > 0 ? `<span class="badge badge-warning">故障转移重试: ${fallbacks}次</span>` : ''}
+            </div>
+            <button class="btn btn-sm" onclick="this.closest('div').parentElement.parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+          </div>
+          <div style="font-size:12px;background:var(--bg);padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text);">
+            <span style="color:var(--text-secondary);">模型输出：</span>${esc(content.trim())}
+          </div>
+        </div>
+      `;
+      toast(`[${modelName}] 实测验证成功！命中: ${routedVia} (${elapsed}ms)`, 'ok');
+    } else {
+      let errText = '';
+      try {
+        const errJson = await resp.json();
+        errText = errJson?.error?.message || JSON.stringify(errJson);
+      } catch(e) {
+        errText = await resp.text();
+      }
+      resBox.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--error);">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="badge badge-error" style="font-weight:700;">HTTP ${resp.status}</span>
+            <span style="font-weight:600;">调用失败:</span>
+            <span style="font-size:12px;">${esc(errText || '未知错误')}</span>
+            ${routedVia ? `<span class="badge badge-neutral" style="font-size:11px;">尝试节点: ${esc(routedVia)}</span>` : ''}
+            <span style="color:var(--text-secondary);font-size:12px;">(${elapsed}ms)</span>
+          </div>
+          <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+        </div>
+      `;
+      toast(`[${modelName}] 实测失败: HTTP ${resp.status}`, 'err');
+    }
+  } catch(e) {
+    resBox.innerHTML = `
+      <div style="color:var(--error);display:flex;align-items:center;justify-content:space-between;">
+        <span>网络请求异常: ${esc(e.message)}</span>
+        <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+      </div>
+    `;
+    toast(`[${modelName}] 请求异常: ${e.message}`, 'err');
+  } finally {
+    if(btn) { btn.disabled = false; btn.innerHTML = '<span>⚡️</span> 实机验证'; }
+  }
 }
 
 // Access Guide
