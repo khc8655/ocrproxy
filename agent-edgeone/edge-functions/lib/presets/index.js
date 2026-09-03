@@ -443,9 +443,9 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "anthropic_thinking",
+        "strategy": "minimax_adaptive",
+        "split_param": "reasoning_split",
         "supported_types": [
-          "enabled",
           "disabled",
           "adaptive"
         ]

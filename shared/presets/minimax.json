@@ -21,8 +21,9 @@
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "anthropic_thinking",
-      "supported_types": ["enabled", "disabled", "adaptive"]
+      "strategy": "minimax_adaptive",
+      "split_param": "reasoning_split",
+      "supported_types": ["disabled", "adaptive"]
     },
     "sanitization": {
       "strip_params": ["output_config"]

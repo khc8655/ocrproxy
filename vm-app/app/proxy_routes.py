@@ -227,12 +227,28 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
             if "enable_thinking" not in ctk:
                 ctk["enable_thinking"] = effort not in ("none", "false")
 
-    # 6. MiniMax: preserve model case (MiniMax-M3) and strip non-standard fields
-    if p == "minimax":
+    # 6. MiniMax: preserve model case (MiniMax-M3), strip non-standard fields and adapt thinking
+    if p == "minimax" or str(out.get("model", "")).lower().startswith("minimax"):
         m = str(out.get("model", ""))
         if m.lower() == "minimax-m3":
             out["model"] = "MiniMax-M3"
         out.pop("output_config", None)
+
+        re = out.pop("reasoning_effort", None)
+        wants_thinking = False
+        if re is not None:
+            wants_thinking = str(re).lower() not in ("none", "false")
+        elif "thinking" in out and isinstance(out["thinking"], dict):
+            wants_thinking = str(out["thinking"].get("type", "")).lower() != "disabled"
+        elif out.get("chat_template_kwargs", {}).get("enable_thinking") is True or out.get("extra_body", {}).get("enable_thinking") is True:
+            wants_thinking = True
+
+        if wants_thinking:
+            out["reasoning_split"] = True
+            out["thinking"] = {"type": "adaptive"}
+        else:
+            out["thinking"] = {"type": "disabled"}
+            out.pop("reasoning_split", None)
 
 
 def _normalise_messages_for_provider(out: dict, provider: str) -> None:
@@ -248,12 +264,12 @@ def _normalise_messages_for_provider(out: dict, provider: str) -> None:
         # 2. Strip Claude-specific non-standard fields like output_config (causes 400 on MiniMax)
         out.pop("output_config", None)
 
-        # 3. Thinking parameter normalization
+        # 3. Thinking parameter normalization: remap Anthropic "enabled" to MiniMax "adaptive"
         thinking = out.get("thinking")
         if isinstance(thinking, dict):
-            # If client passed budget_tokens without type, default to "enabled"
-            if "budget_tokens" in thinking and "type" not in thinking:
-                thinking["type"] = "enabled"
+            t = str(thinking.get("type", "")).lower()
+            if t == "enabled" or (not t and "budget_tokens" in thinking):
+                thinking["type"] = "adaptive"
 
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
@@ -265,6 +281,7 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
       - StepFun: reasoning_effort="low" (lowest tier, "none" not accepted)
       - Agnes: chat_template_kwargs={"enable_thinking": False} (reasoning_effort ignored)
       - Google Gemini: extra_body.google.thinking_config={"include_thoughts": False}
+      - MiniMax: thinking={"type": "disabled"}, reasoning_split removed
       - TokenRhythm / others: reasoning_effort="none" (standard OpenAI-compatible)
     """
     p = str(provider or "").lower()
@@ -278,6 +295,10 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
         out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
             "include_thoughts": False
         }
+    elif p == "minimax":
+        out.pop("reasoning_effort", None)
+        out.pop("reasoning_split", None)
+        out["thinking"] = {"type": "disabled"}
     else:
         out["reasoning_effort"] = "none"
 

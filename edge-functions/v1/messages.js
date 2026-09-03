@@ -256,8 +256,9 @@ function normaliseMessagesForProvider(out, provider) {
     }
     delete out.output_config;
     if (out.thinking && typeof out.thinking === 'object') {
-      if (out.thinking.budget_tokens && !out.thinking.type) {
-        out.thinking.type = 'enabled';
+      const t = String(out.thinking.type || '').toLowerCase();
+      if (t === 'enabled' || (!out.thinking.type && out.thinking.budget_tokens)) {
+        out.thinking.type = 'adaptive';
       }
     }
   }
