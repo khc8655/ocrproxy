@@ -757,8 +757,8 @@ async def anthropic_messages(request: Request):
             return "messages" in protos
         if p_cfg.get("anthropic_messages"):
             return True
-        p_lower = (p_name or "").lower().strip()
-        return p_lower in ("minimax", "bai") or bool(p_cfg.get("anthropic_base_url"))
+        p_clean = (p_name or "").lower().replace(".", "").replace("-", "").replace("_", "").strip()
+        return p_clean in ("minimax", "bai") or bool(p_cfg.get("anthropic_base_url"))
 
     candidates_list = []
     for b in entry.get("keys", []):
