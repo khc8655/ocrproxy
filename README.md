@@ -95,7 +95,12 @@ ocrprox (Monorepo)
     - **非标参数清洗**：自动剥离 Claude 3.7 专有的 `output_config` 等非标字段（防止 MiniMax 报 400 错误）；
     - **大小写严格保护**：强制确保模型名称保留为官方要求的 `MiniMax-M3`；
     - **Thinking 规范化**：自动规整 `budget_tokens` 并补全 `type: "enabled"`，无缝支持 Thinking 内容块输出；
-  - **B.AI (双协议兼容网关)**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通。
+  - **B.AI (双协议兼容网关)**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通；
+  - **AMD Radeon Cloud (官方高性能集群与双协议网关)**：
+    - **思考链深度适配**：AMD 前置网关按白名单字段重新组装请求，严禁 `thinking: {...}` 与 `chat_template_kwargs`；系统自动适配官方规范的 `reasoning_effort: "medium"`（使 `DeepSeek-V4-Flash` 能够正常思考，同时使 `Qwen3.8-Flash-Next` 保持安全思考深度，杜绝 400 报错）；
+    - **Anthropic Messages 协议直通**：自动将 Claude Code 等客户端发送的 `thinking: {"type": "enabled", ...}` 转换为 AMD 官方支持的 `output_config: {"effort": "medium"}` 并剥除 `thinking`；
+    - **消息规范化防爆**：自动将 `role: "developer"` 转换为 `role: "system"`，且自动提取合并所有 `system` 消息并严格置顶于 `messages[0]`，彻底根治 Qwen 模型报 `400 BadRequestError: System message must be at the beginning`；
+    - **响应字段统一规整**：在流式 SSE 与非流式中，自动将 AMD 私有的 `reasoning` 映射规整为通用的 `reasoning_content`，并将 `completion_tokens_details.reasoning_tokens` 回填至顶层 `usage.reasoning_tokens`。
 - **特殊工具调用 (Tool Calling)**：
   - **`tool_choice` 规整**：TokenRhythm / SenseNova / DeepSeek 严禁对象形式，自动转为 `"auto"` 字符串；
   - **深度 Schema 清洗**：针对 Google Gemini 递归剔除 `$schema`、`additionalProperties`、`$defs`、`$ref`，并自动校验清理不在 `properties` 中的多余 `required` 声明；
