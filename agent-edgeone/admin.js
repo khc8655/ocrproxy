@@ -125,11 +125,10 @@ const PRESET_DEFINITIONS = {
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
-    description: 'AMD 官方开发者平台，基于 SGLang 高性能推理集群，网关已自动适配 chat_template_kwargs.thinking 深度思考与 reasoning_content 字段',
+    description: 'AMD 官方开发者平台，基于高性能推理集群。网关已全自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶。',
     recommended_models: [
-      { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 旗舰推理大模型 (网关已自动适配深度思考)', checked: true },
-      { name: 'deepseek-v4-flash-vision-exp', upstream: 'DeepSeek-V4-Flash-Vision-Exp', desc: 'DeepSeek V4 Flash 视觉理解与推理增强模型', checked: true },
-      { name: 'minicpm5-1b', upstream: 'MiniCPM5-1B', desc: 'MiniCPM5-1B 边缘超轻量高并发模型', checked: false }
+      { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 原生百万上下文大模型 (自动注入 reasoning_effort 开启深度思考)', checked: true },
+      { name: 'qwen3.8-flash-next', upstream: 'Qwen3.8-Flash-Next', desc: '千问全新 QSA 稀疏注意力大模型 (26.2万上下文，自动适配 system 消息置顶与安全思考级别)', checked: true }
     ]
   }
 };

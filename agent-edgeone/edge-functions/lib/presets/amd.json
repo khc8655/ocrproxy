@@ -4,11 +4,11 @@
   "protocol": "openai",
   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
-  "doc_url": "https://developer.amd.com.cn/",
-  "description": "AMD 官方开发者平台，基于 SGLang 高性能推理集群，网关已自动适配 chat_template_kwargs.thinking 深度思考与 reasoning_content 字段",
+  "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
+  "description": "AMD 官方开发者平台，基于高性能推理集群。网关已自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶规整。",
   "features": {
     "native_thinking": true,
-    "multimodal": true,
+    "multimodal": false,
     "tools": true,
     "anthropic_messages": true
   },
@@ -16,26 +16,22 @@
     {
       "name": "deepseek-v4-flash",
       "upstream_model": "DeepSeek-V4-Flash",
-      "description": "DeepSeek V4 Flash 旗舰推理大模型 (网关已自动适配深度思考)"
+      "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (网关已自动注入 reasoning_effort 开启深度思考)"
     },
     {
-      "name": "deepseek-v4-flash-vision-exp",
-      "upstream_model": "DeepSeek-V4-Flash-Vision-Exp",
-      "description": "DeepSeek V4 Flash 视觉理解与推理增强模型"
-    },
-    {
-      "name": "minicpm5-1b",
-      "upstream_model": "MiniCPM5-1B",
-      "description": "MiniCPM5-1B 边缘超轻量高并发模型"
+      "name": "qwen3.8-flash-next",
+      "upstream_model": "Qwen3.8-Flash-Next",
+      "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶与安全思考级别)"
     }
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "chat_template_kwargs",
-      "enable_key": "thinking"
+      "strategy": "effort_remapping",
+      "supported_levels": ["low", "medium"],
+      "none_fallback": "low"
     },
     "sanitization": {
-      "strip_params": ["output_config", "thinking"]
+      "strip_params": ["thinking", "chat_template_kwargs"]
     }
   }
 }

@@ -463,24 +463,43 @@ test('normalize: agnes reasoning "none" → chat_template_kwargs.enable_thinking
 });
 
 // normaliseForProvider — AMD
-test('normalize: amd reasoning "high" → chat_template_kwargs.thinking: true', () => {
-  const body = { model: 'DeepSeek-V4-Flash', reasoning_effort: 'high' };
-  normaliseForProvider(body, 'amd');
-  eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { thinking: true });
-});
-
-test('normalize: amd default (no reasoning_effort) → chat_template_kwargs.thinking: true', () => {
+test('normalize: amd default (no reasoning_effort) → defaults to reasoning_effort: "medium"', () => {
   const body = { model: 'DeepSeek-V4-Flash' };
   normaliseForProvider(body, 'amd');
-  deepEq(body.chat_template_kwargs, { thinking: true });
+  eq(body.reasoning_effort, 'medium');
+  eq(body.chat_template_kwargs, undefined);
+  eq(body.thinking, undefined);
 });
 
-test('normalize: amd reasoning "none" → chat_template_kwargs.thinking: false', () => {
+test('normalize: amd qwen with "high" reasoning_effort → safely downgraded to "medium"', () => {
+  const body = { model: 'Qwen3.8-Flash-Next', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'amd');
+  eq(body.reasoning_effort, 'medium');
+});
+
+test('normalize: amd deepseek with "none" reasoning_effort → removed (thinking off by default)', () => {
   const body = { model: 'DeepSeek-V4-Flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'amd');
   eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { thinking: false });
+  eq(body.chat_template_kwargs, undefined);
+});
+
+test('normalize: amd sanitizes messages (developer -> system, multiple systems merged to index 0)', () => {
+  const body = {
+    model: 'Qwen3.8-Flash-Next',
+    messages: [
+      { role: 'user', content: 'hello' },
+      { role: 'developer', content: 'system instruction 1' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'system', content: 'system instruction 2' },
+    ]
+  };
+  normaliseForProvider(body, 'amd');
+  eq(body.messages.length, 3);
+  eq(body.messages[0].role, 'system');
+  eq(body.messages[0].content, 'system instruction 1\n\nsystem instruction 2');
+  eq(body.messages[1].role, 'user');
+  eq(body.messages[2].role, 'assistant');
 });
 
 // normaliseForProvider — SenseNova

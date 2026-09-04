@@ -128,6 +128,47 @@ def _sanitize_gemini_schema(schema):
     return clean
 
 
+def _sanitize_amd_messages(out: dict) -> None:
+    """Ensure messages conform strictly to AMD requirements:
+    1. Replace 'developer' role with 'system'.
+    2. Ensure at most one 'system' message, and it MUST be the first item (messages[0]).
+    """
+    messages = out.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return
+
+    system_parts = []
+    other_messages = []
+
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        if role in ("system", "developer"):
+            content = m.get("content")
+            if isinstance(content, str) and content.strip():
+                system_parts.append(content.strip())
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        t = str(part.get("text", "")).strip()
+                        if t:
+                            system_parts.append(t)
+                    elif isinstance(part, str) and part.strip():
+                        system_parts.append(part.strip())
+        else:
+            other_messages.append(m)
+
+    new_messages = []
+    if system_parts:
+        new_messages.append({
+            "role": "system",
+            "content": "\n\n".join(system_parts)
+        })
+    new_messages.extend(other_messages)
+    out["messages"] = new_messages
+
+
 def _normalise_for_provider(out: dict, provider: str) -> None:
     """Normalise request body fields that the target provider would reject.
 
@@ -227,13 +268,29 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
             if "enable_thinking" not in ctk:
                 ctk["enable_thinking"] = effort not in ("none", "false")
 
-    # 5.1 AMD Radeon Cloud: map reasoning_effort or enabled thinking to chat_template_kwargs.thinking
-    if p == "amd" or "amd.com" in str(upstream_base_url).lower():
-        re = out.pop("reasoning_effort", None)
-        effort = str(re).lower() if re is not None else "high"
-        ctk = out.setdefault("chat_template_kwargs", {})
-        if "thinking" not in ctk:
-            ctk["thinking"] = effort not in ("none", "false")
+    # 5.1 AMD Radeon Cloud: follow official docs (reasoning_effort only, sanitize messages, drop non-standard fields)
+    if p == "amd":
+        out.pop("chat_template_kwargs", None)
+        out.pop("thinking", None)
+        _sanitize_amd_messages(out)
+        m_name = str(out.get("model", "")).lower()
+
+        re = out.get("reasoning_effort")
+        if re is not None:
+            re_str = str(re).lower()
+            if re_str in ("none", "false"):
+                if "qwen" in m_name:
+                    out["reasoning_effort"] = "low"
+                else:
+                    out.pop("reasoning_effort", None)
+            elif re_str in ("high", "xhigh", "max") and "qwen" in m_name:
+                # Qwen3.8-Flash-Next refuses 'high' with 400. Supported types are xhigh (default), medium, low.
+                out["reasoning_effort"] = "medium"
+            elif re_str not in ("minimal", "low", "medium", "high", "xhigh", "max"):
+                out["reasoning_effort"] = "medium"
+        else:
+            # Default for Agent mode: medium (enables DeepSeek thinking and keeps Qwen stable)
+            out["reasoning_effort"] = "medium"
 
     # 6. MiniMax: preserve model case (MiniMax-M3), strip non-standard fields and adapt thinking
     if p == "minimax" or str(out.get("model", "")).lower().startswith("minimax"):
@@ -282,9 +339,15 @@ def _normalise_messages_for_provider(out: dict, provider: str) -> None:
                 thinking["type"] = "adaptive"
 
     elif p == "amd":
-        # AMD Anthropic endpoint rejects thinking field with 400 error
-        out.pop("thinking", None)
-        out.pop("output_config", None)
+        # AMD Anthropic endpoint rejects thinking field (400), but accepts output_config.effort
+        thinking = out.pop("thinking", None)
+        if thinking and isinstance(thinking, dict) and str(thinking.get("type", "")).lower() != "disabled":
+            out["output_config"] = {"effort": "medium"}
+        elif "output_config" in out and isinstance(out["output_config"], dict):
+            eff = str(out["output_config"].get("effort", "")).lower()
+            m_name = str(out.get("model", "")).lower()
+            if eff in ("high", "xhigh", "max") and "qwen" in m_name:
+                out["output_config"]["effort"] = "medium"
 
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
@@ -295,6 +358,7 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
       - SenseNova / DeepSeek: reasoning_effort="none" (truly off)
       - StepFun: reasoning_effort="low" (lowest tier, "none" not accepted)
       - Agnes: chat_template_kwargs={"enable_thinking": False} (reasoning_effort ignored)
+      - AMD: reasoning_effort="low" for Qwen, omitted for DeepSeek (thinking=off by default)
       - Google Gemini: extra_body.google.thinking_config={"include_thoughts": False}
       - MiniMax: thinking={"type": "disabled"}, reasoning_split removed
       - TokenRhythm / others: reasoning_effort="none" (standard OpenAI-compatible)
@@ -306,8 +370,14 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
         out.pop("reasoning_effort", None)
         out["chat_template_kwargs"] = {"enable_thinking": False}
     elif p == "amd":
-        out.pop("reasoning_effort", None)
-        out["chat_template_kwargs"] = {"thinking": False}
+        out.pop("chat_template_kwargs", None)
+        out.pop("thinking", None)
+        _sanitize_amd_messages(out)
+        m_name = str(out.get("model", "")).lower()
+        if "qwen" in m_name:
+            out["reasoning_effort"] = "low"
+        else:
+            out.pop("reasoning_effort", None)
     elif p in _GOOGLE_PROVIDERS:
         out.pop("reasoning_effort", None)
         out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
@@ -723,12 +793,18 @@ async def chat_completions(request: Request):
             request_model=req_model_name,
         )
         resp_data = sr.data
-        # Normalize AMD reasoning to standard reasoning_content
-        if isinstance(resp_data, dict) and "choices" in resp_data:
-            for c in resp_data["choices"]:
-                msg = c.get("message") if isinstance(c, dict) else None
-                if isinstance(msg, dict) and "reasoning" in msg and not msg.get("reasoning_content"):
-                    msg["reasoning_content"] = msg.get("reasoning")
+        # Normalize AMD reasoning to standard reasoning_content & reasoning_tokens
+        if isinstance(resp_data, dict):
+            if "choices" in resp_data:
+                for c in resp_data["choices"]:
+                    msg = c.get("message") if isinstance(c, dict) else None
+                    if isinstance(msg, dict) and "reasoning" in msg and not msg.get("reasoning_content"):
+                        msg["reasoning_content"] = msg.get("reasoning")
+            usage = resp_data.get("usage")
+            if isinstance(usage, dict) and "reasoning_tokens" not in usage:
+                rt = usage.get("completion_tokens_details", {}).get("reasoning_tokens")
+                if rt is not None:
+                    usage["reasoning_tokens"] = rt
         resp = JSONResponse(content=resp_data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)

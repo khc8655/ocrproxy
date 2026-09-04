@@ -268,8 +268,17 @@ function normaliseMessagesForProvider(out, provider) {
       }
     }
   } else if (p === 'amd') {
+    const thinking = out.thinking;
     delete out.thinking;
-    delete out.output_config;
+    if (thinking && typeof thinking === 'object' && String(thinking.type || '').toLowerCase() !== 'disabled') {
+      out.output_config = { effort: 'medium' };
+    } else if (out.output_config && typeof out.output_config === 'object') {
+      const eff = String(out.output_config.effort || '').toLowerCase();
+      const m = String(out.model || '').toLowerCase();
+      if ((eff === 'high' || eff === 'xhigh' || eff === 'max') && m.includes('qwen')) {
+        out.output_config.effort = 'medium';
+      }
+    }
   }
 }
 
