@@ -25,6 +25,7 @@ import {
   shouldFailover,
   bindingId,
 } from '../lib/cooldowns.js';
+import { normaliseMessagesForProvider } from '../lib/normalize.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000;
@@ -171,9 +172,9 @@ export async function onRequestPost(context) {
       // Normalise request body for Messages API
       const attemptBody = JSON.parse(JSON.stringify(body));
       attemptBody.model = resolved.upstreamModel;
-      normaliseMessagesForProvider(attemptBody, binding.provider);
-
       const provCfg = (config.providers || {})[binding.provider] || {};
+      normaliseMessagesForProvider(attemptBody, binding.provider, provCfg);
+
       const targetUrl = buildMessagesUrl(resolved.baseUrl, provCfg.anthropic_base_url, binding.provider);
 
       const remainingMs = deadline - Date.now();
@@ -247,40 +248,6 @@ export async function onRequestPost(context) {
   }
 }
 
-function normaliseMessagesForProvider(out, provider) {
-  const p = String(provider || '').toLowerCase().trim();
-
-  // Ensure max_tokens is present (Anthropic API specification mandatory field)
-  if (!out.max_tokens || typeof out.max_tokens !== 'number' || out.max_tokens <= 0) {
-    out.max_tokens = 4096;
-  }
-
-  if (p === 'minimax') {
-    const m = String(out.model || '');
-    if (m.toLowerCase() === 'minimax-m3') {
-      out.model = 'MiniMax-M3';
-    }
-    delete out.output_config;
-    if (out.thinking && typeof out.thinking === 'object') {
-      const t = String(out.thinking.type || '').toLowerCase();
-      if (t === 'enabled' || (!out.thinking.type && out.thinking.budget_tokens)) {
-        out.thinking.type = 'adaptive';
-      }
-    }
-  } else if (p === 'amd') {
-    const thinking = out.thinking;
-    delete out.thinking;
-    if (thinking && typeof thinking === 'object' && String(thinking.type || '').toLowerCase() !== 'disabled') {
-      out.output_config = { effort: 'medium' };
-    } else if (out.output_config && typeof out.output_config === 'object') {
-      const eff = String(out.output_config.effort || '').toLowerCase();
-      const m = String(out.model || '').toLowerCase();
-      if ((eff === 'high' || eff === 'xhigh' || eff === 'max') && m.includes('qwen')) {
-        out.output_config.effort = 'medium';
-      }
-    }
-  }
-}
 
 async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isStream, timeoutMs) {
   const headers = {

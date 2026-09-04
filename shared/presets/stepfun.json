@@ -1,6 +1,7 @@
 {
   "id": "stepfun",
   "name": "阶跃星辰 (StepFun)",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.stepfun.com/step_plan",
   "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
@@ -42,6 +43,9 @@
     },
     "sanitization": {
       "unsupported_params": []
+    },
+    "response": {
+      "reasoning_fields": ["reasoning", "reasoning_content"]
     }
   }
 }

@@ -211,17 +211,256 @@ async def get_config_endpoint(request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
 
 
-@router.get("/presets")
-async def get_presets_endpoint(request: Request):
-    """Return available provider presets for admin console."""
+# ── Preset Hub & Remote Distribution ─────────────────────────────────
+_CATALOG_CACHE: dict = {"data": None, "expires_at": 0}
+_PRESET_REMOTE_CACHE: dict = {}
+
+_CDN_CATALOG_URLS = [
+    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json",
+    "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json",
+]
+
+_CDN_PRESET_BASE_URLS = [
+    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets",
+    "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets",
+]
+
+
+async def _fetch_remote_json(urls: list, timeout: float = 2.5):
+    """Attempt to fetch JSON from mirrors in order, return parsed dict or None."""
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        for url in urls:
+            try:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    return resp.json()
+            except Exception as e:
+                logger.debug("Failed to fetch preset URL %s: %s", url, e)
+    return None
+
+
+def _get_local_catalog() -> dict:
+    """Fallback: read shared/presets/catalog.json locally."""
+    catalog_file = Path(__file__).resolve().parent.parent.parent / "shared" / "presets" / "catalog.json"
+    if catalog_file.exists():
+        try:
+            return json.loads(catalog_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning("Failed to read local catalog.json: %s", e)
+    return {"version": "1.1.0", "providers": []}
+
+
+def _get_local_preset(preset_id: str):
+    """Fallback: read shared/presets/{preset_id}.json locally."""
+    preset_file = Path(__file__).resolve().parent.parent.parent / "shared" / "presets" / f"{preset_id}.json"
+    if preset_file.exists():
+        try:
+            return json.loads(preset_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning("Failed to read local preset %s.json: %s", preset_id, e)
+    return None
+
+
+@router.get("/presets/catalog")
+async def get_presets_catalog_endpoint(request: Request):
+    """Return lightweight catalog of available providers from CDN with fallback."""
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
-    # Try shared/presets or fallback to bundled
+    now = time.time()
+    if _CATALOG_CACHE["data"] and _CATALOG_CACHE["expires_at"] > now:
+        return JSONResponse(content={"ok": True, "source": "cache", "catalog": _CATALOG_CACHE["data"]})
+
+    catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
+    source = "remote"
+    if not catalog_data:
+        catalog_data = _get_local_catalog()
+        source = "local_fallback"
+
+    _CATALOG_CACHE["data"] = catalog_data
+    _CATALOG_CACHE["expires_at"] = now + 600
+
+    return JSONResponse(content={"ok": True, "source": source, "catalog": catalog_data})
+
+
+@router.get("/presets/detail")
+async def get_preset_detail_endpoint(request: Request, id: str = ""):
+    """Fetch complete preset definition for a single provider on demand."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    pid = id.lower().strip()
+    if not pid:
+        return JSONResponse(status_code=400, content={"error": "Missing preset id"})
+
+    if pid in _PRESET_REMOTE_CACHE:
+        return JSONResponse(content={"ok": True, "source": "cache", "preset": _PRESET_REMOTE_CACHE[pid]})
+
+    urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
+    preset_data = await _fetch_remote_json(urls, timeout=2.5)
+    source = "remote"
+    if not preset_data:
+        preset_data = _get_local_preset(pid)
+        source = "local_fallback"
+
+    if not preset_data:
+        return JSONResponse(status_code=404, content={"error": f"Preset '{pid}' not found"})
+
+    _PRESET_REMOTE_CACHE[pid] = preset_data
+    return JSONResponse(content={"ok": True, "source": source, "preset": preset_data})
+
+
+@router.post("/presets/check-updates")
+async def check_preset_updates_endpoint(request: Request):
+    """Compare local provider versions against latest catalog."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0) or _get_local_catalog()
+    catalog_map = {p["id"]: p for p in catalog_data.get("providers", []) if "id" in p}
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    providers_to_check = body.get("providers")
+    if not providers_to_check:
+        curr_cfg = await get_config()
+        providers_to_check = []
+        for pid, pdata in (curr_cfg.get("providers") or {}).items():
+            preset_id = pdata.get("preset_id", pid)
+            providers_to_check.append({
+                "provider_id": pid,
+                "preset_id": preset_id,
+                "current_version": pdata.get("preset_version") or "1.0.0",
+                "rule_hash": pdata.get("rule_hash"),
+            })
+
+    updates = []
+    up_to_date = []
+
+    for item in providers_to_check:
+        prov_id = item.get("provider_id") or item.get("id")
+        pres_id = item.get("preset_id") or prov_id
+        curr_ver = item.get("current_version") or item.get("version") or "1.0.0"
+
+        remote_preset = catalog_map.get(pres_id)
+        if not remote_preset:
+            continue
+
+        latest_ver = remote_preset.get("version", "1.0.0")
+        latest_hash = remote_preset.get("rule_hash")
+        curr_hash = item.get("rule_hash")
+
+        has_update = (latest_ver != curr_ver) or (bool(latest_hash and curr_hash and latest_hash != curr_hash))
+
+        res_item = {
+            "provider_id": prov_id,
+            "preset_id": pres_id,
+            "name": remote_preset.get("name", prov_id),
+            "current_version": curr_ver,
+            "latest_version": latest_ver,
+            "has_update": has_update,
+        }
+
+        if has_update:
+            updates.append(res_item)
+        else:
+            up_to_date.append(res_item)
+
+    return JSONResponse(content={
+        "ok": True,
+        "updates": updates,
+        "up_to_date": up_to_date,
+        "catalog_version": catalog_data.get("version", "1.1.0"),
+    })
+
+
+@router.post("/presets/update-rules")
+async def update_preset_rules_endpoint(request: Request):
+    """Incremental rule update: Fetch latest adapter_rules and update specified local providers."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    target_ids = body.get("provider_ids", [])
+    if isinstance(target_ids, str):
+        target_ids = [target_ids]
+
+    if not target_ids:
+        return JSONResponse(status_code=400, content={"error": "No provider_ids specified"})
+
+    curr_cfg = await get_config()
+    providers = curr_cfg.get("providers") or {}
+    updated = []
+    failed = []
+
+    for pid in target_ids:
+        if pid not in providers:
+            failed.append({"provider_id": pid, "error": "Provider not found in current config"})
+            continue
+
+        pdata = providers[pid]
+        pres_id = pdata.get("preset_id", pid)
+
+        urls = [f"{base}/{pres_id}.json" for base in _CDN_PRESET_BASE_URLS]
+        preset_data = await _fetch_remote_json(urls, timeout=2.5) or _get_local_preset(pres_id)
+
+        if not preset_data:
+            failed.append({"provider_id": pid, "error": f"Failed to fetch rules for preset '{pres_id}'"})
+            continue
+
+        pdata["adapter_rules"] = preset_data.get("adapter_rules", {})
+        pdata["preset_version"] = preset_data.get("version", "1.1.0")
+        if "recommended_models" in preset_data:
+            pdata["recommended_models"] = preset_data["recommended_models"]
+        if "features" in preset_data:
+            pdata["features"] = preset_data["features"]
+
+        updated.append({
+            "provider_id": pid,
+            "preset_id": pres_id,
+            "new_version": pdata["preset_version"],
+        })
+
+    if updated:
+        await save_config(curr_cfg)
+        try:
+            from .proxy_routes import _PRESET_CACHE
+            _PRESET_CACHE.clear()
+        except Exception:
+            pass
+
+    return JSONResponse(content={
+        "ok": True,
+        "updated": updated,
+        "failed": failed,
+        "message": f"Successfully updated rules for {len(updated)} provider(s)."
+    })
+
+
+@router.get("/presets")
+async def get_presets_endpoint(request: Request, action: str = "", id: str = ""):
+    """Return available provider presets for admin console with action dispatch."""
+    if action == "catalog":
+        return await get_preset_catalog_endpoint(request)
+    if action == "detail":
+        return await get_preset_detail_endpoint(request, id=id)
+
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
     presets_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
     presets_list = []
     if presets_dir.exists():
         for p in sorted(presets_dir.glob("*.json")):
+            if p.name == "catalog.json":
+                continue
             try:
                 presets_list.append(json.loads(p.read_text(encoding="utf-8")))
             except Exception as e:
@@ -229,6 +468,16 @@ async def get_presets_endpoint(request: Request):
 
     preset_map = {p["id"]: p for p in presets_list if "id" in p}
     return JSONResponse(content={"ok": True, "presets": presets_list, "map": preset_map})
+
+
+@router.post("/presets")
+async def post_presets_endpoint(request: Request, action: str = ""):
+    """Dispatcher for POST /presets?action=..."""
+    if action == "check-updates":
+        return await check_preset_updates_endpoint(request)
+    if action == "update-rules":
+        return await update_preset_rules_endpoint(request)
+    return JSONResponse(status_code=400, content={"error": f"Unknown presets action '{action}'"})
 
 
 @router.get("/config/export")

@@ -357,10 +357,14 @@
           <div class="section-head">
             <div>
               <div class="section-title">供应商与 Key 凭证库</div>
-              <div class="section-desc">统一配置各上游平台的基础 URL 与 API 密钥，可在 Agent 模型或知识库路由中灵活复用</div>
+              <div class="section-desc">统一配置各上游平台的基础 URL 与 API 密钥 · 适配规则与主程序完全解耦</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 新增供应商</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary btn-sm" id="btnCheckRuleUpdates" onclick="checkAllRuleUpdates()">🔄 检查规则更新</button>
+              <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 新增供应商</button>
+            </div>
           </div>
+          <div id="ruleUpdatesAlert" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--bg-subtle);border:1px solid var(--primary);border-radius:var(--radius-sm);font-size:13px;align-items:center;justify-content:space-between;"></div>
           <div class="card" id="providersBox"></div>
         </div>
       </div>
@@ -674,17 +678,9 @@
     <div class="modal-head"><h3 id="providerModalTitle">供应商</h3><button class="modal-close" onclick="closeModal('providerModal')">×</button></div>
     <div class="modal-body">
       <div class="form-group" id="p_preset_wrap">
-        <label class="form-label">推荐官方适配模板 (自动填入参数与模型)</label>
+        <label class="form-label">预置官方模板 (动态加载与按需拉取)</label>
         <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
           <option value="">-- 自定义配置 (手动输入) --</option>
-          <option value="minimax">MiniMax</option>
-          <option value="bai">B.AI</option>
-          <option value="agnes">Agnes AI</option>
-          <option value="google">Google AI Studio</option>
-          <option value="sensenova">SenseNova</option>
-          <option value="stepfun">StepFun</option>
-          <option value="siliconflow">SiliconFlow</option>
-          <option value="tokenrhythm">TokenRhythm</option>
         </select>
         <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
       </div>
@@ -859,7 +855,11 @@ const state = {
   modelTab: 'providers', 
   changed: false,
   probingKeys: new Set(),
-  probingModels: new Set()
+  probingModels: new Set(),
+  presetCatalog: [],
+  cachedPresets: {},
+  ruleUpdatesMap: {},
+  currentSelectedPreset: null
 };
 
 const tabs = [
@@ -1230,16 +1230,23 @@ function renderProviders(){
     const protos = getProviderProtocols(name, prov);
     const protoBadges = renderProtocolBadges(protos, false);
     const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${esc(prov.anthropic_base_url)}` : '';
+    const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
+    const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
+    const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
+    const updateBtn = hasUpdate
+      ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">⬆️ 升级规则至 v${esc(hasUpdate.remote_version)}</button>`
+      : '';
     return `<div class="provider-row">
       <div>
         <div class="provider-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-size:14px;font-weight:700;">${esc(name)}</span>
-          <span style="display:inline-flex;gap:4px;">${protoBadges}</span>
+          <span style="display:inline-flex;gap:4px;">${protoBadges} ${verBadge}</span>
           <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span>
         </div>
         <div class="key-list" style="margin-top:6px;">${keyChips||'<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2" style="align-items:center;">
+        ${updateBtn}
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
         <button class="btn btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(name)}')">删除</button>
@@ -1398,11 +1405,12 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   </tr>`;
 }
 
-// ---- Provider Presets Database -------------------------------------------
-const PRESET_DEFINITIONS = {
+// ---- Provider Presets Database & Dynamic Remote Catalog ------------------
+const FALLBACK_PRESETS = {
   minimax: {
     id: 'minimax',
     name: 'MiniMax',
+    version: '1.1.0',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
     protocols: ['chat', 'messages'],
@@ -1414,6 +1422,7 @@ const PRESET_DEFINITIONS = {
   bai: {
     id: 'bai',
     name: 'B.AI',
+    version: '1.1.0',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
     protocols: ['chat', 'messages'],
@@ -1428,6 +1437,7 @@ const PRESET_DEFINITIONS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
+    version: '1.1.0',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
     description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)。',
@@ -1439,6 +1449,7 @@ const PRESET_DEFINITIONS = {
   google: {
     id: 'google',
     name: 'Google AI Studio',
+    version: '1.1.0',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
     protocols: ['chat'],
     description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射。',
@@ -1451,6 +1462,7 @@ const PRESET_DEFINITIONS = {
   sensenova: {
     id: 'sensenova',
     name: 'SenseNova',
+    version: '1.1.0',
     base_url: 'https://token.sensenova.cn/v1',
     protocols: ['chat'],
     description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1、多模态 OCR 等。',
@@ -1462,6 +1474,7 @@ const PRESET_DEFINITIONS = {
   stepfun: {
     id: 'stepfun',
     name: 'StepFun',
+    version: '1.1.0',
     base_url: 'https://api.stepfun.com/v1',
     protocols: ['chat'],
     description: '阶跃星辰 StepFun 大模型平台，系统内置 reasoning_effort none->low 降级兼容与 deepseek 思考格式注入。',
@@ -1473,6 +1486,7 @@ const PRESET_DEFINITIONS = {
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
+    version: '1.1.0',
     base_url: 'https://api.siliconflow.cn/v1',
     protocols: ['chat'],
     description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型及向量/重排模型。',
@@ -1487,6 +1501,7 @@ const PRESET_DEFINITIONS = {
   tokenrhythm: {
     id: 'tokenrhythm',
     name: 'TokenRhythm',
+    version: '1.1.0',
     base_url: 'https://api.tokenrhythm.com/v1',
     protocols: ['chat'],
     description: 'TokenRhythm 聚合大模型路由网关，系统内置 tool_choice 对象转字符串自动清洗。',
@@ -1498,6 +1513,7 @@ const PRESET_DEFINITIONS = {
   amd: {
     id: 'amd',
     name: 'AMD Radeon Cloud',
+    version: '1.1.0',
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
@@ -1509,14 +1525,55 @@ const PRESET_DEFINITIONS = {
   }
 };
 
+const PRESET_DEFINITIONS = new Proxy({}, {
+  get: (target, prop) => (state.cachedPresets && state.cachedPresets[prop]) || FALLBACK_PRESETS[prop]
+});
+
 // Custom URL Toggle Handler
 function onCustomUrlToggleChange(){
   const isChecked = document.getElementById('p_custom_url_toggle').checked;
   document.getElementById('p_custom_url_section').style.display = isChecked ? 'block' : 'none';
 }
 
+async function loadPresetsCatalog() {
+  const select = document.getElementById('p_preset');
+  if (!select) return;
+  if (state.presetCatalog && state.presetCatalog.length > 0) {
+    populateCatalogSelect(select);
+    return;
+  }
+  select.innerHTML = '<option value="">-- 正在从云端拉取提供商目录... --</option>';
+  try {
+    const res = await fetch('/api/admin/presets/catalog', { headers: headers() });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.providers)) {
+        state.presetCatalog = data.providers;
+        populateCatalogSelect(select);
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load preset catalog:', e);
+  }
+  state.presetCatalog = Object.keys(FALLBACK_PRESETS).map(k => ({
+    id: k,
+    name: FALLBACK_PRESETS[k].name,
+    version: FALLBACK_PRESETS[k].version || '1.1.0',
+    description: FALLBACK_PRESETS[k].description
+  }));
+  populateCatalogSelect(select);
+}
+
+function populateCatalogSelect(select) {
+  const cur = select.value;
+  select.innerHTML = '<option value="">-- 自定义配置 (手动输入) --</option>' +
+    state.presetCatalog.map(p => `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'})</option>`).join('');
+  if (cur) select.value = cur;
+}
+
 // Preset Selection Handler
-function onProviderPresetChange(){
+async function onProviderPresetChange(){
   const presetId = document.getElementById('p_preset').value;
   const nameInput = document.getElementById('p_name');
   const urlInput = document.getElementById('p_url');
@@ -1524,7 +1581,8 @@ function onProviderPresetChange(){
   const modelsWrap = document.getElementById('p_models_wrap');
   const modelsList = document.getElementById('p_models_list');
 
-  if(!presetId || !PRESET_DEFINITIONS[presetId]){
+  if(!presetId){
+    state.currentSelectedPreset = null;
     nameInput.value = '';
     urlInput.value = '';
     descEl.style.display = 'none';
@@ -1536,10 +1594,37 @@ function onProviderPresetChange(){
     return;
   }
 
-  const preset = PRESET_DEFINITIONS[presetId];
+  // Fetch preset detail on demand
+  let preset = state.cachedPresets[presetId];
+  if (!preset) {
+    descEl.textContent = '正在按需拉取云端厂商规则与推荐模型...';
+    descEl.style.display = 'block';
+    try {
+      const res = await fetch(`/api/admin/presets/detail?id=${encodeURIComponent(presetId)}`, { headers: headers() });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.ok && data.preset) {
+          preset = data.preset;
+          state.cachedPresets[presetId] = preset;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch preset detail:', e);
+    }
+  }
+  if (!preset && FALLBACK_PRESETS[presetId]) {
+    preset = FALLBACK_PRESETS[presetId];
+  }
+
+  if (!preset) {
+    toast(`未能获取模板「${presetId}」规则`, 'err');
+    return;
+  }
+
+  state.currentSelectedPreset = preset;
   nameInput.value = preset.id;
   urlInput.value = preset.base_url;
-  descEl.textContent = preset.description || '';
+  descEl.textContent = `${preset.description || ''} · 规则版本: v${preset.version || '1.1.0'}`;
   descEl.style.display = 'block';
 
   // Preset protocols sync
@@ -1560,17 +1645,18 @@ function onProviderPresetChange(){
   }
 
   modelsList.innerHTML = '';
-  if(preset.recommended_models && preset.recommended_models.length > 0){
+  const recModels = preset.recommended_models || [];
+  if(recModels.length > 0){
     modelsWrap.style.display = 'block';
-    preset.recommended_models.forEach((rm) => {
+    recModels.forEach((rm) => {
       const row = document.createElement('div');
       row.style.marginBottom = '6px';
       row.innerHTML = `
         <label class="checkbox" style="align-items:flex-start;">
-          <input type="checkbox" data-model="${esc(rm.name)}" data-upstream="${esc(rm.upstream)}" data-kb="${esc(rm.kb_type||'')}" ${rm.checked ? 'checked' : ''}>
+          <input type="checkbox" data-model="${esc(rm.name)}" data-upstream="${esc(rm.upstream || rm.upstream_model || rm.name)}" data-kb="${esc(rm.kb_type||'')}" ${rm.checked !== false ? 'checked' : ''}>
           <div style="font-size:12px;">
-            <div style="font-weight:600;color:var(--text);">${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: ${esc(rm.upstream)})</span></div>
-            <div class="text-secondary" style="font-size:11px;margin-top:2px;">${esc(rm.desc || '')}</div>
+            <div style="font-weight:600;color:var(--text);">${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: ${esc(rm.upstream || rm.upstream_model || rm.name)})</span></div>
+            <div class="text-secondary" style="font-size:11px;margin-top:2px;">${esc(rm.desc || rm.description || '')}</div>
           </div>
         </label>
       `;
@@ -1583,6 +1669,7 @@ function onProviderPresetChange(){
 
 // Key & Provider Actions
 function openProviderModal(){
+  state.currentSelectedPreset = null;
   document.getElementById('providerModalTitle').textContent = '新增供应商';
   document.getElementById('p_preset_wrap').style.display = 'block';
   document.getElementById('p_preset').value = '';
@@ -1598,10 +1685,12 @@ function openProviderModal(){
   document.getElementById('p_anthropic_url').value = '';
   document.getElementById('p_models_wrap').style.display = 'none';
   document.getElementById('p_models_list').innerHTML = '';
+  loadPresetsCatalog();
   openModal('providerModal');
 }
 
 function editProvider(name){
+  state.currentSelectedPreset = null;
   const p = state.config.providers[name];
   document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
   document.getElementById('p_preset_wrap').style.display = 'none';
@@ -1667,6 +1756,18 @@ function saveProvider(){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
     }
 
+    // Attach preset metadata and rules if created from preset
+    if(state.currentSelectedPreset && (state.currentSelectedPreset.id === name || !state.config.providers[name].preset_id)){
+      state.config.providers[name].preset_id = state.currentSelectedPreset.id;
+      state.config.providers[name].preset_version = state.currentSelectedPreset.version || '1.1.0';
+      if(state.currentSelectedPreset.adapter_rules){
+        state.config.providers[name].adapter_rules = state.currentSelectedPreset.adapter_rules;
+      }
+      if(state.currentSelectedPreset.recommended_models){
+        state.config.providers[name].recommended_models = state.currentSelectedPreset.recommended_models;
+      }
+    }
+
     // Process optional recommended models creation
     const checkedModels = [];
     document.querySelectorAll('#p_models_list input[type="checkbox"]:checked').forEach(cb => {
@@ -1695,9 +1796,11 @@ function saveProvider(){
   renderProviders();
   renderModels();
 }
+
 function deleteProvider(name){ 
-  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？相关挂载也将一并清理。')) return; 
+  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？本地规则与配置将一并清理。')) return; 
   delete state.config.providers[name]; 
+  if(state.ruleUpdatesMap && state.ruleUpdatesMap[name]) delete state.ruleUpdatesMap[name];
   KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
   if(state.config.agent_models){ 
     Object.keys(state.config.agent_models).forEach(k=>{ 
@@ -1708,6 +1811,114 @@ function deleteProvider(name){
   } 
   persistConfig(`供应商「${name}」已删除并立即生效`);
   renderModels();
+}
+
+// Incremental Rule Updates
+async function checkAllRuleUpdates(){
+  const btn = document.getElementById('btnCheckRuleUpdates');
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🔄 检查中...';
+  }
+
+  try {
+    const provs = state.config.providers || {};
+    const payload = {
+      providers: Object.keys(provs).map(id => ({
+        id,
+        version: provs[id].preset_version || '1.0.0',
+        rule_hash: provs[id].rule_hash || ''
+      }))
+    };
+
+    const res = await fetch('/api/admin/presets/check-updates', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      state.ruleUpdatesMap = {};
+      if (data && data.ok && Array.isArray(data.updates) && data.updates.length > 0) {
+        data.updates.forEach(u => {
+          state.ruleUpdatesMap[u.provider_id] = u;
+        });
+
+        if (alertEl) {
+          alertEl.style.display = 'flex';
+          alertEl.innerHTML = `
+            <div>
+              <strong>发现 ${data.updates.length} 个供应商规则有新版本</strong>：
+              ${data.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${esc(u.provider_id)}: ${esc(u.current_version)} ➔ ${esc(u.remote_version)}</span>`).join('')}
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
+          `;
+        }
+        toast(`检查完成：发现 ${data.updates.length} 个供应商有新规则`, 'ok');
+      } else {
+        if (alertEl) alertEl.style.display = 'none';
+        toast('所有供应商规则均为最新版本 (无需更新)', 'ok');
+      }
+      renderProviders();
+    } else {
+      toast('检查规则更新接口响应异常', 'err');
+    }
+  } catch (e) {
+    toast(`检查规则更新失败: ${e.message}`, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 检查规则更新';
+    }
+  }
+}
+
+async function applySingleProviderRuleUpdate(pName){
+  await applyRuleUpdates([pName]);
+}
+
+async function applyAllProviderRuleUpdates(){
+  const ids = Object.keys(state.ruleUpdatesMap || {});
+  if(!ids.length) return;
+  await applyRuleUpdates(ids);
+}
+
+async function applyRuleUpdates(providerIds){
+  try {
+    toast(`正在增量拉取并更新 ${providerIds.join(', ')} 的规则...`, 'ok');
+    const res = await fetch('/api/admin/presets/update-rules', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider_ids: providerIds })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.updated) && data.updated.length > 0) {
+        // Re-fetch config to sync state
+        const cr = await fetch('/api/admin/config', { headers: headers() });
+        if (cr.ok) state.config = await cr.json();
+
+        providerIds.forEach(id => {
+          if (state.ruleUpdatesMap) delete state.ruleUpdatesMap[id];
+        });
+        const alertEl = document.getElementById('ruleUpdatesAlert');
+        if (alertEl && Object.keys(state.ruleUpdatesMap || {}).length === 0) {
+          alertEl.style.display = 'none';
+        }
+        toast(`成功更新 ${data.updated.length} 个供应商的规则并已自动生效！`, 'ok');
+        renderProviders();
+      } else {
+        toast(data?.message || '规则更新失败或无变更', 'err');
+      }
+    } else {
+      toast('更新规则请求失败', 'err');
+    }
+  } catch (e) {
+    toast(`更新规则失败: ${e.message}`, 'err');
+  }
 }
 
 function openKeyModal(prov){ 

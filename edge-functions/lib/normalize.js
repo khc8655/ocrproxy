@@ -63,229 +63,416 @@ export function sanitizeGeminiSchema(schema) {
 }
 
 /**
- * Ensure messages conform strictly to AMD requirements:
+ * Ensure messages conform strictly to AMD/Qwen requirements:
  * 1. Replace 'developer' role with 'system'.
  * 2. Ensure at most one 'system' message, and it MUST be the first item (messages[0]).
  */
 export function sanitizeAmdMessages(body) {
-  if (!Array.isArray(body?.messages) || body.messages.length === 0) return;
-  const systemParts = [];
-  const otherMessages = [];
-  for (const m of body.messages) {
-    if (!m || typeof m !== 'object') continue;
-    if (m.role === 'system' || m.role === 'developer') {
-      if (typeof m.content === 'string' && m.content.trim()) {
-        systemParts.push(m.content.trim());
-      } else if (Array.isArray(m.content)) {
-        for (const part of m.content) {
-          if (part && typeof part === 'object' && part.type === 'text' && part.text) {
-            systemParts.push(String(part.text).trim());
-          } else if (typeof part === 'string' && part.trim()) {
-            systemParts.push(part.trim());
-          }
-        }
-      }
-    } else {
-      otherMessages.push(m);
+  applyAdapterRules(body, {
+    messages: {
+      deny_developer_role: true,
+      system_first_only: true,
+      merge_system: true,
     }
-  }
-  const newMessages = [];
-  if (systemParts.length > 0) {
-    newMessages.push({
-      role: 'system',
-      content: systemParts.join('\n\n')
-    });
-  }
-  newMessages.push(...otherMessages);
-  body.messages = newMessages;
+  }, true, false);
 }
 
 /**
- * Apply declarative provider-specific body normalizations. Mutates `body` in place.
- *
- * @param {Object} body - parsed JSON body, will be mutated
- * @param {string} provider - provider name (e.g. "stepfun", "google", "sensenova", "agnes")
- * @param {Object} [configOverride] - optional custom adapter rules from provider config
- * @returns {Object} the same body (for chaining)
+ * Pure Declarative Adapter Rules Executor.
+ * Mutates `body` in place according to provider adapter_rules schema.
  */
-export function normaliseForProvider(body, provider, configOverride = null) {
-  if (!body || typeof body !== 'object') return body;
-  const p = String(provider || '').toLowerCase();
+export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic = false) {
+  if (!body || typeof body !== 'object' || !rules || typeof rules !== 'object') return body;
+
   const modelName = String(body.model || '').toLowerCase();
 
-  // 1. Resolve preset & rules (declarative schema)
-  const preset = getPreset(p) || {};
-  const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
-
-  // 2. Reasoning / Thinking level adapter
-  const reasoningRules = rules.reasoning || {};
-  const isGoogle = reasoningRules.strategy === 'gemini_thinking_matrix' || p.includes('google') || modelName.startsWith('gemini');
-  const isMiniMax = reasoningRules.strategy === 'minimax_adaptive' || p === 'minimax' || modelName.startsWith('minimax');
-
-  // MiniMax model casing and parameter sanitization
-  if (p === 'minimax' || isMiniMax) {
-    if (String(body.model || '').toLowerCase() === 'minimax-m3') {
-      body.model = 'MiniMax-M3';
+  // 1. Model casing mapping
+  const casingMap = rules.case_sensitive_models;
+  if (casingMap && typeof casingMap === 'object') {
+    for (const [k, v] of Object.entries(casingMap)) {
+      if (modelName === k.toLowerCase()) {
+        body.model = v;
+        break;
+      }
     }
-    delete body.output_config;
   }
 
-  if (body.reasoning_effort !== undefined) {
-    const rawEffort = String(body.reasoning_effort).toLowerCase();
+  // 2. Sanitization (parameter blacklisting)
+  const stripParams = rules.sanitization?.strip_params || rules.sanitization?.unsupported_params;
+  if (Array.isArray(stripParams)) {
+    for (const sp of stripParams) {
+      delete body[sp];
+    }
+  }
 
-    if (isGoogle) {
-      const isGemma = modelName.startsWith('gemma');
-      if (!isGemma) {
-        body.extra_body = body.extra_body || {};
-        body.extra_body.google = body.extra_body.google || {};
-        const isGemini25 = modelName.startsWith('gemini-2.5-');
-        const isPro = modelName.includes('pro');
+  // 3. Messages normalization
+  const msgRules = rules.messages;
+  if (msgRules && typeof msgRules === 'object' && Array.isArray(body.messages) && body.messages.length > 0) {
+    const denyDev = Boolean(msgRules.deny_developer_role);
+    const sysFirst = Boolean(msgRules.system_first_only);
+    const mergeSys = Boolean(msgRules.merge_system);
+    const stripEmpty = Boolean(msgRules.strip_empty);
 
-        if (rawEffort === 'none' || rawEffort === 'false') {
-          body.extra_body.google.thinking_config = { include_thoughts: false };
-        } else if (isGemini25) {
-          body.extra_body.google.thinking_config = { include_thoughts: true };
-        } else {
-          let thinkingLevel = 'low';
-          if (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max') {
-            thinkingLevel = 'high';
-          } else if (rawEffort === 'medium' && !isPro) {
-            thinkingLevel = 'medium';
-          } else {
-            thinkingLevel = 'low';
+    if (sysFirst || mergeSys || denyDev || stripEmpty) {
+      const systemParts = [];
+      const otherMessages = [];
+
+      for (const m of body.messages) {
+        if (!m || typeof m !== 'object') continue;
+        let role = m.role;
+        if (role === 'developer' && denyDev) {
+          role = 'system';
+        }
+
+        const content = m.content;
+        if (stripEmpty && (content === null || content === undefined || content === '' || (Array.isArray(content) && content.length === 0))) {
+          continue;
+        }
+
+        if (role === 'system' && (sysFirst || mergeSys)) {
+          if (typeof content === 'string' && content.trim()) {
+            systemParts.push(content.trim());
+          } else if (Array.isArray(content)) {
+            for (const part of content) {
+              if (part && typeof part === 'object' && part.type === 'text' && part.text) {
+                systemParts.push(String(part.text).trim());
+              } else if (typeof part === 'string' && part.trim()) {
+                systemParts.push(part.trim());
+              }
+            }
           }
-          body.extra_body.google.thinking_config = {
-            include_thoughts: true,
-            thinking_level: thinkingLevel,
-          };
-        }
-      }
-      delete body.reasoning_effort;
-    } else if (isMiniMax) {
-      if (rawEffort === 'none' || rawEffort === 'false') {
-        body.thinking = { type: 'disabled' };
-        delete body.reasoning_split;
-      } else {
-        body.reasoning_split = true;
-        body.thinking = { type: 'adaptive' };
-      }
-      delete body.reasoning_effort;
-    } else if (p === 'amd') {
-      delete body.chat_template_kwargs;
-      delete body.thinking;
-      sanitizeAmdMessages(body);
-      if (rawEffort === 'none' || rawEffort === 'false') {
-        if (modelName.includes('qwen')) {
-          body.reasoning_effort = 'low';
         } else {
-          delete body.reasoning_effort;
-        }
-      } else if (modelName.includes('qwen') && (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max')) {
-        body.reasoning_effort = 'medium';
-      } else if (!['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(rawEffort)) {
-        body.reasoning_effort = 'medium';
-      }
-    } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes')) {
-      body.chat_template_kwargs = body.chat_template_kwargs || {};
-      const enableKey = reasoningRules.enable_key || 'enable_thinking';
-      if (body.chat_template_kwargs[enableKey] === undefined) {
-        body.chat_template_kwargs[enableKey] = (rawEffort !== 'none' && rawEffort !== 'false');
-      }
-      delete body.reasoning_effort;
-    } else if (reasoningRules.strategy === 'effort_remapping' || p === 'stepfun') {
-      const supported = reasoningRules.supported_levels || ['low', 'medium', 'high'];
-      if (!supported.includes(rawEffort)) {
-        body.reasoning_effort = reasoningRules.none_fallback || 'low';
-      }
-      if (reasoningRules.inject_params) {
-        for (const [ik, iv] of Object.entries(reasoningRules.inject_params)) {
-          if (body[ik] === undefined) {
-            body[ik] = iv;
+          const mCopy = { ...m };
+          if (role !== m.role) {
+            mCopy.role = role;
           }
+          otherMessages.push(mCopy);
         }
       }
-    }
-  } else {
-    // If client did not specify reasoning_effort:
-    if (p === 'amd') {
-      delete body.chat_template_kwargs;
-      delete body.thinking;
-      sanitizeAmdMessages(body);
-      // Default to medium for AMD models to enable DeepSeek reasoning & keep Qwen safe
-      body.reasoning_effort = 'medium';
-    } else if (isMiniMax) {
-      if (body.thinking && typeof body.thinking === 'object') {
-        const t = String(body.thinking.type || '').toLowerCase();
-        if (t === 'disabled') {
-          body.thinking = { type: 'disabled' };
-          delete body.reasoning_split;
-        } else {
-          body.reasoning_split = true;
-          body.thinking = { type: 'adaptive' };
+
+      if (sysFirst || mergeSys) {
+        const newMessages = [];
+        if (systemParts.length > 0) {
+          newMessages.push({
+            role: 'system',
+            content: systemParts.join('\n\n')
+          });
         }
-      } else {
-        // Default for MiniMax-M3 in OpenAI mode: enable reasoning_split so Hermes and standard OpenAI clients receive reasoning_content cleanly
-        body.reasoning_split = true;
-        if (!body.thinking) {
-          body.thinking = { type: 'adaptive' };
-        }
-      }
-    } else if (reasoningRules.inject_params) {
-      for (const [ik, iv] of Object.entries(reasoningRules.inject_params)) {
-        if (body[ik] === undefined) {
-          body[ik] = iv;
-        }
+        newMessages.push(...otherMessages);
+        body.messages = newMessages;
       }
     }
   }
 
-  // Max output tokens headroom elevation for Google Gemini thinking
-  if (isGoogle) {
-    const thinkingCfg = body.extra_body?.google?.thinking_config;
-    const isThinkingOn = thinkingCfg?.include_thoughts !== false && (thinkingCfg?.include_thoughts === true || thinkingCfg?.thinking_level);
-    if (isThinkingOn) {
-      if (typeof body.max_tokens === 'number' && body.max_tokens < 16384) {
-        body.max_tokens = 65535;
-      }
-      if (typeof body.max_completion_tokens === 'number' && body.max_completion_tokens < 16384) {
-        body.max_completion_tokens = 65535;
-      }
-    }
-  }
-
-  // 3. Tool Calling adapter
-  const toolRules = rules.tools || {};
-  if (toolRules.normalize_choice_to_string || p === 'tokenrhythm' || p === 'sensenova' || p === 'deepseek') {
-    if (body.tool_choice && typeof body.tool_choice === 'object') {
+  // 4. Tools schema normalization
+  const toolRules = rules.tools;
+  if (toolRules && typeof toolRules === 'object') {
+    if (toolRules.normalize_choice_to_string && body.tool_choice && typeof body.tool_choice === 'object') {
       body.tool_choice = 'auto';
     }
-  }
 
-  if (toolRules.strip_json_schema || isGoogle) {
-    if (Array.isArray(body.tools)) {
-      body.tools = body.tools.map((t) => {
-        if (t && t.type === 'function' && t.function && t.function.parameters) {
-          return {
-            ...t,
-            function: {
-              ...t.function,
-              parameters: sanitizeGeminiSchema(t.function.parameters),
-            },
-          };
-        }
-        return t;
-      });
+    if (toolRules.deep_schema_sanitization || toolRules.strip_json_schema) {
+      if (Array.isArray(body.tools)) {
+        body.tools = body.tools.map((t) => {
+          if (t && t.type === 'function' && t.function && t.function.parameters) {
+            return {
+              ...t,
+              function: {
+                ...t.function,
+                parameters: sanitizeGeminiSchema(t.function.parameters),
+              },
+            };
+          }
+          return t;
+        });
+      }
     }
   }
 
-  // 4. Parameter sanitization
-  if (rules.sanitization?.unsupported_params) {
-    for (const field of rules.sanitization.unsupported_params) {
-      delete body[field];
+  // 5. Injected parameters
+  const injectParams = rules.inject_params || rules.reasoning?.inject_params;
+  if (injectParams && typeof injectParams === 'object') {
+    for (const [ik, iv] of Object.entries(injectParams)) {
+      if (body[ik] === undefined) {
+        body[ik] = iv;
+      }
+    }
+  }
+
+  // 6. Reasoning strategy execution
+  const reasoningRules = rules.reasoning;
+  if (reasoningRules && typeof reasoningRules === 'object') {
+    const strat = reasoningRules.strategy || 'openai_passthrough';
+
+    let modelSpecific = {};
+    if (reasoningRules.model_rules && typeof reasoningRules.model_rules === 'object') {
+      for (const [mPrefix, mCfg] of Object.entries(reasoningRules.model_rules)) {
+        if (modelName.includes(mPrefix.toLowerCase())) {
+          modelSpecific = mCfg;
+          break;
+        }
+      }
+    }
+
+    if (!isAgentMode) {
+      // KB mode: suppress thinking latency
+      if (strat === 'gemini_thinking_matrix') {
+        delete body.reasoning_effort;
+        body.extra_body = body.extra_body || {};
+        body.extra_body.google = body.extra_body.google || {};
+        body.extra_body.google.thinking_config = { include_thoughts: false };
+      } else if (strat === 'minimax_adaptive') {
+        delete body.reasoning_effort;
+        delete body.reasoning_split;
+        body.thinking = { type: 'disabled' };
+      } else if (strat === 'chat_template_kwargs') {
+        delete body.reasoning_effort;
+        body.chat_template_kwargs = body.chat_template_kwargs || {};
+        const enableKey = reasoningRules.enable_key || 'enable_thinking';
+        body.chat_template_kwargs[enableKey] = false;
+      } else if (strat === 'effort_remapping') {
+        delete body.thinking;
+        const noneFb = modelSpecific.none_fallback || reasoningRules.none_fallback;
+        const noneAct = modelSpecific.none_action || reasoningRules.none_action;
+        if (noneAct === 'omit' && !noneFb) {
+          delete body.reasoning_effort;
+        } else if (noneFb) {
+          body.reasoning_effort = noneFb;
+        } else {
+          body.reasoning_effort = 'none';
+        }
+      } else {
+        body.reasoning_effort = 'none';
+      }
+    } else {
+      // Agent mode
+      if (strat === 'gemini_thinking_matrix') {
+        const isGemma = modelName.startsWith('gemma');
+        let thinkingEnabled = false;
+
+        if (!isGemma) {
+          const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
+          if (rawEffort !== null) {
+            delete body.reasoning_effort;
+            body.extra_body = body.extra_body || {};
+            body.extra_body.google = body.extra_body.google || {};
+            const isGemini25 = modelName.startsWith('gemini-2.5-');
+            const isPro = modelName.includes('pro');
+
+            if (rawEffort === 'none' || rawEffort === 'false') {
+              body.extra_body.google.thinking_config = { include_thoughts: false };
+            } else if (isGemini25) {
+              body.extra_body.google.thinking_config = { include_thoughts: true };
+              thinkingEnabled = true;
+            } else {
+              let thinkingLevel = 'low';
+              if (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max') {
+                thinkingLevel = 'high';
+              } else if (rawEffort === 'medium' && !isPro) {
+                thinkingLevel = 'medium';
+              }
+              body.extra_body.google.thinking_config = {
+                include_thoughts: true,
+                thinking_level: thinkingLevel,
+              };
+              thinkingEnabled = true;
+            }
+          } else {
+            const cfg = body.extra_body?.google?.thinking_config;
+            if (cfg?.include_thoughts !== false && cfg?.thinking_level) {
+              thinkingEnabled = true;
+            }
+          }
+        }
+
+        if (thinkingEnabled && reasoningRules.headroom_elevation !== false) {
+          if (typeof body.max_tokens === 'number' && body.max_tokens < 16384) {
+            body.max_tokens = 65535;
+          }
+          if (typeof body.max_completion_tokens === 'number' && body.max_completion_tokens < 16384) {
+            body.max_completion_tokens = 65535;
+          }
+        }
+      } else if (strat === 'minimax_adaptive') {
+        const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
+        if (rawEffort !== null) {
+          delete body.reasoning_effort;
+          if (rawEffort === 'none' || rawEffort === 'false') {
+            body.thinking = { type: 'disabled' };
+            delete body.reasoning_split;
+          } else {
+            if (reasoningRules.enable_reasoning_split !== false) {
+              body.reasoning_split = true;
+            }
+            body.thinking = { type: 'adaptive' };
+          }
+        } else if (body.thinking && typeof body.thinking === 'object') {
+          const t = String(body.thinking.type || '').toLowerCase();
+          if (t === 'disabled') {
+            body.thinking = { type: 'disabled' };
+            delete body.reasoning_split;
+          } else {
+            if (reasoningRules.enable_reasoning_split !== false) {
+              body.reasoning_split = true;
+            }
+            body.thinking = { type: 'adaptive' };
+          }
+        } else {
+          if (reasoningRules.enable_reasoning_split !== false) {
+            body.reasoning_split = true;
+          }
+          if (!body.thinking) {
+            body.thinking = { type: reasoningRules.default_type || 'adaptive' };
+          }
+        }
+      } else if (strat === 'chat_template_kwargs') {
+        const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
+        if (rawEffort !== null) {
+          delete body.reasoning_effort;
+          body.chat_template_kwargs = body.chat_template_kwargs || {};
+          const enableKey = reasoningRules.enable_key || 'enable_thinking';
+          if (body.chat_template_kwargs[enableKey] === undefined) {
+            body.chat_template_kwargs[enableKey] = (rawEffort !== 'none' && rawEffort !== 'false');
+          }
+        }
+      } else if (strat === 'effort_remapping') {
+        if (reasoningRules.strip_thinking) {
+          delete body.thinking;
+        }
+        if (body.reasoning_effort !== undefined) {
+          const reStr = String(body.reasoning_effort).toLowerCase();
+          const supported = modelSpecific.supported_levels || reasoningRules.supported_levels || ['low', 'medium', 'high'];
+          const fallbacks = modelSpecific.level_fallback || reasoningRules.level_fallback || {};
+          const noneFb = modelSpecific.none_fallback || reasoningRules.none_fallback;
+          const noneAct = modelSpecific.none_action || reasoningRules.none_action;
+
+          if (reStr === 'none' || reStr === 'false') {
+            if (noneFb) {
+              body.reasoning_effort = noneFb;
+            } else if (noneAct === 'omit') {
+              delete body.reasoning_effort;
+            } else {
+              body.reasoning_effort = 'low';
+            }
+          } else if (fallbacks[reStr]) {
+            body.reasoning_effort = fallbacks[reStr];
+          } else if (!supported.includes(reStr)) {
+            body.reasoning_effort = fallbacks[reStr] || reasoningRules.default_effort || 'medium';
+          }
+        } else {
+          const defaultEff = modelSpecific.default_effort || reasoningRules.default_effort;
+          if (defaultEff) {
+            body.reasoning_effort = defaultEff;
+          }
+        }
+      } else if (strat === 'openai_passthrough') {
+        const supported = reasoningRules.supported_levels || ['none', 'low', 'medium', 'high'];
+        if (body.reasoning_effort === 'none' && !supported.includes('none')) {
+          body.reasoning_effort = reasoningRules.none_fallback || 'low';
+        }
+      }
+    }
+  }
+
+  // 7. Anthropic Messages endpoint specific rules
+  if (isAnthropic) {
+    if (!body.max_tokens || typeof body.max_tokens !== 'number' || body.max_tokens <= 0) {
+      body.max_tokens = 4096;
+    }
+
+    const anthropicRules = rules.anthropic;
+    if (anthropicRules && typeof anthropicRules === 'object') {
+      if (anthropicRules.strip_thinking) {
+        const thinking = body.thinking;
+        delete body.thinking;
+        if (anthropicRules.thinking_to_output_config) {
+          if (thinking && typeof thinking === 'object' && String(thinking.type || '').toLowerCase() !== 'disabled') {
+            body.output_config = { effort: anthropicRules.default_effort || 'medium' };
+          } else if (body.output_config && typeof body.output_config === 'object') {
+            const eff = String(body.output_config.effort || '').toLowerCase();
+            const modelRules = anthropicRules.model_rules || {};
+            for (const [mk, mc] of Object.entries(modelRules)) {
+              if (modelName.includes(mk.toLowerCase())) {
+                const fb = mc.level_fallback || {};
+                if (fb[eff]) {
+                  body.output_config.effort = fb[eff];
+                }
+                break;
+              }
+            }
+          }
+        }
+      } else if (anthropicRules.thinking_to_adaptive) {
+        if (body.thinking && typeof body.thinking === 'object') {
+          const t = String(body.thinking.type || '').toLowerCase();
+          if (t === 'enabled' || (!body.thinking.type && body.thinking.budget_tokens)) {
+            body.thinking.type = 'adaptive';
+          }
+        }
+      }
     }
   }
 
   return body;
+}
+
+/**
+ * Public normalisation API for chat completions.
+ */
+export function normaliseForProvider(body, provider, configOverride = null) {
+  if (!body || typeof body !== 'object') return body;
+  const p = String(provider || '').toLowerCase();
+  const preset = getPreset(p) || {};
+  const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
+  return applyAdapterRules(body, rules, true, false);
+}
+
+/**
+ * Public normalisation API for Anthropic messages.
+ */
+export function normaliseMessagesForProvider(body, provider, configOverride = null) {
+  if (!body || typeof body !== 'object') return body;
+  const p = String(provider || '').toLowerCase();
+  const preset = getPreset(p) || {};
+  const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
+  return applyAdapterRules(body, rules, true, true);
+}
+
+/**
+ * Normalise response JSON (non-streaming) based on declarative response rules.
+ */
+export function normalizeResponseReasoning(data, rules = {}) {
+  if (!data || typeof data !== 'object') return data;
+  const respRules = rules?.response || {};
+  const reasoningFields = respRules.reasoning_fields || ['reasoning_split', 'reasoning_content', 'reasoning'];
+
+  if (Array.isArray(data.choices)) {
+    for (const ch of data.choices) {
+      if (!ch || typeof ch !== 'object') continue;
+      const msg = ch.message;
+      if (msg && typeof msg === 'object') {
+        if (!msg.reasoning_content) {
+          for (const rf of reasoningFields) {
+            if (msg[rf]) {
+              msg.reasoning_content = msg[rf];
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (data.usage && typeof data.usage === 'object') {
+    if (!data.usage.reasoning_tokens) {
+      const details = data.usage.completion_tokens_details;
+      if (details && typeof details === 'object' && details.reasoning_tokens !== undefined) {
+        data.usage.reasoning_tokens = details.reasoning_tokens;
+      }
+    }
+  }
+
+  return data;
 }
 
 /**

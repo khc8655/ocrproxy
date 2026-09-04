@@ -1,6 +1,7 @@
 {
   "id": "amd",
   "name": "AMD Radeon Cloud",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -27,11 +28,43 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "effort_remapping",
-      "supported_levels": ["low", "medium"],
-      "none_fallback": "low"
+      "default_effort": "medium",
+      "supported_levels": ["minimal", "low", "medium", "high", "xhigh", "max"],
+      "model_rules": {
+        "qwen": {
+          "supported_levels": ["low", "medium"],
+          "level_fallback": { "high": "medium", "xhigh": "medium", "max": "medium" },
+          "none_fallback": "low"
+        }
+      },
+      "none_action": "omit",
+      "strip_thinking": true
+    },
+    "messages": {
+      "deny_developer_role": true,
+      "system_first_only": true,
+      "merge_system": true,
+      "strip_empty": true
+    },
+    "anthropic": {
+      "thinking_to_output_config": true,
+      "default_effort": "medium",
+      "strip_thinking": true,
+      "model_rules": {
+        "qwen": {
+          "level_fallback": { "high": "medium", "xhigh": "medium", "max": "medium" }
+        }
+      }
     },
     "sanitization": {
       "strip_params": ["thinking", "chat_template_kwargs"]
+    },
+    "response": {
+      "reasoning_fields": ["reasoning", "reasoning_content"],
+      "reasoning_tokens_paths": [
+        "completion_tokens_details.reasoning_tokens",
+        "usage.reasoning_tokens"
+      ]
     }
   }
 }

@@ -1,6 +1,7 @@
 {
   "id": "tokenrhythm",
   "name": "TokenRhythm",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://tokenrhythm.studio/v1",
   "doc_url": "https://tokenrhythm.studio/docs/api-integration",

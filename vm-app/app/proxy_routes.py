@@ -33,6 +33,7 @@ import json
 import asyncio
 import logging
 import urllib.parse
+from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -80,16 +81,32 @@ VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
 # 3. reasoning_format (StepFun-specific):
 #    - Default "general" returns reasoning in a `reasoning` field
 #    - "deepseek-style" returns reasoning in `reasoning_content` (DeepSeek-compatible)
-#    - Agent tools expecting reasoning_content need "deepseek-style"
+#    - Age# ── Declarative Provider Rule Engine ────────────────────────────────
+_PRESET_CACHE: dict = {}
 
-# Providers that do not accept reasoning_effort="none"
-_PROVIDERS_NO_NONE_EFFORT = {"stepfun"}
 
-# Providers that only accept string-form tool_choice (no object form)
-_PROVIDERS_NO_OBJECT_TOOL_CHOICE = {"tokenrhythm", "sensenova", "deepseek"}
+def _get_preset(provider_id: str) -> dict:
+    """Load provider preset definition from shared/presets/ directory."""
+    pid = str(provider_id or "").lower().strip()
+    if not pid:
+        return {}
+    if pid in _PRESET_CACHE:
+        return _PRESET_CACHE[pid]
+    try:
+        presets_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+        preset_file = presets_dir / f"{pid}.json"
+        if preset_file.exists():
+            data = json.loads(preset_file.read_text(encoding="utf-8"))
+            _PRESET_CACHE[pid] = data
+            return data
+    except Exception as e:
+        logger.warning("Failed to load preset %s: %s", pid, e)
+    return {}
 
-# Google Gemini / AI Studio providers
-_GOOGLE_PROVIDERS = {"google", "gemini", "aistudio", "google-ai"}
+
+def _get_preset_rules(provider_id: str) -> dict:
+    """Return adapter_rules dictionary for a given provider or preset ID."""
+    return _get_preset(provider_id).get("adapter_rules", {})
 
 
 def _sanitize_gemini_schema(schema):
@@ -104,18 +121,15 @@ def _sanitize_gemini_schema(schema):
     clean.pop("$defs", None)
     clean.pop("$ref", None)
 
-    # Sanitize properties recursively
     if "properties" in clean and isinstance(clean["properties"], dict):
         clean["properties"] = {
             k: _sanitize_gemini_schema(v) for k, v in clean["properties"].items()
         }
-        # Verify required array: only retain properties that actually exist
         if "required" in clean and isinstance(clean["required"], list):
             clean["required"] = [r for r in clean["required"] if r in clean["properties"]]
             if not clean["required"]:
                 clean.pop("required", None)
     elif "required" in clean and not ("properties" in clean and clean["properties"]):
-        # Discard standalone required if no properties exist (avoids Gemini 400 'property is not defined')
         clean.pop("required", None)
 
     if "items" in clean:
@@ -128,267 +142,319 @@ def _sanitize_gemini_schema(schema):
     return clean
 
 
-def _sanitize_amd_messages(out: dict) -> None:
-    """Ensure messages conform strictly to AMD requirements:
-    1. Replace 'developer' role with 'system'.
-    2. Ensure at most one 'system' message, and it MUST be the first item (messages[0]).
+def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is_anthropic: bool = False) -> None:
+    """Pure declarative rule executor for all upstream providers.
+    Mutates `out` in place according to provider adapter_rules schema.
     """
-    messages = out.get("messages")
-    if not isinstance(messages, list) or not messages:
+    if not rules or not isinstance(rules, dict):
         return
 
-    system_parts = []
-    other_messages = []
+    m_name = str(out.get("model", "")).lower()
 
-    for m in messages:
-        if not isinstance(m, dict):
-            continue
-        role = m.get("role")
-        if role in ("system", "developer"):
-            content = m.get("content")
-            if isinstance(content, str) and content.strip():
-                system_parts.append(content.strip())
-            elif isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        t = str(part.get("text", "")).strip()
-                        if t:
-                            system_parts.append(t)
-                    elif isinstance(part, str) and part.strip():
-                        system_parts.append(part.strip())
+    # 1. Model casing mapping
+    casing_map = rules.get("case_sensitive_models", {})
+    if isinstance(casing_map, dict):
+        for k, v in casing_map.items():
+            if m_name == k.lower():
+                out["model"] = v
+                break
+
+    # 2. Sanitization (parameter blacklisting)
+    strip_params = rules.get("sanitization", {}).get("strip_params", [])
+    for sp in strip_params:
+        out.pop(sp, None)
+
+    # 3. Messages normalization
+    msg_rules = rules.get("messages", {})
+    if msg_rules and isinstance(msg_rules, dict):
+        messages = out.get("messages")
+        if isinstance(messages, list) and messages:
+            deny_dev = bool(msg_rules.get("deny_developer_role"))
+            sys_first = bool(msg_rules.get("system_first_only"))
+            merge_sys = bool(msg_rules.get("merge_system"))
+            strip_empty = bool(msg_rules.get("strip_empty"))
+
+            if sys_first or merge_sys or deny_dev or strip_empty:
+                system_parts = []
+                other_messages = []
+                for m in messages:
+                    if not isinstance(m, dict):
+                        continue
+                    role = m.get("role")
+                    if role == "developer" and deny_dev:
+                        role = "system"
+
+                    content = m.get("content")
+                    if strip_empty and (content is None or content == "" or content == []):
+                        continue
+
+                    if role == "system" and (sys_first or merge_sys):
+                        if isinstance(content, str) and content.strip():
+                            system_parts.append(content.strip())
+                        elif isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    t = str(part.get("text", "")).strip()
+                                    if t:
+                                        system_parts.append(t)
+                                elif isinstance(part, str) and part.strip():
+                                    system_parts.append(part.strip())
+                    else:
+                        m_copy = dict(m)
+                        if role != m.get("role"):
+                            m_copy["role"] = role
+                        other_messages.append(m_copy)
+
+                if sys_first or merge_sys:
+                    new_messages = []
+                    if system_parts:
+                        new_messages.append({
+                            "role": "system",
+                            "content": "\n\n".join(system_parts)
+                        })
+                    new_messages.extend(other_messages)
+                    out["messages"] = new_messages
+
+    # 4. Tools schema normalization
+    tools_rules = rules.get("tools", {})
+    if tools_rules and isinstance(tools_rules, dict):
+        if tools_rules.get("normalize_choice_to_string"):
+            tc = out.get("tool_choice")
+            if isinstance(tc, dict):
+                out["tool_choice"] = "auto"
+
+        if tools_rules.get("deep_schema_sanitization"):
+            tools = out.get("tools")
+            if isinstance(tools, list):
+                cleaned_tools = []
+                for t in tools:
+                    if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
+                        fn = copy.deepcopy(t["function"])
+                        if "parameters" in fn:
+                            fn["parameters"] = _sanitize_gemini_schema(fn["parameters"])
+                        t_clean = copy.deepcopy(t)
+                        t_clean["function"] = fn
+                        cleaned_tools.append(t_clean)
+                    else:
+                        cleaned_tools.append(t)
+                out["tools"] = cleaned_tools
+
+    # 5. Parameter injection
+    inject_params = rules.get("inject_params") or rules.get("reasoning", {}).get("inject_params", {})
+    if isinstance(inject_params, dict):
+        for ik, iv in inject_params.items():
+            if ik not in out:
+                out[ik] = iv
+
+    # 6. Reasoning strategy execution
+    reasoning_rules = rules.get("reasoning", {})
+    if reasoning_rules and isinstance(reasoning_rules, dict):
+        strat = reasoning_rules.get("strategy", "openai_passthrough")
+
+        model_specific = {}
+        for m_prefix, m_cfg in reasoning_rules.get("model_rules", {}).items():
+            if m_prefix.lower() in m_name:
+                model_specific = m_cfg
+                break
+
+        if not is_agent_mode:
+            # KB mode: suppress thinking latency
+            if strat == "gemini_thinking_matrix":
+                out.pop("reasoning_effort", None)
+                out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
+                    "include_thoughts": False
+                }
+            elif strat == "minimax_adaptive":
+                out.pop("reasoning_effort", None)
+                out.pop("reasoning_split", None)
+                out["thinking"] = {"type": "disabled"}
+            elif strat == "chat_template_kwargs":
+                out.pop("reasoning_effort", None)
+                enable_key = reasoning_rules.get("enable_key", "enable_thinking")
+                out.setdefault("chat_template_kwargs", {})[enable_key] = False
+            elif strat == "effort_remapping":
+                out.pop("thinking", None)
+                none_fb = model_specific.get("none_fallback") or reasoning_rules.get("none_fallback")
+                none_act = model_specific.get("none_action") or reasoning_rules.get("none_action")
+                if none_act == "omit" and not none_fb:
+                    out.pop("reasoning_effort", None)
+                elif none_fb:
+                    out["reasoning_effort"] = none_fb
+                else:
+                    out["reasoning_effort"] = "none"
+            else:
+                out["reasoning_effort"] = "none"
         else:
-            other_messages.append(m)
+            # Agent mode
+            if strat == "gemini_thinking_matrix":
+                is_gemma = m_name.startswith("gemma")
+                thinking_enabled = False
+                if not is_gemma:
+                    re = out.pop("reasoning_effort", None)
+                    if re is not None:
+                        effort = str(re).lower()
+                        extra = out.setdefault("extra_body", {}).setdefault("google", {})
+                        is_gemini_25 = m_name.startswith("gemini-2.5-")
+                        is_pro = "pro" in m_name
+                        if effort in ("none", "false"):
+                            extra["thinking_config"] = {"include_thoughts": False}
+                        elif is_gemini_25:
+                            extra["thinking_config"] = {"include_thoughts": True}
+                            thinking_enabled = True
+                        else:
+                            thinking_level = "low"
+                            if effort in ("high", "xhigh", "max"):
+                                thinking_level = "high"
+                            elif effort == "medium" and not is_pro:
+                                thinking_level = "medium"
+                            extra["thinking_config"] = {
+                                "include_thoughts": True,
+                                "thinking_level": thinking_level,
+                            }
+                            thinking_enabled = True
+                    else:
+                        cfg = out.get("extra_body", {}).get("google", {}).get("thinking_config", {})
+                        if cfg.get("include_thoughts") is not False and cfg.get("thinking_level"):
+                            thinking_enabled = True
 
-    new_messages = []
-    if system_parts:
-        new_messages.append({
-            "role": "system",
-            "content": "\n\n".join(system_parts)
-        })
-    new_messages.extend(other_messages)
-    out["messages"] = new_messages
+                if thinking_enabled and reasoning_rules.get("headroom_elevation", True):
+                    if "max_tokens" in out and isinstance(out["max_tokens"], int) and out["max_tokens"] < 16384:
+                        out["max_tokens"] = 65535
+                    if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
+                        out["max_completion_tokens"] = 65535
+
+            elif strat == "minimax_adaptive":
+                re = out.pop("reasoning_effort", None)
+                if re is not None and str(re).lower() in ("none", "false"):
+                    out["thinking"] = {"type": "disabled"}
+                    out.pop("reasoning_split", None)
+                elif "thinking" in out and isinstance(out["thinking"], dict) and str(out["thinking"].get("type", "")).lower() == "disabled":
+                    out["thinking"] = {"type": "disabled"}
+                    out.pop("reasoning_split", None)
+                else:
+                    if reasoning_rules.get("enable_reasoning_split", True):
+                        out["reasoning_split"] = True
+                    if "thinking" not in out:
+                        out["thinking"] = {"type": reasoning_rules.get("default_type", "adaptive")}
+
+            elif strat == "chat_template_kwargs":
+                re = out.pop("reasoning_effort", None)
+                if re is not None:
+                    effort = str(re).lower()
+                    ctk = out.setdefault("chat_template_kwargs", {})
+                    enable_key = reasoning_rules.get("enable_key", "enable_thinking")
+                    if enable_key not in ctk:
+                        ctk[enable_key] = effort not in ("none", "false")
+
+            elif strat == "effort_remapping":
+                if reasoning_rules.get("strip_thinking"):
+                    out.pop("thinking", None)
+                re = out.get("reasoning_effort")
+                if re is not None:
+                    re_str = str(re).lower()
+                    supported = model_specific.get("supported_levels") or reasoning_rules.get("supported_levels", ["low", "medium", "high"])
+                    fallbacks = model_specific.get("level_fallback") or reasoning_rules.get("level_fallback", {})
+                    none_fb = model_specific.get("none_fallback") or reasoning_rules.get("none_fallback")
+                    none_act = model_specific.get("none_action") or reasoning_rules.get("none_action")
+
+                    if re_str in ("none", "false"):
+                        if none_fb:
+                            out["reasoning_effort"] = none_fb
+                        elif none_act == "omit":
+                            out.pop("reasoning_effort", None)
+                        else:
+                            out["reasoning_effort"] = "low"
+                    elif re_str in fallbacks:
+                        out["reasoning_effort"] = fallbacks[re_str]
+                    elif re_str not in supported:
+                        out["reasoning_effort"] = fallbacks.get(re_str, reasoning_rules.get("default_effort", "medium"))
+                else:
+                    default_eff = model_specific.get("default_effort") or reasoning_rules.get("default_effort")
+                    if default_eff:
+                        out["reasoning_effort"] = default_eff
+
+            elif strat == "openai_passthrough":
+                supported = reasoning_rules.get("supported_levels", ["none", "low", "medium", "high"])
+                re = out.get("reasoning_effort")
+                if re == "none" and "none" not in supported:
+                    out["reasoning_effort"] = reasoning_rules.get("none_fallback", "low")
+
+    # 7. Anthropic Messages endpoint specific rules
+    if is_anthropic:
+        mt = out.get("max_tokens")
+        if not isinstance(mt, int) or mt <= 0:
+            out["max_tokens"] = 4096
+
+        anthropic_rules = rules.get("anthropic", {})
+        if anthropic_rules and isinstance(anthropic_rules, dict):
+            if anthropic_rules.get("strip_thinking"):
+                thinking = out.pop("thinking", None)
+                if anthropic_rules.get("thinking_to_output_config"):
+                    if thinking and isinstance(thinking, dict) and str(thinking.get("type", "")).lower() != "disabled":
+                        out["output_config"] = {"effort": anthropic_rules.get("default_effort", "medium")}
+                    elif "output_config" in out and isinstance(out["output_config"], dict):
+                        eff = str(out["output_config"].get("effort", "")).lower()
+                        model_rules = anthropic_rules.get("model_rules", {})
+                        for mk, mc in model_rules.items():
+                            if mk.lower() in m_name:
+                                fb = mc.get("level_fallback", {})
+                                if eff in fb:
+                                    out["output_config"]["effort"] = fb[eff]
+                                break
+            elif anthropic_rules.get("thinking_to_adaptive"):
+                thinking = out.get("thinking")
+                if isinstance(thinking, dict):
+                    t = str(thinking.get("type", "")).lower()
+                    if t == "enabled" or (not t and "budget_tokens" in thinking):
+                        thinking["type"] = "adaptive"
+
+
+def _normalize_response_data(data: dict, rules: dict) -> None:
+    """Normalize response JSON (non-streaming) based on declarative response rules."""
+    if not isinstance(data, dict):
+        return
+    resp_rules = rules.get("response", {}) if isinstance(rules, dict) else {}
+    reasoning_fields = resp_rules.get("reasoning_fields", ["reasoning_split", "reasoning_content", "reasoning"])
+
+    choices = data.get("choices")
+    if isinstance(choices, list):
+        for ch in choices:
+            if not isinstance(ch, dict):
+                continue
+            msg = ch.get("message")
+            if isinstance(msg, dict):
+                if not msg.get("reasoning_content"):
+                    for rf in reasoning_fields:
+                        if rf in msg and msg[rf]:
+                            msg["reasoning_content"] = msg[rf]
+                            break
+
+    usage = data.get("usage")
+    if isinstance(usage, dict):
+        if "reasoning_tokens" not in usage:
+            details = usage.get("completion_tokens_details")
+            if isinstance(details, dict) and "reasoning_tokens" in details:
+                usage["reasoning_tokens"] = details["reasoning_tokens"]
+
+
+# ── Backwards-compatibility wrapper stubs ────────────────────────────
+def _sanitize_amd_messages(out: dict) -> None:
+    _apply_request_adapter_rules(out, {"messages": {"deny_developer_role": True, "system_first_only": True, "merge_system": True}}, is_agent_mode=True)
 
 
 def _normalise_for_provider(out: dict, provider: str) -> None:
-    """Normalise request body fields that the target provider would reject.
-
-    Mutates `out` in-place.  Only fields whose values would cause a 400 error
-    are touched — all other parameters pass through untouched.
-    """
-    p = str(provider or "").lower()
-
-    # 1. reasoning_effort: "none" → "low" for providers that don't accept "none"
-    if p in _PROVIDERS_NO_NONE_EFFORT:
-        re = out.get("reasoning_effort")
-        if re == "none":
-            out["reasoning_effort"] = "low"
-
-    # 2. tool_choice: object form → "auto" for providers that reject objects
-    if p in _PROVIDERS_NO_OBJECT_TOOL_CHOICE:
-        tc = out.get("tool_choice")
-        if isinstance(tc, dict):
-            out["tool_choice"] = "auto"
-
-    # 3. StepFun: set reasoning_format="deepseek-style" so agent tools
-    #    receive reasoning_content (not the StepFun-native "reasoning" field).
-    #    Only inject if the caller hasn't already set it explicitly.
-    if p == "stepfun":
-        if "reasoning_format" not in out:
-            out["reasoning_format"] = "deepseek-style"
-
-    # 4. Google AI Studio / Gemini Adaptation (Gemini 2.5 / 3 / 3.5+)
-    model_name = str(out.get("model", "")).lower()
-    is_google = p in _GOOGLE_PROVIDERS or model_name.startswith("gemini")
-    if is_google:
-        is_gemma = model_name.startswith("gemma")
-        thinking_enabled = False
-
-        # Only inject thinking_config for Gemini models (Gemma does not support thinking_config)
-        if not is_gemma:
-            re = out.pop("reasoning_effort", None)
-            if re is not None:
-                effort = str(re).lower()
-                extra = out.setdefault("extra_body", {}).setdefault("google", {})
-                is_gemini_25 = model_name.startswith("gemini-2.5-")
-                is_pro = "pro" in model_name
-
-                if effort in ("none", "false"):
-                    extra["thinking_config"] = {"include_thoughts": False}
-                elif is_gemini_25:
-                    extra["thinking_config"] = {"include_thoughts": True}
-                    thinking_enabled = True
-                else:
-                    thinking_level = "low"
-                    if effort in ("high", "xhigh", "max"):
-                        thinking_level = "high"
-                    elif effort == "medium" and not is_pro:
-                        thinking_level = "medium"
-                    extra["thinking_config"] = {
-                        "include_thoughts": True,
-                        "thinking_level": thinking_level,
-                    }
-                    thinking_enabled = True
-            else:
-                # Check if client explicitly sent extra_body.google.thinking_config
-                cfg = out.get("extra_body", {}).get("google", {}).get("thinking_config", {})
-                if cfg.get("include_thoughts") is not False and cfg.get("thinking_level"):
-                    thinking_enabled = True
-
-        # Max output tokens headroom elevation:
-        # Gemini counts thinking tokens against maxOutputTokens. If thinking is active
-        # and client passed a low max_tokens cap, elevate headroom to avoid truncated/empty output.
-        if thinking_enabled:
-            if "max_tokens" in out and isinstance(out["max_tokens"], int) and out["max_tokens"] < 16384:
-                out["max_tokens"] = 65535
-            if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
-                out["max_completion_tokens"] = 65535
-
-        # Sanitize tool schemas
-        tools = out.get("tools")
-        if isinstance(tools, list):
-            cleaned_tools = []
-            for t in tools:
-                if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
-                    fn = copy.deepcopy(t["function"])
-                    if "parameters" in fn:
-                        fn["parameters"] = _sanitize_gemini_schema(fn["parameters"])
-                    t_clean = copy.deepcopy(t)
-                    t_clean["function"] = fn
-                    cleaned_tools.append(t_clean)
-                else:
-                    cleaned_tools.append(t)
-            out["tools"] = cleaned_tools
-
-    # 5. Agnes AI: map reasoning_effort to chat_template_kwargs.enable_thinking
-    if p == "agnes" or str(out.get("model", "")).lower().startswith("agnes"):
-        re = out.pop("reasoning_effort", None)
-        if re is not None:
-            effort = str(re).lower()
-            ctk = out.setdefault("chat_template_kwargs", {})
-            if "enable_thinking" not in ctk:
-                ctk["enable_thinking"] = effort not in ("none", "false")
-
-    # 5.1 AMD Radeon Cloud: follow official docs (reasoning_effort only, sanitize messages, drop non-standard fields)
-    if p == "amd":
-        out.pop("chat_template_kwargs", None)
-        out.pop("thinking", None)
-        _sanitize_amd_messages(out)
-        m_name = str(out.get("model", "")).lower()
-
-        re = out.get("reasoning_effort")
-        if re is not None:
-            re_str = str(re).lower()
-            if re_str in ("none", "false"):
-                if "qwen" in m_name:
-                    out["reasoning_effort"] = "low"
-                else:
-                    out.pop("reasoning_effort", None)
-            elif re_str in ("high", "xhigh", "max") and "qwen" in m_name:
-                # Qwen3.8-Flash-Next refuses 'high' with 400. Supported types are xhigh (default), medium, low.
-                out["reasoning_effort"] = "medium"
-            elif re_str not in ("minimal", "low", "medium", "high", "xhigh", "max"):
-                out["reasoning_effort"] = "medium"
-        else:
-            # Default for Agent mode: medium (enables DeepSeek thinking and keeps Qwen stable)
-            out["reasoning_effort"] = "medium"
-
-    # 6. MiniMax: preserve model case (MiniMax-M3), strip non-standard fields and adapt thinking
-    if p == "minimax" or str(out.get("model", "")).lower().startswith("minimax"):
-        m = str(out.get("model", ""))
-        if m.lower() == "minimax-m3":
-            out["model"] = "MiniMax-M3"
-        out.pop("output_config", None)
-
-        re = out.pop("reasoning_effort", None)
-        if re is not None and str(re).lower() in ("none", "false"):
-            out["thinking"] = {"type": "disabled"}
-            out.pop("reasoning_split", None)
-        elif "thinking" in out and isinstance(out["thinking"], dict) and str(out["thinking"].get("type", "")).lower() == "disabled":
-            out["thinking"] = {"type": "disabled"}
-            out.pop("reasoning_split", None)
-        else:
-            # Default for MiniMax-M3 in OpenAI mode: enable reasoning_split so Hermes and standard OpenAI clients receive reasoning_content cleanly
-            out["reasoning_split"] = True
-            if "thinking" not in out:
-                out["thinking"] = {"type": "adaptive"}
+    rules = _get_preset_rules(provider)
+    _apply_request_adapter_rules(out, rules, is_agent_mode=True, is_anthropic=False)
 
 
 def _normalise_messages_for_provider(out: dict, provider: str) -> None:
-    """Normalise Anthropic Messages request body fields before forwarding to upstream."""
-    # Ensure max_tokens is present (Anthropic API specification mandatory field)
-    mt = out.get("max_tokens")
-    if not isinstance(mt, int) or mt <= 0:
-        out["max_tokens"] = 4096
-
-    p = str(provider or "").lower()
-
-    if p == "minimax":
-        # 1. Model casing: MiniMax is strictly case-sensitive, must be "MiniMax-M3"
-        m = str(out.get("model", ""))
-        if m.lower() == "minimax-m3":
-            out["model"] = "MiniMax-M3"
-
-        # 2. Strip Claude-specific non-standard fields like output_config (causes 400 on MiniMax)
-        out.pop("output_config", None)
-
-        # 3. Thinking parameter normalization: remap Anthropic "enabled" to MiniMax "adaptive"
-        thinking = out.get("thinking")
-        if isinstance(thinking, dict):
-            t = str(thinking.get("type", "")).lower()
-            if t == "enabled" or (not t and "budget_tokens" in thinking):
-                thinking["type"] = "adaptive"
-
-    elif p == "amd":
-        # AMD Anthropic endpoint rejects thinking field (400), but accepts output_config.effort
-        thinking = out.pop("thinking", None)
-        if thinking and isinstance(thinking, dict) and str(thinking.get("type", "")).lower() != "disabled":
-            out["output_config"] = {"effort": "medium"}
-        elif "output_config" in out and isinstance(out["output_config"], dict):
-            eff = str(out["output_config"].get("effort", "")).lower()
-            m_name = str(out.get("model", "")).lower()
-            if eff in ("high", "xhigh", "max") and "qwen" in m_name:
-                out["output_config"]["effort"] = "medium"
+    rules = _get_preset_rules(provider)
+    _apply_request_adapter_rules(out, rules, is_agent_mode=True, is_anthropic=True)
 
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
-    """Inject provider-specific parameters to disable thinking/reasoning in KB mode.
-
-    KB ingestion is batch processing — reasoning adds latency without value.
-    Each provider has a different mechanism:
-      - SenseNova / DeepSeek: reasoning_effort="none" (truly off)
-      - StepFun: reasoning_effort="low" (lowest tier, "none" not accepted)
-      - Agnes: chat_template_kwargs={"enable_thinking": False} (reasoning_effort ignored)
-      - AMD: reasoning_effort="low" for Qwen, omitted for DeepSeek (thinking=off by default)
-      - Google Gemini: extra_body.google.thinking_config={"include_thoughts": False}
-      - MiniMax: thinking={"type": "disabled"}, reasoning_split removed
-      - TokenRhythm / others: reasoning_effort="none" (standard OpenAI-compatible)
-    """
-    p = str(provider or "").lower()
-    if p == "stepfun":
-        out["reasoning_effort"] = "low"
-    elif p == "agnes":
-        out.pop("reasoning_effort", None)
-        out["chat_template_kwargs"] = {"enable_thinking": False}
-    elif p == "amd":
-        out.pop("chat_template_kwargs", None)
-        out.pop("thinking", None)
-        _sanitize_amd_messages(out)
-        m_name = str(out.get("model", "")).lower()
-        if "qwen" in m_name:
-            out["reasoning_effort"] = "low"
-        else:
-            out.pop("reasoning_effort", None)
-    elif p in _GOOGLE_PROVIDERS:
-        out.pop("reasoning_effort", None)
-        out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
-            "include_thoughts": False
-        }
-    elif p == "minimax":
-        out.pop("reasoning_effort", None)
-        out.pop("reasoning_split", None)
-        out["thinking"] = {"type": "disabled"}
-    else:
-        out["reasoning_effort"] = "none"
+    rules = _get_preset_rules(provider)
+    _apply_request_adapter_rules(out, rules, is_agent_mode=False, is_anthropic=False)
 
 
 # Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
@@ -623,13 +689,17 @@ async def chat_completions(request: Request):
         active_key = entry.get("active_key")
 
         candidates_list = []
+        providers_map = config.get("providers") or {}
         for b in entry.get("keys", []):
             if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
                 continue
+            p_id = b["provider"]
+            p_info = providers_map.get(p_id, {})
             candidates_list.append({
-                "provider": b["provider"],
+                "provider": p_id,
                 "key": b["key"],
                 "model": b.get("upstream_model") or default_upstream,
+                "adapter_rules": p_info.get("adapter_rules") or _get_preset_rules(p_info.get("preset_id", p_id)),
             })
 
         if strategy == "manual":
@@ -696,13 +766,17 @@ async def chat_completions(request: Request):
                 return _model_not_found_response(model_name)
             default_upstream = entry.get("upstream_model") or model_name
             candidates_list = []
+            providers_map = config.get("providers") or {}
             for b in entry.get("keys", []):
                 if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
                     continue
+                p_id = b["provider"]
+                p_info = providers_map.get(p_id, {})
                 candidates_list.append({
-                    "provider": b["provider"],
+                    "provider": p_id,
                     "key": b["key"],
                     "model": b.get("upstream_model") or default_upstream,
+                    "adapter_rules": p_info.get("adapter_rules") or _get_preset_rules(p_info.get("preset_id", p_id)),
                 })
             if not candidates_list:
                 return _model_not_found_response(model_name)
@@ -730,14 +804,8 @@ async def chat_completions(request: Request):
         out = dict(body)
         out["model"] = cand["model"]
         provider = cand.get("provider", "")
-        if kb_force_no_reasoning:
-            # KB mode: disable thinking per provider's mechanism
-            _disable_thinking_for_kb(out, provider)
-        else:
-            # Agent mode: minimal normalisation — only fix values that the
-            # target provider would reject (causing a 400 error).  All other
-            # parameters pass through untouched.
-            _normalise_for_provider(out, provider)
+        rules = cand.get("adapter_rules") or _get_preset_rules(provider)
+        _apply_request_adapter_rules(out, rules, is_agent_mode=not kb_force_no_reasoning, is_anthropic=False)
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -748,7 +816,6 @@ async def chat_completions(request: Request):
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
             def _filter_chunk(b: bytes) -> bytes:
-                # AMD SGLang emits "reasoning": "..." in delta. Normalize to "reasoning_content": "..."
                 if b and b'"reasoning":' in b:
                     return b.replace(b'"reasoning":', b'"reasoning_content":')
                 return b
@@ -793,18 +860,8 @@ async def chat_completions(request: Request):
             request_model=req_model_name,
         )
         resp_data = sr.data
-        # Normalize AMD reasoning to standard reasoning_content & reasoning_tokens
         if isinstance(resp_data, dict):
-            if "choices" in resp_data:
-                for c in resp_data["choices"]:
-                    msg = c.get("message") if isinstance(c, dict) else None
-                    if isinstance(msg, dict) and "reasoning" in msg and not msg.get("reasoning_content"):
-                        msg["reasoning_content"] = msg.get("reasoning")
-            usage = resp_data.get("usage")
-            if isinstance(usage, dict) and "reasoning_tokens" not in usage:
-                rt = usage.get("completion_tokens_details", {}).get("reasoning_tokens")
-                if rt is not None:
-                    usage["reasoning_tokens"] = rt
+            _normalize_response_data(resp_data, rules={})
         resp = JSONResponse(content=resp_data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -895,10 +952,12 @@ async def anthropic_messages(request: Request):
         p_name = b["provider"]
         if not _supports_messages(p_name):
             continue
+        p_cfg = (config.get("providers") or {}).get(p_name, {})
         candidates_list.append({
             "provider": p_name,
             "key": b["key"],
             "model": b.get("upstream_model") or default_upstream,
+            "adapter_rules": p_cfg.get("adapter_rules") or _get_preset_rules(p_cfg.get("preset_id", p_name)),
         })
 
     if strategy == "manual":
@@ -937,8 +996,9 @@ async def anthropic_messages(request: Request):
         out = dict(body)
         out["model"] = cand["model"]
         provider = cand.get("provider", "")
+        rules = cand.get("adapter_rules") or _get_preset_rules(provider)
 
-        _normalise_messages_for_provider(out, provider)
+        _apply_request_adapter_rules(out, rules, is_agent_mode=True, is_anthropic=True)
 
         prov_cfg = (config.get("providers") or {}).get(provider, {})
         anthropic_base = prov_cfg.get("anthropic_base_url")
