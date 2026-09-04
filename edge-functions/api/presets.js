@@ -155,6 +155,7 @@ export async function onRequestPost(context) {
           name: remotePreset.name || provId,
           current_version: currVer,
           latest_version: latestVer,
+          remote_version: latestVer,
           has_update: hasUpdate,
         };
 

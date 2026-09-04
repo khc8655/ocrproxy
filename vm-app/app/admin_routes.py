@@ -369,6 +369,7 @@ async def check_preset_updates_endpoint(request: Request):
             "name": remote_preset.get("name", prov_id),
             "current_version": curr_ver,
             "latest_version": latest_ver,
+            "remote_version": latest_ver,
             "has_update": has_update,
         }
 
