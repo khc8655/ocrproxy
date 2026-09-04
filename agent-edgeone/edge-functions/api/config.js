@@ -11,6 +11,7 @@
 import {
   loadConfig,
   validateConfig,
+  invalidateConfigCache,
   ConfigError,
   sanitizeJsonString,
   resolveKvBinding,
@@ -239,7 +240,7 @@ export async function onRequestGet(context) {
     const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' },
     });
   }
 
@@ -252,7 +253,7 @@ export async function onRequestGet(context) {
     }),
     {
       status: 200,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' },
     }
   );
 }
@@ -316,7 +317,7 @@ export async function onRequestPut(context) {
     const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' },
     });
   }
 
@@ -337,6 +338,7 @@ export async function onRequestPut(context) {
 
   try {
     await kv.put(CONFIG_KV_KEY, JSON.stringify(wrapped));
+    invalidateConfigCache();
   } catch (e) {
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV write failed: ${e?.message || e}` } }),
@@ -352,7 +354,7 @@ export async function onRequestPut(context) {
       propagation_hint: 'New config propagates to all edge nodes within ~60 s.',
       config: incoming,
     }),
-    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
+    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' } }
   );
 }
 
@@ -372,6 +374,7 @@ export async function onRequestDelete(context) {
 
   try {
     await kv.delete(CONFIG_KV_KEY);
+    invalidateConfigCache();
   } catch (e) {
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV delete failed: ${e?.message || e}` } }),
@@ -384,6 +387,6 @@ export async function onRequestDelete(context) {
       ok: true,
       message: 'Config reset to empty. Fallback to env on next read.',
     }),
-    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
+    { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' } }
   );
 }

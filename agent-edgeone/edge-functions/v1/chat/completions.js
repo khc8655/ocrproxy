@@ -390,7 +390,8 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
 
 /**
  * Peek the first chunk of a streaming response, then build a new
- * ReadableStream that yields the cached first chunk followed by the rest.
+ * stream using TransformStream (as required by Tencent Cloud EdgeOne Doc 81914)
+ * that yields the cached first chunk followed by the rest.
  * Returns { ok: false } if the stream is empty (caller should fail over).
  */
 async function peekAndStream(response) {
@@ -407,34 +408,34 @@ async function peekAndStream(response) {
     return { ok: false };
   }
   const firstChunk = firstResult.value;
-  let firstEmitted = false;
-  const stream = new ReadableStream({
-    async pull(controller) {
-      if (!firstEmitted) {
-        try { controller.enqueue(firstChunk); } catch { return; }
-        firstEmitted = true;
-        return;
-      }
-      try {
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  (async () => {
+    try {
+      await writer.write(firstChunk);
+      while (true) {
         const { value, done } = await reader.read();
-        if (done) controller.close();
-        else controller.enqueue(value);
-      } catch (e) {
-        try { controller.error(e); } catch {}
+        if (done) break;
+        await writer.write(value);
       }
-    },
-    async cancel(reason) {
-      try { await reader.cancel(reason); } catch {}
-    },
-  });
-  return { ok: true, stream };
+      await writer.close();
+    } catch (e) {
+      try { await writer.abort(e); } catch {}
+    } finally {
+      try { await reader.cancel(); } catch {}
+    }
+  })();
+
+  return { ok: true, stream: readable };
 }
 
 function buildOutHeaders(upstreamResp) {
   const h = new Headers();
   const ct = upstreamResp.headers.get('content-type');
   if (ct) h.set('content-type', ct);
-  h.set('cache-control', 'no-store');
+  h.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
+  h.set('x-accel-buffering', 'no');
   return h;
 }
 

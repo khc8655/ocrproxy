@@ -425,7 +425,7 @@ export const PRESETS = [
     "name": "MiniMax",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
-    "anthropic_base_url": "https://api.minimax.cn/anthropic",
+    "anthropic_base_url": "https://api.minimaxi.com/anthropic",
     "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
     "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
     "features": {
