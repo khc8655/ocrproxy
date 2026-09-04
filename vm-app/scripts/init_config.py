@@ -137,7 +137,7 @@ def main():
     print("\n[1/3] 生成加密密钥...")
     encrypt_key = generate_fernet_key()
     proxy_key = f"sk-ocrproxy-{generate_random_key(32)}"
-    admin_pass = generate_random_key(24)
+    admin_pass = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else generate_random_key(24)
     print(f"  [✓] Fernet 加密密钥已生成")
     print(f"  [✓] PROXY_API_KEY: {proxy_key}")
     print(f"  [✓] ADMIN_PASSWORD: {admin_pass}")

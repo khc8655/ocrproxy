@@ -52,17 +52,23 @@
 
 ## 快速部署
 
-### 1. 上传到 VM
+### 1. 一键网络安装与升级（极简推荐）
 
+直接在目标服务器（Ubuntu / Debian）上执行：
 ```bash
-scp -r vm-app/ root@your-server:/tmp/ocrproxy-install
+# 全新安装（仅需确认/输入端口和密码）或已安装自动平滑升级
+curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
 ```
 
-### 2. 一键安装
+> **自定义参数/无人值守安装**：
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w YourAdminPassword123
+> ```
 
+### 2. 本地源码安装
 ```bash
-ssh root@your-server
-cd /tmp/ocrproxy-install
+git clone https://github.com/khc8655/ocrproxy.git /tmp/ocrproxy
+cd /tmp/ocrproxy
 sudo bash install.sh
 ```
 

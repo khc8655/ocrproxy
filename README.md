@@ -115,12 +115,24 @@ ocrprox (Monorepo)
 
 ### 1. VM 统一版本部署 (`vm-app`)
 
-#### 一键交互式安装（推荐）
+#### 一键快速安装与升级（极简推荐 ⭐⭐⭐）
 
-在目标服务器（Ubuntu / Debian）上运行：
+在目标服务器（Ubuntu / Debian / Linux）上直接执行单行命令：
+```bash
+# 全新安装（仅需输入/回车确认端口和密码）或已安装自动平滑升级
+curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
+```
+
+> **自动化静默安装示例**：
+> ```bash
+> # 指定监听端口与 Web 后台管理员密码，无人值守全自动安装
+> curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w YourAdminPassword123
+> ```
+
+#### 本地源码安装
 ```bash
 git clone https://github.com/khc8655/ocrproxy.git /tmp/ocrprox
-cd /tmp/ocrprox/vm-app
+cd /tmp/ocrprox
 sudo bash install.sh
 ```
 
