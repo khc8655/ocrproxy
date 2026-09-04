@@ -9,7 +9,7 @@
  *   Reads:   admin.html, admin.css, admin.js  (in edgeone/)
  *   Writes:  edge-functions/index.js, edge-functions/admin.js
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -98,6 +98,7 @@ console.log(`Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of
 if (existsSync(join(rootProject, 'edge-functions'))) {
   writeFileSync(rootIndexPath, functionCode, 'utf8');
   writeFileSync(rootAdminPath, functionCode, 'utf8');
-  console.log(`Synced to root: ${rootIndexPath} and ${rootAdminPath}`);
+  cpSync(join(root, 'edge-functions'), join(rootProject, 'edge-functions'), { recursive: true });
+  console.log(`Synced all edge-functions to root: ${join(rootProject, 'edge-functions')}`);
 }
 

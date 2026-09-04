@@ -976,10 +976,14 @@ tr:hover td, .tbl tbody tr:hover td {
         <div class="section-head">
           <div>
             <div class="section-title">供应商</div>
-            <div class="section-desc">配置上游 Base URL 与 API Key</div>
+            <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="btnCheckRuleUpdates" onclick="checkAllRuleUpdates()">🔄 检查规则更新</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
+          </div>
         </div>
+        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--color-bg-subtle);border:1px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;align-items:center;justify-content:space-between;"></div>
         <div id="providersBox"></div>
       </div>
     </div>
@@ -1154,17 +1158,9 @@ tr:hover td, .tbl tbody tr:hover td {
     </div>
     <div class="modal-body">
       <div class="form-group" id="presetSelectGroup">
-        <label class="form-label">预置模板</label>
+        <label class="form-label">预置官方模板 (动态加载与按需拉取)</label>
         <select id="m_prov_preset" class="form-control" onchange="onPresetSelected()">
           <option value="">-- 自定义配置 (手动输入) --</option>
-          <option value="minimax">MiniMax</option>
-          <option value="bai">B.AI</option>
-          <option value="agnes">Agnes AI</option>
-          <option value="google">Google AI Studio</option>
-          <option value="sensenova">SenseNova</option>
-          <option value="stepfun">StepFun</option>
-          <option value="siliconflow">SiliconFlow</option>
-          <option value="tokenrhythm">TokenRhythm</option>
         </select>
         <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);"></div>
       </div>
@@ -1321,11 +1317,17 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
-// ---- Provider Presets Database -------------------------------------------
-const PRESET_DEFINITIONS = {
+// ---- Provider Presets Database & Dynamic Remote Catalog ------------------
+let PRESET_CATALOG = [];
+let CACHED_PRESETS = {};
+let RULE_UPDATES_MAP = {};
+let currentSelectedPreset = null;
+
+const FALLBACK_PRESETS = {
   minimax: {
     id: 'minimax',
     name: 'MiniMax',
+    version: '1.1.0',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
     protocols: ['chat', 'messages'],
@@ -1337,6 +1339,7 @@ const PRESET_DEFINITIONS = {
   bai: {
     id: 'bai',
     name: 'B.AI',
+    version: '1.1.0',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
     protocols: ['chat', 'messages'],
@@ -1351,6 +1354,7 @@ const PRESET_DEFINITIONS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
+    version: '1.1.0',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
     description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)',
@@ -1362,6 +1366,7 @@ const PRESET_DEFINITIONS = {
   google: {
     id: 'google',
     name: 'Google AI Studio',
+    version: '1.1.0',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
     protocols: ['chat'],
     description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射',
@@ -1375,6 +1380,7 @@ const PRESET_DEFINITIONS = {
   sensenova: {
     id: 'sensenova',
     name: 'SenseNova',
+    version: '1.1.0',
     base_url: 'https://token.sensenova.cn/v1',
     protocols: ['chat'],
     description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
@@ -1387,6 +1393,7 @@ const PRESET_DEFINITIONS = {
   stepfun: {
     id: 'stepfun',
     name: 'StepFun',
+    version: '1.1.0',
     base_url: 'https://api.stepfun.com/v1',
     protocols: ['chat'],
     description: '阶跃星辰 StepFun 大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek 思考格式注入',
@@ -1398,6 +1405,7 @@ const PRESET_DEFINITIONS = {
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
+    version: '1.1.0',
     base_url: 'https://api.siliconflow.cn/v1',
     protocols: ['chat'],
     description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型',
@@ -1410,6 +1418,7 @@ const PRESET_DEFINITIONS = {
   tokenrhythm: {
     id: 'tokenrhythm',
     name: 'TokenRhythm',
+    version: '1.1.0',
     base_url: 'https://api.tokenrhythm.com/v1',
     protocols: ['chat'],
     description: 'TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换',
@@ -1421,6 +1430,7 @@ const PRESET_DEFINITIONS = {
   amd: {
     id: 'amd',
     name: 'AMD Radeon Cloud',
+    version: '1.1.0',
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
@@ -1431,6 +1441,10 @@ const PRESET_DEFINITIONS = {
     ]
   }
 };
+
+const PRESET_DEFINITIONS = new Proxy({}, {
+  get: (target, prop) => CACHED_PRESETS[prop] || FALLBACK_PRESETS[prop]
+});
 
 function getKey() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -1873,14 +1887,21 @@ function renderProviders() {
     const protos = getProviderProtocols(p, prov);
     const protoBadges = renderProtocolBadges(protos, false);
     const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? \` · Messages: \${prov.anthropic_base_url}\` : '';
+    const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
+    const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="预设规则版本">\${ver}</span>\`;
+    const hasUpdate = RULE_UPDATES_MAP[p];
+    const updateBtn = hasUpdate
+      ? \`<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('\${p}')">⬆️ 升级规则至 v\${hasUpdate.remote_version}</button>\`
+      : '';
 
     card.innerHTML = \`
       <div class="card-head">
         <div>
-          <h3>\${p} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges}</span></h3>
+          <h3>\${p} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge}</span></h3>
         <div class="meta mono mt-2">\${prov.base_url || '—'}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          \${updateBtn}
           <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${p}')">编辑</button>
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${p}')">+ 新增 Key</button>
           <button class="btn btn-danger btn-sm" onclick="deleteProvider('\${p}')">删除供应商</button>
@@ -2014,8 +2035,43 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
-// Preset Selection Handler
-function onPresetSelected() {
+// ---- Preset Selection & Remote Distribution -----------------------------
+async function loadPresetsCatalog() {
+  const select = document.getElementById('m_prov_preset');
+  if (!select) return;
+  if (PRESET_CATALOG.length > 0) {
+    populateCatalogSelect(select);
+    return;
+  }
+  select.innerHTML = '<option value="">-- 正在从云端拉取提供商目录... --</option>';
+  try {
+    const res = await api('GET', '/api/admin/presets?action=catalog');
+    if (res && res.ok && Array.isArray(res.providers) && res.providers.length > 0) {
+      PRESET_CATALOG = res.providers;
+      populateCatalogSelect(select);
+      return;
+    }
+  } catch (e) {
+    console.warn('Failed to load presets catalog from API, falling back to local list:', e);
+  }
+  // Fallback
+  PRESET_CATALOG = Object.keys(FALLBACK_PRESETS).map(k => ({
+    id: k,
+    name: FALLBACK_PRESETS[k].name,
+    version: FALLBACK_PRESETS[k].version || '1.1.0',
+    description: FALLBACK_PRESETS[k].description
+  }));
+  populateCatalogSelect(select);
+}
+
+function populateCatalogSelect(select) {
+  const cur = select.value;
+  select.innerHTML = '<option value="">-- 自定义配置 (手动输入) --</option>' +
+    PRESET_CATALOG.map(p => \`<option value="\${p.id}">\${p.name} (v\${p.version || '1.1.0'})</option>\`).join('');
+  if (cur) select.value = cur;
+}
+
+async function onPresetSelected() {
   const presetId = document.getElementById('m_prov_preset').value;
   const nameInput = document.getElementById('m_prov_name');
   const urlInput = document.getElementById('m_prov_url');
@@ -2023,7 +2079,8 @@ function onPresetSelected() {
   const modelsWrap = document.getElementById('m_prov_models_wrap');
   const modelsList = document.getElementById('m_prov_models_list');
 
-  if (!presetId || !PRESET_DEFINITIONS[presetId]) {
+  if (!presetId) {
+    currentSelectedPreset = null;
     nameInput.value = '';
     urlInput.value = '';
     descEl.style.display = 'none';
@@ -2032,10 +2089,34 @@ function onPresetSelected() {
     return;
   }
 
-  const preset = PRESET_DEFINITIONS[presetId];
+  // Fetch preset detail on demand if not cached
+  let preset = CACHED_PRESETS[presetId];
+  if (!preset) {
+    descEl.textContent = '正在按需拉取云端厂商规则与推荐模型...';
+    descEl.style.display = 'block';
+    try {
+      const res = await api('GET', \`/api/admin/presets?action=detail&id=\${encodeURIComponent(presetId)}\`);
+      if (res && res.ok && res.preset) {
+        preset = res.preset;
+        CACHED_PRESETS[presetId] = preset;
+      }
+    } catch (e) {
+      console.warn('Failed to load preset detail on-demand:', e);
+    }
+  }
+  if (!preset && FALLBACK_PRESETS[presetId]) {
+    preset = FALLBACK_PRESETS[presetId];
+  }
+
+  if (!preset) {
+    toast(\`未能获取模板「\${presetId}」规则\`, 'err');
+    return;
+  }
+
+  currentSelectedPreset = preset;
   nameInput.value = preset.id;
   urlInput.value = preset.base_url;
-  descEl.textContent = preset.description || '';
+  descEl.textContent = \`\${preset.description || ''} · 规则版本: v\${preset.version || '1.1.0'}\`;
   descEl.style.display = 'block';
 
   // Preset protocols sync
@@ -2060,17 +2141,18 @@ function onPresetSelected() {
 
   // Render recommended models checklist
   modelsList.innerHTML = '';
-  if (preset.recommended_models && preset.recommended_models.length > 0) {
+  const recModels = preset.recommended_models || [];
+  if (recModels.length > 0) {
     modelsWrap.style.display = 'block';
-    preset.recommended_models.forEach((rm) => {
+    recModels.forEach((rm) => {
       const row = document.createElement('div');
       row.style.marginBottom = '6px';
       row.innerHTML = \`
         <label class="checkbox" style="align-items:flex-start;">
-          <input type="checkbox" data-model="\${rm.name}" data-upstream="\${rm.upstream}" \${rm.checked ? 'checked' : ''}>
+          <input type="checkbox" data-model="\${rm.name}" data-upstream="\${rm.upstream || rm.upstream_model || rm.name}" \${rm.checked !== false ? 'checked' : ''}>
           <div style="font-size:12px;">
-            <div style="font-weight:600;color:var(--color-text-1);">\${rm.name} <span class="mono text-secondary" style="font-weight:normal;">(映射: \${rm.upstream})</span></div>
-            <div class="text-secondary" style="font-size:11px;margin-top:2px;">\${rm.desc || ''}</div>
+            <div style="font-weight:600;color:var(--color-text-1);">\${rm.name} <span class="mono text-secondary" style="font-weight:normal;">(映射: \${rm.upstream || rm.upstream_model || rm.name})</span></div>
+            <div class="text-secondary" style="font-size:11px;margin-top:2px;">\${rm.desc || rm.description || ''}</div>
           </div>
         </label>
       \`;
@@ -2088,6 +2170,7 @@ function onEdgeOneCustomUrlToggleChange() {
 }
 
 function openAddProviderModal() {
+  currentSelectedPreset = null;
   document.getElementById('providerModalTitle').textContent = '新增供应商';
   document.getElementById('presetSelectGroup').style.display = 'block';
   document.getElementById('m_prov_preset').value = '';
@@ -2102,10 +2185,12 @@ function openAddProviderModal() {
   const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = '';
   document.getElementById('m_prov_desc').style.display = 'none';
   document.getElementById('m_prov_models_wrap').style.display = 'none';
+  loadPresetsCatalog();
   openModal('providerModal');
 }
 
 function openEditProviderModal(name) {
+  currentSelectedPreset = null;
   const prov = cfg.providers?.[name] || {};
   document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
   document.getElementById('presetSelectGroup').style.display = 'none';
@@ -2163,6 +2248,18 @@ async function saveProviderModal() {
     delete cfg.providers[name].anthropic_base_url;
   }
 
+  // If a preset was selected during creation, attach rules and metadata to local config
+  if (currentSelectedPreset && (currentSelectedPreset.id === name || !cfg.providers[name].preset_id)) {
+    cfg.providers[name].preset_id = currentSelectedPreset.id;
+    cfg.providers[name].preset_version = currentSelectedPreset.version || '1.1.0';
+    if (currentSelectedPreset.adapter_rules) {
+      cfg.providers[name].adapter_rules = currentSelectedPreset.adapter_rules;
+    }
+    if (currentSelectedPreset.recommended_models) {
+      cfg.providers[name].recommended_models = currentSelectedPreset.recommended_models;
+    }
+  }
+
   // If recommended models were checked, auto-register them
   const checkedModels = document.querySelectorAll('#m_prov_models_list input[type="checkbox"]:checked');
   if (checkedModels.length > 0) {
@@ -2189,9 +2286,93 @@ async function saveProviderModal() {
 }
 
 async function deleteProvider(name) {
-  if (!confirm(\`删除供应商「\${name}」及其全部 Key？\`)) return;
+  if (!confirm(\`删除供应商「\${name}」及其全部 Key？本地规则与配置将一并清理。\`)) return;
   delete cfg.providers[name];
+  if (RULE_UPDATES_MAP[name]) delete RULE_UPDATES_MAP[name];
   await persistConfig();
+}
+
+// Incremental Rule Updates
+async function checkAllRuleUpdates() {
+  const btn = document.getElementById('btnCheckRuleUpdates');
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '🔄 检查中...';
+  }
+
+  try {
+    const provs = cfg.providers || {};
+    const payload = {
+      providers: Object.keys(provs).map(id => ({
+        id,
+        version: provs[id].preset_version || '1.0.0',
+        rule_hash: provs[id].rule_hash || ''
+      }))
+    };
+
+    const res = await api('POST', '/api/admin/presets?action=check-updates', payload);
+    RULE_UPDATES_MAP = {};
+    if (res && res.ok && Array.isArray(res.updates) && res.updates.length > 0) {
+      res.updates.forEach(u => {
+        RULE_UPDATES_MAP[u.provider_id] = u;
+      });
+
+      if (alertEl) {
+        alertEl.style.display = 'flex';
+        alertEl.innerHTML = \`
+          <div>
+            <strong>发现 \${res.updates.length} 个供应商规则有更新</strong>：
+            \${res.updates.map(u => \`<span class="badge badge-warning" style="margin-left:4px;">\${u.provider_id}: \${u.current_version} ➔ \${u.remote_version}</span>\`).join('')}
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
+        \`;
+      }
+      toast(\`检查完成：发现 \${res.updates.length} 个供应商有新规则\`, 'ok');
+    } else {
+      if (alertEl) alertEl.style.display = 'none';
+      toast('所有供应商规则均为最新版本 (无需更新)', 'ok');
+    }
+    renderProviders();
+  } catch (e) {
+    toast(\`检查规则更新失败: \${e.message}\`, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 检查规则更新';
+    }
+  }
+}
+
+async function applySingleProviderRuleUpdate(pName) {
+  await applyRuleUpdates([pName]);
+}
+
+async function applyAllProviderRuleUpdates() {
+  const ids = Object.keys(RULE_UPDATES_MAP);
+  if (!ids.length) return;
+  await applyRuleUpdates(ids);
+}
+
+async function applyRuleUpdates(providerIds) {
+  try {
+    toast(\`正在增量拉取并更新 \${providerIds.join(', ')} 的规则...\`, 'ok');
+    const res = await api('POST', '/api/admin/presets?action=update-rules', { provider_ids: providerIds });
+    if (res && res.ok && Array.isArray(res.updated) && res.updated.length > 0) {
+      await loadConfig();
+      providerIds.forEach(id => delete RULE_UPDATES_MAP[id]);
+      const alertEl = document.getElementById('ruleUpdatesAlert');
+      if (alertEl && Object.keys(RULE_UPDATES_MAP).length === 0) {
+        alertEl.style.display = 'none';
+      }
+      toast(\`成功更新 \${res.updated.length} 个供应商的规则并已自动生效！\`, 'ok');
+      renderProviders();
+    } else {
+      toast(res?.message || '规则更新失败或无变更', 'err');
+    }
+  } catch (e) {
+    toast(\`更新规则失败: \${e.message}\`, 'err');
+  }
 }
 
 function openAddKeyModal(prov) {
@@ -2381,17 +2562,20 @@ function renderQuickModelTags(prov) {
   tagBox.innerHTML = '';
   if (!prov) return;
 
-  const preset = PRESETS[prov.toLowerCase()];
-  if (preset && preset.models && preset.models.length > 0) {
-    preset.models.forEach(m => {
+  const provData = cfg.providers?.[prov];
+  const recModels = provData?.recommended_models || CACHED_PRESETS[prov]?.recommended_models || FALLBACK_PRESETS[prov]?.recommended_models || [];
+  if (recModels && recModels.length > 0) {
+    recModels.forEach(m => {
+      const mName = m.name || m.id;
+      const mUpstream = m.upstream || m.upstream_model || mName;
       const tag = document.createElement('button');
       tag.type = 'button';
       tag.className = 'btn btn-ghost btn-sm';
       tag.style.cssText = 'font-size:11px;padding:2px 8px;height:24px;background:var(--color-bg-subtle);';
-      tag.textContent = \`+ 填入 \${m.id}\`;
+      tag.textContent = \`+ 填入 \${mName}\`;
       tag.onclick = () => {
-        document.getElementById('m_model_name').value = m.id;
-        document.getElementById('m_upstream_model').value = m.upstream || '';
+        document.getElementById('m_model_name').value = mName;
+        document.getElementById('m_upstream_model').value = mUpstream;
         toggleProviderKeys(prov, true);
       };
       tagBox.appendChild(tag);

@@ -1,6 +1,7 @@
 {
   "id": "siliconflow",
   "name": "硅基流动 (SiliconFlow)",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.siliconflow.cn/v1",
   "doc_url": "https://docs.siliconflow.cn",

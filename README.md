@@ -21,7 +21,7 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
 │
 ├── shared/                            # 共享资源与规范文档
-│   ├── presets/                       # 8 大官方供应商标准预设 JSON (Google, SenseNova, StepFun, TokenRhythm, Agnes, SiliconFlow, MiniMax, B.AI)
+│   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json (AMD, MiniMax, Google, DeepSeek, etc.)
 │   ├── admin/                         # 跨端共用的现代化 Web 管理后台前端 (HTML / CSS / JS)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
@@ -46,6 +46,22 @@ ocrprox (Monorepo)
 | **`/v1/chat/completions`** | 原生透传 tools、reasoning、SSE 流式字节 | 强制禁用思考提速、非流式快速摘要提取 | 若 model 为 `chat` 走 KB 提速策略，若为真实模型走 Agent 原生透传 |
 | **`/v1/messages`** | **原生支持 Anthropic Messages 协议** (专为 MiniMax-M3, B.AI, Claude SDK 直通) | 知识库模式禁用 (返回 404) | 原生支持真实 Agent 模型直通转发 |
 | **配置数据存储** | **100% 结构通用无损**，任何模式下导入/导出或切换模式**绝不丢弃任何字段** |
+
+---
+
+## 模型提供商解耦架构与云端动态分发 (Decoupled Provider Architecture & CDN Distribution)
+
+为解决模型厂商适配频繁变动导致主程序必须重新编译与部署的痛点，OCRProxy 实现了**提供商适配与网关核心主程序完全分离**的声明式架构：
+
+### 核心设计原则
+1. **彻底解耦**：核心 Python 网关与 EdgeOne JS 路由完全消除硬编码的 `if provider == "..."` 分支，转由统一的纯声明式规则引擎（`adapter_rules`）通用执行。
+2. **轻量按需拉取 (On-Demand Fetching)**：控制台添加提供商时，仅拉取轻量级的 `catalog.json` 目录列表（仅几十字节/厂商）。只有用户选择并保存特定供应商时，才按需拉取对应供应商的完整适配规则落地到本地配置。
+3. **精准增量更新 (Incremental Updates)**：检查更新时仅对比本地已添加的提供商，不进行全量拉取。用户可一键增量同步指定厂商的最新规则，本地已配置的 API Key、别名和映射设置 100% 原样保留。
+4. **本地零冗余清理 (Local Cleanup on Delete)**：删除供应商时，对应的本地适配规则与挂载一并彻底清除，保持配置干净精简。
+5. **双通道分发与离线兜底**：
+   - 优先通过 **jsDelivr CDN** (`cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/`) 极速拉取；
+   - 遇到网络异常自动无缝降级至 GitHub Raw 备用源；
+   - 本地内置 11 大主流厂商离线默认包（Fallback），无网环境完全无阻。
 
 ---
 

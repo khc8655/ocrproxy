@@ -110,10 +110,14 @@
         <div class="section-head">
           <div>
             <div class="section-title">供应商</div>
-            <div class="section-desc">配置上游 Base URL 与 API Key</div>
+            <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="btnCheckRuleUpdates" onclick="checkAllRuleUpdates()">🔄 检查规则更新</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
+          </div>
         </div>
+        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--color-bg-subtle);border:1px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;align-items:center;justify-content:space-between;"></div>
         <div id="providersBox"></div>
       </div>
     </div>
@@ -288,17 +292,9 @@
     </div>
     <div class="modal-body">
       <div class="form-group" id="presetSelectGroup">
-        <label class="form-label">预置模板</label>
+        <label class="form-label">预置官方模板 (动态加载与按需拉取)</label>
         <select id="m_prov_preset" class="form-control" onchange="onPresetSelected()">
           <option value="">-- 自定义配置 (手动输入) --</option>
-          <option value="minimax">MiniMax</option>
-          <option value="bai">B.AI</option>
-          <option value="agnes">Agnes AI</option>
-          <option value="google">Google AI Studio</option>
-          <option value="sensenova">SenseNova</option>
-          <option value="stepfun">StepFun</option>
-          <option value="siliconflow">SiliconFlow</option>
-          <option value="tokenrhythm">TokenRhythm</option>
         </select>
         <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);"></div>
       </div>

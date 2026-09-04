@@ -1,6 +1,7 @@
 {
   "id": "minimax",
   "name": "MiniMax",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.minimaxi.com/v1",
   "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -22,12 +23,20 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "minimax_adaptive",
-      "split_param": "reasoning_split",
-      "supported_types": ["disabled", "adaptive"]
+      "default_type": "adaptive",
+      "enable_reasoning_split": true
+    },
+    "anthropic": {
+      "thinking_to_adaptive": true
+    },
+    "case_sensitive_models": {
+      "minimax-m3": "MiniMax-M3"
     },
     "sanitization": {
       "strip_params": ["output_config"]
     },
-    "case_sensitive_models": true
+    "response": {
+      "reasoning_fields": ["reasoning_split", "reasoning_content", "reasoning"]
+    }
   }
 }

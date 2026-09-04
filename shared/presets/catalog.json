@@ -1,0 +1,193 @@
+{
+  "version": "1.1.0",
+  "updated_at": "2026-09-04T15:25:19.650Z",
+  "providers": [
+    {
+      "id": "agnes",
+      "name": "Agnes AI (爱格尼斯)",
+      "version": "1.1.0",
+      "rule_hash": "12c2664de5e7",
+      "protocol": "openai",
+      "base_url": "https://apihub.agnes-ai.com/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",
+      "description": "Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+      "features": {
+        "native_thinking": false,
+        "chat_template_kwargs_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "amd",
+      "name": "AMD Radeon Cloud",
+      "version": "1.1.0",
+      "rule_hash": "d490d1ecb1e5",
+      "protocol": "openai",
+      "base_url": "https://developer.amd.com.cn/radeon/api/v1",
+      "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
+      "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
+      "description": "AMD 官方开发者平台，基于高性能推理集群。网关已自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶规整。",
+      "features": {
+        "native_thinking": true,
+        "multimodal": false,
+        "tools": true,
+        "anthropic_messages": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "bai",
+      "name": "B.AI",
+      "version": "1.1.0",
+      "rule_hash": "4af5010bef34",
+      "protocol": "openai",
+      "base_url": "https://api.b.ai/v1",
+      "anthropic_base_url": "https://api.b.ai/v1",
+      "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
+      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "anthropic_messages": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek 官方开放平台",
+      "version": "1.1.0",
+      "rule_hash": "193068f4df5b",
+      "protocol": "openai",
+      "base_url": "https://api.deepseek.com/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://api-docs.deepseek.com",
+      "description": "DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存",
+      "features": {
+        "native_thinking": true,
+        "tools": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "google",
+      "name": "Google AI Studio (Gemini)",
+      "version": "1.1.0",
+      "rule_hash": "19fbf45af855",
+      "protocol": "google_openai",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "anthropic_base_url": null,
+      "doc_url": null,
+      "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true
+      },
+      "recommended_models_count": 4
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "version": "1.1.0",
+      "rule_hash": "15e333efeb77",
+      "protocol": "openai",
+      "base_url": "https://api.minimaxi.com/v1",
+      "anthropic_base_url": "https://api.minimaxi.com/anthropic",
+      "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
+      "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true,
+        "anthropic_messages": true
+      },
+      "recommended_models_count": 1
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI 官方 / 标准兼容中转",
+      "version": "1.1.0",
+      "rule_hash": "3ddc251503f8",
+      "protocol": "openai",
+      "base_url": "https://api.openai.com/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://platform.openai.com/docs",
+      "description": "OpenAI 官方 API 或标准兼容中转网关，原生支持 reasoning_effort 思考控制与多模态",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 4
+    },
+    {
+      "id": "sensenova",
+      "name": "商汤日日新 (SenseNova)",
+      "version": "1.1.0",
+      "rule_hash": "193068f4df5b",
+      "protocol": "openai",
+      "base_url": "https://token.sensenova.cn/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://platform.sensenova.cn/docs",
+      "description": "商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true
+      },
+      "recommended_models_count": 3
+    },
+    {
+      "id": "siliconflow",
+      "name": "硅基流动 (SiliconFlow)",
+      "version": "1.1.0",
+      "rule_hash": "193068f4df5b",
+      "protocol": "openai",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://docs.siliconflow.cn",
+      "description": "硅基流动高并发推理平台，包含 DeepSeek-V3/R1、Qwen2.5 等海量开源模型",
+      "features": {
+        "native_thinking": true,
+        "tools": true
+      },
+      "recommended_models_count": 3
+    },
+    {
+      "id": "stepfun",
+      "name": "阶跃星辰 (StepFun)",
+      "version": "1.1.0",
+      "rule_hash": "f7de5125e5e5",
+      "protocol": "openai",
+      "base_url": "https://api.stepfun.com/step_plan",
+      "anthropic_base_url": null,
+      "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
+      "description": "阶跃星辰大模型平台，支持 step-3.7-flash 等，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "tokenrhythm",
+      "name": "TokenRhythm",
+      "version": "1.1.0",
+      "rule_hash": "193068f4df5b",
+      "protocol": "openai",
+      "base_url": "https://tokenrhythm.studio/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://tokenrhythm.studio/docs/api-integration",
+      "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，自动适配 tool_choice 字符串转换与思考流提取",
+      "features": {
+        "native_thinking": true,
+        "tools": true
+      },
+      "recommended_models_count": 3
+    }
+  ]
+}

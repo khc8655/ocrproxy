@@ -1,6 +1,7 @@
 {
   "id": "google",
   "name": "Google AI Studio (Gemini)",
+  "version": "1.1.0",
   "protocol": "google_openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
   "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",

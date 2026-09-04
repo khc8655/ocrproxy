@@ -185,7 +185,7 @@ export async function onRequestPost(context) {
     // Per-attempt body normalization (provider-specific)
     const attemptBody = JSON.parse(JSON.stringify(body));
     attemptBody.model = resolved.upstreamModel;
-    normaliseForProvider(attemptBody, binding.provider);
+    normaliseForProvider(attemptBody, binding.provider, resolved.providerConfig);
 
     // Calculate dynamic remaining timeout for this attempt
     const remainingMs = deadline - Date.now();

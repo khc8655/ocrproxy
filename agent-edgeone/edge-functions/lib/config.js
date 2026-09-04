@@ -422,7 +422,7 @@ export function resolveBinding(config, binding) {
   if (!baseUrl) {
     throw new ConfigError(`Provider "${binding.provider}" has no base_url.`);
   }
-  return { apiKey, baseUrl, upstreamModel: binding.upstreamModel };
+  return { apiKey, baseUrl, upstreamModel: binding.upstreamModel, providerConfig: provider };
 }
 
 /**

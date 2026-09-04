@@ -1,6 +1,7 @@
 {
   "id": "agnes",
   "name": "Agnes AI (爱格尼斯)",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://apihub.agnes-ai.com/v1",
   "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",

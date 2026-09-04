@@ -1,6 +1,7 @@
 {
   "id": "openai",
   "name": "OpenAI 官方 / 标准兼容中转",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.openai.com/v1",
   "doc_url": "https://platform.openai.com/docs",
