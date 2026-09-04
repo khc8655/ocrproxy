@@ -239,7 +239,7 @@ if is_installed; then
         sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
     fi
     if systemd-detect-virt --container >/dev/null 2>&1; then
-        sed -i '/ProtectSystem=/d; /ProtectHome=/d; /ProtectKernel/d; /ProtectControlGroups=/d; /RestrictNamespaces=/d; /LockPersonality=/d; /RestrictRealtime=/d; /RestrictSUIDSGID=/d; /RestrictAddressFamilies=/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
+        sed -i -E '/(Protect|Restrict|LockPersonality|PrivateTmp|NoNewPrivileges|ReadWritePaths)/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
     fi
 
     systemctl daemon-reload
@@ -416,9 +416,7 @@ RestrictRealtime=true
 RestrictSUIDSGID=true"
 
 if systemd-detect-virt --container >/dev/null 2>&1; then
-    SANDBOX_OPTS="NoNewPrivileges=true
-PrivateTmp=true
-ReadWritePaths=${INSTALL_DIR}/config"
+    SANDBOX_OPTS="# 容器环境自适应 (LXC/Docker/WSL 跳过命名空间沙箱以规避 226/NAMESPACE)"
 fi
 
 cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
