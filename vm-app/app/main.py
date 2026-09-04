@@ -103,6 +103,23 @@ async def admin_page_alias():
     return await admin_page()
 
 
+@app.get("/admin.css")
+async def admin_css():
+    css_file = STATIC_DIR / "admin.css"
+    if css_file.exists():
+        return FileResponse(str(css_file), media_type="text/css")
+    return JSONResponse(status_code=404, content={"error": "admin.css not found"})
+
+
+@app.get("/admin.js")
+async def admin_js():
+    js_file = STATIC_DIR / "admin.js"
+    if js_file.exists():
+        return FileResponse(str(js_file), media_type="application/javascript")
+    return JSONResponse(status_code=404, content={"error": "admin.js not found"})
+
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring."""
