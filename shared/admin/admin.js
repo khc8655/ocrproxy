@@ -322,8 +322,10 @@ async function saveSettings() {
     circuit_break_threshold: Number(document.getElementById('set_circuit_break_threshold').value) || 3,
     cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
   };
-  await persistConfig();
-  toast('全局策略设置已保存生效', 'ok');
+  const ok = await persistConfig();
+  if (ok) {
+    toast('全局策略设置已保存生效', 'ok');
+  }
 }
 
 function resetSettingsToDefault() {
@@ -802,6 +804,8 @@ async function saveProviderModal() {
   if (document.getElementById('m_prov_proto_responses')?.checked) selectedProtos.push('responses');
   if (!selectedProtos.length) { toast('请至少选择一种支持的协议类型', 'err'); return; }
 
+  const backupCfg = JSON.parse(JSON.stringify(cfg));
+
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].base_url = url;
@@ -832,8 +836,13 @@ async function saveProviderModal() {
     });
   }
 
-  closeModal('providerModal');
-  await persistConfig();
+  const ok = await persistConfig();
+  if (ok) {
+    closeModal('providerModal');
+  } else {
+    cfg = backupCfg;
+    renderAll();
+  }
 }
 
 async function deleteProvider(name) {
@@ -960,6 +969,8 @@ async function saveKeyModal() {
     }
   }
 
+  const backupCfg = JSON.parse(JSON.stringify(cfg));
+
   if (oldLabel && oldLabel !== label) {
     delete cfg.providers[prov].keys[oldLabel];
     if (cfg.agent_models) {
@@ -972,8 +983,13 @@ async function saveKeyModal() {
   }
 
   cfg.providers[prov].keys[label] = val;
-  closeModal('keyModal');
-  await persistConfig();
+  const ok = await persistConfig();
+  if (ok) {
+    closeModal('keyModal');
+  } else {
+    cfg = backupCfg;
+    renderAll();
+  }
 }
 
 async function deleteKey(prov, label) {
@@ -1159,6 +1175,8 @@ async function saveAgentModal() {
     return;
   }
 
+  const backupCfg = JSON.parse(JSON.stringify(cfg));
+
   cfg.agent_models = cfg.agent_models || {};
   if (oldName && oldName !== name) {
     delete cfg.agent_models[oldName];
@@ -1166,8 +1184,13 @@ async function saveAgentModal() {
   cfg.agent_models[name] = { keys };
   if (upstream && upstream !== name) cfg.agent_models[name].upstream_model = upstream;
 
-  closeModal('agentModal');
-  await persistConfig();
+  const ok = await persistConfig();
+  if (ok) {
+    closeModal('agentModal');
+  } else {
+    cfg = backupCfg;
+    renderAll();
+  }
 }
 
 async function removeModelKeyBinding(modelName, index) {
@@ -1311,10 +1334,15 @@ async function persistConfig() {
   try {
     const res = await api('POST', '/api/config', cfg);
     cfgMeta = res;
+    if (res?.config) {
+      cfg = res.config;
+    }
     renderAll();
     toast('配置已保存', 'ok');
+    return true;
   } catch (e) {
     toast('保存失败: ' + (e?.message || e), 'err');
+    return false;
   }
 }
 

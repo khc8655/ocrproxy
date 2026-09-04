@@ -288,6 +288,13 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      eo: {
+        timeoutSetting: {
+          connectTimeout: 8_000,
+          readTimeout: timeoutMs,
+          writeTimeout: 15_000,
+        },
+      },
     });
   } catch (e) {
     clearTimeout(timer);
@@ -341,35 +348,32 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
 
   clearTimeout(timer);
 
-  const combinedStream = new ReadableStream({
-    start(ctrl) {
-      ctrl.enqueue(firstChunk.value);
-    },
-    async pull(ctrl) {
-      try {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  (async () => {
+    try {
+      await writer.write(firstChunk.value);
+      while (true) {
         const { value, done } = await reader.read();
-        if (done) {
-          ctrl.close();
-        } else {
-          ctrl.enqueue(value);
-        }
-      } catch (e) {
-        ctrl.error(e);
+        if (done) break;
+        await writer.write(value);
       }
-    },
-    cancel() {
-      reader.cancel().catch(() => {});
-    },
-  });
+      await writer.close();
+    } catch (e) {
+      try { await writer.abort(e); } catch {}
+    } finally {
+      try { await reader.cancel(); } catch {}
+    }
+  })();
 
   const responseHeaders = new Headers(resp.headers);
   responseHeaders.set('content-type', 'text/event-stream');
-  responseHeaders.set('cache-control', 'no-cache');
+  responseHeaders.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
   responseHeaders.set('x-accel-buffering', 'no');
 
   return {
     kind: 'success',
-    response: new Response(combinedStream, {
+    response: new Response(readable, {
       status: resp.status,
       statusText: resp.statusText,
       headers: responseHeaders,

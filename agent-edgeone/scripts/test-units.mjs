@@ -887,9 +887,9 @@ test('validateConfig: rejects provider with empty base_url', () => {
   truthy(validateConfig(bad));
 });
 
-test('validateConfig: rejects provider with no keys', () => {
-  const bad = { providers: { s1: { base_url: 'x', keys: {} } }, agent_models: {} };
-  truthy(validateConfig(bad));
+test('validateConfig: accepts provider with empty keys object', () => {
+  const ok = { providers: { s1: { base_url: 'https://api.example.com', keys: {} } }, agent_models: {} };
+  eq(validateConfig(ok), null);
 });
 
 test('validateConfig: rejects empty key value', () => {
@@ -901,9 +901,9 @@ test('validateConfig: rejects missing agent_models', () => {
   truthy(validateConfig({ providers: { s1: { base_url: 'x', keys: { k1: 'v' } } } }));
 });
 
-test('validateConfig: rejects model with no bindings', () => {
-  const bad = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } }, agent_models: { m1: { keys: [] } } };
-  truthy(validateConfig(bad));
+test('validateConfig: accepts model with empty keys array', () => {
+  const ok = { providers: { s1: { base_url: 'x', keys: { k1: 'v' } } }, agent_models: { m1: { keys: [] } } };
+  eq(validateConfig(ok), null);
 });
 
 test('validateConfig: rejects binding to unknown provider', () => {
@@ -1082,7 +1082,7 @@ test('getPreset: finds minimax preset with MiniMax-M3 and domestic anthropic end
   truthy(p);
   eq(p.name, 'MiniMax');
   eq(p.base_url, 'https://api.minimaxi.com/v1');
-  eq(p.anthropic_base_url, 'https://api.minimax.cn/anthropic');
+  eq(p.anthropic_base_url, 'https://api.minimaxi.com/anthropic');
   const m = p.recommended_models.find(x => x.name === 'MiniMax-M3');
   truthy(m);
   eq(m.upstream_model, 'MiniMax-M3');
@@ -1166,6 +1166,53 @@ test('loadConfig: preserves custom settings when provided', async () => {
   eq(cfg.settings.request_total_budget_sec, 40);
   eq(cfg.settings.max_attempts_per_provider, 1);
   eq(cfg.settings.upstream_timeout_sec, 15); // merged default
+});
+
+console.log('\n== TransformStream Streaming (Doc 81914) ==');
+
+test('TransformStream: combines firstChunk and remaining stream per Doc 81914', async () => {
+  const chunks = ['data: {"foo":"bar"}\n\n', 'data: {"baz":1}\n\n', 'data: [DONE]\n\n'];
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const { readable: upstreamReadable, writable: upstreamWritable } = new TransformStream();
+  const upWriter = upstreamWritable.getWriter();
+  (async () => {
+    for (const c of chunks) {
+      await upWriter.write(encoder.encode(c));
+    }
+    await upWriter.close();
+  })();
+
+  const reader = upstreamReadable.getReader();
+  const first = await reader.read();
+  truthy(!first.done);
+  const firstChunk = first.value;
+
+  const { readable: outReadable, writable: outWritable } = new TransformStream();
+  const outWriter = outWritable.getWriter();
+  (async () => {
+    try {
+      await outWriter.write(firstChunk);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        await outWriter.write(value);
+      }
+      await outWriter.close();
+    } catch (e) {
+      await outWriter.abort(e);
+    }
+  })();
+
+  const outReader = outReadable.getReader();
+  const received = [];
+  while (true) {
+    const { value, done } = await outReader.read();
+    if (done) break;
+    received.push(decoder.decode(value));
+  }
+  eq(received.join(''), chunks.join(''));
 });
 
 console.log('\n----');

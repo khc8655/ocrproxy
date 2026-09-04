@@ -514,8 +514,8 @@ export function validateConfig(cfg) {
     if (typeof p.base_url !== 'string' || !p.base_url) {
       return `provider "${name}" must have a non-empty base_url`;
     }
-    if (!p.keys || typeof p.keys !== 'object' || Object.keys(p.keys).length === 0) {
-      return `provider "${name}" must have at least one key`;
+    if (!p.keys || typeof p.keys !== 'object') {
+      p.keys = {};
     }
     for (const [k, v] of Object.entries(p.keys)) {
       if (typeof v !== 'string' || !v) {
@@ -528,8 +528,8 @@ export function validateConfig(cfg) {
   }
   for (const [name, m] of Object.entries(cfg.agent_models)) {
     if (!m || typeof m !== 'object') return `model "${name}" must be an object`;
-    if (!Array.isArray(m.keys) || m.keys.length === 0) {
-      return `model "${name}" must have a non-empty keys array`;
+    if (!Array.isArray(m.keys)) {
+      return `model "${name}" keys must be an array`;
     }
     for (const b of m.keys) {
       if (!b || typeof b !== 'object') {
