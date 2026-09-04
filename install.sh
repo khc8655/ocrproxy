@@ -119,9 +119,21 @@ prepare_source_code() {
     info "正在从 GitHub (${GITHUB_REPO}) 下载最新发行源码..."
     mkdir -p "$target_extract_dir/dl"
     local tar_file="$target_extract_dir/ocrproxy.tar.gz"
+    local auth_header=()
+    local dl_url="${TARBALL_URL}"
 
-    if ! curl -fSL --connect-timeout 15 --retry 3 "${TARBALL_URL}" -o "$tar_file"; then
-        error "从 GitHub 下载源码失败，请检查网络连接或 GitHub 访问状态: ${TARBALL_URL}"
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+        auth_header=(-H "Authorization: token ${GITHUB_TOKEN}")
+        dl_url="https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}"
+    elif [[ -n "$GH_TOKEN" ]]; then
+        auth_header=(-H "Authorization: token ${GH_TOKEN}")
+        dl_url="https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}"
+    fi
+
+    if ! curl -fSL "${auth_header[@]}" --connect-timeout 15 --retry 3 "${dl_url}" -o "$tar_file"; then
+        if [[ ${#auth_header[@]} -gt 0 ]] || ! curl -fSL --connect-timeout 15 --retry 3 "${TARBALL_URL}" -o "$tar_file"; then
+            error "从 GitHub 下载源码失败，请检查网络连接或 GitHub 访问状态 (若仓库为私有，请提供 GITHUB_TOKEN=...): ${dl_url}"
+        fi
     fi
 
     mkdir -p "$target_extract_dir/extracted"
