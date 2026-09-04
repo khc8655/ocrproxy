@@ -238,6 +238,9 @@ if is_installed; then
         info "升级 systemd 服务以支持真双栈套接字监听..."
         sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
     fi
+    if systemd-detect-virt --container >/dev/null 2>&1; then
+        sed -i '/ProtectSystem=/d; /ProtectHome=/d; /ProtectKernel/d; /ProtectControlGroups=/d; /RestrictNamespaces=/d; /LockPersonality=/d; /RestrictRealtime=/d; /RestrictSUIDSGID=/d; /RestrictAddressFamilies=/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
+    fi
 
     systemctl daemon-reload
     info "正在重启 ${SERVICE_NAME} 服务..."
