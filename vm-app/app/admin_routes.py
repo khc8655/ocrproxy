@@ -239,9 +239,17 @@ async def _fetch_remote_json(urls: list, timeout: float = 2.5):
     return None
 
 
+def _get_presets_dir() -> Path:
+    """Resolve shared/presets directory in both prod (/opt/ocrproxy) and dev repo environments."""
+    p = Path(__file__).resolve().parent.parent / "shared" / "presets"
+    if p.exists():
+        return p
+    return Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+
+
 def _get_local_catalog() -> dict:
     """Fallback: read shared/presets/catalog.json locally."""
-    catalog_file = Path(__file__).resolve().parent.parent.parent / "shared" / "presets" / "catalog.json"
+    catalog_file = _get_presets_dir() / "catalog.json"
     if catalog_file.exists():
         try:
             return json.loads(catalog_file.read_text(encoding="utf-8"))
@@ -252,7 +260,7 @@ def _get_local_catalog() -> dict:
 
 def _get_local_preset(preset_id: str):
     """Fallback: read shared/presets/{preset_id}.json locally."""
-    preset_file = Path(__file__).resolve().parent.parent.parent / "shared" / "presets" / f"{preset_id}.json"
+    preset_file = _get_presets_dir() / f"{preset_id}.json"
     if preset_file.exists():
         try:
             return json.loads(preset_file.read_text(encoding="utf-8"))
@@ -455,7 +463,7 @@ async def get_presets_endpoint(request: Request, action: str = "", id: str = "")
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
-    presets_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+    presets_dir = _get_presets_dir()
     presets_list = []
     if presets_dir.exists():
         for p in sorted(presets_dir.glob("*.json")):

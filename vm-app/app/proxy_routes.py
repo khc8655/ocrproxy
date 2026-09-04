@@ -85,6 +85,14 @@ VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
 _PRESET_CACHE: dict = {}
 
 
+def _get_presets_dir() -> Path:
+    """Resolve shared/presets directory in both prod (/opt/ocrproxy) and dev repo environments."""
+    p = Path(__file__).resolve().parent.parent / "shared" / "presets"
+    if p.exists():
+        return p
+    return Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+
+
 def _get_preset(provider_id: str) -> dict:
     """Load provider preset definition from shared/presets/ directory."""
     pid = str(provider_id or "").lower().strip()
@@ -93,7 +101,7 @@ def _get_preset(provider_id: str) -> dict:
     if pid in _PRESET_CACHE:
         return _PRESET_CACHE[pid]
     try:
-        presets_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
+        presets_dir = _get_presets_dir()
         preset_file = presets_dir / f"{pid}.json"
         if preset_file.exists():
             data = json.loads(preset_file.read_text(encoding="utf-8"))
