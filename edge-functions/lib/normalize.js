@@ -63,6 +63,44 @@ export function sanitizeGeminiSchema(schema) {
 }
 
 /**
+ * Ensure messages conform strictly to AMD requirements:
+ * 1. Replace 'developer' role with 'system'.
+ * 2. Ensure at most one 'system' message, and it MUST be the first item (messages[0]).
+ */
+export function sanitizeAmdMessages(body) {
+  if (!Array.isArray(body?.messages) || body.messages.length === 0) return;
+  const systemParts = [];
+  const otherMessages = [];
+  for (const m of body.messages) {
+    if (!m || typeof m !== 'object') continue;
+    if (m.role === 'system' || m.role === 'developer') {
+      if (typeof m.content === 'string' && m.content.trim()) {
+        systemParts.push(m.content.trim());
+      } else if (Array.isArray(m.content)) {
+        for (const part of m.content) {
+          if (part && typeof part === 'object' && part.type === 'text' && part.text) {
+            systemParts.push(String(part.text).trim());
+          } else if (typeof part === 'string' && part.trim()) {
+            systemParts.push(part.trim());
+          }
+        }
+      }
+    } else {
+      otherMessages.push(m);
+    }
+  }
+  const newMessages = [];
+  if (systemParts.length > 0) {
+    newMessages.push({
+      role: 'system',
+      content: systemParts.join('\n\n')
+    });
+  }
+  newMessages.push(...otherMessages);
+  body.messages = newMessages;
+}
+
+/**
  * Apply declarative provider-specific body normalizations. Mutates `body` in place.
  *
  * @param {Object} body - parsed JSON body, will be mutated
@@ -132,6 +170,21 @@ export function normaliseForProvider(body, provider, configOverride = null) {
         body.thinking = { type: 'adaptive' };
       }
       delete body.reasoning_effort;
+    } else if (p === 'amd') {
+      delete body.chat_template_kwargs;
+      delete body.thinking;
+      sanitizeAmdMessages(body);
+      if (rawEffort === 'none' || rawEffort === 'false') {
+        if (modelName.includes('qwen')) {
+          body.reasoning_effort = 'low';
+        } else {
+          delete body.reasoning_effort;
+        }
+      } else if (modelName.includes('qwen') && (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max')) {
+        body.reasoning_effort = 'medium';
+      } else if (!['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(rawEffort)) {
+        body.reasoning_effort = 'medium';
+      }
     } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes')) {
       body.chat_template_kwargs = body.chat_template_kwargs || {};
       const enableKey = reasoningRules.enable_key || 'enable_thinking';
@@ -154,7 +207,13 @@ export function normaliseForProvider(body, provider, configOverride = null) {
     }
   } else {
     // If client did not specify reasoning_effort:
-    if (isMiniMax) {
+    if (p === 'amd') {
+      delete body.chat_template_kwargs;
+      delete body.thinking;
+      sanitizeAmdMessages(body);
+      // Default to medium for AMD models to enable DeepSeek reasoning & keep Qwen safe
+      body.reasoning_effort = 'medium';
+    } else if (isMiniMax) {
       if (body.thinking && typeof body.thinking === 'object') {
         const t = String(body.thinking.type || '').toLowerCase();
         if (t === 'disabled') {
