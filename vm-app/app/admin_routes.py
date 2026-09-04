@@ -515,6 +515,8 @@ async def verify_key_endpoint(request: Request):
                 probe_body["model"] = "MiniMax-M3"
             elif p_clean == "bai":
                 probe_body["model"] = "qwen3.8-flash"
+            elif p_clean == "amd":
+                probe_body["model"] = "DeepSeek-V4-Flash"
 
             headers = {
                 "Authorization": f"Bearer {api_key}",

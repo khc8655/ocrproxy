@@ -227,6 +227,14 @@ def _normalise_for_provider(out: dict, provider: str) -> None:
             if "enable_thinking" not in ctk:
                 ctk["enable_thinking"] = effort not in ("none", "false")
 
+    # 5.1 AMD Radeon Cloud: map reasoning_effort or enabled thinking to chat_template_kwargs.thinking
+    if p == "amd" or "amd.com" in str(upstream_base_url).lower():
+        re = out.pop("reasoning_effort", None)
+        effort = str(re).lower() if re is not None else "high"
+        ctk = out.setdefault("chat_template_kwargs", {})
+        if "thinking" not in ctk:
+            ctk["thinking"] = effort not in ("none", "false")
+
     # 6. MiniMax: preserve model case (MiniMax-M3), strip non-standard fields and adapt thinking
     if p == "minimax" or str(out.get("model", "")).lower().startswith("minimax"):
         m = str(out.get("model", ""))
@@ -273,6 +281,11 @@ def _normalise_messages_for_provider(out: dict, provider: str) -> None:
             if t == "enabled" or (not t and "budget_tokens" in thinking):
                 thinking["type"] = "adaptive"
 
+    elif p == "amd":
+        # AMD Anthropic endpoint rejects thinking field with 400 error
+        out.pop("thinking", None)
+        out.pop("output_config", None)
+
 
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
     """Inject provider-specific parameters to disable thinking/reasoning in KB mode.
@@ -292,6 +305,9 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
     elif p == "agnes":
         out.pop("reasoning_effort", None)
         out["chat_template_kwargs"] = {"enable_thinking": False}
+    elif p == "amd":
+        out.pop("reasoning_effort", None)
+        out["chat_template_kwargs"] = {"thinking": False}
     elif p in _GOOGLE_PROVIDERS:
         out.pop("reasoning_effort", None)
         out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
@@ -661,13 +677,19 @@ async def chat_completions(request: Request):
 
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
+            def _filter_chunk(b: bytes) -> bytes:
+                # AMD SGLang emits "reasoning": "..." in delta. Normalize to "reasoning_content": "..."
+                if b and b'"reasoning":' in b:
+                    return b.replace(b'"reasoning":', b'"reasoning_content":')
+                return b
+
             async def event_generator():
                 try:
                     if first_chunk:
-                        yield first_chunk
+                        yield _filter_chunk(first_chunk)
                     if remainder is not None:
                         async for chunk in remainder:
-                            yield chunk
+                            yield _filter_chunk(chunk)
                 finally:
                     await resp.aclose()
             return StreamingResponse(
@@ -700,7 +722,14 @@ async def chat_completions(request: Request):
             category=req_category,
             request_model=req_model_name,
         )
-        resp = JSONResponse(content=sr.data)
+        resp_data = sr.data
+        # Normalize AMD reasoning to standard reasoning_content
+        if isinstance(resp_data, dict) and "choices" in resp_data:
+            for c in resp_data["choices"]:
+                msg = c.get("message") if isinstance(c, dict) else None
+                if isinstance(msg, dict) and "reasoning" in msg and not msg.get("reasoning_content"):
+                    msg["reasoning_content"] = msg.get("reasoning")
+        resp = JSONResponse(content=resp_data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
         return resp

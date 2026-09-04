@@ -132,9 +132,9 @@ export function normaliseForProvider(body, provider, configOverride = null) {
         body.thinking = { type: 'adaptive' };
       }
       delete body.reasoning_effort;
-    } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes')) {
+    } else if (reasoningRules.strategy === 'chat_template_kwargs' || p === 'agnes' || modelName.startsWith('agnes') || p === 'amd') {
       body.chat_template_kwargs = body.chat_template_kwargs || {};
-      const enableKey = reasoningRules.enable_key || 'enable_thinking';
+      const enableKey = p === 'amd' ? 'thinking' : (reasoningRules.enable_key || 'enable_thinking');
       if (body.chat_template_kwargs[enableKey] === undefined) {
         body.chat_template_kwargs[enableKey] = (rawEffort !== 'none' && rawEffort !== 'false');
       }
@@ -154,7 +154,13 @@ export function normaliseForProvider(body, provider, configOverride = null) {
     }
   } else {
     // If client did not specify reasoning_effort:
-    if (isMiniMax) {
+    if (p === 'amd') {
+      // Default to thinking: true for AMD models if not explicitly disabled
+      body.chat_template_kwargs = body.chat_template_kwargs || {};
+      if (body.chat_template_kwargs.thinking === undefined) {
+        body.chat_template_kwargs.thinking = true;
+      }
+    } else if (isMiniMax) {
       if (body.thinking && typeof body.thinking === 'object') {
         const t = String(body.thinking.type || '').toLowerCase();
         if (t === 'disabled') {

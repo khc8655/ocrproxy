@@ -1,0 +1,41 @@
+{
+  "id": "amd",
+  "name": "AMD Radeon Cloud",
+  "protocol": "openai",
+  "base_url": "https://developer.amd.com.cn/radeon/api/v1",
+  "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
+  "doc_url": "https://developer.amd.com.cn/",
+  "description": "AMD 官方开发者平台，基于 SGLang 高性能推理集群，网关已自动适配 chat_template_kwargs.thinking 深度思考与 reasoning_content 字段",
+  "features": {
+    "native_thinking": true,
+    "multimodal": true,
+    "tools": true,
+    "anthropic_messages": true
+  },
+  "recommended_models": [
+    {
+      "name": "deepseek-v4-flash",
+      "upstream_model": "DeepSeek-V4-Flash",
+      "description": "DeepSeek V4 Flash 旗舰推理大模型 (网关已自动适配深度思考)"
+    },
+    {
+      "name": "deepseek-v4-flash-vision-exp",
+      "upstream_model": "DeepSeek-V4-Flash-Vision-Exp",
+      "description": "DeepSeek V4 Flash 视觉理解与推理增强模型"
+    },
+    {
+      "name": "minicpm5-1b",
+      "upstream_model": "MiniCPM5-1B",
+      "description": "MiniCPM5-1B 边缘超轻量高并发模型"
+    }
+  ],
+  "adapter_rules": {
+    "reasoning": {
+      "strategy": "chat_template_kwargs",
+      "enable_key": "thinking"
+    },
+    "sanitization": {
+      "strip_params": ["output_config", "thinking"]
+    }
+  }
+}

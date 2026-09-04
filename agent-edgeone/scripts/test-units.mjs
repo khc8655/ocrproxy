@@ -462,6 +462,27 @@ test('normalize: agnes reasoning "none" → chat_template_kwargs.enable_thinking
   deepEq(body.chat_template_kwargs, { enable_thinking: false });
 });
 
+// normaliseForProvider — AMD
+test('normalize: amd reasoning "high" → chat_template_kwargs.thinking: true', () => {
+  const body = { model: 'DeepSeek-V4-Flash', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'amd');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { thinking: true });
+});
+
+test('normalize: amd default (no reasoning_effort) → chat_template_kwargs.thinking: true', () => {
+  const body = { model: 'DeepSeek-V4-Flash' };
+  normaliseForProvider(body, 'amd');
+  deepEq(body.chat_template_kwargs, { thinking: true });
+});
+
+test('normalize: amd reasoning "none" → chat_template_kwargs.thinking: false', () => {
+  const body = { model: 'DeepSeek-V4-Flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'amd');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { thinking: false });
+});
+
 // normaliseForProvider — SenseNova
 test('normalize: sensenova object tool_choice → "auto"', () => {
   const body = { model: 'sensenova-6.8-flash-lite', tool_choice: { type: 'function', function: { name: 'calc' } } };

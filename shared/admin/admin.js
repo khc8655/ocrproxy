@@ -118,6 +118,19 @@ const PRESET_DEFINITIONS = {
       { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true },
       { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false },
     ]
+  },
+  amd: {
+    id: 'amd',
+    name: 'AMD Radeon Cloud',
+    base_url: 'https://developer.amd.com.cn/radeon/api/v1',
+    anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
+    protocols: ['chat', 'messages'],
+    description: 'AMD 官方开发者平台，基于 SGLang 高性能推理集群，网关已自动适配 chat_template_kwargs.thinking 深度思考与 reasoning_content 字段',
+    recommended_models: [
+      { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 旗舰推理大模型 (网关已自动适配深度思考)', checked: true },
+      { name: 'deepseek-v4-flash-vision-exp', upstream: 'DeepSeek-V4-Flash-Vision-Exp', desc: 'DeepSeek V4 Flash 视觉理解与推理增强模型', checked: true },
+      { name: 'minicpm5-1b', upstream: 'MiniCPM5-1B', desc: 'MiniCPM5-1B 边缘超轻量高并发模型', checked: false }
+    ]
   }
 };
 
@@ -570,6 +583,7 @@ function renderProviders() {
         <div class="meta mono mt-2">${prov.base_url || '—'}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${p}')">编辑</button>
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${p}')">+ 新增 Key</button>
           <button class="btn btn-danger btn-sm" onclick="deleteProvider('${p}')">删除供应商</button>
         </div>
@@ -793,6 +807,37 @@ function openAddProviderModal() {
   openModal('providerModal');
 }
 
+function openEditProviderModal(name) {
+  const prov = cfg.providers?.[name] || {};
+  document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
+  document.getElementById('presetSelectGroup').style.display = 'none';
+  document.getElementById('m_prov_name').value = name;
+  document.getElementById('m_prov_name').disabled = true;
+  document.getElementById('m_prov_url').value = prov.base_url || '';
+
+  const protos = getProviderProtocols(name, prov);
+  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = protos.includes('chat');
+  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = protos.includes('messages');
+  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = protos.includes('responses');
+
+  const customToggle = document.getElementById('m_prov_custom_url_toggle');
+  const customSection = document.getElementById('m_prov_custom_url_section');
+  const uInput = document.getElementById('m_prov_anthropic_url');
+  if (prov.anthropic_base_url) {
+    if (customToggle) customToggle.checked = true;
+    if (customSection) customSection.style.display = 'block';
+    if (uInput) uInput.value = prov.anthropic_base_url;
+  } else {
+    if (customToggle) customToggle.checked = false;
+    if (customSection) customSection.style.display = 'none';
+    if (uInput) uInput.value = '';
+  }
+
+  document.getElementById('m_prov_desc').style.display = 'none';
+  document.getElementById('m_prov_models_wrap').style.display = 'none';
+  openModal('providerModal');
+}
+
 async function saveProviderModal() {
   const name = document.getElementById('m_prov_name').value.trim();
   const url = document.getElementById('m_prov_url').value.trim();
@@ -927,7 +972,13 @@ async function saveKeyModal() {
         signal: controller.signal
       });
       clearTimeout(timer);
-      const d = await r.json();
+      const resText = await r.text();
+      let d;
+      try {
+        d = JSON.parse(resText);
+      } catch (jsonErr) {
+        throw new Error(r.status === 404 ? '服务器未开通 /api/admin/verify-key 接口' : `服务端返回非 JSON 数据 (HTTP ${r.status})`);
+      }
 
       if (d.valid) {
         const latList = [];
@@ -1178,11 +1229,35 @@ async function saveAgentModal() {
   const backupCfg = JSON.parse(JSON.stringify(cfg));
 
   cfg.agent_models = cfg.agent_models || {};
-  if (oldName && oldName !== name) {
-    delete cfg.agent_models[oldName];
+
+  // Check if adding a new model that collides with an existing model
+  if (!oldName && cfg.agent_models[name]) {
+    const existing = cfg.agent_models[name];
+    const existingKeySet = new Set((existing.keys || []).map(k => `${k.provider}:${k.key}`));
+    const newKeysToAdd = keys.filter(k => !existingKeySet.has(`${k.provider}:${k.key}`));
+
+    const msg = newKeysToAdd.length > 0
+      ? `模型 ID「${name}」已存在！\n\n点击【确定】将勾选的 ${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\n点击【取消】返回修改模型名称。`
+      : `模型 ID「${name}」已存在，且所选 Key 已全部绑定至该模型。\n\n点击【确定】保留原有配置并退出；点击【取消】返回修改模型名称。`;
+
+    if (!confirm(msg)) {
+      document.getElementById('m_model_name').focus();
+      return;
+    }
+
+    if (newKeysToAdd.length > 0) {
+      existing.keys = (existing.keys || []).concat(newKeysToAdd);
+    }
+    if (upstream && upstream !== name) {
+      existing.upstream_model = upstream;
+    }
+  } else {
+    if (oldName && oldName !== name) {
+      delete cfg.agent_models[oldName];
+    }
+    cfg.agent_models[name] = { keys };
+    if (upstream && upstream !== name) cfg.agent_models[name].upstream_model = upstream;
   }
-  cfg.agent_models[name] = { keys };
-  if (upstream && upstream !== name) cfg.agent_models[name].upstream_model = upstream;
 
   const ok = await persistConfig();
   if (ok) {
