@@ -2323,7 +2323,7 @@ async function checkAllRuleUpdates() {
         alertEl.innerHTML = \`
           <div>
             <strong>发现 \${res.updates.length} 个供应商规则有更新</strong>：
-            \${res.updates.map(u => \`<span class="badge badge-warning" style="margin-left:4px;">\${u.provider_id}: \${u.current_version} ➔ \${u.remote_version}</span>\`).join('')}
+            \${res.updates.map(u => \`<span class="badge badge-warning" style="margin-left:4px;">\${u.provider_id}: \${u.current_version} ➔ \${u.latest_version || u.remote_version || '最新'}</span>\`).join('')}
           </div>
           <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
         \`;
