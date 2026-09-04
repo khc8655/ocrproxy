@@ -139,8 +139,8 @@ prepare_source_code() {
         dl_url="https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}"
     fi
 
-    if ! curl -fSL "${auth_header[@]}" --connect-timeout 15 --retry 3 "${dl_url}" -o "$tar_file"; then
-        if [[ ${#auth_header[@]} -gt 0 ]] || ! curl -fSL --connect-timeout 15 --retry 3 "${TARBALL_URL}" -o "$tar_file"; then
+    if ! curl -fSL --location-trusted "${auth_header[@]}" --connect-timeout 15 --retry 3 "${dl_url}" -o "$tar_file"; then
+        if [[ ${#auth_header[@]} -gt 0 ]] || ! curl -fSL --location-trusted --connect-timeout 15 --retry 3 "${TARBALL_URL}" -o "$tar_file"; then
             error "从 GitHub 下载源码失败，请检查网络连接或 GitHub 访问状态 (若仓库为私有，请提供 GITHUB_TOKEN=...): ${dl_url}"
         fi
     fi
