@@ -57,10 +57,15 @@ fi
 CLI_PORT=""
 CLI_PASSWORD=""
 CLI_MODE=""
+CLI_TOKEN=""
 NON_INTERACTIVE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -t|--token)
+            CLI_TOKEN="$2"
+            shift 2
+            ;;
         -p|--port)
             CLI_PORT="$2"
             shift 2
@@ -82,6 +87,10 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# 导出并统一 Token（支持私有仓库）
+GITHUB_TOKEN="${CLI_TOKEN:-${GITHUB_TOKEN:-$GH_TOKEN}}"
+export GITHUB_TOKEN
 
 # ==============================================================================
 # 获取公网 IP (优先 IPv4，备用 IPv6)
