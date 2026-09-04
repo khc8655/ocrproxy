@@ -196,6 +196,36 @@ async def get_config_endpoint(request: Request):
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
+    action = request.query_params.get("action")
+    if action == "test":
+        provider_name = request.query_params.get("provider", "")
+        key_label = request.query_params.get("key", "")
+        target_model = request.query_params.get("model", "")
+        try:
+            config = await get_config()
+            prov = config.get("providers", {}).get(provider_name, {})
+            base_url = prov.get("base_url", "")
+            api_key = prov.get("keys", {}).get(key_label, "")
+            if not base_url or not api_key:
+                return JSONResponse(content={"ok": False, "status": 404, "error": "Provider or Key not found", "latency_ms": 0})
+            
+            t0 = time.monotonic()
+            url = join_upstream(base_url, "models")
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
+                latency = round((time.monotonic() - t0) * 1000)
+                is_ok = resp.status_code in (200, 400, 404)
+                return JSONResponse(content={
+                    "ok": is_ok,
+                    "status": resp.status_code,
+                    "latency_ms": latency,
+                    "provider": provider_name,
+                    "key": key_label,
+                    "model": target_model
+                })
+        except Exception as e:
+            return JSONResponse(content={"ok": False, "status": 500, "error": str(e), "latency_ms": 0})
+
     try:
         config = await get_config()
         resp_data = dict(config)
@@ -209,6 +239,7 @@ async def get_config_endpoint(request: Request):
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to load configuration"})
+
 
 
 # ── Preset Hub & Remote Distribution ─────────────────────────────────
