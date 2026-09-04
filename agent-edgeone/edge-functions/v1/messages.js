@@ -267,6 +267,9 @@ function normaliseMessagesForProvider(out, provider) {
         out.thinking.type = 'adaptive';
       }
     }
+  } else if (p === 'amd') {
+    delete out.thinking;
+    delete out.output_config;
   }
 }
 

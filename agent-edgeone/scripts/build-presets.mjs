@@ -16,6 +16,7 @@ const presetIds = [
   'agnes',
   'minimax',
   'bai',
+  'amd',
 ];
 
 const presets = presetIds.map((id) => {

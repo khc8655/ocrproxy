@@ -361,12 +361,28 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
         }),
       };
     }
-    // Non-streaming: read buffer to prevent stream lock
+    // Non-streaming: read buffer and normalize reasoning to reasoning_content if present
     const rawBytes = await upstreamResp.arrayBuffer();
+    let finalBytes = rawBytes;
+    try {
+      const text = new TextDecoder().decode(rawBytes);
+      if (text.includes('"reasoning":')) {
+        const json = JSON.parse(text);
+        if (Array.isArray(json?.choices)) {
+          for (const c of json.choices) {
+            if (c?.message?.reasoning && !c.message.reasoning_content) {
+              c.message.reasoning_content = c.message.reasoning;
+            }
+          }
+          finalBytes = new TextEncoder().encode(JSON.stringify(json));
+        }
+      }
+    } catch {}
+
     return {
       kind: 'success',
       status: upstreamResp.status,
-      response: new Response(rawBytes, {
+      response: new Response(finalBytes, {
         status: upstreamResp.status,
         headers: buildOutHeaders(upstreamResp),
       }),
@@ -409,15 +425,26 @@ async function peekAndStream(response) {
   }
   const firstChunk = firstResult.value;
 
+  const td = new TextDecoder();
+  const te = new TextEncoder();
+  const filterChunk = (chunk) => {
+    if (!chunk) return chunk;
+    const str = td.decode(chunk);
+    if (str.includes('"reasoning":')) {
+      return te.encode(str.replaceAll('"reasoning":', '"reasoning_content":'));
+    }
+    return chunk;
+  };
+
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   (async () => {
     try {
-      await writer.write(firstChunk);
+      await writer.write(filterChunk(firstChunk));
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        await writer.write(value);
+        await writer.write(filterChunk(value));
       }
       await writer.close();
     } catch (e) {
