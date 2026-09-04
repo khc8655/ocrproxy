@@ -77,6 +77,12 @@ app.include_router(proxy_router, prefix="/api")
 # Admin routes at /api/admin/*
 app.include_router(admin_router)
 
+# Cross-platform frontend compat: alias /api/config -> /api/admin/config
+from .admin_routes import get_config_endpoint, save_config_endpoint
+app.add_api_route("/api/config", get_config_endpoint, methods=["GET"])
+app.add_api_route("/api/config", save_config_endpoint, methods=["POST"])
+
+
 # Serve admin panel + self-hosted vendor assets (font-awesome, chart.js).
 # Vendor files are immutable per version — allow browser caching; the HTML
 # itself is sent with Cache-Control: no-cache so panel updates are picked up
