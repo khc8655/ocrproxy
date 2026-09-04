@@ -397,8 +397,26 @@ done
 # 从 .install_secrets.json 或 .env 读取生成的密钥
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
 
-# 7. 配置并启动 systemd 服务 (支持双栈与内存安全限制)
-info "Step 7/7: 配置并启动 systemd 服务..."
+# 容器环境自适应 (LXC/Docker/WSL 等跳过不支持的命名空间隔离选项，防止 226/NAMESPACE 启动失败)
+SANDBOX_OPTS="NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=${INSTALL_DIR}/config
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true"
+
+if systemd-detect-virt --container >/dev/null 2>&1; then
+    SANDBOX_OPTS="NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=${INSTALL_DIR}/config"
+fi
 
 cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
@@ -423,19 +441,7 @@ MemoryHigh=768M
 MemoryMax=1024M
 MemorySwapMax=0
 
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}/config
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictNamespaces=true
-LockPersonality=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
+${SANDBOX_OPTS}
 
 [Install]
 WantedBy=multi-user.target
