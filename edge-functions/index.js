@@ -920,7 +920,7 @@ tr:hover td, .tbl tbody tr:hover td {
       <div class="section mb-4">
         <div class="section-head">
           <div class="section-title">状态总览</div>
-          <span id="configSourceBadge" class="badge badge-success">KV 同步中</span>
+          <span id="configSourceBadge" class="badge badge-success">KV 已就绪</span>
         </div>
         <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
           <div class="stat-card">
@@ -1680,7 +1680,12 @@ function renderDashboard() {
 
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
-    badge.textContent = \`\${cfgMeta.source || 'KV'} 同步中\`;
+    const src = cfgMeta.source || 'KV';
+    badge.className = 'badge badge-success';
+    badge.textContent = \`\${src} 已同步\`;
+    if (cfgMeta.lastModified) {
+      badge.title = \`最后同步时间: \${new Date(cfgMeta.lastModified).toLocaleString()}\`;
+    }
   }
 
   // Quick models table
@@ -2888,6 +2893,11 @@ async function saveRawJson() {
 }
 
 async function persistConfig() {
+  const badge = document.getElementById('configSourceBadge');
+  if (badge) {
+    badge.className = 'badge badge-warning';
+    badge.textContent = '⏳ 保存同步中...';
+  }
   try {
     const res = await api('POST', '/api/config', cfg);
     cfgMeta = res;
@@ -2898,6 +2908,10 @@ async function persistConfig() {
     toast('配置已保存', 'ok');
     return true;
   } catch (e) {
+    if (badge) {
+      badge.className = 'badge badge-danger';
+      badge.textContent = '❌ 同步失败';
+    }
     toast('保存失败: ' + (e?.message || e), 'err');
     return false;
   }
