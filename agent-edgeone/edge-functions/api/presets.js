@@ -3,10 +3,8 @@
  */
 
 import { PRESETS, PRESET_MAP, CATALOG, getPreset } from '../lib/presets/index.js';
-import { requireAuth, loadConfig, validateConfig, invalidateConfigCache, resolveKvBinding } from '../lib/config.js';
+import { requireAuth, loadConfig, saveConfig, resolveKvBinding } from '../lib/config.js';
 
-const CONFIG_KV_KEY = 'config';
-const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 
 const CDN_CATALOG_URLS = [
   'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json',
@@ -221,10 +219,9 @@ export async function onRequestPost(context) {
     }
 
     if (updated.length > 0 && kv) {
-      const valid = validateConfig(config);
-      await kv.put(CONFIG_KV_KEY, JSON.stringify(valid), { expirationTtl: CONFIG_KV_TTL_SEC });
-      invalidateConfigCache();
+      await saveConfig(config, kv);
     }
+
 
     return new Response(JSON.stringify({
       ok: true,

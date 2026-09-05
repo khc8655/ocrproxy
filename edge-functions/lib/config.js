@@ -97,6 +97,38 @@ function parseAndValidateConfig(raw, source) {
  * Source priority (first hit wins):
  *   1. KV (if bound AND has a non-empty value at key 'config')
  *   2. env.AGENT_CONFIG_JSON  (fallback if KV empty or unbound)
+export const CONFIG_KV_KEY = 'config';
+export const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
+
+/**
+ * Global single-point config persistence.
+ * Validates, wraps, writes to KV, and invalidates cache.
+ */
+export async function saveConfig(incomingConfig, kv) {
+  const incoming = incomingConfig?.config || incomingConfig;
+  const validationErr = validateConfig(incoming);
+  if (validationErr) {
+    throw new ConfigError(validationErr);
+  }
+  const wrapped = {
+    source: 'kv',
+    last_modified: new Date().toISOString(),
+    config: incoming,
+  };
+  if (kv && typeof kv.put === 'function') {
+    await kv.put(CONFIG_KV_KEY, JSON.stringify(wrapped), { expirationTtl: CONFIG_KV_TTL_SEC });
+    invalidateConfigCache();
+  }
+  return wrapped;
+}
+
+/**
+ * Load the active configuration.
+ *
+ * Priority:
+ *   1. KV binding (`agent_kv` or other named binding resolved by resolveKvBinding)
+ *   2. env var `AGENT_CONFIG_JSON` (JSON string)
+ *   3. env var `AGENT_CONFIG` (alias)
  *
  * @param {Object} env - function context.env
  * @param {Object} [kv] - optional pre-resolved KV binding (e.g. agent_kv)
@@ -111,32 +143,41 @@ export async function loadConfig(env, kv) {
   if (kv && typeof kv.get === 'function') {
     let text = null;
     try {
-      text = await kv.get('config');
+      text = await kv.get(CONFIG_KV_KEY);
     } catch (e) {
       console.warn('KV read failed:', e?.message || e);
     }
     if (text && typeof text === 'string' && text.trim()) {
-      const parsed = parseAndValidateConfig(text, 'KV[config]');
-      _cache = { value: parsed, expires: now + CACHE_TTL_MS };
-      return parsed;
+      try {
+        const parsed = parseAndValidateConfig(text, 'KV[config]');
+        _cache = { value: parsed, expires: now + CACHE_TTL_MS };
+        return parsed;
+      } catch (e) {
+        console.warn('KV config parse failed, falling back to env:', e?.message || e);
+      }
     }
   }
 
   // 2) env JSON fallback
   const raw = env?.AGENT_CONFIG_JSON || env?.AGENT_CONFIG || null;
   if (raw && typeof raw === 'string' && raw.trim()) {
-    const parsed = parseAndValidateConfig(raw, 'env.AGENT_CONFIG_JSON');
-    _cache = { value: parsed, expires: now + CACHE_TTL_MS };
-    return parsed;
+    try {
+      const parsed = parseAndValidateConfig(raw, 'env.AGENT_CONFIG_JSON');
+      _cache = { value: parsed, expires: now + CACHE_TTL_MS };
+      return parsed;
+    } catch (e) {
+      console.warn('env config parse failed:', e?.message || e);
+    }
   }
 
-  // 3) Neither KV nor ENV has valid config
-  throw new ConfigError(
-    'No configuration found. Set KV key "config" via admin panel ' +
-    'or env AGENT_CONFIG_JSON to a JSON object with shape ' +
-    '{ providers: { ... }, agent_models: { ... } }.'
-  );
+  // 3) Graceful default if neither KV nor ENV is populated
+  return {
+    providers: {},
+    agent_models: {},
+    settings: { ...DEFAULT_SETTINGS },
+  };
 }
+
 
 /**
  * Detect whether an object looks like a KV handle.  EdgeOne's KV SDK has
