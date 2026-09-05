@@ -1701,8 +1701,10 @@ function renderDashboard() {
       const item = cfg.agent_models[m];
       const keys = item.keys || [];
       const tr = document.createElement('tr');
+      const modelProtos = getModelProtocols(m);
+      const protoBadges = renderProtocolBadges(modelProtos, true);
       tr.innerHTML = \`
-        <td style="font-weight:600;"><span class="mono">\${m}</span></td>
+        <td style="font-weight:600;"><span class="mono">\${m}</span> <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges}</span></td>
         <td class="mono text-secondary">\${item.upstream_model || m}</td>
         <td><span class="badge badge-neutral">\${keys.length} 个候选 Key</span></td>
         <td>
@@ -1891,7 +1893,15 @@ function renderProviders() {
 
     const protos = getProviderProtocols(p, prov);
     const protoBadges = renderProtocolBadges(protos, false);
-    const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? \` · Messages: \${prov.anthropic_base_url}\` : '';
+    const hasMessages = protos.includes('messages');
+    let messagesUrlPart = '';
+    if (hasMessages) {
+      if (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) {
+        messagesUrlPart = \` · Messages: \${prov.anthropic_base_url}\`;
+      } else {
+        messagesUrlPart = \` · Messages: \${prov.anthropic_base_url || prov.base_url} (默认)\`;
+      }
+    }
     const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
     const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="预设规则版本">\${ver}</span>\`;
     const hasUpdate = RULE_UPDATES_MAP[p];

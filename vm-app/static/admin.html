@@ -1111,10 +1111,13 @@ function renderDashboard(){
     } else {
       const chips = top3.map((m, idx) => {
         const pct = ag.count > 0 ? ((m.count / ag.count) * 100).toFixed(0) : '0';
+        const mProtos = getModelProtocols(m.name);
+        const pBadges = renderProtocolBadges(mProtos, true);
         return `
-          <div class="model-chip">
+          <div class="model-chip" style="display:flex;align-items:center;gap:6px;">
             <span class="rank">#${idx + 1}</span>
             <span class="mono" style="font-weight:700;color:var(--text);">${esc(m.name)}</span>
+            <span style="display:inline-flex;gap:4px;">${pBadges}</span>
             <span class="badge badge-primary">${m.count} 次 (${pct}%)</span>
           </div>
         `;
@@ -1229,7 +1232,15 @@ function renderProviders(){
     const keyChips=keys.map(k=>`<span class="key-chip"><b>${esc(k)}</b><button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button><button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button></span>`).join('');
     const protos = getProviderProtocols(name, prov);
     const protoBadges = renderProtocolBadges(protos, false);
-    const messagesUrlPart = (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) ? ` · Messages: ${esc(prov.anthropic_base_url)}` : '';
+    const hasMessages = protos.includes('messages');
+    let messagesUrlPart = '';
+    if (hasMessages) {
+      if (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) {
+        messagesUrlPart = ` · Messages: ${esc(prov.anthropic_base_url)}`;
+      } else {
+        messagesUrlPart = ` · Messages: ${esc(prov.anthropic_base_url || prov.base_url)} (默认)`;
+      }
+    }
     const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
     const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
     const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];

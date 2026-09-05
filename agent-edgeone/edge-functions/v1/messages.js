@@ -256,6 +256,10 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
     'x-api-key': apiKey,
     'anthropic-version': anthropicVersion,
   };
+  if (isStream) {
+    headers['accept'] = 'text/event-stream';
+    headers['accept-encoding'] = 'identity';
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -326,29 +330,25 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   }
 
   clearTimeout(timer);
+  reader.releaseLock();
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   (async () => {
     try {
       await writer.write(firstChunk.value);
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        await writer.write(value);
-      }
-      await writer.close();
+      writer.releaseLock();
+      await bodyStream.pipeTo(writable);
     } catch (e) {
       try { await writer.abort(e); } catch {}
-    } finally {
-      try { await reader.cancel(); } catch {}
     }
   })();
 
   const responseHeaders = new Headers(resp.headers);
-  responseHeaders.set('content-type', 'text/event-stream');
+  responseHeaders.set('content-type', 'text/event-stream; charset=utf-8');
   responseHeaders.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
   responseHeaders.set('x-accel-buffering', 'no');
+  responseHeaders.set('connection', 'keep-alive');
 
   return {
     kind: 'success',

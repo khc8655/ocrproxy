@@ -317,6 +317,9 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
     'content-type': 'application/json',
     accept: isStream ? 'text/event-stream' : 'application/json',
   };
+  if (isStream) {
+    upstreamHeaders['accept-encoding'] = 'identity';
+  }
   if (request.headers.get('x-request-id')) {
     upstreamHeaders['x-request-id'] = request.headers.get('x-request-id');
   }
@@ -346,7 +349,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
   // 2xx — process normally
   if (upstreamResp.status >= 200 && upstreamResp.status < 300) {
     if (isStream) {
-      const peeked = await peekAndStream(upstreamResp);
+      const peeked = await peekAndStream(upstreamResp, resolved);
       if (!peeked.ok) {
         // 200 + empty stream = provider glitch
         console.warn(`[EdgeOne:EmptyStream] url=${url} status=200 but stream was empty`);
@@ -405,12 +408,11 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
 }
 
 /**
- * Peek the first chunk of a streaming response, then build a new
- * stream using TransformStream (as required by Tencent Cloud EdgeOne Doc 81914)
- * that yields the cached first chunk followed by the rest.
+ * Peek the first chunk of a streaming response to ensure upstream health,
+ * then connect upstream stream to client via native pipeTo (Zero-copy, low CPU).
  * Returns { ok: false } if the stream is empty (caller should fail over).
  */
-async function peekAndStream(response) {
+async function peekAndStream(response, resolved) {
   if (!response.body) return { ok: false };
   const reader = response.body.getReader();
   let firstResult;
@@ -424,12 +426,18 @@ async function peekAndStream(response) {
     return { ok: false };
   }
   const firstChunk = firstResult.value;
+  reader.releaseLock();
+
+  const needReasoningReplace = Boolean(
+    resolved?.adapterRules?.response?.reasoning_fields?.includes('reasoning') ||
+    resolved?.provider?.toLowerCase()?.includes('stepfun')
+  );
 
   const td = new TextDecoder();
   const te = new TextEncoder();
   const filterChunk = (chunk) => {
     if (!chunk) return chunk;
-    const str = td.decode(chunk);
+    const str = td.decode(chunk, { stream: true });
     if (str.includes('"reasoning":')) {
       return te.encode(str.replaceAll('"reasoning":', '"reasoning_content":'));
     }
@@ -440,17 +448,20 @@ async function peekAndStream(response) {
   const writer = writable.getWriter();
   (async () => {
     try {
-      await writer.write(filterChunk(firstChunk));
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        await writer.write(filterChunk(value));
+      await writer.write(needReasoningReplace ? filterChunk(firstChunk) : firstChunk);
+      writer.releaseLock();
+      if (needReasoningReplace) {
+        const replaceTS = new TransformStream({
+          transform(chunk, controller) {
+            controller.enqueue(filterChunk(chunk));
+          },
+        });
+        await response.body.pipeThrough(replaceTS).pipeTo(writable);
+      } else {
+        await response.body.pipeTo(writable);
       }
-      await writer.close();
     } catch (e) {
       try { await writer.abort(e); } catch {}
-    } finally {
-      try { await reader.cancel(); } catch {}
     }
   })();
 
@@ -460,9 +471,14 @@ async function peekAndStream(response) {
 function buildOutHeaders(upstreamResp) {
   const h = new Headers();
   const ct = upstreamResp.headers.get('content-type');
-  if (ct) h.set('content-type', ct);
+  if (ct) {
+    h.set('content-type', ct.includes('charset') ? ct : `${ct}; charset=utf-8`);
+  } else {
+    h.set('content-type', 'text/event-stream; charset=utf-8');
+  }
   h.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
   h.set('x-accel-buffering', 'no');
+  h.set('connection', 'keep-alive');
   return h;
 }
 
