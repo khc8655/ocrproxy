@@ -102,12 +102,6 @@ if (existsSync(join(rootProject, 'edge-functions'))) {
   console.log(`Synced all edge-functions to root: ${join(rootProject, 'edge-functions')}`);
 }
 
-const vmStaticDir = join(rootProject, 'vm-app', 'static');
-if (existsSync(vmStaticDir)) {
-  writeFileSync(join(vmStaticDir, 'admin.html'), htmlBundled, 'utf8');
-  writeFileSync(join(vmStaticDir, 'admin.css'), css, 'utf8');
-  writeFileSync(join(vmStaticDir, 'admin.js'), js, 'utf8');
-  console.log(`Synced bundled admin.html, admin.css, and admin.js to ${vmStaticDir}`);
-}
+
 
 

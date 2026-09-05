@@ -2,6 +2,9 @@
 
 本项目采用 **Monorepo** 架构，统一维护一套全功能的 VM 服务端应用 (`vm-app`) 与一套无服务器 EdgeOne 边缘函数版本 (`agent-edgeone`)。所有 VM 模式共用一套通用加密配置 Schema，在保持 100% 完整功能特性的同时，通过 **`RUN_MODE`** 实现界面与路由的动态自适应。
 
+> [!IMPORTANT]
+> **开发与重构铁律**：所有代码修改、构建脚本设计与 Bug 修复必须严格遵守 [ARCHITECTURE_STANDARDS.md](file:///Users/xk/Documents/ocrprox/ARCHITECTURE_STANDARDS.md) 定义的六大核心原则（两大版本定位、VM三模式、EdgeOne纯Agent、共用与差异隔离、程序配置分离、全版本防劣化影响评估）。
+
 ---
 
 ## 架构概览 (Architecture Overview)
