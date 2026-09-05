@@ -10,17 +10,18 @@
 
 import {
   loadConfig,
+  saveConfig,
   validateConfig,
   invalidateConfigCache,
   ConfigError,
   sanitizeJsonString,
   resolveKvBinding,
   kvNotBoundResponse,
+  CONFIG_KV_KEY,
+  CONFIG_KV_TTL_SEC,
 } from '../lib/config.js';
 import { normaliseForProvider } from '../lib/normalize.js';
 
-const CONFIG_KV_KEY = 'config';
-const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 
 function checkAuth(request, env) {
   const need = env?.PROXY_API_KEY;
@@ -175,21 +176,25 @@ export async function onRequestGet(context) {
   if (kv) {
     try {
       const raw = await kv.get(CONFIG_KV_KEY, { type: 'text' });
-      if (raw) {
-        const parsed = JSON.parse(sanitizeJsonString(raw));
-        source = 'kv';
-        config = parsed.config || parsed;
-        lastModified = parsed.last_modified || null;
+      if (raw && typeof raw === 'string' && raw.trim()) {
+        try {
+          const parsed = JSON.parse(sanitizeJsonString(raw));
+          if (parsed && typeof parsed === 'object') {
+            source = 'kv';
+            config = parsed.config || parsed;
+            lastModified = parsed.last_modified || null;
+          } else {
+            console.warn('KV raw config parsed to non-object, fallback to env');
+          }
+        } catch (parseErr) {
+          console.warn('KV JSON parse failed, fallback to env:', parseErr?.message || parseErr);
+        }
       }
     } catch (e) {
-      return new Response(
-        JSON.stringify({
-          error: { type: 'config_error', message: `KV read failed: ${e?.message || e}` },
-        }),
-        { status: 500, headers: { 'content-type': 'application/json' } }
-      );
+      console.warn('KV read failed, fallback to env:', e?.message || e);
     }
   }
+
 
   if (!config) {
     const rawEnv = context.env?.AGENT_CONFIG_JSON || context.env?.AGENT_CONFIG;
@@ -322,29 +327,22 @@ export async function onRequestPut(context) {
   }
 
   const incoming = body?.config || body;
-  const validationErr = validateConfig(incoming);
-  if (validationErr) {
-    return new Response(
-      JSON.stringify({ error: { type: 'invalid_config', message: validationErr } }),
-      { status: 400, headers: { 'content-type': 'application/json' } }
-    );
-  }
-
-  const wrapped = {
-    source: 'kv',
-    last_modified: new Date().toISOString(),
-    config: incoming,
-  };
-
+  let wrapped;
   try {
-    await kv.put(CONFIG_KV_KEY, JSON.stringify(wrapped));
-    invalidateConfigCache();
+    wrapped = await saveConfig(incoming, kv);
   } catch (e) {
+    if (e instanceof ConfigError) {
+      return new Response(
+        JSON.stringify({ error: { type: 'invalid_config', message: e.message } }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV write failed: ${e?.message || e}` } }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
+
 
   return new Response(
     JSON.stringify({
