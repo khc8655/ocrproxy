@@ -599,7 +599,7 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
 
 def _get_active_run_mode(config: dict) -> str:
     """Return the active run mode: 'agent', 'kb', or 'full'."""
-    mode = (os.environ.get("RUN_MODE") or config.get("run_mode") or "full").lower().strip()
+    mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower().strip()
     return mode if mode in ("agent", "kb", "full") else "full"
 
 
