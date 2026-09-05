@@ -749,36 +749,44 @@ function closeModal(id) {
 async function loadPresetsCatalog() {
   const select = document.getElementById('m_prov_preset');
   if (!select) return;
-  if (PRESET_CATALOG.length > 0) {
-    populateCatalogSelect(select);
-    return;
+  if (!PRESET_CATALOG || PRESET_CATALOG.length === 0) {
+    PRESET_CATALOG = Object.keys(FALLBACK_PRESETS).map(k => ({
+      id: k,
+      name: FALLBACK_PRESETS[k].name,
+      version: FALLBACK_PRESETS[k].version || '1.1.0',
+      description: FALLBACK_PRESETS[k].description
+    }));
   }
-  select.innerHTML = '<option value="">-- 正在从云端拉取提供商目录... --</option>';
+  populateCatalogSelect(select);
+
+  // Silent background sync for new remote presets without disturbing the UI
   try {
     const res = await api('GET', '/api/admin/presets?action=catalog');
     if (res && res.ok && Array.isArray(res.providers) && res.providers.length > 0) {
       PRESET_CATALOG = res.providers;
       populateCatalogSelect(select);
-      return;
     }
   } catch (e) {
-    console.warn('Failed to load presets catalog from API, falling back to local list:', e);
+    // Silent fallback
   }
-  // Fallback
-  PRESET_CATALOG = Object.keys(FALLBACK_PRESETS).map(k => ({
-    id: k,
-    name: FALLBACK_PRESETS[k].name,
-    version: FALLBACK_PRESETS[k].version || '1.1.0',
-    description: FALLBACK_PRESETS[k].description
-  }));
-  populateCatalogSelect(select);
 }
 
 function populateCatalogSelect(select) {
   const cur = select.value;
-  select.innerHTML = '<option value="">-- 自定义配置 (手动输入) --</option>' +
-    PRESET_CATALOG.map(p => `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'})</option>`).join('');
-  if (cur) select.value = cur;
+  const catalog = (PRESET_CATALOG && PRESET_CATALOG.length > 0)
+    ? PRESET_CATALOG
+    : Object.keys(FALLBACK_PRESETS).map(k => ({
+        id: k,
+        name: FALLBACK_PRESETS[k].name,
+        version: FALLBACK_PRESETS[k].version || '1.1.0',
+        description: FALLBACK_PRESETS[k].description
+      }));
+
+  select.innerHTML = '<option value="">-- 自定义供应商 (本地内置·手动填写) --</option>' +
+    '<optgroup label="官方预设厂商模板 (按需选用)">' +
+    catalog.map(p => `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'})</option>`).join('') +
+    '</optgroup>';
+  if (cur !== undefined && cur !== null) select.value = cur;
 }
 
 async function onPresetSelected() {
@@ -793,7 +801,12 @@ async function onPresetSelected() {
     currentSelectedPreset = null;
     nameInput.value = '';
     urlInput.value = '';
-    descEl.style.display = 'none';
+    nameInput.disabled = false;
+    urlInput.disabled = false;
+    descEl.style.display = 'block';
+    descEl.style.background = 'var(--color-bg-page)';
+    descEl.style.color = 'var(--color-text-2)';
+    descEl.innerHTML = '⚡ <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。';
     modelsWrap.style.display = 'none';
     modelsList.innerHTML = '';
     return;
@@ -884,6 +897,7 @@ function openAddProviderModal() {
   document.getElementById('providerModalTitle').textContent = '新增供应商';
   document.getElementById('presetSelectGroup').style.display = 'block';
   document.getElementById('m_prov_preset').value = '';
+  onPresetSelected();
   document.getElementById('m_prov_name').value = '';
   document.getElementById('m_prov_name').disabled = false;
   document.getElementById('m_prov_url').value = '';
@@ -893,7 +907,6 @@ function openAddProviderModal() {
   const customToggle = document.getElementById('m_prov_custom_url_toggle'); if(customToggle) customToggle.checked = false;
   const customSection = document.getElementById('m_prov_custom_url_section'); if(customSection) customSection.style.display = 'none';
   const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = '';
-  document.getElementById('m_prov_desc').style.display = 'none';
   document.getElementById('m_prov_models_wrap').style.display = 'none';
   loadPresetsCatalog();
   openModal('providerModal');
