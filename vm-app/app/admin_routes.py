@@ -229,7 +229,7 @@ async def get_config_endpoint(request: Request):
     try:
         config = await get_config()
         resp_data = dict(config)
-        run_mode = os.environ.get("RUN_MODE") or config.get("run_mode") or "full"
+        run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "full"
         run_mode = run_mode.lower().strip()
         if run_mode not in ("agent", "kb", "full"):
             run_mode = "full"
@@ -534,7 +534,7 @@ async def export_config_endpoint(request: Request):
         export_data["_version"] = "3.3"
         filename = f"ocrproxy_config_{now_str}.json"
 
-        run_mode = (os.environ.get("RUN_MODE") or config.get("run_mode") or "full").lower()
+        run_mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower()
         if run_mode == "agent":
             export_data.pop("candidates", None)
         elif run_mode == "kb":
@@ -594,7 +594,7 @@ async def import_config_endpoint(request: Request):
 
     try:
         current_config = await get_config()
-        local_run_mode = (os.environ.get("RUN_MODE") or current_config.get("run_mode") or "full").lower().strip()
+        local_run_mode = (current_config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower().strip()
         if local_run_mode not in ("agent", "kb", "full"):
             local_run_mode = "full"
 
@@ -643,6 +643,38 @@ async def import_config_endpoint(request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to import configuration"})
 
 
+def _sync_env_run_mode(new_mode: str):
+    if not new_mode:
+        return
+    new_mode = str(new_mode).lower().strip()
+    if new_mode not in ("agent", "kb", "full"):
+        return
+    os.environ["RUN_MODE"] = new_mode
+    env_paths = [
+        Path("/opt/ocrproxy/.env"),
+        Path(__file__).resolve().parent.parent / ".env",
+        Path(__file__).resolve().parent.parent.parent / ".env"
+    ]
+    for env_file in env_paths:
+        if env_file.exists():
+            try:
+                content = env_file.read_text(encoding="utf-8")
+                lines = []
+                found = False
+                for line in content.splitlines():
+                    if line.startswith("RUN_MODE="):
+                        lines.append(f"RUN_MODE={new_mode}")
+                        found = True
+                    else:
+                        lines.append(line)
+                if not found:
+                    lines.append(f"RUN_MODE={new_mode}")
+                env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                logger.info("Synced RUN_MODE=%s to %s", new_mode, env_file)
+            except Exception as e:
+                logger.warning("Could not sync RUN_MODE to %s: %s", env_file, e)
+
+
 @router.post("/config")
 async def save_config_endpoint(request: Request):
     if not _check_auth(request):
@@ -665,6 +697,9 @@ async def save_config_endpoint(request: Request):
         body["agent_models"] = {}
 
     try:
+        new_run_mode = body.get("run_mode")
+        if new_run_mode:
+            _sync_env_run_mode(new_run_mode)
         await save_config(body)
         return JSONResponse(content={"status": "success", "message": "Configuration saved successfully."})
     except Exception as e:
