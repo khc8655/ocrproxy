@@ -97,6 +97,7 @@ function parseAndValidateConfig(raw, source) {
  * Source priority (first hit wins):
  *   1. KV (if bound AND has a non-empty value at key 'config')
  *   2. env.AGENT_CONFIG_JSON  (fallback if KV empty or unbound)
+ */
 export const CONFIG_KV_KEY = 'config';
 export const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 
