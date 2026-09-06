@@ -48,6 +48,9 @@ const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000; // 25s upstream timeout to allow fai
 const MAX_RETRIES = 3;
 
 export async function onRequestPost(context) {
+  if (context?.request?.method === 'OPTIONS') {
+    return onRequestOptions(context);
+  }
   try {
     const { request, env } = context;
     const startMs = Date.now();
@@ -205,7 +208,7 @@ export async function onRequestPost(context) {
 
       // Attach debug headers
       const headers = result.response.headers;
-      headers.set('x-edgeone-relay', 'v8-1');
+      headers.set('x-edgeone-relay', 'v8-2');
       headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
       headers.set('x-proxy-route', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join('->'));
       headers.set('x-proxy-attempts', String(attemptLog.length + 1));
@@ -233,7 +236,7 @@ export async function onRequestPost(context) {
     if (strategy === 'manual' || !shouldFailover(result.status, result.kind)) {
       if (result.response) {
         const headers = result.response.headers;
-        headers.set('x-edgeone-relay', 'v8-1');
+        headers.set('x-edgeone-relay', 'v8-2');
         headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
         headers.set('x-proxy-route', attemptLog.join('->'));
         headers.set('x-proxy-attempts', String(attemptLog.length));
@@ -277,7 +280,7 @@ export async function onRequestPost(context) {
       status: finalStatus,
       headers: {
         'content-type': 'application/json',
-        'x-edgeone-relay': 'v8-1',
+        'x-edgeone-relay': 'v8-2',
         'x-proxy-route': attemptLog.join('->'),
         'x-proxy-attempts': String(attemptLog.length),
         'x-proxy-latency-ms': String(Date.now() - startMs),
@@ -298,7 +301,7 @@ export async function onRequestPost(context) {
         status: 500,
         headers: {
           'content-type': 'application/json',
-          'x-edgeone-relay': 'v8-1',
+          'x-edgeone-relay': 'v8-2',
           'x-error-hint': 'caught_in_edge_function',
         },
       }
@@ -587,4 +590,4 @@ export async function onRequest(context) {
   return onRequestPost(context);
 }
 
-export default onRequestPost;
+export default onRequest;

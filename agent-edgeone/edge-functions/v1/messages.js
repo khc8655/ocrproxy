@@ -31,6 +31,9 @@ const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000;
 
 export async function onRequestPost(context) {
+  if (context?.request?.method === 'OPTIONS') {
+    return onRequestOptions(context);
+  }
   try {
     const { request, env } = context;
     const startMs = Date.now();
@@ -193,7 +196,7 @@ export async function onRequestPost(context) {
         recordStickySuccess(body.model, binding, allBindings);
 
         const headers = result.response.headers;
-        headers.set('x-edgeone-relay', 'v8-1');
+        headers.set('x-edgeone-relay', 'v8-2');
         headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
         headers.set('x-proxy-route', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join('->'));
         headers.set('x-proxy-attempts', String(attemptLog.length + 1));
@@ -415,4 +418,4 @@ export async function onRequest(context) {
   return onRequestPost(context);
 }
 
-export default onRequestPost;
+export default onRequest;
