@@ -349,6 +349,10 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   responseHeaders.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
   responseHeaders.set('x-accel-buffering', 'no');
   responseHeaders.set('connection', 'keep-alive');
+  responseHeaders.set('content-encoding', 'identity');
+  responseHeaders.set('access-control-allow-origin', '*');
+  responseHeaders.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+  responseHeaders.set('access-control-allow-headers', '*');
 
   return {
     kind: 'success',
@@ -382,7 +386,33 @@ function anthropicError(status, type, message) {
     }),
     {
       status,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET, POST, OPTIONS',
+        'access-control-allow-headers': '*',
+      },
     }
   );
 }
+
+export async function onRequestOptions(context) {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': '*',
+      'access-control-max-age': '86400',
+    },
+  });
+}
+
+export async function onRequest(context) {
+  if (context?.request?.method === 'OPTIONS') {
+    return onRequestOptions(context);
+  }
+  return onRequestPost(context);
+}
+
+export default onRequestPost;

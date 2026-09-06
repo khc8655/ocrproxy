@@ -1255,6 +1255,46 @@ test('TransformStream: combines firstChunk and remaining stream per Doc 81914', 
   eq(received.join(''), chunks.join(''));
 });
 
+test('resolveBinding: includes provider and adapterRules from preset', () => {
+  const b = listBindings(SAMPLE_CONFIG, 'deepseek-v4-flash')[0];
+  const r = resolveBinding(SAMPLE_CONFIG, b);
+  eq(r.provider, 'sensenova');
+  truthy(typeof r.adapterRules === 'object');
+  eq(r.adapterRules.reasoning?.strategy, 'openai_passthrough');
+});
+
+test('TransformStream: reasoning filter rewrites reasoning to reasoning_content and normalizes event: done', async () => {
+  const td = new TextDecoder();
+  const te = new TextEncoder();
+  const filterChunk = (chunk) => {
+    if (!chunk) return chunk;
+    let str = td.decode(chunk, { stream: true });
+    let modified = false;
+    if (str.includes('"reasoning":')) {
+      str = str.replaceAll('"reasoning":', '"reasoning_content":');
+      modified = true;
+    }
+    if (str.includes('event: done\ndata: [DONE]')) {
+      str = str.replaceAll('event: done\ndata: [DONE]', 'data: [DONE]');
+      modified = true;
+    }
+    return modified ? te.encode(str) : chunk;
+  };
+
+  const sampleAmdChunks = [
+    'data: {"choices":[{"delta":{"reasoning":"思考中"}}]}\nid: 0\n\n',
+    'data: {"choices":[{"delta":{"content":"答案"}}]}\nid: 1\n\n',
+    'event: done\ndata: [DONE]\nid: 2\n\n'
+  ];
+
+  const processed = sampleAmdChunks.map(c => td.decode(filterChunk(te.encode(c))));
+  truthy(processed[0].includes('"reasoning_content":"思考中"'));
+  truthy(!processed[0].includes('"reasoning":"'));
+  truthy(processed[1].includes('"content":"答案"'));
+  truthy(processed[2].includes('data: [DONE]'));
+  truthy(!processed[2].includes('event: done'));
+});
+
 console.log('\n----');
 console.log(`PASS: ${passed}`);
 console.log(`FAIL: ${failed}`);

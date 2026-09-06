@@ -28,6 +28,8 @@
  * KV is already 60s eventually-consistent, so the cache window is harmless.
  */
 
+import { getPreset } from './presets/index.js';
+
 const CACHE_TTL_MS = 60_000;
 let _cache = { value: null, expires: 0 };
 
@@ -464,7 +466,16 @@ export function resolveBinding(config, binding) {
   if (!baseUrl) {
     throw new ConfigError(`Provider "${binding.provider}" has no base_url.`);
   }
-  return { apiKey, baseUrl, upstreamModel: binding.upstreamModel, providerConfig: provider };
+  const preset = getPreset(binding.provider);
+  const adapterRules = provider.adapter_rules || preset?.adapter_rules || {};
+  return {
+    apiKey,
+    baseUrl,
+    upstreamModel: binding.upstreamModel,
+    providerConfig: provider,
+    provider: binding.provider,
+    adapterRules,
+  };
 }
 
 /**
