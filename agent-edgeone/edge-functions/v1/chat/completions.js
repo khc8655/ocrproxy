@@ -428,29 +428,39 @@ async function peekAndStream(response, resolved) {
   const firstChunk = firstResult.value;
   reader.releaseLock();
 
-  const needReasoningReplace = Boolean(
-    resolved?.adapterRules?.response?.reasoning_fields?.includes('reasoning') ||
-    resolved?.provider?.toLowerCase()?.includes('stepfun')
-  );
-
   const td = new TextDecoder();
   const te = new TextEncoder();
   const filterChunk = (chunk) => {
     if (!chunk) return chunk;
-    const str = td.decode(chunk, { stream: true });
+    let str = td.decode(chunk, { stream: true });
+    let modified = false;
     if (str.includes('"reasoning":')) {
-      return te.encode(str.replaceAll('"reasoning":', '"reasoning_content":'));
+      str = str.replaceAll('"reasoning":', '"reasoning_content":');
+      modified = true;
     }
-    return chunk;
+    if (str.includes('event: done\ndata: [DONE]')) {
+      str = str.replaceAll('event: done\ndata: [DONE]', 'data: [DONE]');
+      modified = true;
+    }
+    return modified ? te.encode(str) : chunk;
   };
+
+  const firstChunkStr = td.decode(firstChunk, { stream: true });
+  const prov = String(resolved?.provider || '').toLowerCase();
+  const needTransform = Boolean(
+    resolved?.adapterRules?.response?.reasoning_fields?.includes('reasoning') ||
+    prov.includes('amd') ||
+    prov.includes('stepfun') ||
+    firstChunkStr.includes('"reasoning":')
+  );
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   (async () => {
     try {
-      await writer.write(needReasoningReplace ? filterChunk(firstChunk) : firstChunk);
+      await writer.write(needTransform ? filterChunk(firstChunk) : firstChunk);
       writer.releaseLock();
-      if (needReasoningReplace) {
+      if (needTransform) {
         const replaceTS = new TransformStream({
           transform(chunk, controller) {
             controller.enqueue(filterChunk(chunk));
@@ -479,6 +489,10 @@ function buildOutHeaders(upstreamResp) {
   h.set('cache-control', 'no-cache, no-store, no-transform, must-revalidate');
   h.set('x-accel-buffering', 'no');
   h.set('connection', 'keep-alive');
+  h.set('content-encoding', 'identity');
+  h.set('access-control-allow-origin', '*');
+  h.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+  h.set('access-control-allow-headers', '*');
   return h;
 }
 
@@ -502,7 +516,13 @@ function checkAuth(request, env, config) {
       }),
       {
         status: 401,
-        headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
+        headers: {
+          'content-type': 'application/json',
+          'www-authenticate': 'Bearer',
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, POST, OPTIONS',
+          'access-control-allow-headers': '*',
+        },
       }
     );
   }
@@ -512,12 +532,25 @@ function checkAuth(request, env, config) {
 function errorResponse(status, type, message) {
   return new Response(
     JSON.stringify({ error: { type, message, code: type } }),
-    { status, headers: { 'content-type': 'application/json' } }
+    {
+      status,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET, POST, OPTIONS',
+        'access-control-allow-headers': '*',
+      },
+    }
   );
 }
 
 function tooLargeResponse(actualBytes) {
-  const headers = { 'content-type': 'application/json' };
+  const headers = {
+    'content-type': 'application/json',
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': '*',
+  };
   const fallback = (typeof globalThis !== 'undefined' && globalThis?.EDGEONE_FALLBACK_URL) || '';
   if (fallback) headers['x-fallback-endpoint'] = fallback;
   return new Response(
@@ -535,7 +568,22 @@ function tooLargeResponse(actualBytes) {
   );
 }
 
+export async function onRequestOptions(context) {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': '*',
+      'access-control-max-age': '86400',
+    },
+  });
+}
+
 export async function onRequest(context) {
+  if (context?.request?.method === 'OPTIONS') {
+    return onRequestOptions(context);
+  }
   return onRequestPost(context);
 }
 
