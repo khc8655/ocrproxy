@@ -13,10 +13,12 @@
    - **`sticky_failover` (粘性故障转移 - 默认推荐)**：固定使用当前 Key，遭遇 429/5xx 顺延切换并**长期驻留新 Key**，杜绝多轮对话的 Key 抖动；
    - **`round_robin` (轮询负载均衡)**：按请求原子轮询各可用 Key；
    - **`priority_fallback` (优先级优先)**：按配置顺序优先使用高优先级 Key。
-2. **上游参数自适应与清洗 (`normalize.js`)**：
+2. **上游参数自适应与清洗 (`normalize.js` & 流式过滤管道)**：
+   - **AMD Radeon Cloud**：默认开启思考，自动将上游 SSE 流式中非标的 `choices[0].delta.reasoning` 实时转译为业界标准的 `reasoning_content`，将非标的 `event: done\ndata: [DONE]` 规整为标准 `data: [DONE]`，保证打字机流畅输出，杜绝思考阶段屏幕卡死；
    - **StepFun**：`reasoning_effort="none"` 自动转为 `"low"`，并自动注入 `reasoning_format="deepseek-style"`（以 `reasoning_content` 透传思考链）；
    - **TokenRhythm**：对象形式的 `tool_choice` 自动转为字符串 `"auto"`；
-   - **Google Gemini (2.5 / 3 / 3.5+)**：自动映射 `reasoning_effort` 到 `extra_body.google.thinking_config`，并递归清洗 Tool Schema 中的 `$schema` 非标字段。
+   - **Google Gemini (2.5 / 3 / 3.5+)**：自动映射 `reasoning_effort` 到 `extra_body.google.thinking_config`，并递归清洗 Tool Schema 中的 `$schema` 非标字段；
+   - **CORS 浏览器预检**：支持 `/v1/chat/completions` 与 `/v1/messages` 的 `OPTIONS` 204 无鉴权预检请求，使网页端应用（如 Web 版 NextChat、LibreChat 等）无缝直连。
 3. **管理后台 UI (单文件 Web App)**：
    - **Key 重命名自动联动**：修改 Key 别名时自动级联更新所有 `agent_models` 绑定；
    - **模型二次编辑与回显**：支持在模型列表中随时二次编辑绑定的 Key 与上游别名；
@@ -57,7 +59,7 @@ cd agent-edgeone
 # 1. 安装依赖
 npm install
 
-# 2. 执行 109 项自动化单元测试
+# 2. 执行 132 项自动化单元测试
 npm test
 
 # 3. 构建单文件管理后台
