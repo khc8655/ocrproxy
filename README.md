@@ -21,7 +21,7 @@ ocrprox (Monorepo)
 ├── agent-edgeone/                     # 部署于腾讯云 EdgeOne 边缘函数 (Serverless)
 │   ├── edge-functions/                # V8 边缘函数 (OpenAI 兼容 /v1/* 接口)
 │   ├── admin.html / css / js          # 现代化 EdgeOne 管理后台
-│   └── package.json                   # EdgeOne 构建与 106+ 自动化测试套件
+│   └── package.json                   # EdgeOne 构建与 132 项自动化测试套件
 │
 ├── shared/                            # 共享资源与规范文档
 │   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json (AMD, MiniMax, Google, DeepSeek, etc.)
