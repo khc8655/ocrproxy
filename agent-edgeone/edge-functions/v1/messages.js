@@ -196,7 +196,7 @@ export async function onRequestPost(context) {
         recordStickySuccess(body.model, binding, allBindings);
 
         const headers = result.response.headers;
-        headers.set('x-edgeone-relay', 'v8-2');
+        headers.set('x-edgeone-relay', 'v8-3');
         headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
         headers.set('x-proxy-route', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join('->'));
         headers.set('x-proxy-attempts', String(attemptLog.length + 1));
@@ -307,45 +307,11 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
     return { kind: 'success', response: resp };
   }
 
-  // Stream peek check
-  const bodyStream = resp.body;
-  if (!bodyStream) {
-    clearTimeout(timer);
+  // Stream: directly return native zero-copy response stream without JS TransformStream buffering
+  clearTimeout(timer);
+  if (!resp.body) {
     return { kind: 'empty_stream', status: resp.status, errorText: 'Response has no body' };
   }
-
-  const reader = bodyStream.getReader();
-  let firstChunk;
-  try {
-    firstChunk = await reader.read();
-  } catch (e) {
-    clearTimeout(timer);
-    return {
-      kind: e?.name === 'AbortError' ? 'read_timeout' : 'network_error',
-      status: resp.status,
-      errorText: `Failed to read first chunk: ${e?.message || e}`,
-    };
-  }
-
-  if (firstChunk.done) {
-    clearTimeout(timer);
-    return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without any data' };
-  }
-
-  clearTimeout(timer);
-  reader.releaseLock();
-
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  (async () => {
-    try {
-      await writer.write(firstChunk.value);
-      writer.releaseLock();
-      await bodyStream.pipeTo(writable);
-    } catch (e) {
-      try { await writer.abort(e); } catch {}
-    }
-  })();
 
   const responseHeaders = new Headers(resp.headers);
   responseHeaders.set('content-type', 'text/event-stream; charset=utf-8');
@@ -359,7 +325,7 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
 
   return {
     kind: 'success',
-    response: new Response(readable, {
+    response: new Response(resp.body, {
       status: resp.status,
       statusText: resp.statusText,
       headers: responseHeaders,
