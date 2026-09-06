@@ -208,7 +208,7 @@ export async function onRequestPost(context) {
 
       // Attach debug headers
       const headers = result.response.headers;
-      headers.set('x-edgeone-relay', 'v8-2');
+      headers.set('x-edgeone-relay', 'v8-3');
       headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
       headers.set('x-proxy-route', attemptLog.concat(`${binding.provider}/${binding.keyLabel}=ok`).join('->'));
       headers.set('x-proxy-attempts', String(attemptLog.length + 1));
@@ -236,7 +236,7 @@ export async function onRequestPost(context) {
     if (strategy === 'manual' || !shouldFailover(result.status, result.kind)) {
       if (result.response) {
         const headers = result.response.headers;
-        headers.set('x-edgeone-relay', 'v8-2');
+        headers.set('x-edgeone-relay', 'v8-3');
         headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
         headers.set('x-proxy-route', attemptLog.join('->'));
         headers.set('x-proxy-attempts', String(attemptLog.length));
@@ -280,7 +280,7 @@ export async function onRequestPost(context) {
       status: finalStatus,
       headers: {
         'content-type': 'application/json',
-        'x-edgeone-relay': 'v8-2',
+        'x-edgeone-relay': 'v8-3',
         'x-proxy-route': attemptLog.join('->'),
         'x-proxy-attempts': String(attemptLog.length),
         'x-proxy-latency-ms': String(Date.now() - startMs),
@@ -301,7 +301,7 @@ export async function onRequestPost(context) {
         status: 500,
         headers: {
           'content-type': 'application/json',
-          'x-edgeone-relay': 'v8-2',
+          'x-edgeone-relay': 'v8-3',
           'x-error-hint': 'caught_in_edge_function',
         },
       }
@@ -352,16 +352,14 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
   // 2xx — process normally
   if (upstreamResp.status >= 200 && upstreamResp.status < 300) {
     if (isStream) {
-      const peeked = await peekAndStream(upstreamResp, resolved);
-      if (!peeked.ok) {
-        // 200 + empty stream = provider glitch
+      if (!upstreamResp.body) {
         console.warn(`[EdgeOne:EmptyStream] url=${url} status=200 but stream was empty`);
         return { kind: 'empty_stream', status: 200, response: null };
       }
       return {
         kind: 'success',
         status: upstreamResp.status,
-        response: new Response(peeked.stream, {
+        response: new Response(upstreamResp.body, {
           status: upstreamResp.status,
           headers: buildOutHeaders(upstreamResp),
         }),
@@ -408,77 +406,6 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       headers: buildOutHeaders(upstreamResp),
     }),
   };
-}
-
-/**
- * Peek the first chunk of a streaming response to ensure upstream health,
- * then connect upstream stream to client via native pipeTo (Zero-copy, low CPU).
- * Returns { ok: false } if the stream is empty (caller should fail over).
- */
-async function peekAndStream(response, resolved) {
-  if (!response.body) return { ok: false };
-  const reader = response.body.getReader();
-  let firstResult;
-  try {
-    firstResult = await reader.read();
-  } catch (e) {
-    return { ok: false };
-  }
-  if (firstResult.done || !firstResult.value || firstResult.value.length === 0) {
-    try { await reader.cancel(); } catch {}
-    return { ok: false };
-  }
-  const firstChunk = firstResult.value;
-  reader.releaseLock();
-
-  const td = new TextDecoder();
-  const te = new TextEncoder();
-  const filterChunk = (chunk) => {
-    if (!chunk) return chunk;
-    let str = td.decode(chunk, { stream: true });
-    let modified = false;
-    if (str.includes('"reasoning":')) {
-      str = str.replaceAll('"reasoning":', '"reasoning_content":');
-      modified = true;
-    }
-    if (str.includes('event: done\ndata: [DONE]')) {
-      str = str.replaceAll('event: done\ndata: [DONE]', 'data: [DONE]');
-      modified = true;
-    }
-    return modified ? te.encode(str) : chunk;
-  };
-
-  const firstChunkStr = td.decode(firstChunk, { stream: true });
-  const prov = String(resolved?.provider || '').toLowerCase();
-  const needTransform = Boolean(
-    resolved?.adapterRules?.response?.reasoning_fields?.includes('reasoning') ||
-    prov.includes('amd') ||
-    prov.includes('stepfun') ||
-    firstChunkStr.includes('"reasoning":')
-  );
-
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  (async () => {
-    try {
-      await writer.write(needTransform ? filterChunk(firstChunk) : firstChunk);
-      writer.releaseLock();
-      if (needTransform) {
-        const replaceTS = new TransformStream({
-          transform(chunk, controller) {
-            controller.enqueue(filterChunk(chunk));
-          },
-        });
-        await response.body.pipeThrough(replaceTS).pipeTo(writable);
-      } else {
-        await response.body.pipeTo(writable);
-      }
-    } catch (e) {
-      try { await writer.abort(e); } catch {}
-    }
-  })();
-
-  return { ok: true, stream: readable };
 }
 
 function buildOutHeaders(upstreamResp) {
