@@ -254,7 +254,12 @@ case "$1" in
         echo "================================================="
         echo "  正在从 GitHub (${GITHUB_REPO}/${GITHUB_BRANCH}) 升级 OCRProxy..."
         echo "================================================="
-        curl -fsSL "${CURL_AUTH[@]}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
+        TARGET_REF="${GITHUB_BRANCH}"
+        LATEST_SHA=$(curl -s "${CURL_AUTH[@]}" "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | sed -n 's/.*"sha": "\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)
+        if [[ -n "$LATEST_SHA" ]]; then
+            TARGET_REF="$LATEST_SHA"
+        fi
+        curl -fsSL "${CURL_AUTH[@]}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
         ;;
     status)
         systemctl status ${SERVICE_NAME}
