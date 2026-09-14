@@ -417,7 +417,7 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
 
     # 检查并确保 systemd service 使用 run_server.py
     optimize_network_routing
-    local need_reload=false
+    need_reload=false
     if ! grep -q "run_server.py" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
         info "升级 systemd 服务以支持真双栈套接字监听..."
         run_sudo sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
