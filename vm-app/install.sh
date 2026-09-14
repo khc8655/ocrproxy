@@ -246,7 +246,7 @@ case "$1" in
         shift
         TOKEN_ARG=()
         CURL_AUTH=()
-        SAVED_TOKEN=$(grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || true)
+        SAVED_TOKEN=$(sudo grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || true)
         if [[ -n "$SAVED_TOKEN" ]]; then
             TOKEN_ARG=(-t "$SAVED_TOKEN")
             CURL_AUTH=(-H "Authorization: token ${SAVED_TOKEN}")
@@ -365,11 +365,11 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     echo ""
 
     # 读取旧配置中的端口
-    CURRENT_PORT=$(grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "8787")
+    CURRENT_PORT=$(run_sudo grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "8787")
     info "当前服务监听端口: ${CURRENT_PORT}"
 
     # 确定服务运行用户 (优先读取已运行 systemd 服务中的 User，兼容不同宿主环境)
-    SERVICE_USER=$(grep -oP '^User=\K\S+' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || echo "${CURRENT_USER}")
+    SERVICE_USER=$(run_sudo grep -oP '^User=\K\S+' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || echo "${CURRENT_USER}")
 
     # 创建独立配置备份
     BACKUP_DIR="${INSTALL_DIR}/backup/backup_$(date +%Y%m%d_%H%M%S)"
@@ -400,7 +400,7 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
 
     # 保存 GITHUB_TOKEN 到 .env 以便后续 ocrproxy CLI 免输入升级
     if [[ -n "$GITHUB_TOKEN" ]]; then
-        if ! grep -q "^GITHUB_TOKEN=" "${INSTALL_DIR}/.env" 2>/dev/null; then
+        if ! run_sudo grep -q "^GITHUB_TOKEN=" "${INSTALL_DIR}/.env" 2>/dev/null; then
             echo "GITHUB_TOKEN=${GITHUB_TOKEN}" | run_sudo tee -a "${INSTALL_DIR}/.env" >/dev/null
         else
             run_sudo sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${GITHUB_TOKEN}|" "${INSTALL_DIR}/.env" 2>/dev/null || true
