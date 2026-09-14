@@ -5,13 +5,18 @@
 # 托管仓库: https://github.com/khc8655/ocrproxy
 #
 # 使用方法:
-#   1. 一键网络安装/升级:
+#   1. 一键网络安装/升级 (以普通用户或 root 执行均可):
 #      curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
 #
-#   2. 自定义参数安装/静默安装:
-#      curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w MyAdminPass123
-#      或通过环境变量:
-#      APP_PORT=8787 ADMIN_PASSWORD=xxx curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
+#   2. 显式命令:
+#      - 升级: curl -fsSL ... | bash -s -- --upgrade
+#      - 卸载: curl -fsSL ... | bash -s -- --uninstall
+#
+#   3. 安装后可通过本地快捷命令管理:
+#      ocrproxy upgrade  (平滑升级)
+#      ocrproxy status   (查看状态)
+#      ocrproxy restart  (重启服务)
+#      ocrproxy log      (查看日志)
 # ==============================================================================
 
 set -e
@@ -40,28 +45,56 @@ warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
 error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 highlight(){ echo -e "${CYAN}${BOLD}$1${NC}"; }
 
+# 智能提权辅助函数 (仅在必要时调用 sudo)
+run_sudo() {
+    if [[ $EUID -eq 0 ]]; then
+        "$@"
+    elif command -v sudo &>/dev/null; then
+        sudo "$@"
+    else
+        error "该操作需要管理员权限，但系统中未找到 sudo 命令: $*"
+    fi
+}
+
+# 当前执行用户
+CURRENT_USER=$(whoami 2>/dev/null || id -un)
+
 # 随机字符串生成器 (密码与 API Key)
 gen_random_str() {
     local len=${1:-16}
     LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len"
 }
 
-# 检查 root 权限
-if [[ $EUID -ne 0 ]]; then
-    error "此脚本必须以 root 权限运行。请使用: sudo bash install.sh"
-fi
-
 # ==============================================================================
 # 解析命令行参数
 # ==============================================================================
+CLI_ACTION=""
 CLI_PORT=""
 CLI_PASSWORD=""
 CLI_MODE=""
 CLI_TOKEN=""
+KEEP_CONFIG=false
 NON_INTERACTIVE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --upgrade|upgrade|update)
+            CLI_ACTION="upgrade"
+            shift
+            ;;
+        --uninstall|uninstall)
+            CLI_ACTION="uninstall"
+            shift
+            ;;
+        --keep-config)
+            KEEP_CONFIG=true
+            shift
+            ;;
+        -b|--branch)
+            GITHUB_BRANCH="$2"
+            TARBALL_URL="https://github.com/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.tar.gz"
+            shift 2
+            ;;
         -t|--token)
             CLI_TOKEN="$2"
             shift 2
@@ -125,7 +158,7 @@ prepare_source_code() {
     fi
 
     # 情况 2: 远程 curl 管道运行，下载 GitHub 源码压缩包
-    info "正在从 GitHub (${GITHUB_REPO}) 下载最新发行源码..."
+    info "正在从 GitHub (${GITHUB_REPO}/${GITHUB_BRANCH}) 下载最新发行源码..."
     mkdir -p "$target_extract_dir/dl"
     local tar_file="$target_extract_dir/ocrproxy.tar.gz"
     local auth_header=()
@@ -166,16 +199,94 @@ prepare_source_code() {
 # ==============================================================================
 optimize_network_routing() {
     if [[ -f /etc/gai.conf ]]; then
-        if grep -q "^#precedence ::ffff:0:0/96  100" /etc/gai.conf; then
+        if grep -q "^#precedence ::ffff:0:0/96  100" /etc/gai.conf 2>/dev/null; then
             info "优化系统级 DNS 解析优先级 (启用 IPv4 优先，防止大模型国内源站 IPv6 丢包)..."
-            sed -i "s/#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/" /etc/gai.conf
+            run_sudo sed -i "s/#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/" /etc/gai.conf 2>/dev/null || true
             ok "网络出站优先级已调优"
         fi
     fi
 }
 
 # ==============================================================================
-# 模式判断: 升级 (Upgrade) 还是 全新安装 (Install)
+# 注册 CLI 命令与免密重启白名单 (/usr/local/bin/ocrproxy 与 /etc/sudoers.d/ocrproxy)
+# ==============================================================================
+setup_cli_and_sudoers() {
+    # 1. 注册免密重启白名单 (仅针对 ocrproxy 服务的极低权限操作，免去日常升级输密码)
+    if [[ -d /etc/sudoers.d && "$CURRENT_USER" != "root" ]]; then
+        local sudoers_file="/etc/sudoers.d/ocrproxy"
+        local expected_rule="${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl status ${SERVICE_NAME}, /usr/bin/systemctl stop ${SERVICE_NAME}, /usr/bin/systemctl start ${SERVICE_NAME}, /usr/bin/systemctl reload ${SERVICE_NAME}, /usr/bin/systemctl daemon-reload, /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl stop ${SERVICE_NAME}, /bin/systemctl start ${SERVICE_NAME}, /bin/systemctl reload ${SERVICE_NAME}, /bin/systemctl daemon-reload"
+        if [[ ! -f "$sudoers_file" ]] || ! grep -q "daemon-reload" "$sudoers_file" 2>/dev/null; then
+            info "配置免密服务运维白名单 (/etc/sudoers.d/ocrproxy)..."
+            echo "$expected_rule" | run_sudo tee "$sudoers_file" >/dev/null 2>&1 || true
+            run_sudo chmod 440 "$sudoers_file" 2>/dev/null || true
+        fi
+    fi
+
+    # 2. 安装全局快捷管理命令 /usr/local/bin/ocrproxy
+    if [[ ! -f /usr/local/bin/ocrproxy ]] || ! grep -q "ocrproxy upgrade" /usr/local/bin/ocrproxy 2>/dev/null; then
+        info "注册系统管理命令 /usr/local/bin/ocrproxy..."
+        cat << 'EOF_CLI' | run_sudo tee /usr/local/bin/ocrproxy >/dev/null
+#!/bin/bash
+SERVICE_NAME="ocrproxy"
+GITHUB_REPO="khc8655/ocrproxy"
+GITHUB_BRANCH="main"
+
+restart_cmd() {
+    if [[ $EUID -eq 0 ]]; then
+        systemctl restart ${SERVICE_NAME}
+    elif command -v sudo &>/dev/null; then
+        sudo systemctl restart ${SERVICE_NAME}
+    else
+        systemctl restart ${SERVICE_NAME}
+    fi
+}
+
+case "$1" in
+    upgrade|update)
+        shift
+        echo "================================================="
+        echo "  正在从 GitHub (${GITHUB_REPO}/${GITHUB_BRANCH}) 升级 OCRProxy..."
+        echo "================================================="
+        curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --upgrade "$@"
+        ;;
+    status)
+        systemctl status ${SERVICE_NAME}
+        ;;
+    restart)
+        echo "正在平滑重启 ${SERVICE_NAME}..."
+        restart_cmd
+        echo "重启完成！"
+        ;;
+    log|logs)
+        journalctl -u ${SERVICE_NAME} -f
+        ;;
+    uninstall)
+        shift
+        curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --uninstall "$@"
+        ;;
+    *)
+        echo "================================================="
+        echo "  OCRProxy 命令行管理工具"
+        echo "================================================="
+        echo "用法: ocrproxy <命令>"
+        echo ""
+        echo "可用命令:"
+        echo "  upgrade    一键平滑升级至 GitHub 最新版本"
+        echo "  status     查看服务运行状态与监听端口"
+        echo "  restart    重启 OCRProxy 服务"
+        echo "  log        实时跟踪服务运行日志 (Ctrl+C 退出)"
+        echo "  uninstall  安全卸载 OCRProxy"
+        echo "================================================="
+        ;;
+esac
+EOF_CLI
+        run_sudo chmod +x /usr/local/bin/ocrproxy 2>/dev/null || true
+        ok "全局命令 ocrproxy 注册就绪"
+    fi
+}
+
+# ==============================================================================
+# 状态检查: 是否已安装
 # ==============================================================================
 is_installed() {
     if [[ -f "${INSTALL_DIR}/.env" && -d "${INSTALL_DIR}/app" && -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
@@ -184,24 +295,73 @@ is_installed() {
     return 1
 }
 
+# ==============================================================================
+# 分支 1: 安全卸载模式 (UNINSTALL MODE)
+# ==============================================================================
+if [[ "$CLI_ACTION" == "uninstall" ]]; then
+    echo ""
+    echo "=============================================================================="
+    highlight "  OCRProxy 卸载向导"
+    echo "=============================================================================="
+    echo ""
+    if ! is_installed; then
+        warn "未检测到已安装的 OCRProxy 服务，无需卸载。"
+        exit 0
+    fi
+
+    if [[ "$NON_INTERACTIVE" != "true" ]]; then
+        read -p "确定要卸载 OCRProxy 吗？(y/N): " CONFIRM
+        if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+            info "已取消卸载。"
+            exit 0
+        fi
+    fi
+
+    info "正在停止并注销 ${SERVICE_NAME} 服务..."
+    run_sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+    run_sudo systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
+    run_sudo rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+    run_sudo systemctl daemon-reload 2>/dev/null || true
+
+    info "清理快捷命令与免密规则..."
+    run_sudo rm -f "/etc/sudoers.d/ocrproxy"
+    run_sudo rm -f "/usr/local/bin/ocrproxy"
+
+    if [[ "$KEEP_CONFIG" == "true" ]]; then
+        info "保留配置数据，仅移除应用代码与虚拟环境..."
+        run_sudo rm -rf "${INSTALL_DIR}/app" "${INSTALL_DIR}/static" "${INSTALL_DIR}/scripts" "${INSTALL_DIR}/venv" "${INSTALL_DIR}/shared"
+        ok "应用已卸载，您的配置文件与密钥安全保留在: ${INSTALL_DIR}/config"
+    else
+        BACKUP_EXPORT="/tmp/ocrproxy_backup_$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "$BACKUP_EXPORT"
+        cp -r "${INSTALL_DIR}/config" "$BACKUP_EXPORT/" 2>/dev/null || true
+        cp "${INSTALL_DIR}/.env" "$BACKUP_EXPORT/" 2>/dev/null || true
+        info "配置已安全归档备份至: $BACKUP_EXPORT"
+        run_sudo rm -rf "${INSTALL_DIR}"
+        ok "OCRProxy 已完全卸载！"
+    fi
+    echo ""
+    exit 0
+fi
+
 echo ""
 echo "=============================================================================="
 highlight "  OCRProxy 一键部署与管理中心 (Unified LLM Gateway)"
 echo "=============================================================================="
 echo ""
 
-# ------------------------------------------------------------------------------
-# 分支 A: 平滑升级模式 (UPGRADE MODE)
-# ------------------------------------------------------------------------------
-if is_installed; then
+# ==============================================================================
+# 分支 2: 平滑升级模式 (UPGRADE MODE)
+# ==============================================================================
+if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     echo -e "${GREEN}${BOLD}▶ 检测到已安装 OCRProxy 服务，进入【平滑就地升级】流程${NC}"
     echo ""
 
     # 读取旧配置中的端口
-    CURRENT_PORT=$(grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" || echo "8787")
+    CURRENT_PORT=$(grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "8787")
     info "当前服务监听端口: ${CURRENT_PORT}"
 
-    # 创建独立备份
+    # 创建独立配置备份
     BACKUP_DIR="${INSTALL_DIR}/backup/backup_$(date +%Y%m%d_%H%M%S)"
     info "正在备份当前配置与密钥至 ${BACKUP_DIR}..."
     mkdir -p "${BACKUP_DIR}"
@@ -216,7 +376,12 @@ if is_installed; then
     trap 'rm -rf "$TMP_DIR"' EXIT
     prepare_source_code "$TMP_DIR"
 
-    # 停止服务准备更新
+    # 确保当前用户有写权限，若原为 root 部署则自动调整给当前用户以实现免 sudo 升级
+    if [[ ! -w "${INSTALL_DIR}" ]]; then
+        info "正在调整应用目录归属以支持当前用户免 sudo 升级..."
+        run_sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "${INSTALL_DIR}" 2>/dev/null || true
+    fi
+
     info "正在平滑同步应用文件..."
     cp -r "$TMP_DIR/source/vm-app/app" "${INSTALL_DIR}/"
     cp -r "$TMP_DIR/source/vm-app/static" "${INSTALL_DIR}/"
@@ -224,8 +389,10 @@ if is_installed; then
     cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
     cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
     cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
-    ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
     chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
+    if [[ ! -e "/opt/shared" ]]; then
+        run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
+    fi
 
     # 更新 Python 依赖
     info "正在增量检查并更新 Python 虚拟环境依赖..."
@@ -234,17 +401,25 @@ if is_installed; then
 
     # 检查并确保 systemd service 使用 run_server.py
     optimize_network_routing
+    local need_reload=false
     if ! grep -q "run_server.py" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
         info "升级 systemd 服务以支持真双栈套接字监听..."
-        sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
+        run_sudo sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
+        need_reload=true
     fi
     if systemd-detect-virt --container >/dev/null 2>&1; then
-        sed -i -E '/(Protect|Restrict|LockPersonality|PrivateTmp|NoNewPrivileges|ReadWritePaths)/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
+        run_sudo sed -i -E '/(Protect|Restrict|LockPersonality|PrivateTmp|NoNewPrivileges|ReadWritePaths)/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
+        need_reload=true
     fi
 
-    systemctl daemon-reload
+    # 注册或更新全局 CLI 与免密规则
+    setup_cli_and_sudoers
+
+    if [[ "$need_reload" == "true" ]]; then
+        run_sudo systemctl daemon-reload
+    fi
     info "正在重启 ${SERVICE_NAME} 服务..."
-    systemctl restart "${SERVICE_NAME}"
+    run_sudo systemctl restart "${SERVICE_NAME}"
 
     # 健康自检
     info "正在执行服务健康自检..."
@@ -260,7 +435,7 @@ if is_installed; then
     if [[ "$CHECK_SUCCESS" == "true" ]]; then
         ok "健康检查通过！服务运行正常。"
     else
-        warn "健康检查未能在 15 秒内响应，请通过 'systemctl status ${SERVICE_NAME}' 查看服务状态。"
+        warn "健康检查未能在 15 秒内响应，请通过 'ocrproxy status' 查看服务状态。"
     fi
 
     echo ""
@@ -269,27 +444,29 @@ if is_installed; then
     echo "=============================================================================="
     echo -e "  服务端口: ${BOLD}${CURRENT_PORT}${NC}"
     echo -e "  备份目录: ${BACKUP_DIR}"
-    echo -e "  服务状态: systemctl status ${SERVICE_NAME}"
+    echo -e "  服务状态: ocrproxy status"
+    echo -e "  实时日志: ocrproxy log"
     echo "=============================================================================="
     echo ""
     exit 0
 fi
 
-# ------------------------------------------------------------------------------
-# 分支 B: 全新安装模式 (FRESH INSTALL MODE)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 分支 3: 全新安装模式 (FRESH INSTALL MODE)
+# ==============================================================================
 echo -e "${CYAN}${BOLD}▶ 未检测到旧版本，进入【全新一键安装】流程${NC}"
 echo ""
 
-# 1. 检查并安装操作系统依赖
-info "Step 1/7: 检查系统环境与必要依赖..."
+# 1. 检查基础环境依赖 (仅在缺失时按需请求 sudo 安装系统包)
+info "Step 1/7: 检查系统环境与基础依赖..."
 if ! command -v curl &>/dev/null; then
-    apt-get update -qq && apt-get install -y -qq curl
+    info "未检测到 curl，正在通过 sudo 安装基础包..."
+    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq curl
 fi
 
 if ! command -v python3 &>/dev/null; then
-    info "未检测到 python3，正在自动安装 Python 环境与必要组件..."
-    apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
+    info "未检测到 python3，正在通过 sudo 安装 Python 环境..."
+    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq python3 python3-venv python3-pip
     if ! command -v python3 &>/dev/null; then
         error "自动安装 Python 失败，请手动在系统中安装 Python 3.10+。"
     fi
@@ -298,10 +475,10 @@ fi
 PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 info "检测到 Python 版本: ${PY_VERSION}"
 
-# 检查 venv 和 pip (Debian/Ubuntu 常常拆分 python3-venv 和 python3-pip)
+# 检查 venv 和 pip (Debian/Ubuntu 拆分了 python3-venv 和 python3-pip)
 if ! python3 -c "import ensurepip" &>/dev/null || ! command -v pip3 &>/dev/null; then
-    info "安装 python3-venv 与 python3-pip..."
-    apt-get update -qq && apt-get install -y -qq "python${PY_VERSION}-venv" python3-pip python3-venv
+    info "安装 python3-venv 与 python3-pip (需要 sudo 权限)..."
+    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq "python${PY_VERSION}-venv" python3-pip python3-venv 2>/dev/null || run_sudo apt-get install -y -qq python3-venv python3-pip
 fi
 ok "系统基础依赖检查就绪"
 
@@ -345,18 +522,24 @@ fi
 # 运行模式选择
 FINAL_MODE="${CLI_MODE:-${RUN_MODE:-agent}}"
 
-# 3. 创建服务专用系统用户
-info "Step 3/7: 配置系统专用用户..."
-if id "${SERVICE_NAME}" &>/dev/null; then
-    info "用户 ${SERVICE_NAME} 已存在，跳过创建"
+# 3. 确定服务运行用户与环境
+info "Step 3/7: 配置系统运行环境..."
+RUN_AS_USER="${CURRENT_USER}"
+if [[ "$CURRENT_USER" == "root" ]]; then
+    if id "${SERVICE_NAME}" &>/dev/null; then
+        RUN_AS_USER="${SERVICE_NAME}"
+    else
+        useradd --system --no-create-home --shell /usr/sbin/nologin "${SERVICE_NAME}" 2>/dev/null && RUN_AS_USER="${SERVICE_NAME}" || RUN_AS_USER="root"
+    fi
+    info "以 root 执行安装，已配置专用运行用户: ${RUN_AS_USER}"
 else
-    useradd --system --no-create-home --shell /usr/sbin/nologin "${SERVICE_NAME}"
-    ok "系统用户 ${SERVICE_NAME} 创建成功"
+    info "以运维用户 ${CURRENT_USER} 安装，服务将以 ${CURRENT_USER} 身份运行 (后续支持免 sudo 平滑自动升级)"
 fi
 
 # 4. 创建目录结构并部署源码
 info "Step 4/7: 部署应用目录与最新源码..."
-mkdir -p "${INSTALL_DIR}"
+run_sudo mkdir -p "${INSTALL_DIR}"
+run_sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "${INSTALL_DIR}"
 mkdir -p "${INSTALL_DIR}/config"
 mkdir -p "${INSTALL_DIR}/static"
 mkdir -p "${INSTALL_DIR}/scripts"
@@ -372,7 +555,7 @@ cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
 cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
-ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
+run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
 ok "应用核心文件已部署到 ${INSTALL_DIR}"
 
@@ -401,10 +584,10 @@ done
     "$FINAL_MODE" \
     "$FINAL_PASSWORD"
 
-# 从 .install_secrets.json 或 .env 读取生成的密钥
+# 从 .env 读取生成的密钥
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
 
-# 容器环境自适应 (LXC/Docker/WSL 等跳过不支持的命名空间隔离选项，防止 226/NAMESPACE 启动失败)
+# 容器环境自适应
 SANDBOX_OPTS="NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -423,7 +606,8 @@ if systemd-detect-virt --container >/dev/null 2>&1; then
     SANDBOX_OPTS="# 容器环境自适应 (LXC/Docker/WSL 跳过命名空间沙箱以规避 226/NAMESPACE)"
 fi
 
-cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
+# 写入 systemd 服务
+cat << EOF | run_sudo tee /etc/systemd/system/${SERVICE_NAME}.service >/dev/null
 [Unit]
 Description=OCRProxy - Unified LLM Proxy Gateway
 After=network.target
@@ -431,8 +615,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${SERVICE_NAME}
-Group=${SERVICE_NAME}
+User=${RUN_AS_USER}
+Group=${RUN_AS_USER}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${INSTALL_DIR}/.env
 Environment=MALLOC_ARENA_MAX=2
@@ -452,15 +636,18 @@ ${SANDBOX_OPTS}
 WantedBy=multi-user.target
 EOF
 
-# 权限加固
-chown -R "${SERVICE_NAME}:${SERVICE_NAME}" "${INSTALL_DIR}"
-chmod 600 "${INSTALL_DIR}/.env"
-chmod 700 "${INSTALL_DIR}/config"
-chmod 600 "${INSTALL_DIR}/config/proxy_config.enc" 2>/dev/null || true
+# 注册 CLI 命令与免密重启白名单
+setup_cli_and_sudoers
 
-systemctl daemon-reload
-systemctl enable "${SERVICE_NAME}"
-systemctl restart "${SERVICE_NAME}"
+# 权限加固 (确保运行用户有权读写 config，同时普通用户保留必要访问)
+run_sudo chown -R "${RUN_AS_USER}:${RUN_AS_USER}" "${INSTALL_DIR}"
+run_sudo chmod 600 "${INSTALL_DIR}/.env"
+run_sudo chmod 700 "${INSTALL_DIR}/config"
+run_sudo chmod 600 "${INSTALL_DIR}/config/proxy_config.enc" 2>/dev/null || true
+
+run_sudo systemctl daemon-reload
+run_sudo systemctl enable "${SERVICE_NAME}" 2>/dev/null || true
+run_sudo systemctl restart "${SERVICE_NAME}"
 
 # 健康自检验证
 info "正在检验服务运行健康状态..."
@@ -492,11 +679,10 @@ echo -e "  🔑 ${BOLD}大模型代理接入 (OpenAI 格式)${NC}:"
 echo -e "     端点: ${CYAN}http://${PUBLIC_IP}:${FINAL_PORT}/v1${NC}"
 echo -e "     密钥: ${YELLOW}${PROXY_KEY}${NC}"
 echo ""
-echo -e "  🛠️  ${BOLD}常用运维命令${NC}:"
-echo -e "     查看状态: ${BOLD}systemctl status ${SERVICE_NAME}${NC}"
-echo -e "     查看日志: ${BOLD}journalctl -u ${SERVICE_NAME} -f${NC}"
-echo -e "     重启服务: ${BOLD}systemctl restart ${SERVICE_NAME}${NC}"
-echo -e "     一键升级: ${BOLD}curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh | bash${NC}"
-echo ""
+echo -e "  🛠️  ${BOLD}常用运维命令 (已全局注册)${NC}:"
+echo -e "     查看状态: ${BOLD}ocrproxy status${NC}"
+echo -e "     查看日志: ${BOLD}ocrproxy log${NC}"
+echo -e "     重启服务: ${BOLD}ocrproxy restart${NC}"
+echo -e "     一键升级: ${BOLD}ocrproxy upgrade${NC}"
 echo "=============================================================================="
 echo ""
