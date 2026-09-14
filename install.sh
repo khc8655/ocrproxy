@@ -368,13 +368,16 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     CURRENT_PORT=$(grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "8787")
     info "当前服务监听端口: ${CURRENT_PORT}"
 
+    # 确定服务运行用户 (优先读取已运行 systemd 服务中的 User，兼容不同宿主环境)
+    SERVICE_USER=$(grep -oP '^User=\K\S+' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || echo "${CURRENT_USER}")
+
     # 创建独立配置备份
     BACKUP_DIR="${INSTALL_DIR}/backup/backup_$(date +%Y%m%d_%H%M%S)"
     info "正在备份当前配置与密钥至 ${BACKUP_DIR}..."
-    mkdir -p "${BACKUP_DIR}"
-    cp "${INSTALL_DIR}/.env" "${BACKUP_DIR}/" 2>/dev/null || true
+    run_sudo mkdir -p "${BACKUP_DIR}"
+    run_sudo cp "${INSTALL_DIR}/.env" "${BACKUP_DIR}/" 2>/dev/null || true
     if [[ -d "${INSTALL_DIR}/config" ]]; then
-        cp -r "${INSTALL_DIR}/config" "${BACKUP_DIR}/" 2>/dev/null || true
+        run_sudo cp -r "${INSTALL_DIR}/config" "${BACKUP_DIR}/" 2>/dev/null || true
     fi
     ok "历史配置已完成安全备份"
 
@@ -383,20 +386,14 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     trap 'rm -rf "$TMP_DIR"' EXIT
     prepare_source_code "$TMP_DIR"
 
-    # 确保当前用户有写权限，若原为 root 部署则自动调整给当前用户以实现免 sudo 升级
-    if [[ ! -w "${INSTALL_DIR}" ]]; then
-        info "正在调整应用目录归属以支持当前用户免 sudo 升级..."
-        run_sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "${INSTALL_DIR}" 2>/dev/null || true
-    fi
-
     info "正在平滑同步应用文件..."
-    cp -r "$TMP_DIR/source/vm-app/app" "${INSTALL_DIR}/"
-    cp -r "$TMP_DIR/source/vm-app/static" "${INSTALL_DIR}/"
-    cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/"
-    cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
-    cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
-    cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
-    chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
+    run_sudo cp -r "$TMP_DIR/source/vm-app/app" "${INSTALL_DIR}/"
+    run_sudo cp -r "$TMP_DIR/source/vm-app/static" "${INSTALL_DIR}/"
+    run_sudo cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/"
+    run_sudo cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
+    run_sudo cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
+    run_sudo cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
+    run_sudo chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
     if [[ ! -e "/opt/shared" ]]; then
         run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
     fi
@@ -404,15 +401,18 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     # 保存 GITHUB_TOKEN 到 .env 以便后续 ocrproxy CLI 免输入升级
     if [[ -n "$GITHUB_TOKEN" ]]; then
         if ! grep -q "^GITHUB_TOKEN=" "${INSTALL_DIR}/.env" 2>/dev/null; then
-            echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> "${INSTALL_DIR}/.env"
+            echo "GITHUB_TOKEN=${GITHUB_TOKEN}" | run_sudo tee -a "${INSTALL_DIR}/.env" >/dev/null
         else
-            sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${GITHUB_TOKEN}|" "${INSTALL_DIR}/.env" 2>/dev/null || true
+            run_sudo sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${GITHUB_TOKEN}|" "${INSTALL_DIR}/.env" 2>/dev/null || true
         fi
     fi
 
+    # 统一确保运行用户权限
+    run_sudo chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
+
     # 更新 Python 依赖
     info "正在增量检查并更新 Python 虚拟环境依赖..."
-    "${INSTALL_DIR}/venv/bin/pip" install --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
+    run_sudo "${INSTALL_DIR}/venv/bin/pip" install --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
     ok "Python 依赖更新完成"
 
     # 检查并确保 systemd service 使用 run_server.py
