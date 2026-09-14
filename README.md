@@ -147,25 +147,43 @@ ocrprox (Monorepo)
 
 ### 1. VM 统一版本部署 (`vm-app`)
 
-#### 一键快速安装与升级（极简推荐 ⭐⭐⭐）
+#### 一键快速安装与生命周期管理（极简推荐 ⭐⭐⭐）
 
-在目标服务器（Ubuntu / Debian / Linux）上直接执行单行命令：
+在目标服务器（Ubuntu / Debian / Linux）上**直接以普通用户运行**（无需前置 `sudo`，仅缺失系统底层依赖时按需提示 `sudo`）：
+
 ```bash
-# 全新安装（仅需输入/回车确认端口和密码）或已安装自动平滑升级
+# 首次安装：交互式向导（提示确认端口、密码与运行模式）
+# 已安装机器：自动进入无感平滑升级（配置与密钥 100% 保留备份）
 curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
 ```
 
-> **自动化静默安装示例**：
+> **自动化静默安装示例**（适合脚本/CI/无人值守部署）：
 > ```bash
-> # 指定监听端口与 Web 后台管理员密码，无人值守全自动安装
-> curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w YourAdminPassword123
+> # 指定端口、密码与模式 (-m agent | kb | full)
+> curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w YourAdminPassword123 -m agent -y
 > ```
 
-#### 本地源码安装
+#### 系统已注册全局运维命令 (`ocrproxy` CLI)
+
+安装完成后，系统已自动注册全局便捷运维命令 `/usr/local/bin/ocrproxy`，并配置了细粒度免密运维白名单，**日常维护全程无需输入 root 密码**：
+
+| 命令 | 说明 | 权限说明 |
+| :--- | :--- | :--- |
+| **`ocrproxy upgrade`** | 从 GitHub `main` 分支平滑就地升级，自动更新代码与依赖并自检 | **普通用户直接运行**（免 sudo 密码） |
+| **`ocrproxy status`** | 查看当前 systemd 服务运行状态与端口监听 | 普通用户直接运行 |
+| **`ocrproxy log`** | 实时追踪服务运行日志（等同 `journalctl -u ocrproxy -f`） | 普通用户直接运行（Ctrl+C 退出） |
+| **`ocrproxy restart`** | 优雅平滑重启服务 | **免密重启**（已配置极窄 sudoers 白名单） |
+| **`ocrproxy uninstall`** | 安全卸载服务（支持交互确认并归档备份配置） | 支持 `--keep-config` 保留密钥数据 |
+
+#### GitOps 单向发布纪律说明
+- **全面对齐 EdgeOne**：VM 版本的生命周期管理与 EdgeOne 保持一致，**严禁使用 SSH/SCP 手动登录云主机修改代码**；
+- **唯一代码流向**：本地开发/测试 -> Git 提交并推送至 GitHub 仓库 -> 目标云主机通过 `ocrproxy upgrade` 或网络一键脚本直接拉取最新发布制品更新，杜绝环境漂移。
+
+#### 本地源码安装 (可选)
 ```bash
 git clone https://github.com/khc8655/ocrproxy.git /tmp/ocrprox
 cd /tmp/ocrprox
-sudo bash install.sh
+bash install.sh
 ```
 
 在安装向导中按需选择模式与端口：
@@ -184,7 +202,8 @@ sudo bash install.sh
 1. 配置 `systemd` 服务守护进程（支持 Dual-Stack IPv6/IPv4 `::` 监听）；
 2. 自动配置 `journald` 50MB 磁盘日志配额与 7 天保留策略，彻底防止日志占满磁盘；
 3. 生成加密主密钥并创建通用初始配置文件 `/opt/ocrproxy/config/proxy_config.enc`；
-4. 输出独立的管理员密码（用于 Web 登录）与客户端默认 Key（用于 `/v1/*` 接入）。
+4. 注册 `/usr/local/bin/ocrproxy` CLI 管理命令与 `/etc/sudoers.d/ocrproxy` 免密运维白名单；
+5. 输出独立的管理员密码（用于 Web 登录）与客户端默认 Key（用于 `/v1/*` 接入）。
 
 ---
 
