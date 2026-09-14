@@ -244,10 +244,17 @@ restart_cmd() {
 case "$1" in
     upgrade|update)
         shift
+        TOKEN_ARG=()
+        CURL_AUTH=()
+        SAVED_TOKEN=$(grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || true)
+        if [[ -n "$SAVED_TOKEN" ]]; then
+            TOKEN_ARG=(-t "$SAVED_TOKEN")
+            CURL_AUTH=(-H "Authorization: token ${SAVED_TOKEN}")
+        fi
         echo "================================================="
         echo "  正在从 GitHub (${GITHUB_REPO}/${GITHUB_BRANCH}) 升级 OCRProxy..."
         echo "================================================="
-        curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --upgrade "$@"
+        curl -fsSL "${CURL_AUTH[@]}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
         ;;
     status)
         systemctl status ${SERVICE_NAME}
@@ -392,6 +399,15 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
     if [[ ! -e "/opt/shared" ]]; then
         run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
+    fi
+
+    # 保存 GITHUB_TOKEN 到 .env 以便后续 ocrproxy CLI 免输入升级
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+        if ! grep -q "^GITHUB_TOKEN=" "${INSTALL_DIR}/.env" 2>/dev/null; then
+            echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> "${INSTALL_DIR}/.env"
+        else
+            sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${GITHUB_TOKEN}|" "${INSTALL_DIR}/.env" 2>/dev/null || true
+        fi
     fi
 
     # 更新 Python 依赖
@@ -583,6 +599,11 @@ done
     "$FINAL_PORT" \
     "$FINAL_MODE" \
     "$FINAL_PASSWORD"
+
+# 保存 GITHUB_TOKEN 到 .env (若有)
+if [[ -n "$GITHUB_TOKEN" ]]; then
+    echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> "${INSTALL_DIR}/.env"
+fi
 
 # 从 .env 读取生成的密钥
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
