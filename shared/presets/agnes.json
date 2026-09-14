@@ -1,11 +1,11 @@
 {
   "id": "agnes",
   "name": "Agnes AI (爱格尼斯)",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://apihub.agnes-ai.com/v1",
-  "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",
-  "description": "Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+  "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+  "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
   "features": {
     "native_thinking": false,
     "chat_template_kwargs_thinking": true,
@@ -13,6 +13,11 @@
     "multimodal": true
   },
   "recommended_models": [
+    {
+      "name": "agnes-3.0-flash",
+      "upstream_model": "agnes-3.0-flash",
+      "description": "Agnes 3.0 Flash 全新一代旗舰开源推理模型 (512K 上下文)"
+    },
     {
       "name": "agnes-2.5-flash",
       "upstream_model": "agnes-2.5-flash",
@@ -27,7 +32,8 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "chat_template_kwargs",
-      "enable_key": "enable_thinking"
+      "enable_key": "enable_thinking",
+      "default_thinking": true
     },
     "tools": {
       "normalize_choice_to_string": false,
@@ -38,7 +44,8 @@
       "passthrough_user": true
     },
     "sanitization": {
-      "unsupported_params": []
+      "unsupported_params": [],
+      "max_tokens_ceiling": 65536
     }
   }
 }

@@ -30,7 +30,7 @@
 
 import { getPreset } from './presets/index.js';
 
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 5_000;
 let _cache = { value: null, expires: 0 };
 
 /** Candidate KV binding names.  Exported so the error helpers can list
@@ -70,6 +70,9 @@ function parseAndValidateConfig(raw, source) {
     );
   }
   if (parsed && typeof parsed === 'object' && parsed.config && typeof parsed.config === 'object') {
+    if (parsed._version !== undefined && parsed.config._version === undefined) {
+      parsed.config._version = parsed._version;
+    }
     parsed = parsed.config;
   }
   if (!parsed || typeof parsed !== 'object') {
@@ -113,9 +116,32 @@ export async function saveConfig(incomingConfig, kv) {
   if (validationErr) {
     throw new ConfigError(validationErr);
   }
+
+  // Version checking & optimistic locking
+  let curVersion = 0;
+  if (kv && typeof kv.get === 'function') {
+    try {
+      const raw = await kv.get(CONFIG_KV_KEY, { type: 'text' });
+      if (raw) {
+        const parsed = JSON.parse(sanitizeJsonString(raw));
+        const c = parsed.config || parsed;
+        curVersion = c._version || parsed._version || 0;
+      }
+    } catch (_) {}
+  }
+  const clientVer = incoming._version !== undefined && incoming._version !== null ? Number(incoming._version) : null;
+  if (clientVer !== null && !isNaN(clientVer) && curVersion > 0 && clientVer < curVersion) {
+    const err = new ConfigError(`配置版本冲突：远端当前版本为 v${curVersion}，您提交的版本为 v${clientVer}。请刷新配置重新编辑。`);
+    err.status = 409;
+    err.curVersion = curVersion;
+    throw err;
+  }
+  incoming._version = curVersion + 1;
+
   const wrapped = {
     source: 'kv',
     last_modified: new Date().toISOString(),
+    _version: incoming._version,
     config: incoming,
   };
   if (kv && typeof kv.put === 'function') {
@@ -373,8 +399,9 @@ export function listBindings(config, model) {
   }
 
   if (strategy === 'manual') {
+    const activeKey = _stickyAgentActiveKeys.get(model) || entry.active_key;
     if (activeKey) {
-      const matched = out.filter(b => b.keyLabel === activeKey);
+      const matched = out.filter(b => b.keyLabel === activeKey || `${b.provider}:${b.keyLabel}` === activeKey);
       if (matched.length > 0) return matched;
     }
     return out.slice(0, 1);
@@ -383,8 +410,8 @@ export function listBindings(config, model) {
   return out;
 }
 
-const _stickyAgentIndices = new Map(); // model -> active index
-const _rrAgentIndices = new Map();      // model -> rr index
+const _stickyAgentActiveKeys = new Map(); // model -> active keyLabel
+const _rrAgentIndices = new Map();        // model -> rr index
 
 /**
  * Get ordered candidate bindings based on routing strategy (matches VM scheduler).
@@ -393,16 +420,32 @@ const _rrAgentIndices = new Map();      // model -> rr index
  * @param {Array} bindings - list of valid bindings
  * @param {string} model - requested model name
  * @param {string} [strategy] - routing strategy
+ * @param {string} [configuredActiveKey] - active_key configured in agent_models[model]
  * @returns {Array} ordered bindings
  */
-export function orderBindings(bindings, model, strategy = 'sticky_failover') {
+export function orderBindings(bindings, model, strategy = 'sticky_failover', configuredActiveKey = null) {
   if (!bindings || bindings.length === 0) return [];
   const n = bindings.length;
-  if (n <= 1 || strategy === 'manual') return bindings.slice(0, 1);
+  if (n <= 1) return bindings.slice(0, 1);
+
+  const activeKey = _stickyAgentActiveKeys.get(model) || configuredActiveKey;
+
+  if (strategy === 'manual') {
+    if (activeKey) {
+      const matched = bindings.find(b => b.keyLabel === activeKey || `${b.provider}:${b.keyLabel}` === activeKey);
+      if (matched) return [matched];
+    }
+    return bindings.slice(0, 1);
+  }
 
   if (strategy === 'sticky_failover') {
-    const stickyIdx = (_stickyAgentIndices.get(model) || 0) % n;
-    return bindings.slice(stickyIdx).concat(bindings.slice(0, stickyIdx));
+    if (activeKey) {
+      const idx = bindings.findIndex(b => b.keyLabel === activeKey || `${b.provider}:${b.keyLabel}` === activeKey);
+      if (idx > 0) {
+        return bindings.slice(idx).concat(bindings.slice(0, idx));
+      }
+    }
+    return bindings.slice();
   }
   if (strategy === 'round_robin') {
     const rrIdx = (_rrAgentIndices.get(model) || 0) % n;
@@ -422,16 +465,11 @@ export function orderBindings(bindings, model, strategy = 'sticky_failover') {
 }
 
 /**
- * Record a successful binding index for sticky failover.
+ * Record a successful binding for sticky failover.
  */
 export function recordStickySuccess(model, binding, allBindings) {
-  if (!model || !binding || !allBindings) return;
-  const idx = allBindings.findIndex(
-    (b) => b.provider === binding.provider && b.keyLabel === binding.keyLabel
-  );
-  if (idx >= 0) {
-    _stickyAgentIndices.set(model, idx);
-  }
+  if (!model || !binding) return;
+  _stickyAgentActiveKeys.set(model, binding.keyLabel);
 }
 
 /**

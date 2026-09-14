@@ -1,24 +1,24 @@
 {
   "version": "1.1.0",
-  "updated_at": "2026-09-06T00:56:16.897Z",
+  "updated_at": "2026-09-13T03:50:22.953Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI (爱格尼斯)",
-      "version": "1.1.0",
-      "rule_hash": "12c2664de5e7",
+      "version": "1.2.0",
+      "rule_hash": "aaa5a822991a",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",
-      "description": "Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+      "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+      "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
       "features": {
         "native_thinking": false,
         "chat_template_kwargs_thinking": true,
         "tools": true,
         "multimodal": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 3
     },
     {
       "id": "amd",
@@ -41,19 +41,19 @@
     {
       "id": "bai",
       "name": "B.AI",
-      "version": "1.1.0",
-      "rule_hash": "4af5010bef34",
+      "version": "1.2.0",
+      "rule_hash": "c49042746764",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
       "anthropic_base_url": "https://api.b.ai/v1",
       "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
       "features": {
         "native_thinking": true,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 4
     },
     {
       "id": "deepseek",

@@ -8,6 +8,7 @@
 
 import {
   loadConfig,
+  saveConfig,
   listBindings,
   pickBinding,
   orderBindings,
@@ -25,7 +26,7 @@ import {
   KV_BINDING_CANDIDATES,
   DEFAULT_SETTINGS,
 } from '../edge-functions/lib/config.js';
-import { normaliseForProvider, rescueToolCallsFromText } from '../edge-functions/lib/normalize.js';
+import { normaliseForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream } from '../edge-functions/lib/normalize.js';
 import {
   getCooldown,
   setCooldown,
@@ -462,6 +463,27 @@ test('normalize: agnes reasoning "none" → chat_template_kwargs.enable_thinking
   deepEq(body.chat_template_kwargs, { enable_thinking: false });
 });
 
+test('normalize: agnes default (no reasoning_effort) → chat_template_kwargs.enable_thinking: true', () => {
+  const body = { model: 'agnes-3.0-flash' };
+  normaliseForProvider(body, 'agnes');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { enable_thinking: true });
+});
+
+test('normalize: agnes max_tokens ceiling clamps excessive max_tokens', () => {
+  const body = { model: 'agnes-3.0-flash', max_tokens: 131072, max_completion_tokens: 131072 };
+  normaliseForProvider(body, 'agnes');
+  eq(body.max_tokens, 65536);
+  eq(body.max_completion_tokens, 65536);
+});
+
+test('normalize: agnes in KB mode strictly disables thinking', () => {
+  const body = { model: 'agnes-3.0-flash', reasoning_effort: 'high' };
+  normaliseForProvider(body, 'agnes', { isAgentMode: false });
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.chat_template_kwargs, { enable_thinking: false });
+});
+
 // normaliseForProvider — AMD
 test('normalize: amd default (no reasoning_effort) → defaults to reasoning_effort: "medium"', () => {
   const body = { model: 'DeepSeek-V4-Flash' };
@@ -500,6 +522,37 @@ test('normalize: amd sanitizes messages (developer -> system, multiple systems m
   eq(body.messages[0].content, 'system instruction 1\n\nsystem instruction 2');
   eq(body.messages[1].role, 'user');
   eq(body.messages[2].role, 'assistant');
+});
+
+// normaliseForProvider — B.AI
+test('normalize: bai glm-5.3-flash with "medium" reasoning_effort → remapped to "high"', () => {
+  const body = { model: 'glm-5.3-flash', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'B.AI');
+  eq(body.reasoning_effort, 'high');
+});
+
+test('normalize: bai glm-5.3-flash with "none" reasoning_effort → omitted (avoid 400 rejection)', () => {
+  const body = { model: 'glm-5.3-flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'B.AI');
+  eq(body.reasoning_effort, undefined);
+});
+
+test('normalize: bai glm-5.3-flash default (no reasoning_effort) → defaults to "high"', () => {
+  const body = { model: 'glm-5.3-flash' };
+  normaliseForProvider(body, 'B.AI');
+  eq(body.reasoning_effort, 'high');
+});
+
+test('normalize: bai qwen3.8-flash with "medium" reasoning_effort → preserved untouched', () => {
+  const body = { model: 'qwen3.8-flash', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'B.AI');
+  eq(body.reasoning_effort, 'medium');
+});
+
+test('normalize: bai qwen3.8-flash with "none" reasoning_effort → preserved untouched', () => {
+  const body = { model: 'qwen3.8-flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'B.AI');
+  eq(body.reasoning_effort, 'none');
 });
 
 // normaliseForProvider — SenseNova
@@ -556,6 +609,80 @@ test('rescueToolCallsFromText: extracts <tool_call> xml tag', () => {
   truthy(rescued);
   eq(rescued.length, 1);
   eq(rescued[0].function.name, 'search');
+});
+
+test('applyAdapterRules: thinking_policy "strict_signature" strips unsigned thinking blocks', () => {
+  const body = {
+    model: 'claude-3-7-sonnet',
+    messages: [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: [
+        { type: 'thinking', thinking: 'internal thought without signature' },
+        { type: 'text', text: 'response' }
+      ]}
+    ]
+  };
+  applyAdapterRules(body, { thinking_policy: 'strict_signature' }, true, true);
+  eq(body.messages[1].content.length, 1);
+  eq(body.messages[1].content[0].type, 'text');
+});
+
+test('applyAdapterRules: thinking_policy "strict_signature" preserves signed thinking blocks', () => {
+  const body = {
+    model: 'claude-3-7-sonnet',
+    messages: [
+      { role: 'assistant', content: [
+        { type: 'thinking', thinking: 'internal thought', signature: 'valid_sig_123' },
+        { type: 'text', text: 'response' }
+      ]}
+    ]
+  };
+  applyAdapterRules(body, { thinking_policy: 'strict_signature' }, true, true);
+  eq(body.messages[0].content.length, 2);
+  eq(body.messages[0].content[0].type, 'thinking');
+  eq(body.messages[0].content[0].signature, 'valid_sig_123');
+});
+
+test('applyAdapterRules: thinking_policy "passback_required" preserves unsigned thinking blocks', () => {
+  const body = {
+    model: 'deepseek-v4-flash',
+    messages: [
+      { role: 'assistant', content: [
+        { type: 'thinking', thinking: 'deep thought' },
+        { type: 'text', text: 'response' }
+      ]}
+    ]
+  };
+  applyAdapterRules(body, { thinking_policy: 'passback_required' }, true, true);
+  eq(body.messages[0].content.length, 2);
+  eq(body.messages[0].content[0].thinking, 'deep thought');
+});
+
+test('createKeepAliveStream: emits keep-alive comments on inactivity', async () => {
+  let push;
+  const upstream = new ReadableStream({
+    start(controller) {
+      push = controller;
+    }
+  });
+  const keepAliveStream = createKeepAliveStream(upstream, 30); // 30ms interval
+  const reader = keepAliveStream.getReader();
+  const decoder = new TextDecoder();
+
+  // Wait 75ms for keepalive comments
+  await new Promise(r => setTimeout(r, 75));
+  push.enqueue(new TextEncoder().encode('data: chunk1\n\n'));
+  push.close();
+
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(decoder.decode(value));
+  }
+  const fullText = chunks.join('');
+  truthy(fullText.includes(': keep-alive\n\n'));
+  truthy(fullText.includes('data: chunk1\n\n'));
 });
 
 console.log('\n== cooldowns.js ==');
@@ -648,6 +775,40 @@ test('setCooldown + getCooldown: round-trip', async () => {
   truthy(exp > Date.now() && exp <= Date.now() + 30_100);
 });
 
+test('setCooldown + getCooldown: model isolation prevents cross-model cooldown', async () => {
+  const kv = makeMockKV();
+  await setCooldown('sensenova', '妈妈', 30, kv, 'deepseek-v4-flash');
+  const expModelA = await getCooldown('sensenova', '妈妈', kv, 'deepseek-v4-flash');
+  const expModelB = await getCooldown('sensenova', '妈妈', kv, 'sensenova-6.8-flash-lite');
+  truthy(expModelA > 0);
+  eq(expModelB, 0); // Model B is NOT in cooldown!
+});
+
+test('saveConfig: optimistic locking blocks stale version and increments version', async () => {
+  const kv = makeMockKV();
+  const baseCfg = {
+    providers: { s1: { base_url: 'https://api.test.com', keys: { k1: 'key1' } } },
+    agent_models: { m1: { keys: [{ provider: 's1', key: 'k1' }] } }
+  };
+  const w1 = await saveConfig(baseCfg, kv);
+  eq(w1._version, 1);
+  eq(w1.config._version, 1);
+
+  // Next save with version 1 succeeds and bumps to 2
+  const w2 = await saveConfig({ ...baseCfg, _version: 1 }, kv);
+  eq(w2._version, 2);
+
+  // Concurrent save with stale version 1 should fail with 409
+  let threw = false;
+  try {
+    await saveConfig({ ...baseCfg, _version: 1 }, kv);
+  } catch (e) {
+    threw = true;
+    eq(e.status, 409);
+  }
+  truthy(threw);
+});
+
 test('getCooldown: returns 0 when no entry', async () => {
   const kv = makeMockKV();
   eq(await getCooldown('nope', 'nope', kv), 0);
@@ -699,6 +860,16 @@ test('recordFailure: increments counter up to threshold then triggers breaker', 
   truthy(exp > Date.now() + (COOLDOWN_DURATIONS.CIRCUIT_BREAKER - 5) * 1000);
   // And the counter is reset
   eq(await recordFailure('p', 'k', kv), 1);
+});
+
+test('recordFailure: failure collapse merges burst errors within collapseWindowMs', async () => {
+  const kv = makeMockKV();
+  const c1 = await recordFailure('burst_prov', 'key1', kv, '', 3000);
+  eq(c1, 1);
+  const c2 = await recordFailure('burst_prov', 'key1', kv, '', 3000);
+  eq(c2, 1);
+  const raw = await kv.get('fail_burst_prov_key1');
+  eq(raw, '1');
 });
 
 test('recordSuccess: clears the failure counter', async () => {
@@ -1134,6 +1305,13 @@ test('getPreset: finds bai preset with dual completions and messages support', (
   eq(p.name, 'B.AI');
   eq(p.base_url, 'https://api.b.ai/v1');
   eq(p.anthropic_base_url, 'https://api.b.ai/v1');
+});
+
+test('getPreset: finds bai preset with sanitized id "B.AI"', () => {
+  const p = getPreset('B.AI');
+  truthy(p);
+  eq(p.id, 'bai');
+  eq(p.name, 'B.AI');
 });
 
 test('getPreset: finds google preset with recommended models', () => {

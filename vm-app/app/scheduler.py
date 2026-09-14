@@ -11,7 +11,7 @@ import gc
 import ctypes
 import ctypes.util
 import httpx
-from typing import Optional, Any, Callable, Dict
+from typing import Optional, Any, Callable, Dict, Set
 from dataclasses import dataclass
 
 from . import stats
@@ -108,13 +108,63 @@ class GlobalOverloadError(Exception):
 # Module-level in-memory state (persists across requests on the same instance)
 _cooldown_until: Dict[str, float] = {}
 _consecutive_failures: Dict[str, int] = {}
+_last_failure_at: Dict[str, float] = {}
+_quota_exhausted_cands: Set[str] = set()
 _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
 _sem_lock = asyncio.Lock()
 
+# Failure collapse window: merges burst disconnects/5xx within 3 seconds into a single failure event
+FAILURE_COLLAPSE_WINDOW_SEC = 3.0
+
+# Temporary rate-limiting keywords (TPM, RPM, QPS, rate limits, sliding window limits)
+# These represent transient restrictions that auto-recover in seconds/minutes, NOT hard account arrears.
+RATE_LIMIT_KEYWORDS = (
+    "tpm", "rpm", "qps", "rate limit", "rate_limit", "ratelimit",
+    "requests per minute", "tokens per minute", "tokens per day",
+    "per minute", "per-minute", "per second", "per-second",
+    "too many requests", "concurrency", "concurrent", "429001",
+    "traffic control", "slow down", "try again later"
+)
+
+# Hard account-level quota exhaustion keywords (arrears, balance 0, free quota depleted, credit exhausted)
+# Note: standalone 'exhausted' or 'quota' are deliberately excluded to avoid false positives with TPM limits.
+HARD_QUOTA_KEYWORDS = (
+    "insufficient_quota", "allocated quota exceeded", "exceeded your current quota",
+    "credit balance is too low", "insufficient balance", "balance is insufficient",
+    "balance not enough", "no balance", "account arrears", "account abnormal or account balance",
+    "free usage limit exceeded", "daily free usage limit", "freeusagelimit",
+    "free quota has been exhausted", "free quota exhausted", "free allowance exhausted",
+    "free quota is exhausted", "quota has been exhausted", "allowance exhausted",
+    "欠费", "余额不足", "配额不足", "额度不足", "账户欠费", "免费额度用尽", "免费额度已用完",
+    "超出总额度", "超出配额限制"
+)
+QUOTA_EXHAUSTED_KEYWORDS = HARD_QUOTA_KEYWORDS
+
+def get_active_cooldowns() -> Dict[str, dict]:
+    """Return candidates currently cooling down or quota-exhausted."""
+    now = time.time()
+    res = {}
+    for cand_id, expiry in list(_cooldown_until.items()):
+        if expiry > now:
+            res[cand_id] = {
+                "cooling": True,
+                "is_quota": cand_id in _quota_exhausted_cands,
+            }
+    return res
+
 # Key routing state
-_sticky_agent_indices: Dict[str, int] = {}  # model_name -> active key index for sticky failover
-_rr_kb_indices: Dict[str, int] = {}          # model_type -> round robin cursor for KB
+_sticky_agent_active_keys: Dict[str, str] = {}  # model_name -> active key label
+_rr_kb_indices: Dict[str, int] = {}             # model_type -> round robin cursor for KB
+
+
+def get_sticky_agent_active_key(model_name: str) -> Optional[str]:
+    return _sticky_agent_active_keys.get(model_name)
+
+
+def set_sticky_agent_active_key(model_name: str, key_label: str):
+    _sticky_agent_active_keys[model_name] = key_label
+
 
 # Config-version tracking: entries in the dicts above are pruned whenever the
 # encrypted config changes on disk (removed keys/providers leave no residue,
@@ -137,6 +187,103 @@ class ScheduleResult:
     stream_resp: Any = None
     routed_via: str = ""
     fallback_attempts: int = 0
+
+
+@dataclass
+class FailureEvaluation:
+    cooldown_sec: float
+    is_quota: bool
+    mark_provider_down: bool
+    circuit_breaker_triggered: bool
+
+
+def evaluate_candidate_failure(
+    status_code: int,
+    is_quota: bool,
+    is_key_issue_400: bool,
+    category: str,
+    consecutive_5xx_count: int,
+    config_params: dict,
+) -> FailureEvaluation:
+    """
+    Decoupled failure evaluation policy.
+    Distinguishes Agent mode (no artificial freeze on transient 5xx/429; failover freely within budget)
+    from KB mode (strict batch protection, circuit breakers, rate limit cool down).
+    """
+    is_agent = (category == "agent")
+    cooldown_quota_sec = config_params.get("cooldown_quota_sec", 1800.0)
+    cooldown_tpm_sec = config_params.get("cooldown_tpm_sec", 15.0)
+    cooldown_403_sec = config_params.get("cooldown_403_sec", 600.0)
+    cooldown_5xx_sec = config_params.get("cooldown_5xx_sec", 30.0)
+    circuit_threshold = config_params.get("circuit_break_threshold", 3)
+    circuit_cooldown_sec = config_params.get("circuit_cooldown_sec", 300.0)
+
+    # 1. Hard Quota / Arrears: applies to both KB and Agent (account has no money/credits)
+    if is_quota:
+        return FailureEvaluation(
+            cooldown_sec=cooldown_quota_sec,
+            is_quota=True,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+
+    # 2. Agent Mode: Only hard quota or auth failure causes long cooldown. Transient errors do NOT freeze the key.
+    if is_agent:
+        if status_code in (401, 403):
+            # Auth failure (bad key token)
+            return FailureEvaluation(
+                cooldown_sec=cooldown_403_sec,
+                is_quota=False,
+                mark_provider_down=False,
+                circuit_breaker_triggered=False,
+            )
+        # Transient 429 TPM, 5xx, or network timeouts: 0s cooldown (do not lock out from future retries)
+        return FailureEvaluation(
+            cooldown_sec=0.0,
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+
+    # 3. KB Mode (High-concurrency batch ingestion protection)
+    if status_code == 429:
+        return FailureEvaluation(
+            cooldown_sec=cooldown_tpm_sec,
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+    elif status_code in (401, 403):
+        return FailureEvaluation(
+            cooldown_sec=cooldown_403_sec,
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+    elif status_code == 400 and is_key_issue_400:
+        return FailureEvaluation(
+            cooldown_sec=10.0,
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+    elif status_code >= 500:
+        is_circuit = consecutive_5xx_count >= circuit_threshold
+        cd = max(circuit_cooldown_sec, 1800.0) if is_circuit else cooldown_5xx_sec
+        mark_down = status_code in (502, 503, 504)
+        return FailureEvaluation(
+            cooldown_sec=cd,
+            is_quota=False,
+            mark_provider_down=mark_down,
+            circuit_breaker_triggered=is_circuit,
+        )
+
+    return FailureEvaluation(
+        cooldown_sec=0.0,
+        is_quota=False,
+        mark_provider_down=False,
+        circuit_breaker_triggered=False,
+    )
 
 
 def get_candidate_id(cand: dict) -> str:
@@ -236,14 +383,19 @@ def _prune_runtime_state(config: dict):
                 valid_key_ids.add(f"{cand['provider']}:{cand['key']}")
             except KeyError:
                 continue
-    for state in (_cooldown_until, _consecutive_failures, _latency_history):
+    valid_agent_models = set(config.get("agent_models", {}).keys())
+    for state in (_cooldown_until, _consecutive_failures, _last_failure_at, _latency_history):
         for k in list(state.keys()):
             if k not in valid_cand_ids:
                 del state[k]
+    _quota_exhausted_cands.intersection_update(valid_cand_ids)
     for k in list(_semaphores.keys()):
         if k not in valid_key_ids:
             del _semaphores[k]
             _semaphore_limits.pop(k, None)
+    for m in list(_sticky_agent_active_keys.keys()):
+        if m not in valid_agent_models:
+            del _sticky_agent_active_keys[m]
     _last_config_version = get_config_version()
 
 
@@ -257,10 +409,12 @@ def reset_runtime_state():
     ops action."""
     _cooldown_until.clear()
     _consecutive_failures.clear()
+    _last_failure_at.clear()
+    _quota_exhausted_cands.clear()
     _latency_history.clear()
     _semaphores.clear()
     _semaphore_limits.clear()
-    _sticky_agent_indices.clear()
+    _sticky_agent_active_keys.clear()
     _rr_kb_indices.clear()
 
 
@@ -319,10 +473,31 @@ async def schedule(
     ordered_items = list(enumerate(candidates))  # (orig_idx, cand)
 
     if strategy == "manual":
-        ordered_items = ordered_items[:1]
+        # In manual mode: strictly pin to active_key, no failover
+        active_key = (
+            _sticky_agent_active_keys.get(req_model_name)
+            or config.get("agent_models", {}).get(req_model_name, {}).get("active_key")
+            or stats.get_agent_active_key(req_model_name)
+        )
+        if active_key:
+            matched = [item for item in ordered_items if item[1]["key"] == active_key or f"{item[1]['provider']}:{item[1]['key']}" == active_key]
+            ordered_items = matched[:1] if matched else ordered_items[:1]
+        else:
+            ordered_items = ordered_items[:1]
     elif strategy == "sticky_failover":
-        sticky_idx = _sticky_agent_indices.get(req_model_name, 0) % num_cands
-        ordered_items = ordered_items[sticky_idx:] + ordered_items[:sticky_idx]
+        active_key = (
+            _sticky_agent_active_keys.get(req_model_name)
+            or config.get("agent_models", {}).get(req_model_name, {}).get("active_key")
+            or stats.get_agent_active_key(req_model_name)
+        )
+        if active_key:
+            match_idx = -1
+            for idx, (_, cand) in enumerate(ordered_items):
+                if cand["key"] == active_key or f"{cand['provider']}:{cand['key']}" == active_key:
+                    match_idx = idx
+                    break
+            if match_idx > 0:
+                ordered_items = ordered_items[match_idx:] + ordered_items[:match_idx]
     elif strategy == "round_robin":
         rr_idx = _rr_kb_indices.get(model_type, 0) % num_cands
         _rr_kb_indices[model_type] = (rr_idx + 1) % num_cands
@@ -335,6 +510,17 @@ async def schedule(
     else:  # "priority_fallback"
         pass  # keep original configured order
 
+    # Candidate deduplication: eliminate identical candidates in the list so duplicate configs do not burn retries
+    seen_cand_ids = set()
+    deduped_items = []
+    for orig_idx, cand in ordered_items:
+        cid = get_candidate_id(cand)
+        if cid in seen_cand_ids:
+            continue
+        seen_cand_ids.add(cid)
+        deduped_items.append((orig_idx, cand))
+    ordered_items = deduped_items
+
     providers = config.get("providers", {})
 
     # Load settings from config with safe fallback and clamping
@@ -344,21 +530,21 @@ async def schedule(
         upstream_timeout_sec = 15.0
 
     try:
-        total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 45))))
+        total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 60))))
     except (ValueError, TypeError):
-        total_budget_sec = 45.0
+        total_budget_sec = 60.0
 
     # Max candidate retries per request
     try:
-        max_retries = max(1, int(config.get("max_retries", config.get("schedule_total_budget_count", 3))))
+        max_retries = max(1, int(config.get("max_retries", config.get("schedule_total_budget_count", 5))))
     except (ValueError, TypeError):
-        max_retries = 3
+        max_retries = 5
 
     # Max attempts per individual provider
     try:
-        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 2)))
+        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 6)))
     except (ValueError, TypeError):
-        max_attempts_per_provider = 2
+        max_attempts_per_provider = 6
 
     fast_failover_provider_down = bool(config.get("fast_failover_provider_down", True))
     provider_attempts: Dict[str, int] = {}
@@ -372,17 +558,17 @@ async def schedule(
     except (ValueError, TypeError):
         concurrency_limit = 5
 
-    # 429 TPM Rate Limit Cooldown (default 60s)
+    # 429 TPM Rate Limit Cooldown (default 15s)
     try:
-        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 60))))
+        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 15))))
     except (ValueError, TypeError):
-        cooldown_tpm_sec = 60.0
+        cooldown_tpm_sec = 15.0
 
-    # 429/403 Quota Exhaustion Cooldown (default 600s)
+    # 429/403 Quota Exhaustion Cooldown (default 1800s / 30m)
     try:
-        cooldown_quota_sec = max(1.0, float(config.get("cooldown_quota_sec", config.get("cooldown_403_sec", 600))))
+        cooldown_quota_sec = max(1.0, float(config.get("cooldown_quota_sec", 1800.0)))
     except (ValueError, TypeError):
-        cooldown_quota_sec = 600.0
+        cooldown_quota_sec = 1800.0
 
     # 403 Auth Failure Cooldown (default 600s)
     try:
@@ -408,6 +594,15 @@ async def schedule(
         circuit_cooldown = max(1.0, float(config.get("circuit_cooldown_sec", 300)))
     except (ValueError, TypeError):
         circuit_cooldown = 300.0
+
+    cooldown_cfg = {
+        "cooldown_quota_sec": cooldown_quota_sec,
+        "cooldown_tpm_sec": cooldown_tpm_sec,
+        "cooldown_403_sec": cooldown_403_sec,
+        "cooldown_5xx_sec": cooldown_5xx_sec,
+        "circuit_break_threshold": circuit_break_threshold,
+        "circuit_cooldown_sec": circuit_cooldown,
+    }
 
     start_time = time.time()
     errors = []
@@ -438,6 +633,7 @@ async def schedule(
             cand_id = get_candidate_id(cand)
             provider_name = cand["provider"]
             key_label = cand["key"]
+            cand_model_name = cand.get("model")
 
             # Provider down fast failover
             if fast_failover_provider_down and provider_name in down_providers:
@@ -530,6 +726,7 @@ async def schedule(
                         # instead of handing the client a dead stream.
                         first_chunk = b""
                         remainder = None
+                        cand_model_name = cand.get("model")
                         if is_stream:
                             first_chunk, remainder, peek_err = await _peek_first_chunk(resp)
                             if not first_chunk:
@@ -541,13 +738,16 @@ async def schedule(
                                 cand_latency = time.time() - cand_start
                                 stats.record(model_type, 502, cand_latency,
                                              provider=provider_name, key=key_label, error_msg=err_msg,
-                                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                             cand_model=cand_model_name)
                                 # Short cooldown — likely a transient provider glitch
                                 _cooldown_until[cand_id] = time.time() + 5.0
                                 continue
 
                         _consecutive_failures[cand_id] = 0
+                        _last_failure_at.pop(cand_id, None)
                         _cooldown_until[cand_id] = 0.0
+                        _quota_exhausted_cands.discard(cand_id)
 
                         routed_via = f"{provider_name}/{key_label}"
                         cand_latency = time.time() - cand_start
@@ -557,11 +757,13 @@ async def schedule(
 
                         stats.record(model_type, status_code, cand_latency,
                                      provider=provider_name, key=key_label,
-                                     category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                     category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                     cand_model=cand_model_name, is_quota=False)
 
-                        # Update sticky cursor for Agent mode if sticky_failover strategy is active
-                        if category == "agent" and strategy == "sticky_failover":
-                            _sticky_agent_indices[req_model_name] = orig_idx
+                        # Update sticky active key for Agent mode
+                        if category == "agent":
+                            _sticky_agent_active_keys[req_model_name] = key_label
+                            stats.set_agent_active_key(req_model_name, key_label)
 
                         if is_stream:
                             if handle_stream:
@@ -613,124 +815,117 @@ async def schedule(
                     if is_stream:
                         await resp.aread()
 
-                    # Capture upstream error body for forwarding to client
+                    raw_bytes = resp.content
                     try:
-                        last_err_body = resp.text
+                        err_body_text = raw_bytes.decode("utf-8", errors="replace")
                     except Exception:
-                        last_err_body = None
-                    last_status_code = status_code
+                        err_body_text = ""
 
-                    # Close the response to release the connection back to the
-                    # pool immediately — we no longer need it after capturing
-                    # the error body above.
+                    last_status_code = status_code
+                    last_err_body = err_body_text
+
+                    # Close response immediately to return socket to pool
                     await resp.aclose()
 
-                    # Build a detailed error message including the upstream response body
-                    upstream_detail = ""
-                    if last_err_body:
-                        # Truncate to keep logs readable but include enough context
-                        upstream_detail = f" | upstream: {last_err_body[:500]}"
-                    err_msg = f"{cand_id} failed with HTTP {status_code}{upstream_detail}"
-                    logger.error(err_msg)
-                    errors.append(err_msg)
+                    body_lower = (err_body_text or "").lower()
+                    _has_rate_limit_kw = bool(body_lower and any(w in body_lower for w in RATE_LIMIT_KEYWORDS))
+                    _has_hard_quota_kw = bool(body_lower and any(w in body_lower for w in HARD_QUOTA_KEYWORDS))
 
-                    cand_latency = time.time() - cand_start
-                    stats.record(model_type, status_code, cand_latency,
-                                 provider=provider_name, key=key_label, error_msg=err_msg,
-                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                    # Hard quota/arrears requires explicit quota keywords and NO rate-limit indicators.
+                    _is_quota = bool(
+                        status_code in (429, 401, 402, 403)
+                        and _has_hard_quota_kw
+                        and not _has_rate_limit_kw
+                    )
 
-                    # In manual mode: transparently raise AllCandidatesFailedError immediately (no failover, no cooldown)
-                    if strategy == "manual":
-                        raise AllCandidatesFailedError(
-                            err_msg,
-                            last_status_code=status_code,
-                            last_response_body=last_err_body,
-                        )
-
-                    # --- Classify 400s BEFORE the early-exit check below ---
+                    # Distinguish 400 Bad Request:
                     _400_is_key_issue = False
-                    _is_content_moderation = False
-                    if status_code == 400 and last_err_body:
-                        body_lower = last_err_body.lower()
-                        # Key/account/subscription problems that repeat across requests
+                    if status_code == 400 and err_body_text:
                         if any(kw in body_lower for kw in [
                             "subscription", "no active", "api key", "invalid_key",
                             "unauthorized", "account", "billing", "payment", "plan",
                         ]):
                             _400_is_key_issue = True
-                        elif any(kw in body_lower for kw in [
-                            "content_filter", "content management", "content moderation",
-                            "data_inspection", "moderation", "sensitive", "inappropriate",
-                            "pornograph", "审核", "敏感", "违规",
-                        ]):
-                            _is_content_moderation = True
 
-                    # --- Early exit for request-level 400s ---
-                    # If the upstream rejected the request due to client content or format/parameters
-                    # (and NOT a key/account issue), trying other candidates on the same provider with
-                    # the exact same payload is futile. Short-circuit immediately to return 400 without retry.
-                    if status_code == 400 and not _400_is_key_issue:
-                        if _is_content_moderation:
-                            logger.warning(f"Content moderation 400 from {cand_id} — skipping remaining candidates")
-                            errors.append(f"{cand_id}: content rejected by upstream (not retrying other candidates)")
+                    # 1. Non-retriable errors: abort immediately without failover
+                    # 400 (Client parameter error), 404 (Model not found / route invalid), 422 (Validation error)
+                    if (status_code == 400 and not _400_is_key_issue) or status_code in (404, 422):
+                        logger.warning(
+                            f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {err_body_text[:120]}"
+                        )
+                        raise AllCandidatesFailedError(
+                            f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {err_body_text[:200]}",
+                            last_status_code=status_code,
+                            last_response_body=err_body_text,
+                        )
+
+                    # 2. Manual routing strategy: no failover, raise immediately
+                    if strategy == "manual":
+                        raise AllCandidatesFailedError(
+                            f"Candidate {cand_id} failed with HTTP {status_code}: {err_body_text[:200]}",
+                            last_status_code=status_code,
+                            last_response_body=err_body_text,
+                        )
+
+                    cand_latency = time.time() - cand_start
+                    err_msg = f"{cand_id} returned HTTP {status_code}: {err_body_text[:120]}"
+                    logger.warning(f"Candidate {cand_id} failed with HTTP {status_code} ({cand_latency:.2f}s): {err_body_text[:80]}")
+                    errors.append(err_msg)
+
+                    stats.record(model_type, status_code, cand_latency,
+                                 provider=provider_name, key=key_label, error_msg=err_msg,
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                 cand_model=cand_model_name, is_quota=_is_quota)
+
+                    # Record failure as elevated latency to guide smart ordering
+                    _record_latency(cand_id, max(cand_latency, 5.0))
+
+                    # 3. Dynamic Cooldown & Failure Accounting
+                    is_agent = (category == "agent")
+
+                    if status_code >= 500:
+                        now = time.time()
+                        last_fail = _last_failure_at.get(cand_id, 0.0)
+                        _last_failure_at[cand_id] = now
+                        if (now - last_fail) >= FAILURE_COLLAPSE_WINDOW_SEC:
+                            cf = _consecutive_failures.get(cand_id, 0) + 1
+                            _consecutive_failures[cand_id] = cf
                         else:
-                            logger.warning(f"Request-level 400 from {cand_id} — returning immediately without retry: {upstream_detail}")
-                            errors.append(f"{cand_id}: request rejected by upstream ({last_err_body[:200] if last_err_body else '400 Bad Request'})")
-                        _consecutive_failures[cand_id] = 0
-                        break
-
-                    # --- Cooldown & Circuit Breaker Logic (Decoupled) ---
-                    # Policy:
-                    # 1. 429 Rate Limit (TPM/RPM): 10s cooldown, DO NOT increment circuit breaker.
-                    # 2. 429/403 Quota Exhausted: 600s cooldown, DO NOT increment circuit breaker.
-                    # 3. 401/403 Auth Failure: 600s cooldown, DO NOT increment circuit breaker.
-                    # 4. 400 (Key issue): 10s cooldown, DO NOT increment circuit breaker.
-                    # 5. 5xx Server Error: 30s cooldown, INCREMENT circuit breaker (>=3 triggers 300s).
-                    # 6. 404/422 (Request level): No cooldown.
-
-                    if status_code == 429:
-                        _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
-                            "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
-                        ]))
-                        cd_sec = cooldown_quota_sec if _is_quota else cooldown_tpm_sec
-                        _consecutive_failures[cand_id] = 0  # Rate limits do not count as server crash
-                        _cooldown_until[cand_id] = time.time() + cd_sec
-                        logger.info(f"429 on {cand_id} ({'Quota' if _is_quota else 'TPM/RPM'} limit) — cool down {cd_sec}s")
-
-                    elif status_code in (401, 403):
-                        _is_quota = bool(last_err_body and any(w in last_err_body.lower() for w in [
-                            "quota", "allowance", "exhausted", "credit", "balance", "insufficient_quota"
-                        ]))
-                        cd_sec = cooldown_quota_sec if _is_quota else cooldown_403_sec
-                        _consecutive_failures[cand_id] = 0
-                        _cooldown_until[cand_id] = time.time() + cd_sec
-
-                    elif status_code == 400 and _400_is_key_issue:
-                        _consecutive_failures[cand_id] = 0
-                        _cooldown_until[cand_id] = time.time() + 10.0
-
-                    elif status_code >= 500:
-                        cf = _consecutive_failures.get(cand_id, 0) + 1
-                        _consecutive_failures[cand_id] = cf
-                        cd_sec = cooldown_5xx_sec
-
-                        # Circuit breaker escalation only for 5xx server failures
-                        if cf >= circuit_break_threshold:
-                            cd_sec = max(cd_sec, circuit_cooldown)
-                            logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {cd_sec}s.")
-
-                        _cooldown_until[cand_id] = time.time() + cd_sec
-
-                        if fast_failover_provider_down and status_code in (502, 503, 504):
-                            down_providers.add(provider_name)
-                            logger.warning(f"Fast failover: provider {provider_name} returned {status_code}, skipping remaining keys for this request")
-
+                            cf = _consecutive_failures.get(cand_id, 1)
+                            logger.info(f"Collapsed burst 5xx failure for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
                     else:
-                        # Non-cooldown cases (404/422 etc.): don't penalise key.
+                        cf = 0
                         _consecutive_failures[cand_id] = 0
+
+                    eval_res = evaluate_candidate_failure(
+                        status_code=status_code,
+                        is_quota=_is_quota,
+                        is_key_issue_400=_400_is_key_issue,
+                        category=category,
+                        consecutive_5xx_count=cf,
+                        config_params=cooldown_cfg,
+                    )
+
+                    if eval_res.cooldown_sec > 0:
+                        _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
+                    else:
+                        _cooldown_until.pop(cand_id, None)
+
+                    if eval_res.is_quota:
+                        _quota_exhausted_cands.add(cand_id)
+                        logger.warning(f"{status_code} Quota limit on {cand_id} (欠费/超额) — cool down {eval_res.cooldown_sec:.0f}s")
+                    else:
+                        _quota_exhausted_cands.discard(cand_id)
+
+                    if eval_res.circuit_breaker_triggered:
+                        logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {eval_res.cooldown_sec:.0f}s.")
+
+                    if eval_res.mark_provider_down and fast_failover_provider_down and not is_agent:
+                        down_providers.add(provider_name)
+                        logger.warning(f"Fast failover: provider {provider_name} returned {status_code}, skipping remaining keys for this request")
 
                 except httpx.ReadTimeout as e:
-                    if fast_failover_provider_down:
+                    if fast_failover_provider_down and category != "agent":
                         down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
@@ -738,12 +933,10 @@ async def schedule(
                             last_status_code=504,
                             last_response_body=None,
                         )
-                    # ReadTimeout = model is slow (e.g. reasoning models), not a
-                    # key problem.  Use a very short cooldown and do NOT count
-                    # toward the circuit breaker so the key stays available.
-                    _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
-                    # Record the timeout as latency so this candidate gets
-                    # deprioritised in smart ordering.
+                    if category != "agent":
+                        _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
+                    else:
+                        _cooldown_until.pop(cand_id, None)
                     _record_latency(cand_id, upstream_timeout_sec)
                     err_msg = (f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s "
                                f"(model may be slow, not penalised)")
@@ -751,14 +944,13 @@ async def schedule(
                     errors.append(err_msg)
 
                     cand_latency = time.time() - cand_start
-                    # 599 = pseudo-code for client-side read timeout: keeps the 5xx
-                    # bucket in stats but stays distinguishable from real upstream 5xx.
                     stats.record(model_type, 599, cand_latency,
                                  provider=provider_name, key=key_label, error_msg=err_msg,
-                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                 cand_model=cand.get("model"))
 
                 except httpx.ConnectTimeout as e:
-                    if fast_failover_provider_down:
+                    if fast_failover_provider_down and category != "agent":
                         down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
@@ -766,19 +958,20 @@ async def schedule(
                             last_status_code=502,
                             last_response_body=None,
                         )
-                    # ConnectTimeout = network issue, short cooldown
-                    _cooldown_until[cand_id] = time.time() + 5.0
-                    # Record a high latency to deprioritise this candidate
+                    if category != "agent":
+                        _cooldown_until[cand_id] = time.time() + 5.0
+                    else:
+                        _cooldown_until.pop(cand_id, None)
                     _record_latency(cand_id, 10.0)
                     err_msg = f"{cand_id} encountered ConnectTimeout: {str(e)}"
                     logger.error(err_msg)
                     errors.append(err_msg)
 
                     cand_latency = time.time() - cand_start
-                    # 598 = pseudo-code for connect timeout (network issue, not upstream 5xx)
                     stats.record(model_type, 598, cand_latency,
                                  provider=provider_name, key=key_label, error_msg=err_msg,
-                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                 cand_model=cand.get("model"))
 
                 except AllCandidatesFailedError:
                     raise
@@ -790,15 +983,29 @@ async def schedule(
                             last_status_code=500,
                             last_response_body=None,
                         )
-                    cf = _consecutive_failures.get(cand_id, 0) + 1
-                    _consecutive_failures[cand_id] = cf
+                    now = time.time()
+                    last_fail = _last_failure_at.get(cand_id, 0.0)
+                    _last_failure_at[cand_id] = now
+                    if (now - last_fail) >= FAILURE_COLLAPSE_WINDOW_SEC:
+                        cf = _consecutive_failures.get(cand_id, 0) + 1
+                        _consecutive_failures[cand_id] = cf
+                    else:
+                        cf = _consecutive_failures.get(cand_id, 1)
+                        logger.info(f"Collapsed burst exception for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
 
-                    cd_sec = cooldown_5xx_sec
-                    if cf >= circuit_break_threshold:
-                        cd_sec = max(cd_sec, circuit_cooldown)
-                        logger.warning(f"Circuit breaker triggered for {cand_id}. Cool down for {cd_sec}s.")
+                    eval_res = evaluate_candidate_failure(
+                        status_code=500,
+                        is_quota=False,
+                        is_key_issue_400=False,
+                        category=category,
+                        consecutive_5xx_count=cf,
+                        config_params=cooldown_cfg,
+                    )
+                    if eval_res.cooldown_sec > 0:
+                        _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
+                    else:
+                        _cooldown_until.pop(cand_id, None)
 
-                    _cooldown_until[cand_id] = time.time() + cd_sec
                     err_msg = f"{cand_id} encountered {type(e).__name__}: {str(e)}"
                     logger.error(err_msg)
                     errors.append(err_msg)
@@ -806,7 +1013,8 @@ async def schedule(
                     cand_latency = time.time() - cand_start
                     stats.record(model_type, 500, cand_latency,
                                  provider=provider_name, key=key_label, error_msg=err_msg,
-                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1))
+                                 category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                 cand_model=cand.get("model"))
 
                 finally:
                     if global_sem_acquired:

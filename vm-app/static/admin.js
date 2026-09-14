@@ -59,12 +59,13 @@ const FALLBACK_PRESETS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
-    version: '1.1.0',
+    version: '1.2.0',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
-    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)',
+    description: 'Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型 (512K 上下文)',
     recommended_models: [
-      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true },
+      { name: 'agnes-3.0-flash', upstream: 'agnes-3.0-flash', desc: 'Agnes 3.0 Flash 全新一代旗舰开源推理模型 (512K 上下文)', checked: true },
+      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: false },
       { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false },
     ]
   },
@@ -509,20 +510,20 @@ function renderAgentModels() {
 
       const setActiveBtn = isActive
         ? `<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>`
-        : `<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="切换使用该 Key" style="font-size:11px;padding:2px 8px;">切</button>`;
+        : `<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;">主</button>`;
 
       keysRowsHtml += `
         <div class="provider-row" style="padding:10px 16px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <span class="badge badge-neutral">#${idx+1}</span>
+            <input type="number" min="1" max="${keys.length}" value="${idx+1}" 
+                   style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+                   onchange="reorderModelKeyBinding('${m}', ${idx}, this.value)" title="修改数字直接调整顺序" />
             <span style="font-weight:600;">${b.provider}</span>
             <span class="key-chip">${b.key}</span>
             ${latBadge}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             ${setActiveBtn}
-            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('${m}', ${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="上移">↑</button>
-            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('${m}', ${idx}, 1)" ${idx === keys.length - 1 ? 'disabled' : ''} title="下移">↓</button>
             <button class="btn btn-ghost btn-sm" onclick="testModelKey('${m}', '${b.provider}', '${b.key}')">探活</button>
             <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('${m}', ${idx})">移除</button>
           </div>
@@ -1490,6 +1491,27 @@ async function removeModelKeyBinding(modelName, index) {
   }
 }
 
+async function reorderModelKeyBinding(modelName, fromIdx, inputVal) {
+  if (!cfg.agent_models || !cfg.agent_models[modelName]) return;
+  const list = cfg.agent_models[modelName].keys || [];
+  let targetPos = parseInt(inputVal, 10);
+  if (isNaN(targetPos)) {
+    renderAgentModels();
+    return;
+  }
+  let targetIdx = Math.max(0, Math.min(list.length - 1, targetPos - 1));
+  if (targetIdx === fromIdx) {
+    renderAgentModels();
+    return;
+  }
+  const [item] = list.splice(fromIdx, 1);
+  list.splice(targetIdx, 0, item);
+  cfg.agent_models[modelName].keys = list;
+  renderAgentModels();
+  await persistConfig();
+  toast('已调整 Key 优先级', 'ok');
+}
+
 async function moveModelKeyBinding(modelName, index, dir) {
   if (!cfg.agent_models || !cfg.agent_models[modelName]) return;
   const list = cfg.agent_models[modelName].keys || [];
@@ -1522,7 +1544,7 @@ async function setActiveAgentKey(modelName, keyLabel) {
   cfg.agent_models[modelName].active_key = keyLabel;
   renderAgentModels();
   await persistConfig();
-  toast(`已将模型 ${modelName} 切换至 Key: [${keyLabel}]`, 'ok');
+  toast(`已将模型 ${modelName} 设置为主力 Key: [${keyLabel}]`, 'ok');
 }
 
 

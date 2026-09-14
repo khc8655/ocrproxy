@@ -48,7 +48,8 @@ def _get_empty_stats() -> dict:
             "4xx": 0,
             "5xx": 0,
             "fallback_count": 0,
-            "models": {}
+            "models": {},
+            "active_keys": {}
         },
         "kb": {
             "chat": _empty_metric_stats(),
@@ -78,6 +79,7 @@ def get_stats() -> dict:
 
         agent_copy = dict(_stats["agent"])
         agent_copy["models"] = agent_models_copy
+        agent_copy["active_keys"] = dict(_stats["agent"].get("active_keys", {}))
 
         kb_copy = {k: dict(v) for k, v in _stats["kb"].items()}
 
@@ -94,6 +96,20 @@ def get_stats() -> dict:
         }
 
 
+def get_agent_active_key(model_name: str) -> Optional[str]:
+    """Get the currently active runtime key for an agent model."""
+    with _lock:
+        return _stats["agent"].get("active_keys", {}).get(model_name)
+
+
+def set_agent_active_key(model_name: str, key_label: str):
+    """Set the currently active runtime key for an agent model."""
+    with _lock:
+        if "active_keys" not in _stats["agent"]:
+            _stats["agent"]["active_keys"] = {}
+        _stats["agent"]["active_keys"][model_name] = key_label
+
+
 def record_agent(
     model_name: str,
     status_code: int,
@@ -101,7 +117,8 @@ def record_agent(
     provider: Optional[str] = None,
     key: Optional[str] = None,
     is_fallback: bool = False,
-    error_msg: Optional[str] = None
+    error_msg: Optional[str] = None,
+    is_quota: bool = False
 ):
     """Record an Agent request result."""
     with _lock:
@@ -136,6 +153,10 @@ def record_agent(
 
         if code == 200:
             m_stats["success"] += 1
+            if key:
+                if "active_keys" not in ag:
+                    ag["active_keys"] = {}
+                ag["active_keys"][model_name] = key
         elif code == 429:
             m_stats["429"] += 1
         elif code == 403:
@@ -156,7 +177,8 @@ def record_agent(
                 "latency_ms": lat_ms,
                 "category": "agent",
                 "model": model_name,
-                "time": now_ms
+                "time": now_ms,
+                "is_quota": is_quota
             }
             # Also populate lookup key for UI backwards compatibility
             _stats["candidates_status"][f"{provider}:{key}:agent:{model_name}"] = {
@@ -164,7 +186,8 @@ def record_agent(
                 "latency_ms": lat_ms,
                 "category": "agent",
                 "model": model_name,
-                "time": now_ms
+                "time": now_ms,
+                "is_quota": is_quota
             }
 
         # 4. Error Logs with Agent Category
@@ -192,8 +215,10 @@ def record_kb(
     latency: float,
     provider: Optional[str] = None,
     key: Optional[str] = None,
+    model: Optional[str] = None,
     is_fallback: bool = False,
-    error_msg: Optional[str] = None
+    error_msg: Optional[str] = None,
+    is_quota: bool = False
 ):
     """Record a KB Ingestion request result."""
     with _lock:
@@ -226,36 +251,46 @@ def record_kb(
         if kb_type in _stats:
             _stats[kb_type] = dict(t_stats)
 
-        # Update Candidate Node Status (Isolated for KB)
+        # Update Candidate Node Status (Isolated for KB with model dimension)
         if provider and key:
-            node_key = f"kb:{kb_type}:{provider}:{key}"
-            _stats["candidates_status"][node_key] = {
+            status_entry = {
                 "status": code,
                 "latency_ms": lat_ms,
                 "category": "kb",
                 "type": kb_type,
-                "time": now_ms
+                "model": model or "",
+                "time": now_ms,
+                "is_quota": is_quota
             }
+            if model:
+                _stats["candidates_status"][f"kb:{kb_type}:{provider}:{key}:{model}"] = status_entry
             # Also store legacy format for backward compatibility
-            _stats["candidates_status"][f"{provider}:{key}:{kb_type}"] = {
-                "status": code,
-                "latency_ms": lat_ms,
-                "category": "kb",
-                "type": kb_type,
-                "time": now_ms
-            }
+            _stats["candidates_status"][f"kb:{kb_type}:{provider}:{key}"] = status_entry
+            _stats["candidates_status"][f"{provider}:{key}:{kb_type}"] = status_entry
 
-        # Error Logs with KB Category
+        # Error Logs with KB Category (Deduplicate consecutive identical errors during ingestion to control log size)
         if code != 200 and error_msg:
+            if _stats["error_logs"]:
+                last_log = _stats["error_logs"][0]
+                if (last_log.get("provider") == provider and
+                    last_log.get("key") == key and
+                    last_log.get("status") == code and
+                    last_log.get("model_name") == (model or kb_type) and
+                    (now_ms - last_log.get("timestamp", 0) < 60000)):
+                    last_log["repeat_count"] = last_log.get("repeat_count", 1) + 1
+                    last_log["timestamp"] = now_ms
+                    return
+
             _stats["error_logs"].insert(0, {
                 "timestamp": now_ms,
                 "category": "kb",
                 "type": kb_type,
-                "model_name": kb_type,
+                "model_name": model or kb_type,
                 "provider": provider or "unknown",
                 "key": key or "unknown",
                 "status": code,
-                "error": error_msg
+                "error": error_msg[:300],  # Bound error text length
+                "repeat_count": 1
             })
             if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
                 _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
@@ -270,7 +305,9 @@ def record(
     error_msg: Optional[str] = None,
     category: Optional[str] = None,
     request_model: Optional[str] = None,
-    is_fallback: bool = False
+    is_fallback: bool = False,
+    cand_model: Optional[str] = None,
+    is_quota: bool = False
 ):
     """Unified record router for legacy & direct calls."""
     if category == "agent" or (type_name not in ("chat", "embedding", "reranker", "ocr") and type_name != "kb"):
@@ -282,7 +319,8 @@ def record(
             provider=provider,
             key=key,
             is_fallback=is_fallback,
-            error_msg=error_msg
+            error_msg=error_msg,
+            is_quota=is_quota
         )
     else:
         kb_type = type_name if type_name in ("chat", "embedding", "reranker", "ocr") else "chat"
@@ -292,8 +330,10 @@ def record(
             latency=latency,
             provider=provider,
             key=key,
+            model=cand_model or request_model,
             is_fallback=is_fallback,
-            error_msg=error_msg
+            error_msg=error_msg,
+            is_quota=is_quota
         )
 
 

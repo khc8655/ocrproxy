@@ -56,7 +56,8 @@ export const PRESETS = ${JSON.stringify(presets, null, 2)};
 export const PRESET_MAP = Object.fromEntries(PRESETS.map((p) => [p.id, p]));
 
 export function getPreset(id) {
-  return PRESET_MAP[String(id).toLowerCase()] || null;
+  const key = String(id || '').toLowerCase().trim();
+  return PRESET_MAP[key] || PRESET_MAP[key.replace(/[.\\-_]/g, '')] || null;
 }
 `;
 

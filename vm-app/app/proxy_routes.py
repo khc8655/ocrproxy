@@ -27,7 +27,9 @@ Chat relay optimisations:
     provider-specific SSE fields (e.g. reasoning_content deltas from
     SenseNova / DeepSeek) reach the client verbatim.
 """
+from typing import Optional, Callable, Any, Dict, List
 import os
+import re
 import copy
 import json
 import asyncio
@@ -107,6 +109,14 @@ def _get_preset(provider_id: str) -> dict:
             data = json.loads(preset_file.read_text(encoding="utf-8"))
             _PRESET_CACHE[pid] = data
             return data
+        # Fallback: try stripping dots, hyphens, and underscores (e.g. "b.ai" -> "bai")
+        pid_clean = re.sub(r"[.\-_]", "", pid)
+        if pid_clean and pid_clean != pid:
+            clean_file = presets_dir / f"{pid_clean}.json"
+            if clean_file.exists():
+                data = json.loads(clean_file.read_text(encoding="utf-8"))
+                _PRESET_CACHE[pid] = data
+                return data
     except Exception as e:
         logger.warning("Failed to load preset %s: %s", pid, e)
     return {}
@@ -167,10 +177,16 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                 out["model"] = v
                 break
 
-    # 2. Sanitization (parameter blacklisting)
+    # 2. Sanitization (parameter blacklisting and clamping)
     strip_params = rules.get("sanitization", {}).get("strip_params", [])
     for sp in strip_params:
         out.pop(sp, None)
+    max_tokens_ceil = rules.get("sanitization", {}).get("max_tokens_ceiling")
+    if isinstance(max_tokens_ceil, int) and max_tokens_ceil > 0:
+        if isinstance(out.get("max_tokens"), int) and out["max_tokens"] > max_tokens_ceil:
+            out["max_tokens"] = max_tokens_ceil
+        if isinstance(out.get("max_completion_tokens"), int) and out["max_completion_tokens"] > max_tokens_ceil:
+            out["max_completion_tokens"] = max_tokens_ceil
 
     # 3. Messages normalization
     msg_rules = rules.get("messages", {})
@@ -222,6 +238,35 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                         })
                     new_messages.extend(other_messages)
                     out["messages"] = new_messages
+
+    # 3b. Thinking protocol & reasoning block filtering on messages
+    # Supports "passback_required", "strict_signature", "strip"
+    thinking_policy = rules.get("thinking_policy") or rules.get("reasoning", {}).get("thinking_policy")
+    if not thinking_policy and is_anthropic:
+        id_lower = m_name.lower()
+        if any(id_lower.startswith(p) for p in ("claude-", "opus-", "sonnet-", "haiku-")):
+            thinking_policy = "strict_signature"
+        elif any(id_lower.startswith(p) for p in ("deepseek-", "kimi-", "moonshot-", "glm-", "minimax-")) or "-thinking" in id_lower or id_lower in ("k3", "k3-256k"):
+            thinking_policy = "passback_required"
+
+    if thinking_policy and "messages" in out and isinstance(out["messages"], list):
+        for m in out["messages"]:
+            if not isinstance(m, dict) or m.get("role") != "assistant":
+                continue
+            content = m.get("content")
+            if isinstance(content, list):
+                new_content = []
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "thinking":
+                        if thinking_policy == "strip":
+                            continue
+                        elif thinking_policy == "strict_signature" and not b.get("signature"):
+                            continue
+                    new_content.append(b)
+                m["content"] = new_content
+            elif thinking_policy == "strip":
+                m.pop("reasoning_content", None)
+                m.pop("reasoning", None)
 
     # 4. Tools schema normalization
     tools_rules = rules.get("tools", {})
@@ -353,6 +398,11 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                     enable_key = reasoning_rules.get("enable_key", "enable_thinking")
                     if enable_key not in ctk:
                         ctk[enable_key] = effort not in ("none", "false")
+                elif reasoning_rules.get("default_thinking", False):
+                    ctk = out.setdefault("chat_template_kwargs", {})
+                    enable_key = reasoning_rules.get("enable_key", "enable_thinking")
+                    if enable_key not in ctk:
+                        ctk[enable_key] = True
 
             elif strat == "effort_remapping":
                 if reasoning_rules.get("strip_thinking"):
@@ -366,7 +416,9 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                     none_act = model_specific.get("none_action") or reasoning_rules.get("none_action")
 
                     if re_str in ("none", "false"):
-                        if none_fb:
+                        if "none" in supported and not none_fb and none_act != "omit":
+                            out["reasoning_effort"] = "none"
+                        elif none_fb:
                             out["reasoning_effort"] = none_fb
                         elif none_act == "omit":
                             out.pop("reasoning_effort", None)
@@ -463,6 +515,46 @@ def _normalise_messages_for_provider(out: dict, provider: str) -> None:
 def _disable_thinking_for_kb(out: dict, provider: str) -> None:
     rules = _get_preset_rules(provider)
     _apply_request_adapter_rules(out, rules, is_agent_mode=False, is_anthropic=False)
+
+
+async def _stream_with_keepalive(
+    first_chunk: bytes,
+    remainder,
+    filter_fn: Optional[Callable[[bytes], bytes]] = None,
+    keepalive_sec: float = 15.0,
+):
+    """Yield chunks from a streaming response, emitting SSE keep-alive comments
+    (': keep-alive\n\n') every `keepalive_sec` if upstream is idle (e.g. during deep thinking).
+    Uses asyncio.wait on the pending task so timeouts do NOT cancel the generator.
+    """
+    if first_chunk:
+        yield filter_fn(first_chunk) if filter_fn else first_chunk
+
+    if remainder is None:
+        return
+
+    chunk_iter = remainder.__aiter__()
+    pending_task = None
+    try:
+        while True:
+            if pending_task is None:
+                pending_task = asyncio.create_task(chunk_iter.__anext__())
+            done, _ = await asyncio.wait([pending_task], timeout=keepalive_sec)
+            if done:
+                try:
+                    chunk = pending_task.result()
+                    pending_task = None
+                    yield filter_fn(chunk) if filter_fn else chunk
+                except StopAsyncIteration:
+                    break
+            else:
+                # Timed out waiting for next chunk; keep pending_task alive!
+                yield b": keep-alive\n\n"
+    finally:
+        if pending_task and not pending_task.done():
+            pending_task.cancel()
+
+
 
 
 # Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
@@ -710,26 +802,12 @@ async def chat_completions(request: Request):
                 "adapter_rules": p_info.get("adapter_rules") or _get_preset_rules(p_info.get("preset_id", p_id)),
             })
 
-        if strategy == "manual":
-            # In manual mode, filter to only the active key (or first key if active_key not found)
-            if active_key:
-                matched = [c for c in candidates_list if c["key"] == active_key]
-                candidates_list = matched if matched else candidates_list[:1]
-            else:
-                candidates_list = candidates_list[:1]
-        elif active_key:
-            # Reorder candidates so active_key is attempted first
-            matched = [c for c in candidates_list if c["key"] == active_key]
-            others = [c for c in candidates_list if c["key"] != active_key]
-            if matched:
-                candidates_list = matched + others
-
         if not candidates_list:
             return _model_not_found_response(model_name)
         try:
-            chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
+            chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
         except (ValueError, TypeError):
-            chat_timeout = 15.0
+            chat_timeout = 60.0
 
     elif run_mode == "kb":
         if model_name != "chat":
@@ -789,9 +867,9 @@ async def chat_completions(request: Request):
             if not candidates_list:
                 return _model_not_found_response(model_name)
             try:
-                chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
+                chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
             except (ValueError, TypeError):
-                chat_timeout = 15.0
+                chat_timeout = 60.0
 
     if not candidates_list:
         return JSONResponse(
@@ -819,6 +897,10 @@ async def chat_completions(request: Request):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
+        if isinstance(inject_hdrs, dict):
+            for hk, hv in inject_hdrs.items():
+                headers[str(hk)] = str(hv)
         return "POST", url, headers, out
 
     if is_stream:
@@ -830,11 +912,8 @@ async def chat_completions(request: Request):
 
             async def event_generator():
                 try:
-                    if first_chunk:
-                        yield _filter_chunk(first_chunk)
-                    if remainder is not None:
-                        async for chunk in remainder:
-                            yield _filter_chunk(chunk)
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=_filter_chunk, keepalive_sec=15.0):
+                        yield chunk
                 finally:
                     await resp.aclose()
             return StreamingResponse(
@@ -968,18 +1047,6 @@ async def anthropic_messages(request: Request):
             "adapter_rules": p_cfg.get("adapter_rules") or _get_preset_rules(p_cfg.get("preset_id", p_name)),
         })
 
-    if strategy == "manual":
-        if active_key:
-            matched = [c for c in candidates_list if c["key"] == active_key]
-            candidates_list = matched if matched else candidates_list[:1]
-        else:
-            candidates_list = candidates_list[:1]
-    elif active_key:
-        matched = [c for c in candidates_list if c["key"] == active_key]
-        others = [c for c in candidates_list if c["key"] != active_key]
-        if matched:
-            candidates_list = matched + others
-
     if not candidates_list:
         return _anthropic_error(
             400, "invalid_request_error",
@@ -987,9 +1054,9 @@ async def anthropic_messages(request: Request):
         )
 
     try:
-        chat_timeout = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout_chat", 15))))
+        chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
     except (ValueError, TypeError):
-        chat_timeout = 15.0
+        chat_timeout = 60.0
 
     req_config = {
         **config,
@@ -1018,17 +1085,18 @@ async def anthropic_messages(request: Request):
             "anthropic-version": anthropic_version,
             "Content-Type": "application/json",
         }
+        inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
+        if isinstance(inject_hdrs, dict):
+            for hk, hv in inject_hdrs.items():
+                headers[str(hk)] = str(hv)
         return "POST", url, headers, out
 
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
             async def event_generator():
                 try:
-                    if first_chunk:
-                        yield first_chunk
-                    if remainder is not None:
-                        async for chunk in remainder:
-                            yield chunk
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, keepalive_sec=15.0):
+                        yield chunk
                 finally:
                     await resp.aclose()
             return StreamingResponse(
@@ -1135,6 +1203,12 @@ async def embeddings(request: Request):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        provider = cand.get("provider", "")
+        rules = cand.get("adapter_rules") or _get_preset_rules(provider)
+        inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
+        if isinstance(inject_hdrs, dict):
+            for hk, hv in inject_hdrs.items():
+                headers[str(hk)] = str(hv)
         return "POST", url, headers, out
 
     try:
@@ -1301,11 +1375,19 @@ async def ocr(request: Request):
             "max_tokens": 4096,
             "stream": False,
         }
+        provider_name = cand.get("provider")
+        provider_cfg = (config.get("providers") or {}).get(provider_name, {})
+        rules = cand.get("adapter_rules") or provider_cfg.get("adapter_rules") or _get_preset_rules(provider_name)
+        _apply_request_adapter_rules(chat_body, rules, is_agent_mode=False, is_anthropic=False)
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
+        if isinstance(inject_hdrs, dict):
+            for hk, hv in inject_hdrs.items():
+                headers[str(hk)] = str(hv)
         return "POST", url, headers, chat_body
 
     # OCR / vision models need a longer timeout than chat

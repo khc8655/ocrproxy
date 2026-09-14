@@ -37,10 +37,11 @@ import {
   ConfigError,
   resolveKvBinding,
 } from '../../lib/config.js';
-import { normaliseForProvider } from '../../lib/normalize.js';
+import { normaliseForProvider, createKeepAliveStream } from '../../lib/normalize.js';
 import {
   shouldFailover,
   bindingId,
+  recordFailure,
 } from '../../lib/cooldowns.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
@@ -226,6 +227,9 @@ export async function onRequestPost(context) {
       if (fastFailoverProvDown) {
         downProviders.add(binding.provider);
       }
+      if (kv) {
+        recordFailure(binding.provider, binding.keyLabel, kv, binding.upstreamModel || '', 3000).catch(() => {});
+      }
     }
 
     attemptLog.push(
@@ -327,6 +331,14 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
     upstreamHeaders['x-request-id'] = request.headers.get('x-request-id');
   }
 
+  // Inject custom outbound headers from adapter rules
+  const injectHeaders = resolved.adapterRules?.inject_headers || resolved.adapterRules?.adapter_rules?.inject_headers;
+  if (injectHeaders && typeof injectHeaders === 'object') {
+    for (const [k, v] of Object.entries(injectHeaders)) {
+      upstreamHeaders[k.toLowerCase()] = String(v);
+    }
+  }
+
   const timeoutMs = perAttemptTimeoutMs || Number(env?.UPSTREAM_TIMEOUT_MS || DEFAULT_UPSTREAM_TIMEOUT_MS);
 
   let upstreamResp;
@@ -359,7 +371,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       return {
         kind: 'success',
         status: upstreamResp.status,
-        response: new Response(upstreamResp.body, {
+        response: new Response(createKeepAliveStream(upstreamResp.body, 15000), {
           status: upstreamResp.status,
           headers: buildOutHeaders(upstreamResp),
         }),

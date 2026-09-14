@@ -2,9 +2,6 @@
 
 本项目采用 **Monorepo** 架构，统一维护一套全功能的 VM 服务端应用 (`vm-app`) 与一套无服务器 EdgeOne 边缘函数版本 (`agent-edgeone`)。所有 VM 模式共用一套通用加密配置 Schema，在保持 100% 完整功能特性的同时，通过 **`RUN_MODE`** 实现界面与路由的动态自适应。
 
-> [!IMPORTANT]
-> **开发与重构铁律**：所有代码修改、构建脚本设计与 Bug 修复必须严格遵守 [ARCHITECTURE_STANDARDS.md](file:///Users/xk/Documents/ocrprox/ARCHITECTURE_STANDARDS.md) 定义的六大核心原则（两大版本定位、VM三模式、EdgeOne纯Agent、共用与差异隔离、程序配置分离、全版本防劣化影响评估）。
-
 ---
 
 ## 架构概览 (Architecture Overview)
@@ -42,6 +39,7 @@ ocrprox (Monorepo)
 | :--- | :--- | :--- | :--- |
 | **典型部署环境** | 海外 Azure / 自建 VM，用于 Cursor / Cline / OpenClaw 直连海外大模型 | 国内腾讯云 VM，用于 Dify / FastGPT / Ragflow 高并发知识库入库 | 单机同时服务智能体编程与知识库检索 |
 | **默认 Key 轮换策略** | **粘性故障转移 (`sticky_failover`)**：固定使用当前 Key，遭遇 429/5xx 顺延切换，且**切换后长期驻留新 Key**，杜绝抖动 | **轮询负载均衡 (`round_robin`)**：原子计数轮询各 Key，最大化利用并发配额 | 支持针对 Agent 与 KB 独立配置分流策略 |
+| **序号与候选控制台呈现** | **保留数字序号**（定义故障转移顺延链条）。当前生效主力显示绿色徽章 **`[使用中]`**；其余备用顺位提供极简操作按钮 **`[主]`** | **保留数字序号**（控制轮询池初始次序与分流优先级）。所有节点平等并发工作，不显示 `[主]` | 各模块自适应对应规范 |
 | **内存治理机制** | 极轻量占用 (~30MB)，零拷贝 SSE 异步流式转发，无需定时重启服务 | 大 payload (OCR / Embedding) 结束立即调用 glibc `malloc_trim(0)` 释放堆内存，杜绝内存膨胀 | 混合感知内存回收，按需释放 |
 | **服务运维与重启** | 默认关闭每日定时重启定时器，保证长连接会话长效稳定 | 默认启用每日凌晨 04:00 重启定时器，重置内存碎片 | 可按需在后台管理面板一键平滑重启服务 |
 | **后台界面自适应** | 隐藏 KB 候选挂载区与 KB 4项入库超时，只展示 Agent 模型、供应商凭证、Agent 监控与接入指南 | 隐藏 Agent 模型区与 Agent 对话超时，只展示 4 大虚拟模型挂载、KB 入库超时与 Dify 接入指南 | **完整展示**（供应商凭证库 + Agent 模型 + KB 虚拟模型 + 全量参数与示例） |
@@ -88,11 +86,18 @@ ocrprox (Monorepo)
 ### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget)
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
   - **EdgeOne 边缘版**：默认 **`25s`**（在 EdgeOne 平台 30s 强杀前 5s 提前拦截，主动向客户端返回规范的 504 Gateway Timeout 与完整调用链路轨迹，彻底根治 4 分钟卡死）；
-  - **VM 服务端版**：默认 **`45s`**。
+  - **VM 服务端版**：默认 **`60s`**（充分容纳 KB 大文档入库推理与多 Key 故障转移切换）。
 - **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`15s`**，单个 Key 超时立即切换。
-- **`schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
-- **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**（防止同一厂商配置 7 个 Key 时在已宕机源站上死等 7 次导致乘数爆炸）。
+- **`schedule_total_budget` (单请求重试上限)**：默认 **`5 次`**。
+- **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`6 次`**（满足商汤、硅基等单厂商配置 5~8 个不同账号 Key 的深度轮询调度）。
 - **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。
+- **429 欠费与额度耗尽 30 分钟智能冷冻 (Quota Quarantine)**：
+  - 自动识别商汤 `Allocated quota exceeded`、OpenCode `Consumer daily free usage limit exceeded` 等致命账号级错误；
+  - 触发后立即打入 **30 分钟（1800s）长效冷冻**，调度层物理跳过，杜绝废 Key 吃掉重试预算；控制台列表直接标注红色 `[欠费]` 徽章；
+  - 成功调用（HTTP 200）即刻自动清除冷冻与欠费标记。
+- **控制台极简原生数字排序 (Lightweight Numeric Ordering)**：
+  - 彻底移除复杂或难按的 `↑` / `↓` 箭头；
+  - 序号列采用原生超轻量数字输入框（支持任意数字输入自动安全截断归位），纯本地数组秒级位移，后端零依赖。
 
 ### 3. 链路追踪与透明诊断响应头
 每次请求均在 HTTP 响应头中注入实时链路信息：
@@ -105,7 +110,7 @@ ocrprox (Monorepo)
 - **思考链等级控制 (Reasoning & Thinking Level)**：
   - **SenseNova (商汤)**：原生支持标准 `reasoning_effort` (`none/low/medium/high`)，支持 `sensenova-6.8-flash-lite`, `deepseek-v4-flash`, `glm-5.2`；
   - **StepFun (阶跃)**：`none` 自动映射为 `low` 降级（防止上游 400），自动注入 `reasoning_format: "deepseek-style"` 以在 SSE 流中返回 `reasoning_content`；
-  - **Agnes AI**：OpenAI 协议下自动映射为 `chat_template_kwargs: {"enable_thinking": true/false}`；
+  - **Agnes AI**：全面支持最新 `agnes-3.0-flash` 旗舰开源推理模型与 `agnes-2.5-flash`；Agent 模式下缺省默认开启思考（`default_thinking: true` 自动映射为 `chat_template_kwargs: {"enable_thinking": true}`），客户端传 `reasoning_effort: "none"` 时精准关闭；KB 模式严格锁死禁用思考以保障毫秒级低延迟；内置 `max_tokens_ceiling: 65536` 钳制保护（杜绝 Hermes 等 Agent 工具超限 400 报错）；
   - **Google AI Studio (Gemini)**：
     - **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`，Gemma 模型自动规避；
     - **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考 Token 耗尽导致的空响应与截断；
@@ -114,7 +119,10 @@ ocrprox (Monorepo)
     - **非标参数清洗**：自动剥离 Claude 3.7 专有的 `output_config` 等非标字段（防止 MiniMax 报 400 错误）；
     - **大小写严格保护**：强制确保模型名称保留为官方要求的 `MiniMax-M3`；
     - **Thinking 规范化**：自动规整 `budget_tokens` 并补全 `type: "enabled"`，无缝支持 Thinking 内容块输出；
-  - **B.AI (双协议兼容网关)**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通；
+  - **B.AI (双协议兼容网关与 GLM 思考链专属适配)**：
+    - **双通道直通**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通；
+    - **GLM 常开思考专属适配**：针对 `glm-5.3-flash` 等常开思考模型（不支持关闭思考且仅认 `low/high/max`），专属映射：将 Hermes 默认的 `medium` 自动重映射为 `high`，将 `none` 安全剔除（omit）以避免触发 400 校验异常，彻底根治“该模型始终思考，不支持关闭思考；请使用 low、high 或 max”报错；
+    - **严格厂商隔离**：该规则仅对 B.AI 旗下的 GLM 模型生效，B.AI 内部的 `qwen3.8-flash` 及其他厂商模型完全保持原生标准直通，不受任何干扰。
   - **AMD Radeon Cloud (官方高性能集群与双协议网关)**：
     - **思考链深度适配**：AMD 前置网关按白名单字段重新组装请求，严禁 `thinking: {...}` 与 `chat_template_kwargs`；系统自动适配官方规范的 `reasoning_effort: "medium"`（使 `DeepSeek-V4-Flash` 能够正常思考，同时使 `Qwen3.8-Flash-Next` 保持安全思考深度，杜绝 400 报错）；
     - **Anthropic Messages 协议直通**：自动将 Claude Code 等客户端发送的 `thinking: {"type": "enabled", ...}` 转换为 AMD 官方支持的 `output_config: {"effort": "medium"}` 并剥除 `thinking`；
@@ -193,37 +201,32 @@ npm run deploy      # 一键发布至 EdgeOne
 
 ---
 
-## 生产级测试验证套件
-
-本项目提供了两套标准的生产级自动化回归测试套件：
-
-### 1. Agent 模式测试套件 (`tests/test_live_models_suite.py`)
-```bash
-python3 tests/test_live_models_suite.py
-# 或指定目标域名
-TARGET_URL="https://api1.khc6.cn" python3 tests/test_live_models_suite.py
-```
-- **思考等级 (Reasoning Effort) 验证**：测试 `none` / `low` / `medium` / `high` 各等级下的推理字数与思维链标记；
-- **流式 (SSE) vs 非流式对比验证**：全面测试各模型首字时间 (TTFT < 800ms) 与数据块流式传输；
-- **连续 10 轮工具调用 (Function Calling) 闭环测试**：连续发起函数调用、参数解析、模拟执行并送回结果完成多轮会话闭环，100% 成功率。
-
-### 2. KB 知识库模式测试套件 (`tests/test_live_kb_suite.py`)
-```bash
-python3 tests/test_live_kb_suite.py
-# 或指定目标域名
-TARGET_URL="https://api.khc6.cn" python3 tests/test_live_kb_suite.py
-```
-- **KB 快速对话摘要测试 (`/v1/chat/completions`, model="chat")**：验证非流式、强制关闭/极简思考、极速响应；
-- **文本向量化测试 (`/v1/embeddings`, model="embedding")**：验证单句与批量多文档向量生成、向量维度（如 2560 维）与浮点有效性；
-- **检索重排测试 (`/v1/rerank`, model="reranker")**：验证多文档相似度打分与相关性重排；
-- **多模态 OCR 图文提取测试 (`/v1/ocr`, model="ocr")**：验证 Base64 图像文字识别与 Markdown 输出；
-- **Key 轮询负载均衡测试 (Round-Robin Routing)**：验证高并发下多 Key 均匀分摊与 `X-Routed-Via` 轮换；
-- **全量负向安全鉴权测试 (Security Guard)**：验证空 Key、假 Key、非法 Header 严格 401 拦截。
-
----
-
 ## 客户端与管理鉴权架构
 
 1. **Web 管理后台登录**：使用安装时生成的独立密码 `ADMIN_PASSWORD` 保护；
 2. **客户端接口调用 (`/v1/*`)**：使用 `PROXY_API_KEY` 进行鉴权；可在 Web 管理后台「系统运行与可靠性参数 -> 客户端连接鉴权」中直接查看、复制、修改或一键随机生成，修改后点击「保存设置」即刻全域生效，无需登录服务器修改环境变量；
 3. **服务平滑重启**：可在 Web 后台「服务运维与系统重启」卡片中一键发起安全重启，耗时约 2-3 秒，自动重连。
+
+---
+
+## 高可靠性与并发安全防护 (Reliability & Concurrency Protection)
+
+### 1. 配置并发安全与版本乐观锁 (`_version` 乐观锁 + 滚动加密备份)
+- **多端/多标签页并发冲突防护**：配置文件内置单调递增 `_version` 版本号。当旧会话或后台标签页提交过期版本时，服务端严格以 `HTTP 409 Conflict` 拦截保存，前端弹窗友好提示并自动重新加载最新配置，彻底杜绝新增 Key/模型被旧标签页覆盖丢失。
+- **自动滚动加密备份**：每次配置成功落盘前，自动在受保护的配置目录中保留带时间戳的加密备份（`proxy_config.enc.bak-<timestamp>`），自动滚动保留最近 20 份历史版本，提供双重兜底保障。
+- **跨模式全量资产保留**：无论是从 Agent 模式还是 KB 模式保存，服务端与边缘函数均永久完整保留 `agent_models` 与 `candidates` 两套资产，杜绝因模式切换冲毁未展示模式的节点。
+
+### 2. 跨模型独立监控与隔离机制
+- **同 Key 多模型完全解耦**：统计监控状态主键升级为 `kb:{type}:{provider}:{key}:{model}`（与 `agent:{model}:{provider}:{key}`），彻底消除同一个 API Key 挂载到不同模型时耗时、探活状态和可用性联动的缺陷。
+- **边缘函数跨模型限流隔离**：EdgeOne 冷却机制将 KV 键升级为 `cd_{provider}_{key}_{model}`，避免模型 A 限流（429）株连模型 B。
+
+### 3. 调度器精准分流：临时限流 (TPM/RPM) 与真账户欠费隔离
+- **临时速率限制 (TPM/RPM/QPS)**：识别包含 `tpm`、`rpm`、`rate limit`、`429001` 等分钟级滑动窗口限流报错，严格不标记为欠费，仅执行短退避（15 秒）并平滑轮转至下一候选 Key，窗口刷新后自动秒级恢复。
+- **真账户欠费/额度耗尽 (Hard Quota Exhaustion)**：精准匹配 `insufficient_quota`、`allocated quota exceeded`、`balance is insufficient`、`账户欠费`、`余额不足` 等资产级报错，判定为真正欠费并执行 30 分钟长效冷冻，并在管理后台明确标红指示「欠费/冷冻中」。
+- **KB 模式与 OCR 视觉思考链全面压制**：`/v1/chat/completions` 与 `/v1/ocr` 均统一应用请求适配器规则，显式注入 `reasoning_effort: "none"`、`thinking: {"type": "disabled"}` 与 `include_thoughts: False`，彻底消除视觉大模型潜在的慢推理时延，保障知识库毫秒级极速解析。
+
+
+### 4. 高频重试日志限额与内存治理
+- **高频入库错误折叠**：知识库（KB）批处理高并发入库重试时，相同供应商与 Key 在 60 秒内触发的重复错误自动折叠（记录 `repeat_count`），严格限制全局最新错误记录最大 100 条且错误文本截断至 300 字符，杜绝磁盘日志与内存爆炸。
+- **有界内存字典与快速垃圾回收**：运行时状态采用 O(1) 字典增量刷新，绝不无限增长，高负载下内存稳定在 40~50MB。
+
