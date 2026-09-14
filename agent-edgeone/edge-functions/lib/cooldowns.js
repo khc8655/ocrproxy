@@ -77,22 +77,24 @@ function safeKeyPart(str) {
 /**
  * Build the KV key for a (provider, key_label) cooldown entry.
  */
-export function cooldownKey(provider, keyLabel) {
-  return `cd_${safeKeyPart(provider)}_${safeKeyPart(keyLabel)}`;
+export function cooldownKey(provider, keyLabel, targetModel = '') {
+  const modelPart = targetModel ? `_${safeKeyPart(targetModel)}` : '';
+  return `cd_${safeKeyPart(provider)}_${safeKeyPart(keyLabel)}${modelPart}`;
 }
 
-export function failCountKey(provider, keyLabel) {
-  return `fail_${safeKeyPart(provider)}_${safeKeyPart(keyLabel)}`;
+export function failCountKey(provider, keyLabel, targetModel = '') {
+  const modelPart = targetModel ? `_${safeKeyPart(targetModel)}` : '';
+  return `fail_${safeKeyPart(provider)}_${safeKeyPart(keyLabel)}${modelPart}`;
 }
 
 /**
  * Read the current cooldown expiry (ms since epoch) for a binding.
  * Returns 0 if no cooldown is set, or the expiry has passed.
  */
-export async function getCooldown(provider, keyLabel, kv) {
+export async function getCooldown(provider, keyLabel, kv, targetModel = '') {
   if (!kv) return 0;
   try {
-    const raw = await kv.get(cooldownKey(provider, keyLabel), { type: 'text' });
+    const raw = await kv.get(cooldownKey(provider, keyLabel, targetModel), { type: 'text' });
     if (!raw) return 0;
     const expires = Number(raw);
     if (!Number.isFinite(expires) || expires <= Date.now()) return 0;
@@ -115,7 +117,7 @@ export async function getCooldownsBatch(bindings, kv) {
   // We could use kv.get([...keys]) for a single multi-read if available;
   // for now Promise.all of single gets is fine and bounded by N candidates.
   const results = await Promise.allSettled(
-    bindings.map((b) => getCooldown(b.provider, b.keyLabel, kv))
+    bindings.map((b) => getCooldown(b.provider, b.keyLabel, kv, b.upstreamModel || b.model || ''))
   );
   for (let i = 0; i < bindings.length; i++) {
     const r = results[i];
@@ -127,26 +129,43 @@ export async function getCooldownsBatch(bindings, kv) {
 /**
  * Set a cooldown for a binding.  `durationSec` defaults to 30s if omitted.
  */
-export async function setCooldown(provider, keyLabel, durationSec, kv) {
+export async function setCooldown(provider, keyLabel, durationSec, kv, targetModel = '') {
   if (!kv) return;
   const sec = Number(durationSec) > 0 ? Number(durationSec) : 30;
   const expiresAt = Date.now() + sec * 1000;
   try {
-    await kv.put(cooldownKey(provider, keyLabel), String(expiresAt));
+    await kv.put(cooldownKey(provider, keyLabel, targetModel), String(expiresAt));
   } catch (e) {
     console.warn('cooldown put failed:', e?.message || e);
   }
   return expiresAt;
 }
 
+// In-worker ephemeral cache for failure collapse
+const _recentFailures = new Map();
+
 /**
  * Increment the consecutive-failure counter for a binding.
  * If it reaches the circuit-breaker threshold, set a long cooldown
  * and reset the counter.
+ *
+ * collapseWindowMs: if > 0 and another failure occurred within this window (e.g. 3000ms),
+ * the burst is collapsed and KV writing/circuit breaker escalation is suppressed.
  */
-export async function recordFailure(provider, keyLabel, kv) {
+export async function recordFailure(provider, keyLabel, kv, targetModel = '', collapseWindowMs = 0) {
   if (!kv) return 0;
-  const fk = failCountKey(provider, keyLabel);
+  const fk = failCountKey(provider, keyLabel, targetModel);
+
+  if (collapseWindowMs > 0) {
+    const cacheKey = `${provider}:${keyLabel}:${targetModel}`;
+    const now = Date.now();
+    const lastFail = _recentFailures.get(cacheKey) || 0;
+    _recentFailures.set(cacheKey, now);
+    if (now - lastFail < collapseWindowMs) {
+      return 1;
+    }
+  }
+
   let count = 0;
   try {
     const raw = await kv.get(fk, { type: 'text' });
@@ -158,7 +177,7 @@ export async function recordFailure(provider, keyLabel, kv) {
     return 0;
   }
   if (count >= CIRCUIT_BREAKER_THRESHOLD) {
-    await setCooldown(provider, keyLabel, COOLDOWN_DURATIONS.CIRCUIT_BREAKER, kv);
+    await setCooldown(provider, keyLabel, COOLDOWN_DURATIONS.CIRCUIT_BREAKER, kv, targetModel);
     // Reset the counter so we don't keep tripping on the same key forever.
     try { await kv.delete(fk); } catch {}
   }
@@ -168,10 +187,11 @@ export async function recordFailure(provider, keyLabel, kv) {
 /**
  * Clear the failure counter on a successful response.
  */
-export async function recordSuccess(provider, keyLabel, kv) {
+export async function recordSuccess(provider, keyLabel, kv, targetModel = '') {
+  _recentFailures.delete(`${provider}:${keyLabel}:${targetModel}`);
   if (!kv) return;
   try {
-    await kv.delete(failCountKey(provider, keyLabel));
+    await kv.delete(failCountKey(provider, keyLabel, targetModel));
   } catch (e) {
     console.warn('recordSuccess failed:', e?.message || e);
   }
@@ -181,7 +201,8 @@ export async function recordSuccess(provider, keyLabel, kv) {
  * Stable ID for a binding.  Used as Map keys.
  */
 export function bindingId(b) {
-  return `${b.provider}:${b.keyLabel}`;
+  const modelPart = (b.upstreamModel || b.model) ? `:${b.upstreamModel || b.model}` : '';
+  return `${b.provider}:${b.keyLabel}${modelPart}`;
 }
 
 /**
@@ -223,8 +244,13 @@ export async function clearAllState(bindings, kv) {
   let n = 0;
   for (const b of bindings || []) {
     try {
-      await kv.delete(cooldownKey(b.provider, b.keyLabel));
-      await kv.delete(failCountKey(b.provider, b.keyLabel));
+      const tm = b.upstreamModel || b.model || '';
+      await kv.delete(cooldownKey(b.provider, b.keyLabel, tm));
+      await kv.delete(failCountKey(b.provider, b.keyLabel, tm));
+      if (tm) {
+        await kv.delete(cooldownKey(b.provider, b.keyLabel));
+        await kv.delete(failCountKey(b.provider, b.keyLabel));
+      }
       n += 1;
     } catch (e) {
       console.warn('clearAllState failed for', b.provider, b.keyLabel, e?.message);
@@ -235,7 +261,7 @@ export async function clearAllState(bindings, kv) {
 
 /**
  * Snapshot all cooldowns for the admin endpoint.
- * Returns [{ provider, keyLabel, expiresAt, inCooldown }]
+ * Returns [{ provider, keyLabel, upstreamModel, expiresAt, inCooldown }]
  */
 export async function snapshotState(bindings, kv) {
   const now = Date.now();
@@ -243,11 +269,12 @@ export async function snapshotState(bindings, kv) {
   for (const b of bindings || []) {
     let expiresAt = 0;
     let failCount = 0;
+    const tm = b.upstreamModel || b.model || '';
     try {
       if (kv) {
-        const c = await kv.get(cooldownKey(b.provider, b.keyLabel), { type: 'text' });
+        const c = await kv.get(cooldownKey(b.provider, b.keyLabel, tm), { type: 'text' });
         if (c) expiresAt = Number(c) || 0;
-        const f = await kv.get(failCountKey(b.provider, b.keyLabel), { type: 'text' });
+        const f = await kv.get(failCountKey(b.provider, b.keyLabel, tm), { type: 'text' });
         if (f) failCount = Number(f) || 0;
       }
     } catch (e) {
@@ -256,7 +283,7 @@ export async function snapshotState(bindings, kv) {
     out.push({
       provider: b.provider,
       keyLabel: b.keyLabel,
-      upstreamModel: b.upstreamModel,
+      upstreamModel: tm,
       expiresAt,
       remainingMs: expiresAt > now ? expiresAt - now : 0,
       inCooldown: expiresAt > now,

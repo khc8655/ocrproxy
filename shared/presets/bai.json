@@ -1,18 +1,28 @@
 {
   "id": "bai",
   "name": "B.AI",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.b.ai/v1",
   "anthropic_base_url": "https://api.b.ai/v1",
   "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-  "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+  "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
   "features": {
     "native_thinking": true,
     "tools": true,
     "anthropic_messages": true
   },
   "recommended_models": [
+    {
+      "name": "glm-5.3-flash",
+      "upstream_model": "glm-5.3-flash",
+      "description": "智谱 GLM 5.3 Flash 原生常开深度思考模型 (网关已自动适配 Hermes / OpenAI 思考档位)"
+    },
+    {
+      "name": "qwen3.8-flash",
+      "upstream_model": "qwen3.8-flash",
+      "description": "千问 3.8 Flash 模型 (原生思考支持)"
+    },
     {
       "name": "claude-3-5-sonnet",
       "upstream_model": "claude-3-5-sonnet",
@@ -26,7 +36,20 @@
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "openai_passthrough"
+      "strategy": "effort_remapping",
+      "supported_levels": ["none", "minimal", "low", "medium", "high", "max"],
+      "model_rules": {
+        "glm": {
+          "supported_levels": ["low", "high", "max"],
+          "level_fallback": {
+            "medium": "high",
+            "minimal": "low",
+            "none": "low"
+          },
+          "none_action": "omit",
+          "default_effort": "high"
+        }
+      }
     },
     "tools": {
       "normalize_choice_to_string": false,
@@ -38,3 +61,4 @@
     }
   }
 }
+

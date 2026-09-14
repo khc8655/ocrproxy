@@ -923,9 +923,18 @@ async function persistConfig(msg='配置已保存并立即生效'){
     const r=await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
     if(!r.ok){
       const err=await r.json().catch(()=>({}));
+      if (r.status === 409) {
+        alert('⚠️ 配置保存冲突：后端配置已被其他窗口或进程更新！\n\n为防止覆盖他人最新修改，系统已自动重新拉取最新线上配置，请在最新配置基础上重新操作。');
+        await loadData();
+        return;
+      }
       throw new Error(err.error||'保存配置失败');
     }
-    toast(msg,'ok');
+    const respData = await r.json().catch(()=>({}));
+    if (respData._version !== undefined && state.config) {
+      state.config._version = respData._version;
+    }
+    if (msg) toast(msg,'ok');
     await loadData();
   } catch(e){ toast(e.message,'err'); }
 }
@@ -1353,19 +1362,21 @@ function renderKbModels(){
 function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   const nk = isAgent
     ? ('agent:' + modelName + ':' + binding.provider + ':' + binding.key)
-    : ('kb:' + type + ':' + binding.provider + ':' + binding.key);
-  const ns = status[nk] || status[binding.provider + ':' + binding.key + ':' + (isAgent ? ('agent:' + modelName) : type)] || status[binding.provider + ':' + binding.key + ':' + type];
+    : ('kb:' + type + ':' + binding.provider + ':' + binding.key + (binding.model ? (':' + binding.model) : ''));
+  const ns = status[nk] || (isAgent ? status[binding.provider + ':' + binding.key + ':agent:' + modelName] : (status['kb:' + type + ':' + binding.provider + ':' + binding.key] || status[binding.provider + ':' + binding.key + ':' + type]));
   let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
   if(ns){ 
-    if(ns.status === 200){
+    if(ns.is_quota || ns.status === 'quota'){
+      badge = `<span class="badge badge-error" style="font-weight:700;">欠费</span>`;
+    } else if(ns.status === 429) {
+      badge = `<span class="badge badge-warn" style="font-weight:700;">429 限流</span>`;
+    } else if(ns.status === 200){
       if(ns.latency_ms !== null && ns.latency_ms !== undefined && ns.latency_ms > 0){
         const latStr = ns.latency_ms >= 1000 ? (ns.latency_ms / 1000).toFixed(2) + 's' : ns.latency_ms + 'ms';
         badge = `<span class="badge badge-success" title="最近响应耗时: ${ns.latency_ms}ms" style="font-weight:700;">${latStr}</span>`;
       } else {
         badge = `<span class="badge badge-success" style="font-weight:700;">正常</span>`;
       }
-    } else if(ns.status === 429) {
-      badge = `<span class="badge badge-warn">429 限流</span>`;
     } else {
       badge = `<span class="badge badge-error">${ns.status} 异常</span>`;
     }
@@ -1373,40 +1384,48 @@ function renderBindingRow(idx, binding, type, modelName, i, status, isAgent){
   }
   const modelCell = isAgent ? '' : `<td class="mono truncate" title="${esc(binding.model)}"><b>${esc(binding.model)}</b></td>`;
   
-  const probeKeyId = (isAgent ? 'agent:' + modelName : 'kb:' + type) + ':' + binding.provider + ':' + binding.key;
+  const probeKeyId = (isAgent ? 'agent:' + modelName : ('kb:' + type + (binding.model ? ':' + binding.model : ''))) + ':' + binding.provider + ':' + binding.key;
   const isProbing = state.probingKeys.has(probeKeyId);
 
   const keyBadgeHtml = `<span class="badge badge-neutral">${esc(binding.key)}</span>`;
+  const totalCount = isAgent
+    ? (state.config.agent_models?.[modelName]?.keys || []).length
+    : ((state.config.candidates || {})[type] || []).length;
+
+  const orderInputHtml = isAgent
+    ? `<input type="number" min="1" max="${totalCount}" value="${idx}" 
+        style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+        onchange="reorderAgentKey('${esc(modelName)}', ${i}, this.value)" title="修改数字直接调整顺序">`
+    : `<input type="number" min="1" max="${totalCount}" value="${idx}" 
+        style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+        onchange="reorderCandidate('${type}', ${i}, this.value)" title="修改数字直接调整顺序">`;
+
   let actions;
   if(isAgent){
     const list = state.config.agent_models[modelName]?.keys || [];
-    const activeKey = state.config.agent_models[modelName]?.active_key || (list[0] ? list[0].key : '');
+    const runtimeActiveKey = (state.stats && state.stats.agent && state.stats.agent.active_keys) ? state.stats.agent.active_keys[modelName] : null;
+    const activeKey = runtimeActiveKey || state.config.agent_models[modelName]?.active_key || (list[0] ? list[0].key : '');
     const isActive = (binding.key === activeKey);
 
     const setActiveBtn = isActive
       ? `<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>`
-      : `<button class="btn btn-sm btn-secondary" onclick="setActiveAgentKey('${esc(modelName)}','${esc(binding.key)}')" title="切换使用该 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">切</button>`;
+      : `<button class="btn btn-sm btn-secondary" onclick="setActiveAgentKey('${esc(modelName)}','${esc(binding.key)}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">主</button>`;
 
     actions = `
       ${setActiveBtn}
-      <button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},-1)" ${i===0?'disabled':''} title="上移">↑</button>
-      <button class="btn btn-icon btn-sm" onclick="moveAgentKey('${esc(modelName)}',${i},1)" ${i===list.length-1?'disabled':''} title="下移">↓</button>
       <button class="btn btn-icon btn-sm" id="probeBtn-${esc(probeKeyId)}" onclick="testAgentKey('${esc(modelName)}',${i})" title="快速探活" ${isProbing?'disabled':''}>
         ${isProbing ? '<span class="spinner"></span>' : '测'}
       </button>
       <button class="btn btn-icon btn-sm btn-danger" onclick="deleteAgentKey('${esc(modelName)}',${i})" title="删除绑定">×</button>`;
   } else {
-    const list = state.config.candidates[type] || [];
     actions = `
-      <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},-1)" ${i===0?'disabled':''} title="上移">↑</button>
-      <button class="btn btn-icon btn-sm" onclick="moveCandidate('${type}',${i},1)" ${i===list.length-1?'disabled':''} title="下移">↓</button>
       <button class="btn btn-icon btn-sm" id="probeBtn-${esc(probeKeyId)}" onclick="testCandidate('${type}',${i})" title="快速探活" ${isProbing?'disabled':''}>
         ${isProbing ? '<span class="spinner"></span>' : '测'}
       </button>
       <button class="btn btn-icon btn-sm btn-danger" onclick="deleteCandidate('${type}',${i})" title="删除">×</button>`;
   }
   return `<tr>
-    <td style="color:var(--primary);font-weight:700">#${idx}</td>
+    <td>${orderInputHtml}</td>
     <td><b>${esc(binding.provider)}</b></td>
     <td>${keyBadgeHtml}</td>
     ${modelCell}
@@ -1448,12 +1467,13 @@ const FALLBACK_PRESETS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
-    version: '1.1.0',
+    version: '1.2.0',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
-    description: 'Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型 (512K 上下文)。',
+    description: 'Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型 (512K 上下文)。',
     recommended_models: [
-      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: true, kb_type: 'chat' },
+      { name: 'agnes-3.0-flash', upstream: 'agnes-3.0-flash', desc: 'Agnes 3.0 Flash 全新一代旗舰开源推理模型 (512K 上下文)', checked: true, kb_type: 'chat' },
+      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: false, kb_type: 'chat' },
       { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false, kb_type: 'chat' }
     ]
   },
@@ -2252,6 +2272,24 @@ function deleteAgentModel(name){
   persistConfig(`Agent 模型「${name}」已删除并立即生效`); 
   renderAgentModels(); 
 }
+function reorderAgentKey(name, fromIdx, inputVal){
+  const keys = state.config.agent_models?.[name]?.keys;
+  if (!Array.isArray(keys) || keys.length <= 1) return;
+  let targetPos = parseInt(inputVal, 10);
+  if (isNaN(targetPos)) {
+    renderAgentModels();
+    return;
+  }
+  let targetIdx = Math.max(0, Math.min(keys.length - 1, targetPos - 1));
+  if (targetIdx === fromIdx) {
+    renderAgentModels();
+    return;
+  }
+  const [item] = keys.splice(fromIdx, 1);
+  keys.splice(targetIdx, 0, item);
+  persistConfig('Key 优先级已调整并立即生效');
+  renderAgentModels();
+}
 function moveAgentKey(name,i,dir){ 
   const keys=state.config.agent_models[name].keys; 
   const t=i+dir; 
@@ -2269,7 +2307,11 @@ function deleteAgentKey(name,i){
 function setActiveAgentKey(name, keyLabel){
   if(!state.config.agent_models || !state.config.agent_models[name]) return;
   state.config.agent_models[name].active_key = keyLabel;
-  persistConfig(`模型「${name}」已切换为使用 Key: [${keyLabel}] 并立即生效`);
+  if(state.stats && state.stats.agent){
+    if(!state.stats.agent.active_keys) state.stats.agent.active_keys = {};
+    state.stats.agent.active_keys[name] = keyLabel;
+  }
+  persistConfig(`模型「${name}」已设置主力 Key: [${keyLabel}] 并立即生效`);
   renderAgentModels();
 }
 
@@ -2436,6 +2478,24 @@ function saveCandidate(){
   persistConfig(`候选节点已挂载到 [${type}] 并立即生效`);
   renderKbModels();
 }
+function reorderCandidate(type, fromIdx, inputVal){
+  const list = state.config.candidates?.[type];
+  if (!Array.isArray(list) || list.length <= 1) return;
+  let targetPos = parseInt(inputVal, 10);
+  if (isNaN(targetPos)) {
+    renderKbModels();
+    return;
+  }
+  let targetIdx = Math.max(0, Math.min(list.length - 1, targetPos - 1));
+  if (targetIdx === fromIdx) {
+    renderKbModels();
+    return;
+  }
+  const [item] = list.splice(fromIdx, 1);
+  list.splice(targetIdx, 0, item);
+  persistConfig('候选节点优先级已调整并立即生效');
+  renderKbModels();
+}
 function moveCandidate(type,i,dir){ 
   const list=state.config.candidates[type]; 
   const t=i+dir; 
@@ -2453,7 +2513,7 @@ function deleteCandidate(type,i){
 
 async function testCandidate(type, i){
   const c = state.config.candidates[type][i];
-  const probeKeyId = 'kb:' + type + ':' + c.provider + ':' + c.key;
+  const probeKeyId = 'kb:' + type + (c.model ? ':' + c.model : '') + ':' + c.provider + ':' + c.key;
   if(state.probingKeys.has(probeKeyId)) return;
 
   state.probingKeys.add(probeKeyId);
@@ -2467,19 +2527,19 @@ async function testCandidate(type, i){
     const r = await fetch('/api/admin/test-candidate', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ ...c, type }),
+      body: JSON.stringify({ ...c, type, model: c.model }),
       signal: controller.signal
     });
     clearTimeout(timer);
     const d = await r.json();
     const latency = Date.now() - start;
     if(d.success){
-      toast(`[${c.provider}/${c.key}] 探活成功 (${latency}ms)`, 'ok');
+      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活成功 (${latency}ms)`, 'ok');
     } else {
-      toast(`[${c.provider}/${c.key}] 探活失败: ${d.error || d.status}`, 'err');
+      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活失败: ${d.error || d.status}`, 'err');
     }
   } catch(e) {
-    toast(`[${c.provider}/${c.key}] 探活异常: ${e.message}`, 'err');
+    toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活异常: ${e.message}`, 'err');
   } finally {
     state.probingKeys.delete(probeKeyId);
     await loadData();

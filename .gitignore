@@ -17,6 +17,15 @@ tx_khc.pem
 *.install_secrets.json
 *.log
 
+# Local internal docs, architecture specs & secrets (STRICTLY LOCAL, NEVER PUSH TO GITHUB)
+LOCAL_*.md
+ARCHITECTURE_STANDARDS.md
+LOCAL_ENV_SECRETS.md
+
+# Local test suites & scratch tools (STRICTLY LOCAL, NEVER PUSH TO GITHUB)
+tests/
+scratch/
+
 # OS
 .DS_Store
 Thumbs.db

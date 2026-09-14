@@ -288,7 +288,11 @@ if ! command -v curl &>/dev/null; then
 fi
 
 if ! command -v python3 &>/dev/null; then
-    error "未找到 python3，请在系统中安装 Python 3.10+。"
+    info "未检测到 python3，正在自动安装 Python 环境与必要组件..."
+    apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip
+    if ! command -v python3 &>/dev/null; then
+        error "自动安装 Python 失败，请手动在系统中安装 Python 3.10+。"
+    fi
 fi
 
 PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')

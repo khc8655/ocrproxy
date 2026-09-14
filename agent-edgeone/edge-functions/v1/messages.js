@@ -24,8 +24,9 @@ import {
 import {
   shouldFailover,
   bindingId,
+  recordFailure,
 } from '../lib/cooldowns.js';
-import { normaliseMessagesForProvider } from '../lib/normalize.js';
+import { normaliseMessagesForProvider, createKeepAliveStream } from '../lib/normalize.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000;
@@ -182,6 +183,7 @@ export async function onRequestPost(context) {
 
       const remainingMs = deadline - Date.now();
       const perAttemptTimeoutMs = Math.min(upstreamTimeoutSec * 1000, Math.max(3000, remainingMs));
+      const customHeaders = binding.adapterRules?.inject_headers || binding.adapterRules?.adapter_rules?.inject_headers;
 
       const result = await forwardMessagesUpstream(
         targetUrl,
@@ -189,7 +191,8 @@ export async function onRequestPost(context) {
         anthropicVersion,
         attemptBody,
         body.stream === true,
-        perAttemptTimeoutMs
+        perAttemptTimeoutMs,
+        customHeaders
       );
 
       if (result.kind === 'success') {
@@ -210,6 +213,9 @@ export async function onRequestPost(context) {
 
       if (fastFailoverProvDown && (lastStatus >= 500 || result.kind === 'read_timeout' || result.kind === 'empty_stream')) {
         downProviders.add(binding.provider);
+      }
+      if (kv && (lastStatus >= 500 || result.kind === 'read_timeout' || result.kind === 'empty_stream')) {
+        recordFailure(binding.provider, binding.keyLabel, kv, binding.upstreamModel || '', 3000).catch(() => {});
       }
 
       attemptLog.push(`${binding.provider}/${binding.keyLabel}=${lastStatus || result.kind}`);
@@ -252,7 +258,7 @@ export async function onRequestPost(context) {
 }
 
 
-async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isStream, timeoutMs) {
+async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isStream, timeoutMs, customHeaders = null) {
   const headers = {
     'content-type': 'application/json',
     'authorization': `Bearer ${apiKey}`,
@@ -262,6 +268,13 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   if (isStream) {
     headers['accept'] = 'text/event-stream';
     headers['accept-encoding'] = 'identity';
+  }
+
+  // Inject custom outbound headers from adapter rules
+  if (customHeaders && typeof customHeaders === 'object') {
+    for (const [k, v] of Object.entries(customHeaders)) {
+      headers[k.toLowerCase()] = String(v);
+    }
   }
 
   const controller = new AbortController();
@@ -307,7 +320,6 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
     return { kind: 'success', response: resp };
   }
 
-  // Stream: directly return native zero-copy response stream without JS TransformStream buffering
   clearTimeout(timer);
   if (!resp.body) {
     return { kind: 'empty_stream', status: resp.status, errorText: 'Response has no body' };
@@ -325,7 +337,7 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
 
   return {
     kind: 'success',
-    response: new Response(resp.body, {
+    response: new Response(createKeepAliveStream(resp.body, 15000), {
       status: resp.status,
       statusText: resp.statusText,
       headers: responseHeaders,

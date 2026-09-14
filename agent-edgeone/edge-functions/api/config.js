@@ -254,6 +254,7 @@ export async function onRequestGet(context) {
       source,
       last_modified: lastModified,
       kv_binding: kvRes?.name || null,
+      _version: config._version || 0,
       config,
     }),
     {
@@ -331,6 +332,12 @@ export async function onRequestPut(context) {
   try {
     wrapped = await saveConfig(incoming, kv);
   } catch (e) {
+    if (e.status === 409) {
+      return new Response(
+        JSON.stringify({ error: { type: 'conflict', message: e.message }, _version: e.curVersion }),
+        { status: 409, headers: { 'content-type': 'application/json' } }
+      );
+    }
     if (e instanceof ConfigError) {
       return new Response(
         JSON.stringify({ error: { type: 'invalid_config', message: e.message } }),
@@ -343,13 +350,13 @@ export async function onRequestPut(context) {
     );
   }
 
-
   return new Response(
     JSON.stringify({
       ok: true,
       last_modified: wrapped.last_modified,
       source: 'kv',
-      propagation_hint: 'New config propagates to all edge nodes within ~60 s.',
+      _version: wrapped._version,
+      propagation_hint: 'New config propagates to all edge nodes within ~5 s.',
       config: incoming,
     }),
     { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store, no-cache, must-revalidate' } }

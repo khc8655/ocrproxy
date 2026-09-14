@@ -5,25 +5,25 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-09-06T00:56:16.897Z",
+  "updated_at": "2026-09-13T03:50:22.953Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI (爱格尼斯)",
-      "version": "1.1.0",
-      "rule_hash": "12c2664de5e7",
+      "version": "1.2.0",
+      "rule_hash": "aaa5a822991a",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",
-      "description": "Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+      "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+      "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
       "features": {
         "native_thinking": false,
         "chat_template_kwargs_thinking": true,
         "tools": true,
         "multimodal": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 3
     },
     {
       "id": "amd",
@@ -46,19 +46,19 @@ export const CATALOG = {
     {
       "id": "bai",
       "name": "B.AI",
-      "version": "1.1.0",
-      "rule_hash": "4af5010bef34",
+      "version": "1.2.0",
+      "rule_hash": "c49042746764",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
       "anthropic_base_url": "https://api.b.ai/v1",
       "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
       "features": {
         "native_thinking": true,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 4
     },
     {
       "id": "deepseek",
@@ -201,11 +201,11 @@ export const PRESETS = [
   {
     "id": "agnes",
     "name": "Agnes AI (爱格尼斯)",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
-    "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-25-flash",
-    "description": "Agnes AI 平台，支持 agnes-2.5-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+    "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+    "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
     "features": {
       "native_thinking": false,
       "chat_template_kwargs_thinking": true,
@@ -213,6 +213,11 @@ export const PRESETS = [
       "multimodal": true
     },
     "recommended_models": [
+      {
+        "name": "agnes-3.0-flash",
+        "upstream_model": "agnes-3.0-flash",
+        "description": "Agnes 3.0 Flash 全新一代旗舰开源推理模型 (512K 上下文)"
+      },
       {
         "name": "agnes-2.5-flash",
         "upstream_model": "agnes-2.5-flash",
@@ -227,7 +232,8 @@ export const PRESETS = [
     "adapter_rules": {
       "reasoning": {
         "strategy": "chat_template_kwargs",
-        "enable_key": "enable_thinking"
+        "enable_key": "enable_thinking",
+        "default_thinking": true
       },
       "tools": {
         "normalize_choice_to_string": false,
@@ -238,7 +244,8 @@ export const PRESETS = [
         "passthrough_user": true
       },
       "sanitization": {
-        "unsupported_params": []
+        "unsupported_params": [],
+        "max_tokens_ceiling": 65536
       }
     }
   },
@@ -339,18 +346,28 @@ export const PRESETS = [
   {
     "id": "bai",
     "name": "B.AI",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.b.ai/v1",
     "anthropic_base_url": "https://api.b.ai/v1",
     "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-    "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道",
+    "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
     "features": {
       "native_thinking": true,
       "tools": true,
       "anthropic_messages": true
     },
     "recommended_models": [
+      {
+        "name": "glm-5.3-flash",
+        "upstream_model": "glm-5.3-flash",
+        "description": "智谱 GLM 5.3 Flash 原生常开深度思考模型 (网关已自动适配 Hermes / OpenAI 思考档位)"
+      },
+      {
+        "name": "qwen3.8-flash",
+        "upstream_model": "qwen3.8-flash",
+        "description": "千问 3.8 Flash 模型 (原生思考支持)"
+      },
       {
         "name": "claude-3-5-sonnet",
         "upstream_model": "claude-3-5-sonnet",
@@ -364,7 +381,31 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "openai_passthrough"
+        "strategy": "effort_remapping",
+        "supported_levels": [
+          "none",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "max"
+        ],
+        "model_rules": {
+          "glm": {
+            "supported_levels": [
+              "low",
+              "high",
+              "max"
+            ],
+            "level_fallback": {
+              "medium": "high",
+              "minimal": "low",
+              "none": "low"
+            },
+            "none_action": "omit",
+            "default_effort": "high"
+          }
+        }
       },
       "tools": {
         "normalize_choice_to_string": false,
@@ -815,5 +856,6 @@ export const PRESETS = [
 export const PRESET_MAP = Object.fromEntries(PRESETS.map((p) => [p.id, p]));
 
 export function getPreset(id) {
-  return PRESET_MAP[String(id).toLowerCase()] || null;
+  const key = String(id || '').toLowerCase().trim();
+  return PRESET_MAP[key] || PRESET_MAP[key.replace(/[.\-_]/g, '')] || null;
 }

@@ -97,11 +97,20 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
-  // 2. Sanitization (parameter blacklisting)
+  // 2. Sanitization (parameter blacklisting and clamping)
   const stripParams = rules.sanitization?.strip_params || rules.sanitization?.unsupported_params;
   if (Array.isArray(stripParams)) {
     for (const sp of stripParams) {
       delete body[sp];
+    }
+  }
+  const maxTokensCeil = rules.sanitization?.max_tokens_ceiling;
+  if (typeof maxTokensCeil === 'number' && maxTokensCeil > 0) {
+    if (typeof body.max_tokens === 'number' && body.max_tokens > maxTokensCeil) {
+      body.max_tokens = maxTokensCeil;
+    }
+    if (typeof body.max_completion_tokens === 'number' && body.max_completion_tokens > maxTokensCeil) {
+      body.max_completion_tokens = maxTokensCeil;
     }
   }
 
@@ -160,6 +169,40 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
         }
         newMessages.push(...otherMessages);
         body.messages = newMessages;
+      }
+    }
+  }
+
+  // 3b. Thinking protocol & reasoning block filtering on messages
+  let thinkingPolicy = rules.thinking_policy || rules.reasoning?.thinking_policy;
+  if (!thinkingPolicy && isAnthropic) {
+    const idLower = modelName.toLowerCase();
+    if (['claude-', 'opus-', 'sonnet-', 'haiku-'].some(p => idLower.startsWith(p))) {
+      thinkingPolicy = 'strict_signature';
+    } else if (['deepseek-', 'kimi-', 'moonshot-', 'glm-', 'minimax-'].some(p => idLower.startsWith(p)) || idLower.includes('-thinking') || idLower === 'k3' || idLower === 'k3-256k') {
+      thinkingPolicy = 'passback_required';
+    }
+  }
+
+  if (thinkingPolicy && Array.isArray(body.messages)) {
+    for (const m of body.messages) {
+      if (!m || typeof m !== 'object' || m.role !== 'assistant') continue;
+      if (Array.isArray(m.content)) {
+        const newContent = [];
+        for (const b of m.content) {
+          if (b && typeof b === 'object' && b.type === 'thinking') {
+            if (thinkingPolicy === 'strip') {
+              continue;
+            } else if (thinkingPolicy === 'strict_signature' && !b.signature) {
+              continue;
+            }
+          }
+          newContent.push(b);
+        }
+        m.content = newContent;
+      } else if (thinkingPolicy === 'strip') {
+        delete m.reasoning_content;
+        delete m.reasoning;
       }
     }
   }
@@ -334,6 +377,12 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
           if (body.chat_template_kwargs[enableKey] === undefined) {
             body.chat_template_kwargs[enableKey] = (rawEffort !== 'none' && rawEffort !== 'false');
           }
+        } else if (reasoningRules.default_thinking) {
+          body.chat_template_kwargs = body.chat_template_kwargs || {};
+          const enableKey = reasoningRules.enable_key || 'enable_thinking';
+          if (body.chat_template_kwargs[enableKey] === undefined) {
+            body.chat_template_kwargs[enableKey] = true;
+          }
         }
       } else if (strat === 'effort_remapping') {
         if (reasoningRules.strip_thinking) {
@@ -347,7 +396,9 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
           const noneAct = modelSpecific.none_action || reasoningRules.none_action;
 
           if (reStr === 'none' || reStr === 'false') {
-            if (noneFb) {
+            if (supported.includes('none') && !noneFb && noneAct !== 'omit') {
+              body.reasoning_effort = 'none';
+            } else if (noneFb) {
               body.reasoning_effort = noneFb;
             } else if (noneAct === 'omit') {
               delete body.reasoning_effort;
@@ -419,12 +470,13 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
 /**
  * Public normalisation API for chat completions.
  */
-export function normaliseForProvider(body, provider, configOverride = null) {
+export function normaliseForProvider(body, provider, configOverride = null, isAgentMode = true) {
   if (!body || typeof body !== 'object') return body;
   const p = String(provider || '').toLowerCase();
   const preset = getPreset(p) || {};
   const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
-  return applyAdapterRules(body, rules, true, false);
+  const agentMode = configOverride?.isAgentMode !== undefined ? configOverride.isAgentMode : isAgentMode;
+  return applyAdapterRules(body, rules, agentMode, false);
 }
 
 /**
@@ -521,4 +573,56 @@ export function rescueToolCallsFromText(content) {
   }
 
   return null;
+}
+
+/**
+ * Wraps an upstream ReadableStream so that if no chunk is emitted for
+ * `intervalMs` (default 15s), an SSE comment ": keep-alive\n\n" is enqueued
+ * to maintain the connection with downstream clients / edge gateways.
+ */
+export function createKeepAliveStream(upstreamBody, intervalMs = 15000) {
+  if (!upstreamBody || typeof upstreamBody.getReader !== 'function') {
+    return upstreamBody;
+  }
+  const reader = upstreamBody.getReader();
+  const encoder = new TextEncoder();
+  let timer = null;
+
+  return new ReadableStream({
+    async start(controller) {
+      const scheduleKeepAlive = () => {
+        timer = setTimeout(() => {
+          try {
+            controller.enqueue(encoder.encode(': keep-alive\n\n'));
+            scheduleKeepAlive();
+          } catch (e) {}
+        }, intervalMs);
+      };
+
+      scheduleKeepAlive();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          if (done) {
+            break;
+          }
+          controller.enqueue(value);
+          scheduleKeepAlive();
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
+    cancel(reason) {
+      if (timer) clearTimeout(timer);
+      return reader.cancel(reason);
+    }
+  });
 }

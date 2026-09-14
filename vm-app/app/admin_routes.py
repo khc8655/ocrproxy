@@ -2,6 +2,7 @@ import os
 import copy
 import json
 import shutil
+import glob
 import logging
 import asyncio
 import ipaddress
@@ -117,50 +118,42 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "full") -> 
                         if k_name and k_secret:
                             merged_keys[k_name] = k_secret
 
-    # 2. Merge candidates (KB mode / Full mode only)
-    if local_run_mode in ("kb", "full"):
-        merged_candidates = merged.setdefault("candidates", {})
-        incoming_candidates = incoming.get("candidates", {})
-        if isinstance(incoming_candidates, dict):
-            for cat in ("chat", "embedding", "reranker", "ocr"):
-                in_list = incoming_candidates.get(cat, [])
-                if isinstance(in_list, list):
-                    existing_list = merged_candidates.setdefault(cat, [])
-                    existing_keys = {(c.get("provider"), c.get("key"), c.get("model")) for c in existing_list if isinstance(c, dict)}
-                    for cand in in_list:
-                        if isinstance(cand, dict):
-                            k = (cand.get("provider"), cand.get("key"), cand.get("model"))
-                            if k not in existing_keys and cand.get("provider") and cand.get("key"):
-                                existing_list.append(copy.deepcopy(cand))
-                                existing_keys.add(k)
-    else:
-        # In Agent mode, strip any candidates
-        merged["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+    # 2. Merge candidates (Always preserve user candidates across modes)
+    merged_candidates = merged.setdefault("candidates", {})
+    incoming_candidates = incoming.get("candidates", {})
+    if isinstance(incoming_candidates, dict):
+        for cat in ("chat", "embedding", "reranker", "ocr"):
+            in_list = incoming_candidates.get(cat, [])
+            if isinstance(in_list, list):
+                existing_list = merged_candidates.setdefault(cat, [])
+                existing_keys = {(c.get("provider"), c.get("key"), c.get("model")) for c in existing_list if isinstance(c, dict)}
+                for cand in in_list:
+                    if isinstance(cand, dict):
+                        k = (cand.get("provider"), cand.get("key"), cand.get("model"))
+                        if k not in existing_keys and cand.get("provider") and cand.get("key"):
+                            existing_list.append(copy.deepcopy(cand))
+                            existing_keys.add(k)
 
-    # 3. Merge agent_models (Agent mode / Full mode only)
-    if local_run_mode in ("agent", "full"):
-        merged_agent_models = merged.setdefault("agent_models", {})
-        incoming_agent_models = incoming.get("agent_models", {})
-        if isinstance(incoming_agent_models, dict):
-            for m_name, m_val in incoming_agent_models.items():
-                if not isinstance(m_val, dict):
-                    continue
-                if m_name not in merged_agent_models:
-                    merged_agent_models[m_name] = copy.deepcopy(m_val)
-                else:
-                    existing_keys = merged_agent_models[m_name].setdefault("keys", [])
-                    existing_set = {(b.get("provider"), b.get("key")) for b in existing_keys if isinstance(b, dict)}
-                    for b in m_val.get("keys", []):
-                        if isinstance(b, dict):
-                            sig = (b.get("provider"), b.get("key"))
-                            if sig not in existing_set and b.get("provider") and b.get("key"):
-                                existing_keys.append(copy.deepcopy(b))
-                                existing_set.add(sig)
-                    if m_val.get("upstream_model"):
-                        merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
-    else:
-        # In KB mode, strip any agent models
-        merged["agent_models"] = {}
+    # 3. Merge agent_models (Always preserve user agent models across modes)
+    merged_agent_models = merged.setdefault("agent_models", {})
+    incoming_agent_models = incoming.get("agent_models", {})
+    if isinstance(incoming_agent_models, dict):
+        for m_name, m_val in incoming_agent_models.items():
+            if not isinstance(m_val, dict):
+                continue
+            if m_name not in merged_agent_models:
+                merged_agent_models[m_name] = copy.deepcopy(m_val)
+            else:
+                existing_keys = merged_agent_models[m_name].setdefault("keys", [])
+                existing_set = {(b.get("provider"), b.get("key")) for b in existing_keys if isinstance(b, dict)}
+                for b in m_val.get("keys", []):
+                    if isinstance(b, dict):
+                        sig = (b.get("provider"), b.get("key"))
+                        if sig not in existing_set and b.get("provider") and b.get("key"):
+                            existing_keys.append(copy.deepcopy(b))
+                            existing_set.add(sig)
+                if m_val.get("upstream_model"):
+                    merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
 
     # 4. Update top-level setting parameters if present in incoming (EXCLUDING run_mode)
     setting_keys = [
@@ -235,6 +228,7 @@ async def get_config_endpoint(request: Request):
             run_mode = "full"
         resp_data["_run_mode"] = run_mode
         resp_data["run_mode"] = run_mode
+        resp_data["_version"] = config.get("_version", 1)
         return JSONResponse(content=resp_data)
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)
@@ -613,10 +607,10 @@ async def import_config_endpoint(request: Request):
         else:
             final_config = copy.deepcopy(incoming_config)
             final_config["run_mode"] = local_run_mode
-            if local_run_mode == "agent":
-                final_config["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
-            elif local_run_mode == "kb":
-                final_config["agent_models"] = {}
+            if "candidates" not in final_config or not final_config["candidates"]:
+                final_config["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+            if "agent_models" not in final_config or not final_config["agent_models"]:
+                final_config["agent_models"] = current_config.get("agent_models") or {}
 
         final_config.pop("_exported_at", None)
         final_config.pop("_version", None)
@@ -625,9 +619,12 @@ async def import_config_endpoint(request: Request):
         final_config["run_mode"] = local_run_mode
 
         if "candidates" not in final_config:
-            final_config["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+            final_config["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
         if "agent_models" not in final_config:
-            final_config["agent_models"] = {}
+            final_config["agent_models"] = current_config.get("agent_models") or {}
+
+        # Monotonic version bump on import
+        final_config["_version"] = current_config.get("_version", 1) + 1
 
         await save_config(final_config)
         summary = _get_config_summary(final_config)
@@ -637,6 +634,7 @@ async def import_config_endpoint(request: Request):
             "mode": mode,
             "message": "配置导入成功",
             "summary": summary,
+            "_version": final_config["_version"]
         })
     except Exception as e:
         logger.error("Failed to import config: %s", e, exc_info=True)
@@ -691,17 +689,69 @@ async def save_config_endpoint(request: Request):
             content={"error": "Invalid configuration: providers must be an object"}
         )
 
-    if "candidates" not in body or not isinstance(body["candidates"], dict):
-        body["candidates"] = {"chat": [], "embedding": [], "reranker": [], "ocr": []}
-    if "agent_models" not in body or not isinstance(body["agent_models"], dict):
-        body["agent_models"] = {}
-
     try:
+        current_config = await get_config()
+        curr_ver = current_config.get("_version", 1)
+        client_ver = body.get("_version")
+
+        # 1. Optimistic Locking Version Check:
+        # If client provides _version and it is strictly lower than current version on disk,
+        # reject with 409 Conflict to protect against stale tabs overwriting newly added keys/models.
+        if client_ver is not None and isinstance(client_ver, int) and client_ver < curr_ver:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": f"配置已被其他会话或标签页更新（当前最新版本为 v{curr_ver}，您的版本为 v{client_ver}）。为防止新添加的模型和 Key 被覆盖冲毁，本次保存已被系统安全拦截。请刷新页面拉取最新配置后重试。",
+                    "code": "version_conflict",
+                    "current_version": curr_ver,
+                    "client_version": client_ver
+                }
+            )
+
+        # 2. Asset preservation: keep existing candidates/agent_models if missing from incoming
+        if "candidates" not in body or not isinstance(body["candidates"], dict):
+            body["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
+        if "agent_models" not in body or not isinstance(body["agent_models"], dict):
+            body["agent_models"] = current_config.get("agent_models") or {}
+
+        # 3. Rolling encrypted backups (keep last 20)
+        try:
+            config_dir = _get_config_dir()
+            current_enc_file = os.path.join(config_dir, "proxy_config.enc")
+            if os.path.exists(current_enc_file):
+                timestamp_str = time.strftime("%Y%m%d%H%M%S")
+                bak_file = os.path.join(config_dir, f"proxy_config.enc.bak-{timestamp_str}")
+                shutil.copy2(current_enc_file, bak_file)
+                bak_files = sorted(glob.glob(os.path.join(config_dir, "proxy_config.enc.bak-*")))
+                if len(bak_files) > 20:
+                    for old_bak in bak_files[:-20]:
+                        try:
+                            os.remove(old_bak)
+                        except Exception:
+                            pass
+        except Exception as bak_err:
+            logger.warning("Failed to create pre-save rolling backup: %s", bak_err)
+
+        # 4. Bump version monotonically
+        next_ver = curr_ver + 1
+        body["_version"] = next_ver
+
         new_run_mode = body.get("run_mode")
         if new_run_mode:
             _sync_env_run_mode(new_run_mode)
+
         await save_config(body)
-        return JSONResponse(content={"status": "success", "message": "Configuration saved successfully."})
+        for m_name, m_cfg in (body.get("agent_models") or {}).items():
+            if isinstance(m_cfg, dict) and m_cfg.get("active_key"):
+                from . import scheduler
+                scheduler.set_sticky_agent_active_key(m_name, m_cfg["active_key"])
+                stats.set_agent_active_key(m_name, m_cfg["active_key"])
+
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Configuration saved successfully.",
+            "_version": next_ver
+        })
     except Exception as e:
         logger.error("Failed to save config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to save configuration"})
@@ -712,7 +762,29 @@ async def get_stats_endpoint(request: Request):
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
-    return JSONResponse(content=stats.get_stats())
+    data = stats.get_stats()
+    try:
+        from .scheduler import get_active_cooldowns
+        active_cds = get_active_cooldowns()
+        if active_cds and "candidates_status" in data:
+            c_status = data["candidates_status"]
+            for cid, info in active_cds.items():
+                parts = cid.split(":")
+                if len(parts) >= 2:
+                    prov, key = parts[0], parts[1]
+                    model = parts[2] if len(parts) > 2 else ""
+                    for k, entry in c_status.items():
+                        if prov in k and key in k and (not model or model in k):
+                            if info.get("is_quota"):
+                                entry["is_quota"] = True
+                            # Agent mode keys should not be marked as 'cooling' unless strictly quota-exhausted
+                            is_agent_entry = (entry.get("category") == "agent" or k.startswith("agent:"))
+                            if info.get("cooling") and not is_agent_entry:
+                                entry["cooling"] = True
+    except Exception:
+        pass
+
+    return JSONResponse(content=data)
 
 
 @router.post("/stats")
@@ -960,14 +1032,14 @@ async def test_candidate_endpoint(request: Request):
                 if category == "agent":
                     stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label)
                 else:
-                    stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label)
+                    stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model)
                 return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
             if category == "agent":
                 stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}")
             else:
-                stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}")
+                stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model, error_msg=f"Manual test failed: {err_text}")
             return JSONResponse(content={
                 "success": False,
                 "status": resp.status_code,
@@ -976,16 +1048,16 @@ async def test_candidate_endpoint(request: Request):
             })
     except httpx.ReadTimeout:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg="Manual test timeout (30s)")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test timeout (30s)")
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg="Manual test connect error")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test connect error")
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, error_msg=f"Manual test error: {str(e)}")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg=f"Manual test error: {str(e)}")
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={"success": False, "error": "测试失败"})
 
