@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-09-13T03:50:22.953Z",
+  "updated_at": "2026-09-14T12:50:11.336Z",
   "providers": [
     {
       "id": "agnes",
@@ -46,8 +46,8 @@ export const CATALOG = {
     {
       "id": "bai",
       "name": "B.AI",
-      "version": "1.2.0",
-      "rule_hash": "c49042746764",
+      "version": "1.3.0",
+      "rule_hash": "fadedcc28148",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
       "anthropic_base_url": "https://api.b.ai/v1",
@@ -346,7 +346,7 @@ export const PRESETS = [
   {
     "id": "bai",
     "name": "B.AI",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "protocol": "openai",
     "base_url": "https://api.b.ai/v1",
     "anthropic_base_url": "https://api.b.ai/v1",
@@ -414,6 +414,29 @@ export const PRESETS = [
       },
       "sanitization": {
         "unsupported_params": []
+      },
+      "error_rules": [
+        {
+          "name": "credit_insufficient_balance",
+          "match_status": 400,
+          "match_keywords": [
+            "credit",
+            "balance",
+            "insufficient",
+            "欠费",
+            "余额不足"
+          ],
+          "action": "quota_exhausted",
+          "cooldown_sec": 1800,
+          "failover": true
+        }
+      ],
+      "timeout_rules": {
+        "default_timeout_sec": 60,
+        "models": {
+          "glm-5.3-flash": 120,
+          "glm-5.3": 120
+        }
       }
     }
   },

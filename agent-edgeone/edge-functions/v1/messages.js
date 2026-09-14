@@ -127,7 +127,8 @@ export async function onRequestPost(context) {
     let lastStatus = 0;
     let lastErrorText = '';
 
-    const candidatePool = orderBindings(allBindings, body.model, strategy);
+    const configuredActiveKey = config.agent_models?.[body.model]?.active_key;
+    const candidatePool = orderBindings(allBindings, body.model, strategy, configuredActiveKey);
     const anthropicVersion = request.headers.get('anthropic-version') || '2023-06-01';
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -182,7 +183,11 @@ export async function onRequestPost(context) {
       const targetUrl = buildMessagesUrl(resolved.baseUrl, provCfg.anthropic_base_url, binding.provider);
 
       const remainingMs = deadline - Date.now();
-      const perAttemptTimeoutMs = Math.min(upstreamTimeoutSec * 1000, Math.max(3000, remainingMs));
+      const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
+        || binding.adapterRules?.timeout_rules?.default_timeout_sec
+        || upstreamTimeoutSec;
+      const effectiveTimeoutSec = Math.min(60, Number(modelTimeoutSec) || upstreamTimeoutSec);
+      const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
       const customHeaders = binding.adapterRules?.inject_headers || binding.adapterRules?.adapter_rules?.inject_headers;
 
       const result = await forwardMessagesUpstream(
@@ -220,7 +225,7 @@ export async function onRequestPost(context) {
 
       attemptLog.push(`${binding.provider}/${binding.keyLabel}=${lastStatus || result.kind}`);
 
-      if (!shouldFailover(lastStatus, result.kind)) {
+      if (!shouldFailover(lastStatus, result.kind, result.errorText)) {
         return new Response(result.errorText || 'Upstream error', {
           status: lastStatus || 500,
           headers: {

@@ -194,7 +194,11 @@ export async function onRequestPost(context) {
 
     // Calculate dynamic remaining timeout for this attempt
     const remainingMs = deadline - Date.now();
-    const perAttemptTimeoutMs = Math.min(upstreamTimeoutSec * 1000, Math.max(3000, remainingMs));
+    const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
+      || binding.adapterRules?.timeout_rules?.default_timeout_sec
+      || upstreamTimeoutSec;
+    const effectiveTimeoutSec = Math.min(60, Number(modelTimeoutSec) || upstreamTimeoutSec);
+    const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
 
     const result = await forwardUpstream(
       resolved,
@@ -238,7 +242,7 @@ export async function onRequestPost(context) {
     );
 
     // Non-retriable? (e.g. 400 bad request, or manual mode) Return immediately
-    if (strategy === 'manual' || !shouldFailover(result.status, result.kind)) {
+    if (strategy === 'manual' || !shouldFailover(result.status, result.kind, lastErrorText)) {
       if (result.response) {
         const headers = result.response.headers;
         headers.set('x-edgeone-relay', 'v8-3');

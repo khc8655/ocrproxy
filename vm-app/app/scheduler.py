@@ -136,6 +136,7 @@ HARD_QUOTA_KEYWORDS = (
     "free usage limit exceeded", "daily free usage limit", "freeusagelimit",
     "free quota has been exhausted", "free quota exhausted", "free allowance exhausted",
     "free quota is exhausted", "quota has been exhausted", "allowance exhausted",
+    "credit insufficient balance", "balance=0", "credit is 0", "credit depleted",
     "欠费", "余额不足", "配额不足", "额度不足", "账户欠费", "免费额度用尽", "免费额度已用完",
     "超出总额度", "超出配额限制"
 )
@@ -669,11 +670,31 @@ async def schedule(
             attempt_seq += 1
             provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
 
-            # 3. Concurrency Semaphore acquisition per key
+            # 3. Dynamic candidate timeout calculation
+            cand_p_rules = cand.get("adapter_rules") or (providers.get(provider_name, {}).get("adapter_rules") or {})
+            cand_t_rules = cand_p_rules.get("timeout_rules") or {}
+            cand_m_map = cand_t_rules.get("models") or {}
+            cand_timeout_cfg = cand.get("timeout_sec") or cand_m_map.get(cand_model_name) or cand_t_rules.get("default_timeout_sec")
+            
+            if cand_timeout_cfg:
+                cand_timeout_sec = float(cand_timeout_cfg)
+            else:
+                m_check = f"{req_model_name or ''} {cand_model_name or ''}".lower()
+                if any(k in m_check for k in ("glm-5", "r1", "thinking", "o1", "o3")):
+                    cand_timeout_sec = float(config.get("upstream_timeout_reasoning", 120.0))
+                else:
+                    cand_timeout_sec = upstream_timeout_sec
+
+            if total_budget_sec < cand_timeout_sec * 1.5:
+                total_budget_sec = cand_timeout_sec * 1.5
+
+            cand_req_timeout = httpx.Timeout(cand_timeout_sec, connect=min(5.0, cand_timeout_sec))
+
+            # 4. Concurrency Semaphore acquisition per key
             sem_id = f"{provider_name}:{key_label}"
             sem = await get_key_semaphore(sem_id, concurrency_limit)
 
-            logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id}")
+            logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id} (timeout={cand_timeout_sec:.0f}s)")
 
             cand_start = time.time()
             # Acquire the per-key semaphore (queueing here preserves agent-mode
@@ -706,14 +727,14 @@ async def schedule(
                     if is_stream:
                         req = client.build_request(method, url, headers=headers, json=body)
                         req.extensions["timeout"] = {
-                            "connect": min(5.0, upstream_timeout_sec),
-                            "read": upstream_timeout_sec,
-                            "write": upstream_timeout_sec,
+                            "connect": min(5.0, cand_timeout_sec),
+                            "read": cand_timeout_sec,
+                            "write": cand_timeout_sec,
                             "pool": 5.0,
                         }
                         resp = await client.send(req, stream=True)
                     else:
-                        resp = await client.request(method, url, headers=headers, json=body, timeout=req_timeout)
+                        resp = await client.request(method, url, headers=headers, json=body, timeout=cand_req_timeout)
 
                     status_code = resp.status_code
 
@@ -829,11 +850,25 @@ async def schedule(
 
                     body_lower = (err_body_text or "").lower()
                     _has_rate_limit_kw = bool(body_lower and any(w in body_lower for w in RATE_LIMIT_KEYWORDS))
-                    _has_hard_quota_kw = bool(body_lower and any(w in body_lower for w in HARD_QUOTA_KEYWORDS))
+                    _has_hard_quota_kw = bool(body_lower and (
+                        any(w in body_lower for w in HARD_QUOTA_KEYWORDS)
+                        or any(w in body_lower for w in cand_p_rules.get("quota_keywords", []))
+                        or ("balance" in body_lower and any(b in body_lower for b in ("insufficient", "0", "zero", "low", "empty", "not enough")))
+                        or ("credit" in body_lower and any(b in body_lower for b in ("insufficient", "0", "zero", "low", "empty", "not enough")))
+                    ))
+
+                    # Provider declarative error rules from adapter_rules
+                    for er in cand_p_rules.get("error_rules", []):
+                        er_status = er.get("match_status")
+                        er_kws = er.get("match_keywords", [])
+                        if (er_status is None or er_status == status_code) and any(k.lower() in body_lower for k in er_kws):
+                            if er.get("action") == "quota_exhausted" or er.get("category") == "quota_exhausted":
+                                _has_hard_quota_kw = True
 
                     # Hard quota/arrears requires explicit quota keywords and NO rate-limit indicators.
+                    # Upstreams like B.AI/OneAPI return HTTP 400 with "credit insufficient balance"
                     _is_quota = bool(
-                        status_code in (429, 401, 402, 403)
+                        status_code in (400, 401, 402, 403, 429)
                         and _has_hard_quota_kw
                         and not _has_rate_limit_kw
                     )
@@ -841,9 +876,10 @@ async def schedule(
                     # Distinguish 400 Bad Request:
                     _400_is_key_issue = False
                     if status_code == 400 and err_body_text:
-                        if any(kw in body_lower for kw in [
+                        if _is_quota or any(kw in body_lower for kw in [
                             "subscription", "no active", "api key", "invalid_key",
                             "unauthorized", "account", "billing", "payment", "plan",
+                            "credit", "balance", "insufficient", "quota", "arrears",
                         ]):
                             _400_is_key_issue = True
 
@@ -929,7 +965,7 @@ async def schedule(
                         down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
-                            f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s",
+                            f"{cand_id} encountered ReadTimeout after {cand_timeout_sec:.0f}s",
                             last_status_code=504,
                             last_response_body=None,
                         )
@@ -937,8 +973,8 @@ async def schedule(
                         _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
                     else:
                         _cooldown_until.pop(cand_id, None)
-                    _record_latency(cand_id, upstream_timeout_sec)
-                    err_msg = (f"{cand_id} encountered ReadTimeout after {upstream_timeout_sec:.0f}s "
+                    _record_latency(cand_id, cand_timeout_sec)
+                    err_msg = (f"{cand_id} encountered ReadTimeout after {cand_timeout_sec:.0f}s "
                                f"(model may be slow, not penalised)")
                     logger.warning(err_msg)
                     errors.append(err_msg)

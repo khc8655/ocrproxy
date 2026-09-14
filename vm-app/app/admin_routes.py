@@ -1,4 +1,5 @@
 import os
+import re
 import copy
 import json
 import shutil
@@ -285,7 +286,12 @@ def _get_local_catalog() -> dict:
 
 def _get_local_preset(preset_id: str):
     """Fallback: read shared/presets/{preset_id}.json locally."""
-    preset_file = _get_presets_dir() / f"{preset_id}.json"
+    pdir = _get_presets_dir()
+    preset_file = pdir / f"{preset_id}.json"
+    if not preset_file.exists():
+        pid_clean = re.sub(r"[.\-_]", "", preset_id.lower())
+        if pid_clean:
+            preset_file = pdir / f"{pid_clean}.json"
     if preset_file.exists():
         try:
             return json.loads(preset_file.read_text(encoding="utf-8"))
