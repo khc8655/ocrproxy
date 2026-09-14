@@ -211,11 +211,18 @@ export function bindingId(b) {
  *
  * Mirrors VM's scheduler.py logic for the cases that make sense here.
  */
-export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_timeout' */) {
+export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_timeout' */, errBody = '') {
   if (kind === 'empty_stream') return COOLDOWN_DURATIONS.EMPTY_STREAM;
   if (kind === 'read_timeout') return COOLDOWN_DURATIONS.READ_TIMEOUT;
   if (status === 429) return COOLDOWN_DURATIONS.TPM_429;
   if (status === 403) return COOLDOWN_DURATIONS.QUOTA_403;
+  if (status === 400) {
+    const lower = (errBody || '').toLowerCase();
+    if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('subscription')) {
+      return COOLDOWN_DURATIONS.QUOTA_403;
+    }
+    return 0;
+  }
   if (status === 401 || status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
   if (status >= 500) return COOLDOWN_DURATIONS.SERVER_5XX;
   return 0;
@@ -224,14 +231,20 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 /**
  * Decide if a status code should trigger failover to the next candidate.
  * 2xx → no, return to client
- * 400 → no, return to client (likely request-level)
+ * 400 → no (unless credit / balance quota issue), return to client (likely request-level)
  * 408 / 429 / 5xx / empty stream → yes
  * 401 / 403 / 404 → also yes (key-level, but mark with longer cooldown)
  */
-export function shouldFailover(status, kind) {
+export function shouldFailover(status, kind, errBody = '') {
   if (kind === 'empty_stream' || kind === 'read_timeout') return true;
   if (status >= 200 && status < 300) return false;
-  if (status === 400) return false; // request-level — short-circuit
+  if (status === 400) {
+    const lower = (errBody || '').toLowerCase();
+    if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('subscription')) {
+      return true;
+    }
+    return false;
+  }
   return true;
 }
 

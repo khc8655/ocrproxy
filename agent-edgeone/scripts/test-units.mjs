@@ -748,6 +748,11 @@ test('shouldFailover: 2xx and 400 do NOT failover', () => {
   eq(shouldFailover(400, 'http'), false);
 });
 
+test('classifyFailure & shouldFailover: 400 with quota/balance/credit failure triggers QUOTA_403 and failover', () => {
+  eq(classifyFailure(400, 'http', 'credit insufficient balance: balance=0'), COOLDOWN_DURATIONS.QUOTA_403);
+  eq(shouldFailover(400, 'http', 'credit insufficient balance: balance=0'), true);
+});
+
 test('shouldFailover: 429, 5xx, 401, 403, 404 DO failover', () => {
   eq(shouldFailover(429, 'http'), true);
   eq(shouldFailover(500, 'http'), true);
