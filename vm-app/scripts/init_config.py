@@ -28,7 +28,7 @@ def create_env_file(env_path: str, config_dir: str, proxy_key: str, admin_pass: 
 # 此文件包含敏感密钥，权限已设置为 600
 # 生成时间: 自动安装
 
-# 运行模式: agent (智能体直连) | kb (知识库入库) | full (混合全功能)
+# 运行模式: agent (智能体直连) | kb (知识库入库)
 RUN_MODE={run_mode}
 
 # 代理服务监听地址 (支持 IPv6 与 IPv4 双栈)
@@ -126,7 +126,7 @@ def main():
     env_path = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else "/opt/ocrproxy/.env"
     port = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 3000
     run_mode = sys.argv[5].lower() if len(sys.argv) > 5 and sys.argv[5] else "agent"
-    if run_mode not in ("agent", "kb", "full"):
+    if run_mode not in ("agent", "kb"):
         run_mode = "agent"
 
     print("\n" + "=" * 60)

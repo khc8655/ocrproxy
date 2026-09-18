@@ -96,7 +96,7 @@ def _get_config_summary(config: dict) -> dict:
     }
 
 
-def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "full") -> dict:
+def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") -> dict:
     """Deep-merge incoming config into base config, filtered by active RUN_MODE."""
     merged = copy.deepcopy(base)
 
@@ -223,10 +223,10 @@ async def get_config_endpoint(request: Request):
     try:
         config = await get_config()
         resp_data = dict(config)
-        run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "full"
+        run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "agent"
         run_mode = run_mode.lower().strip()
-        if run_mode not in ("agent", "kb", "full"):
-            run_mode = "full"
+        if run_mode not in ("agent", "kb"):
+            run_mode = "agent"
         resp_data["_run_mode"] = run_mode
         resp_data["run_mode"] = run_mode
         resp_data["_version"] = config.get("_version", 1)
@@ -534,10 +534,10 @@ async def export_config_endpoint(request: Request):
         export_data["_version"] = "3.3"
         filename = f"ocrproxy_config_{now_str}.json"
 
-        run_mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower()
+        run_mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower()
         if run_mode == "agent":
             export_data.pop("candidates", None)
-        elif run_mode == "kb":
+        else:
             export_data.pop("agent_models", None)
 
         json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -594,9 +594,9 @@ async def import_config_endpoint(request: Request):
 
     try:
         current_config = await get_config()
-        local_run_mode = (current_config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower().strip()
-        if local_run_mode not in ("agent", "kb", "full"):
-            local_run_mode = "full"
+        local_run_mode = (current_config.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower().strip()
+        if local_run_mode not in ("agent", "kb"):
+            local_run_mode = "agent"
 
         try:
             config_dir = _get_config_dir()
@@ -651,7 +651,7 @@ def _sync_env_run_mode(new_mode: str):
     if not new_mode:
         return
     new_mode = str(new_mode).lower().strip()
-    if new_mode not in ("agent", "kb", "full"):
+    if new_mode not in ("agent", "kb"):
         return
     os.environ["RUN_MODE"] = new_mode
     env_paths = [
