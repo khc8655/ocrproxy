@@ -690,9 +690,9 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
 
 
 def _get_active_run_mode(config: dict) -> str:
-    """Return the active run mode: 'agent', 'kb', or 'full'."""
-    mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "full").lower().strip()
-    return mode if mode in ("agent", "kb", "full") else "full"
+    """Return the active run mode: 'agent' or 'kb'."""
+    mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower().strip()
+    return mode if mode in ("agent", "kb") else "agent"
 
 
 @router.get("/models")
@@ -705,8 +705,8 @@ async def list_models(request: Request):
     run_mode = _get_active_run_mode(config)
     data = []
 
-    # 1. Include real Agent models if in agent or full mode
-    if run_mode in ("agent", "full"):
+    # 1. Include real Agent models if in agent mode
+    if run_mode == "agent":
         agent_models = config.get("agent_models") or {}
         if isinstance(agent_models, dict):
             real_models = set(agent_models.keys())
@@ -719,15 +719,14 @@ async def list_models(request: Request):
                 "owned_by": "llm-proxy-agent",
             })
 
-    # 2. Include 4 virtual aggregation models if in kb or full mode
-    if run_mode in ("kb", "full"):
+    # 2. Include 4 virtual aggregation models if in kb mode
+    else:
         for alias in ("chat", "embedding", "reranker", "ocr"):
-            if not any(d["id"] == alias for d in data):
-                data.append({
-                    "id": alias,
-                    "object": "model",
-                    "owned_by": "llm-proxy-kb",
-                })
+            data.append({
+                "id": alias,
+                "object": "model",
+                "owned_by": "llm-proxy-kb",
+            })
 
     return {"object": "list", "data": data}
 
@@ -808,8 +807,8 @@ async def chat_completions(request: Request):
             chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
         except (ValueError, TypeError):
             chat_timeout = 60.0
-
-    elif run_mode == "kb":
+    else:
+        # KB mode: only accepts model='chat'
         if model_name != "chat":
             return JSONResponse(
                 status_code=404,
@@ -826,50 +825,6 @@ async def chat_completions(request: Request):
         except (ValueError, TypeError):
             chat_timeout = 30.0
         candidates_list = config.get("candidates", {}).get("chat", [])
-
-    else:
-        # Full mode: support both
-        if model_name == "chat":
-            req_category = "kb"
-            req_model_name = "chat"
-            kb_force_no_reasoning = True
-            if is_stream:
-                body["stream"] = False
-                is_stream = False
-            try:
-                chat_timeout = max(1.0, float(config.get("chat_fast_timeout", 30)))
-            except (ValueError, TypeError):
-                chat_timeout = 30.0
-            candidates_list = config.get("candidates", {}).get("chat", [])
-        elif model_name in VIRTUAL_ALIASES:
-            return _model_not_found_response(model_name)
-        else:
-            req_category = "agent"
-            req_model_name = model_name
-            agent_models = config.get("agent_models") or {}
-            entry = agent_models.get(model_name) if isinstance(agent_models, dict) else None
-            if not entry:
-                return _model_not_found_response(model_name)
-            default_upstream = entry.get("upstream_model") or model_name
-            candidates_list = []
-            providers_map = config.get("providers") or {}
-            for b in entry.get("keys", []):
-                if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
-                    continue
-                p_id = b["provider"]
-                p_info = providers_map.get(p_id, {})
-                candidates_list.append({
-                    "provider": p_id,
-                    "key": b["key"],
-                    "model": b.get("upstream_model") or default_upstream,
-                    "adapter_rules": p_info.get("adapter_rules") or _get_preset_rules(p_info.get("preset_id", p_id)),
-                })
-            if not candidates_list:
-                return _model_not_found_response(model_name)
-            try:
-                chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
-            except (ValueError, TypeError):
-                chat_timeout = 60.0
 
     if not candidates_list:
         return JSONResponse(

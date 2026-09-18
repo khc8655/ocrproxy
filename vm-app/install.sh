@@ -540,8 +540,26 @@ else
     fi
 fi
 
-# 运行模式选择
-FINAL_MODE="${CLI_MODE:-${RUN_MODE:-agent}}"
+# 运行模式选择 (agent: 智能体直连 | kb: 知识库入库加速)
+if [[ -n "$CLI_MODE" ]]; then
+    FINAL_MODE="$CLI_MODE"
+elif [[ -n "$RUN_MODE" ]]; then
+    FINAL_MODE="$RUN_MODE"
+elif [[ "$NON_INTERACTIVE" == "true" ]]; then
+    FINAL_MODE="agent"
+else
+    echo -e "请选择系统运行模式 (1: Agent 智能体直连模式 [默认] | 2: KB 知识库入库加速模式):"
+    read -p "请输入选项 [1/2] (默认 1): " INPUT_MODE
+    if [[ "$INPUT_MODE" == "2" || "$INPUT_MODE" == "kb" ]]; then
+        FINAL_MODE="kb"
+    else
+        FINAL_MODE="agent"
+    fi
+fi
+if [[ "$FINAL_MODE" != "agent" && "$FINAL_MODE" != "kb" ]]; then
+    FINAL_MODE="agent"
+fi
+info "已设定运行模式: ${BOLD}${FINAL_MODE}${NC}"
 
 # 3. 确定服务运行用户与环境
 info "Step 3/7: 配置系统运行环境..."

@@ -236,6 +236,55 @@
     .model-subtab { display: none; }
     .model-subtab.active { display: block; }
 
+    /* Capsule Selectors (Extreme 3-Click Flow) */
+    .capsule-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .capsule-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px;
+      border: 1px solid var(--border); background: var(--bg);
+      color: var(--text); font-size: 13px; font-weight: 500;
+      cursor: pointer; user-select: none; transition: all 0.15s ease;
+    }
+    .capsule-btn:hover {
+      border-color: var(--primary); background: var(--primary-soft); color: var(--primary);
+    }
+    .capsule-btn.active {
+      border-color: var(--primary); background: var(--primary); color: #fff;
+      font-weight: 600; box-shadow: 0 2px 6px rgba(22, 100, 255, 0.25);
+    }
+    .capsule-btn.active .badge {
+      background: rgba(255, 255, 255, 0.25); color: #fff; border: none;
+    }
+
+    .key-capsule {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 16px;
+      border: 1px solid var(--border); background: var(--bg);
+      font-size: 12px; cursor: pointer; user-select: none; transition: all 0.15s ease;
+    }
+    .key-capsule:hover {
+      border-color: var(--primary);
+    }
+    .key-capsule.checked {
+      border-color: var(--primary); background: var(--primary-soft);
+      color: var(--primary); font-weight: 600;
+    }
+
+    .model-capsule {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 12px; border-radius: 16px;
+      border: 1px solid var(--border); background: var(--bg);
+      font-size: 12px; cursor: pointer; user-select: none; transition: all 0.15s ease;
+    }
+    .model-capsule:hover {
+      border-color: var(--primary); background: var(--primary-soft);
+      color: var(--primary); transform: translateY(-1px);
+    }
+    .model-capsule.active {
+      border-color: var(--primary); background: var(--primary);
+      color: #fff; font-weight: 600;
+    }
+
     /* Spinners & Loaders */
     .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.15); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -345,40 +394,26 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <div class="subtabs" style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;gap:4px;">
-          <button id="msub-agents" class="active" onclick="switchModelTab('agents')">Agent 模型</button>
-          <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
+      <!-- Direct Single-Mode Model Management (No Subtabs) -->
+      <div id="modelsSectionHead" class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="section-title" id="modelsPanelTitle">Agent 模型管理</div>
+          <div class="section-desc" id="modelsPanelDesc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则">🔄 同步中枢规则</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则">🔄 同步中枢规则</button>
+          <button class="btn btn-primary btn-sm" id="btnPrimaryModelAction" onclick="handlePrimaryModelAction()">+ 新增 Agent 模型</button>
+        </div>
       </div>
 
-      <!-- Sub-tab: Agents -->
+      <!-- Agent View -->
       <div id="mtab-agents" class="model-subtab active">
-        <div class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-title">Agent 模型中转</div>
-              <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
-          </div>
-          <div id="agentModelsBox"></div>
-        </div>
+        <div id="agentModelsBox"></div>
       </div>
 
-      <!-- Sub-tab: KB -->
+      <!-- KB View -->
       <div id="mtab-kb" class="model-subtab">
-        <div class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-title">知识库入库虚拟模型</div>
-              <div class="section-desc">4 个入库专用虚拟别名（chat / embedding / reranker / ocr），每个支持挂载多个供应商模型轮询</div>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="openCandidateModal()">+ 挂载候选节点</button>
-          </div>
-          <div id="kbModelsBox"></div>
-        </div>
+        <div id="kbModelsBox"></div>
       </div>
     </div>
 
@@ -470,9 +505,8 @@
             <div class="setting-item" style="grid-column: 1 / -1; max-width:480px;">
               <label class="form-label" for="s_runMode">系统运行模式 (Running Mode)</label>
               <select id="s_runMode" class="form-control" onchange="onRunModeChange()">
-                <option value="agent">Agent 智能体模式 (推荐海外 VM / 专精 Cursor、Cline 真实模型)</option>
-                <option value="kb">KB 知识库模式 (推荐国内 VM / 4 大入库专用虚拟模型)</option>
-                <option value="full">Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)</option>
+                <option value="agent">Agent 智能体直连模式 (专精 Cursor、Cline 真实模型)</option>
+                <option value="kb">KB 知识库入库模式 (4 大入库专用虚拟聚合模型)</option>
               </select>
               <span class="hint">控制管理后台页面自适应展示（隐藏无关参数/Tab）以及 /v1/models 的暴露范围。</span>
             </div>
@@ -658,82 +692,131 @@
 
 <!-- Modals -->
 <div class="modal" id="agentModal">
-  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
-    <div class="modal-head"><h3 id="agentModalTitle">Agent 模型配置</h3><button class="modal-close" onclick="closeModal('agentModal')">×</button></div>
+  <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-head">
+      <h3 id="agentModalTitle">Agent 模型配置</h3>
+      <button class="modal-close" onclick="closeModal('agentModal')">×</button>
+    </div>
     <div class="modal-body">
       <input type="hidden" id="a_oldName">
-      <div class="form-group">
-        <label class="form-label">模型名（对外暴露名称）</label>
-        <input type="text" id="a_name" class="form-control" placeholder="例如 deepseek-v4-flash">
-      </div>
-      <div class="form-group">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="margin-bottom:0;">上游实际模型 ID（可选，若与暴露名相同可留空）</label>
-          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:12px;" id="btnProbeAgentModels" onclick="probeModelsForAgent()">🔍 探测模型</button>
-        </div>
-        <input type="text" id="a_upstream" class="form-control" placeholder="例如 DeepSeek-V3-Flash">
-      </div>
-      <div id="a_probedModelsBox" class="mb-2" style="display:none;">
-        <div class="text-xs text-secondary mb-1">上游探测到的可用模型 (点击自动填入)：</div>
-        <div id="a_probedTags" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
-      </div>
-      <div class="form-group">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="margin-bottom:0;">选择供应商并勾选绑定 Key</label>
+      <input type="hidden" id="a_provider">
+
+      <!-- Step 1: 供应商胶囊选择 -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">① 点选供应商</label>
           <span id="a_provider_protos"></span>
         </div>
-        <select id="a_provider" class="form-control" onchange="renderAgentKeyChecks()"></select>
+        <div id="a_providerCapsules" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:2px 0;"></div>
         <div id="a_model_proto_info" class="text-secondary text-sm mt-1" style="font-size:12px;"></div>
       </div>
-      <div id="a_quickModels" class="mb-2" style="display:none;">
-        <div class="text-xs text-secondary mb-1">官方推荐模型 (点击自动填入)：</div>
-        <div id="a_quickTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+      <!-- Step 2: Key 胶囊选择 -->
+      <div class="form-group mb-3">
+        <label class="form-label" style="font-weight:700;margin-bottom:8px;">② 点选绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，点击切换/多选)</span></label>
+        <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
       </div>
-      <div id="a_keyList" class="mt-2" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
+
+      <!-- Step 3: 模型胶囊选择 -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 点选模型 <span class="text-secondary text-sm" style="font-weight:normal;">(点击秒级填入，零键盘输入)</span></label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;" id="btnProbeAgentModels" onclick="probeModelsForAgent()">🔍 探测更多模型</button>
+        </div>
+        <!-- 推荐模型胶囊 -->
+        <div id="a_quickModels" class="mb-2" style="display:none;">
+          <div class="text-xs text-secondary mb-1">官方/中枢推荐模型胶囊：</div>
+          <div id="a_quickTags" class="capsule-row"></div>
+        </div>
+        <!-- 探测模型胶囊 -->
+        <div id="a_probedModelsBox" class="mb-2" style="display:none;">
+          <div class="text-xs text-secondary mb-1">🔍 上游探测到的实时可用模型：</div>
+          <div id="a_probedTags" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+        </div>
+      </div>
+
+      <!-- 详细参数 (由胶囊自动填充，亦可微调) -->
+      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
+          <input type="text" id="a_name" class="form-control" placeholder="点击上方模型胶囊自动填入，例如 sf-deepseek">
+        </div>
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>
+          <input type="text" id="a_upstream" class="form-control" placeholder="例如 deepseek-ai/DeepSeek-V3">
+        </div>
+      </div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('agentModal')">取消</button><button class="btn btn-primary" onclick="saveAgentModel()">保存配置</button></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('agentModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">保存配置</button>
+    </div>
   </div>
 </div>
 
 <div class="modal" id="candidateModal">
-  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
-    <div class="modal-head"><h3 id="candidateModalTitle">挂载候选节点</h3><button class="modal-close" onclick="closeModal('candidateModal')">×</button></div>
+  <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-head">
+      <h3 id="candidateModalTitle">挂载候选节点</h3>
+      <button class="modal-close" onclick="closeModal('candidateModal')">×</button>
+    </div>
     <div class="modal-body">
-      <input type="hidden" id="c_editCat"><input type="hidden" id="c_editIdx">
-      <div class="form-group">
-        <label class="form-label">知识库虚拟类型</label>
-        <select id="c_type" class="form-control" onchange="renderCandidateQuickModels()">
-          <option value="chat">chat (对话与摘要)</option>
-          <option value="embedding">embedding (向量化)</option>
-          <option value="reranker">reranker (重排序)</option>
-          <option value="ocr">ocr (图文识别)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">供应商</label>
-        <select id="c_provider" class="form-control" onchange="renderCandidateKeyChecks(); renderCandidateQuickModels();"></select>
-      </div>
-      <div class="form-group">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="margin-bottom:0;">上游实际模型 ID</label>
-          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:12px;" id="btnProbeCandidateModels" onclick="probeModelsForCandidate()">🔍 探测模型</button>
+      <input type="hidden" id="c_editCat">
+      <input type="hidden" id="c_editIdx">
+      <input type="hidden" id="c_type" value="chat">
+      <input type="hidden" id="c_provider">
+
+      <!-- Step 1: 虚拟角色胶囊 -->
+      <div class="form-group mb-3">
+        <label class="form-label" style="font-weight:700;margin-bottom:8px;">① 知识库聚合角色</label>
+        <div id="c_typeCapsules" class="capsule-row">
+          <div class="capsule-btn active" data-type="chat" onclick="selectCandidateType('chat')">💬 chat (对话与摘要)</div>
+          <div class="capsule-btn" data-type="embedding" onclick="selectCandidateType('embedding')">📐 embedding (向量化)</div>
+          <div class="capsule-btn" data-type="reranker" onclick="selectCandidateType('reranker')">📊 reranker (重排序)</div>
+          <div class="capsule-btn" data-type="ocr" onclick="selectCandidateType('ocr')">🖼️ ocr (图文识别)</div>
         </div>
-        <input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B">
       </div>
-      <div id="c_probedModelsBox" class="mb-2" style="display:none;">
-        <div class="text-xs text-secondary mb-1">上游探测到的可用模型 (点击自动填入)：</div>
-        <div id="c_probedTags" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+
+      <!-- Step 2: 供应商胶囊 -->
+      <div class="form-group mb-3">
+        <label class="form-label" style="font-weight:700;margin-bottom:8px;">② 点选供应商</label>
+        <div id="c_providerCapsules" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:2px 0;"></div>
       </div>
-      <div id="c_quickModels" class="mb-2" style="display:none;">
-        <div class="text-xs text-secondary mb-1">推荐适配模型 (点击自动填入)：</div>
-        <div id="c_quickTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+      <!-- Step 3: Key 胶囊 -->
+      <div class="form-group mb-3">
+        <label class="form-label" style="font-weight:700;margin-bottom:8px;">③ 点选绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已选首位，点击切换/多选)</span></label>
+        <div id="c_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">选择绑定的 Key</label>
-        <div id="c_keyList" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg-subtle);"></div>
+
+      <!-- Step 4: 模型胶囊 (推荐 + 探测) -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">④ 点选模型 <span class="text-secondary text-sm" style="font-weight:normal;">(点击秒级填入，零键盘输入)</span></label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;" id="btnProbeCandidateModels" onclick="probeModelsForCandidate()">🔍 探测更多模型</button>
+        </div>
+        <div id="c_quickModels" class="mb-2" style="display:none;">
+          <div class="text-xs text-secondary mb-1">推荐模型胶囊：</div>
+          <div id="c_quickTags" class="capsule-row"></div>
+        </div>
+        <div id="c_probedModelsBox" class="mb-2" style="display:none;">
+          <div class="text-xs text-secondary mb-1">🔍 上游探测到的实时模型：</div>
+          <div id="c_probedTags" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+        </div>
+      </div>
+
+      <!-- 上游实际模型 ID -->
+      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (例如 Qwen/Qwen2.5-72B-Instruct)</label>
+          <input type="text" id="c_model" class="form-control" placeholder="点击上方模型胶囊自动填入">
+        </div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('candidateModal')">取消</button><button class="btn btn-primary" onclick="saveCandidate()">保存挂载</button></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('candidateModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveCandidate()">保存挂载</button>
+    </div>
   </div>
 </div>
 
@@ -920,26 +1003,23 @@ async function reloadRuntimeState(){
 function render(){
   if(!state.config) return;
 
-  const runMode = (state.config.run_mode || state.config._run_mode || 'full').toLowerCase();
+  const runMode = (state.config.run_mode || state.config._run_mode || 'agent').toLowerCase();
 
   // Top header badge
   const badge = document.getElementById('topModeBadge');
   if (badge) {
     if (runMode === 'agent') {
       badge.className = 'brand-badge badge badge-success';
-      badge.textContent = 'Agent 智能体模式';
-    } else if (runMode === 'kb') {
-      badge.className = 'brand-badge badge badge-primary';
-      badge.textContent = 'KB 知识库模式';
+      badge.textContent = 'Agent 智能体直连';
     } else {
-      badge.className = 'brand-badge badge badge-neutral';
-      badge.textContent = 'Full 混合模式';
+      badge.className = 'brand-badge badge badge-primary';
+      badge.textContent = 'KB 知识库入库';
     }
   }
 
-  // Log filter bar: in single mode (agent or kb), hide the entire filter bar because all logs belong to that single mode
+  // Log filter bar: in single mode (agent or kb), hide filter bar
   const lfb = document.getElementById('logFilterBar');
-  if(lfb) lfb.style.display = (runMode === 'full') ? 'flex' : 'none';
+  if(lfb) lfb.style.display = 'none';
 
   // Dashboard visibility
   const sa = document.getElementById('db-section-agent');
@@ -947,24 +1027,45 @@ function render(){
   if(sa) sa.style.display = (runMode === 'kb') ? 'none' : 'block';
   if(sk) sk.style.display = (runMode === 'agent') ? 'none' : 'block';
 
-  // Models Subtabs visibility & mode auto-correction
-  const msa = document.getElementById('msub-agents');
-  const msk = document.getElementById('msub-kb');
-  if(msa) msa.style.display = (runMode === 'kb') ? 'none' : 'inline-block';
-  if(msk) msk.style.display = (runMode === 'agent') ? 'none' : 'inline-block';
+  // Models Panel Direct View (No subtabs!)
+  const isAgent = runMode === 'agent';
+  const mtabAgents = document.getElementById('mtab-agents');
+  const mtabKb = document.getElementById('mtab-kb');
+  const panelTitle = document.getElementById('modelsPanelTitle');
+  const panelDesc = document.getElementById('modelsPanelDesc');
+  const primaryBtn = document.getElementById('btnPrimaryModelAction');
 
-  if (runMode === 'agent' && state.modelTab === 'kb') state.modelTab = 'agents';
-  if (runMode === 'kb' && state.modelTab === 'agents') state.modelTab = 'kb';
-  if (!['agents', 'kb'].includes(state.modelTab)) {
-    state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
+  if (isAgent) {
+    if (panelTitle) panelTitle.textContent = 'Agent 模型管理';
+    if (panelDesc) panelDesc.textContent = '对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 粘性故障转移';
+    if (primaryBtn) {
+      primaryBtn.textContent = '+ 新增 Agent 模型';
+      primaryBtn.style.display = 'inline-flex';
+    }
+    if (mtabAgents) {
+      mtabAgents.style.display = 'block';
+      mtabAgents.classList.add('active');
+    }
+    if (mtabKb) {
+      mtabKb.style.display = 'none';
+      mtabKb.classList.remove('active');
+    }
+  } else {
+    if (panelTitle) panelTitle.textContent = '知识库入库虚拟模型';
+    if (panelDesc) panelDesc.textContent = '4 个入库专用聚合别名（chat / embedding / reranker / ocr），每个支持挂载多个供应商模型并发轮询';
+    if (primaryBtn) {
+      primaryBtn.textContent = '+ 挂载候选节点';
+      primaryBtn.style.display = 'inline-flex';
+    }
+    if (mtabAgents) {
+      mtabAgents.style.display = 'none';
+      mtabAgents.classList.remove('active');
+    }
+    if (mtabKb) {
+      mtabKb.style.display = 'block';
+      mtabKb.classList.add('active');
+    }
   }
-
-  ['agents', 'kb'].forEach(t => {
-    const btn = document.getElementById('msub-' + t);
-    const tabEl = document.getElementById('mtab-' + t);
-    if (btn) btn.classList.toggle('active', state.modelTab === t);
-    if (tabEl) tabEl.classList.toggle('active', state.modelTab === t);
-  });
 
   // Settings visibility
   const sta = document.getElementById('st-group-agent');
@@ -1140,20 +1241,26 @@ async function resetStats(){
   state.stats=await r.json(); toast('统计与日志已清空','ok'); renderDashboard();
 }
 
-// Models dispatcher
+function handlePrimaryModelAction(){
+  const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
+  if (runMode === 'agent') {
+    openAgentModal();
+  } else {
+    openCandidateModal('chat');
+  }
+}
+
 function switchModelTab(id){
   state.modelTab=id;
-  ['agents', 'kb'].forEach(t => {
-    const btn = document.getElementById('msub-' + t);
-    const tabEl = document.getElementById('mtab-' + t);
-    if (btn) btn.classList.toggle('active', t === id);
-    if (tabEl) tabEl.classList.toggle('active', t === id);
-  });
   renderModels();
 }
 function renderModels(){
-  if(state.modelTab==='agents') renderAgentModels();
-  if(state.modelTab==='kb') renderKbModels();
+  const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
+  if(runMode === 'agent') {
+    renderAgentModels();
+  } else {
+    renderKbModels();
+  }
 }
 
 // Protocol Metadata & Helpers (Factual Badges)
@@ -2100,15 +2207,56 @@ function commitKey(prov,label,val){
   renderModels(); 
 }
 
-// Agent Model Actions
-function applyAgentQuickModel(name, upstream){
+// Provider & Key Helpers for Capsule Flow
+function getAllAvailableProviders(){
+  const localNames = new Set(Object.keys(state.config?.providers||{}));
+  const remoteProviders = (state.vaultManifest && state.vaultManifest.providers) || [];
+  const list = [];
+  localNames.forEach(name => {
+    const protos = getProviderProtocols(name);
+    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    list.push({
+      id: name,
+      label: name,
+      protoStr: protoStr,
+      isVault: false,
+      protocols: protos
+    });
+  });
+  remoteProviders.forEach(rp => {
+    if(!localNames.has(rp.id)){
+      const protos = rp.protocols || ['chat'];
+      const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+      list.push({
+        id: rp.id,
+        label: rp.id,
+        protoStr: protoStr,
+        isVault: true,
+        protocols: protos
+      });
+    }
+  });
+  return list;
+}
+
+function toggleKeyCapsule(el){
+  const inp = el.querySelector('input[type="checkbox"]');
+  if(!inp) return;
+  inp.checked = !inp.checked;
+  el.classList.toggle('checked', inp.checked);
+}
+
+function applyAgentQuickModel(name, upstream, el){
   document.getElementById('a_name').value = name;
   document.getElementById('a_upstream').value = upstream || name;
+  document.querySelectorAll('#a_quickTags .model-capsule, #a_probedTags .model-capsule').forEach(c => c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  toast(`已选定模型: ${name}`, 'info');
 }
 
 async function probeModelsForAgent(){
   const prov = document.getElementById('a_provider').value;
-  if(!prov){ toast('请先选择供应商','err'); return; }
+  if(!prov){ toast('请先点选供应商','err'); return; }
   const btn = document.getElementById('btnProbeAgentModels');
   const box = document.getElementById('a_probedModelsBox');
   const tags = document.getElementById('a_probedTags');
@@ -2123,48 +2271,17 @@ async function probeModelsForAgent(){
     if(d.ok && Array.isArray(d.models) && d.models.length > 0){
       tags.innerHTML = d.models.map(m => {
         const id = typeof m === 'string' ? m : (m.id || m.name);
-        return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(id)}','${esc(id)}')">${esc(id)}</button>`;
-      }).join(' ');
+        return `<div class="model-capsule" onclick="applyAgentQuickModel('${esc(id)}','${esc(id)}', this)"><span>${esc(id)}</span></div>`;
+      }).join('');
       box.style.display = 'block';
-      toast(`探测成功，发现 ${d.models.length} 个可用模型`, 'ok');
+      toast(`探测成功，发现 ${d.models.length} 个实时可用模型`, 'ok');
     } else {
       toast(d.error || '未获取到可用模型列表', 'err');
     }
   } catch(e) {
     toast('探测模型异常: ' + e.message, 'err');
   } finally {
-    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测模型'; }
-  }
-}
-
-async function probeModelsForCandidate(){
-  const prov = document.getElementById('c_provider').value;
-  if(!prov){ toast('请先选择供应商','err'); return; }
-  const btn = document.getElementById('btnProbeCandidateModels');
-  const box = document.getElementById('c_probedModelsBox');
-  const tags = document.getElementById('c_probedTags');
-  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
-  try {
-    const res = await fetch('/api/admin/probe-models', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ provider: prov })
-    });
-    const d = await res.json();
-    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
-      tags.innerHTML = d.models.map(m => {
-        const id = typeof m === 'string' ? m : (m.id || m.name);
-        return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(id)}')">${esc(id)}</button>`;
-      }).join(' ');
-      box.style.display = 'block';
-      toast(`探测成功，发现 ${d.models.length} 个可用模型`, 'ok');
-    } else {
-      toast(d.error || '未获取到可用模型列表', 'err');
-    }
-  } catch(e) {
-    toast('探测模型异常: ' + e.message, 'err');
-  } finally {
-    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测模型'; }
+    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测更多模型'; }
   }
 }
 
@@ -2204,7 +2321,7 @@ async function ensureKeysImported(bindings){
   return true;
 }
 
-function openAgentModal(){ 
+async function openAgentModal(){ 
   document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; 
   document.getElementById('a_oldName').value=''; 
   document.getElementById('a_name').value=''; 
@@ -2212,42 +2329,39 @@ function openAgentModal(){
   document.getElementById('a_upstream').value=''; 
   const probedBox = document.getElementById('a_probedModelsBox');
   if(probedBox) probedBox.style.display = 'none';
-  populateProviderSelect('a_provider'); 
+  if(!state.vaultManifest){ await fetchVaultManifest(true); }
+  const providers = getAllAvailableProviders();
+  const defaultProv = providers[0] ? providers[0].id : '';
+  renderAgentProviderCapsules(defaultProv); 
   renderAgentKeyChecks(); 
   openModal('agentModal'); 
 }
 
-function populateProviderSelect(id){ 
-  const sel = document.getElementById(id); 
-  if(!sel) return;
-  const localNames = new Set(Object.keys(state.config.providers||{}));
-  const remoteProviders = (state.vaultManifest && state.vaultManifest.providers) || [];
-  
-  const allProviders = [];
-  // 1. Add all local
-  localNames.forEach(name => {
-    const protos = getProviderProtocols(name);
-    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
-    allProviders.push({
-      id: name,
-      label: `${name} [${protoStr}]`
-    });
-  });
-  
-  // 2. Add remote from vault that are not local
-  remoteProviders.forEach(rp => {
-    if(!localNames.has(rp.id)){
-      const protoStr = (rp.protocols || ['chat']).map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
-      allProviders.push({
-        id: rp.id,
-        label: `☁️ [中枢] ${rp.id} [${protoStr}]`
-      });
-    }
-  });
+function renderAgentProviderCapsules(selectedId){ 
+  const box = document.getElementById('a_providerCapsules'); 
+  if(!box) return;
+  const providers = getAllAvailableProviders();
+  if(!providers.length){
+    box.innerHTML = '<div class="hint">暂无可用供应商（可点击上方同步中枢规则拉取）</div>';
+    return;
+  }
+  const curId = (selectedId && providers.some(p => p.id === selectedId)) ? selectedId : providers[0].id;
+  document.getElementById('a_provider').value = curId;
 
-  sel.innerHTML = allProviders.length ? allProviders.map(p => {
-    return `<option value="${esc(p.id)}">${esc(p.label)}</option>`;
-  }).join('') : '<option value="">无可用供应商</option>'; 
+  box.innerHTML = providers.map(p => {
+    const isActive = p.id === curId;
+    const vaultBadge = p.isVault ? '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;margin-right:2px;">☁️中枢</span>' : '';
+    return `<div class="capsule-btn ${isActive ? 'active' : ''}" onclick="selectAgentProvider('${esc(p.id)}')">
+      ${vaultBadge}<span>${esc(p.label)}</span>
+      <span class="badge ${isActive ? 'badge-primary' : 'badge-neutral'}" style="font-size:10px;padding:0 4px;">${esc(p.protoStr)}</span>
+    </div>`;
+  }).join('');
+}
+
+function selectAgentProvider(id){
+  document.getElementById('a_provider').value = id;
+  renderAgentProviderCapsules(id);
+  renderAgentKeyChecks();
 }
 
 function renderAgentKeyChecks(){
@@ -2261,7 +2375,7 @@ function renderAgentKeyChecks(){
   if(probedBox) probedBox.style.display = 'none';
 
   if(!prov){ 
-    box.innerHTML = '<div class="hint">请先在上方选择供应商</div>'; 
+    box.innerHTML = '<div class="hint">请先点选上方供应商</div>'; 
     if(quickBox) quickBox.style.display = 'none';
     if(protosBadgeEl) protosBadgeEl.innerHTML = '';
     if(protoInfoEl) protoInfoEl.innerHTML = '';
@@ -2290,32 +2404,38 @@ function renderAgentKeyChecks(){
   if(allKeyLabels.length === 0){
     box.innerHTML = '<div class="hint">该供应商下暂无可用 Key</div>';
   } else {
-    box.innerHTML = allKeyLabels.map(k => {
+    box.innerHTML = allKeyLabels.map((k, idx) => {
       const isLocal = localKeys.includes(k);
-      const tag = isLocal ? '' : ' <span class="badge badge-neutral" style="font-size:10px;padding:1px 4px;">☁️ 中枢</span>';
-      return `<label class="checkbox" style="display:flex;align-items:center;padding:4px 0;cursor:pointer;">
-        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}">
-        <span style="display:flex;align-items:center;gap:4px;">${esc(k)}${tag}</span>
-      </label>`;
+      const isChecked = idx === 0;
+      const tag = isLocal 
+        ? '<span class="badge badge-success" style="font-size:10px;padding:0 4px;">✔ 本地</span>' 
+        : '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;">☁️ 中枢</span>';
+      return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
+        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
+        <span style="font-weight:600;">${esc(k)}</span>
+        ${tag}
+      </div>`;
     }).join('');
   }
 
-  // Render quick tags (Preset or Remote Vault)
+  // Render quick model capsules (Preset or Remote Vault)
   const preset = PRESET_DEFINITIONS[prov.toLowerCase()] || remoteProv;
   const recModels = preset?.recommended_models || remoteProv?.recommended_models || [];
   if(recModels.length > 0 && quickBox && quickTags){
     quickTags.innerHTML = recModels.map(rm => {
       const mName = typeof rm === 'string' ? rm : (rm.name || rm.id);
       const mUpstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
-      return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(mName)}', '${esc(mUpstream)}')">${esc(mName)}</button>`;
-    }).join(' ');
+      return `<div class="model-capsule" onclick="applyAgentQuickModel('${esc(mName)}', '${esc(mUpstream)}', this)">
+        <span>${esc(mName)}</span>
+      </div>`;
+    }).join('');
     quickBox.style.display = 'block';
   } else if(quickBox) {
     quickBox.style.display = 'none';
   }
 }
 
-function editAgentModel(name){
+async function editAgentModel(name){
   const m=state.config.agent_models[name] || {};
   document.getElementById('agentModalTitle').textContent='编辑 Agent 模型';
   document.getElementById('a_oldName').value=name;
@@ -2324,20 +2444,18 @@ function editAgentModel(name){
   document.getElementById('a_upstream').value=m.upstream_model||'';
   const probedBox = document.getElementById('a_probedModelsBox');
   if(probedBox) probedBox.style.display = 'none';
-  populateProviderSelect('a_provider');
-  const providers=[...new Set((m.keys||[]).map(x=>x.provider))];
-  if(providers[0]) document.getElementById('a_provider').value=providers[0];
+  if(!state.vaultManifest){ await fetchVaultManifest(true); }
+  const boundProviders=[...new Set((m.keys||[]).map(x=>x.provider))];
+  const activeProv = boundProviders[0] || (getAllAvailableProviders()[0]?.id || '');
+  renderAgentProviderCapsules(activeProv);
   renderAgentKeyChecks();
   const set=new Set((m.keys||[]).map(x=>x.provider+':'+x.key));
-  document.querySelectorAll('#a_keyList input').forEach(inp=>{ const p=document.getElementById('a_provider').value; inp.checked=set.has(p+':'+inp.value); });
-  const box=document.getElementById('a_keyList');
-  providers.slice(1).forEach(p=>{
-    const pKeys = (state.config.providers && state.config.providers[p] && Object.keys(state.config.providers[p].keys||{})) || [];
-    if(!pKeys.length) return;
-    const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label" style="font-weight:700;">${esc(p)}</div>`+pKeys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
-    box.appendChild(div);
+  document.querySelectorAll('#a_keyList .key-capsule').forEach(cap=>{
+    const inp = cap.querySelector('input');
+    const checked = set.has(activeProv+':'+inp.value);
+    inp.checked = checked;
+    cap.classList.toggle('checked', checked);
   });
-  document.querySelectorAll('#a_keyList input[data-provider]').forEach(inp=>inp.checked=set.has(inp.dataset.provider+':'+inp.value));
   openModal('agentModal');
 }
 
@@ -2345,10 +2463,11 @@ async function saveAgentModel(){
   const oldName=(document.getElementById('a_oldName').value||'').trim();
   const name=document.getElementById('a_name').value.trim();
   const upstream=document.getElementById('a_upstream').value.trim();
+  const provider = document.getElementById('a_provider').value;
   if(!name){ toast('模型名称不能为空','err'); return; }
   const bindings=[];
   document.querySelectorAll('#a_keyList input:checked').forEach(inp=>{
-    bindings.push({provider:inp.dataset.provider||document.getElementById('a_provider').value, key:inp.value});
+    bindings.push({provider:inp.dataset.provider||provider, key:inp.value});
   });
   if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
 
@@ -2528,13 +2647,82 @@ async function testAgentModelAll(name){
 }
 
 // Candidate Actions
-function applyCandidateQuickModel(model){
+function selectCandidateType(type){
+  document.getElementById('c_type').value = type;
+  document.querySelectorAll('#c_typeCapsules .capsule-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === type);
+  });
+  renderCandidateQuickModels();
+}
+
+function renderCandidateProviderCapsules(selectedId){
+  const box = document.getElementById('c_providerCapsules');
+  if(!box) return;
+  const providers = getAllAvailableProviders();
+  if(!providers.length){
+    box.innerHTML = '<div class="hint">暂无可用供应商</div>';
+    return;
+  }
+  const curId = (selectedId && providers.some(p => p.id === selectedId)) ? selectedId : providers[0].id;
+  document.getElementById('c_provider').value = curId;
+
+  box.innerHTML = providers.map(p => {
+    const isActive = p.id === curId;
+    const vaultBadge = p.isVault ? '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;margin-right:2px;">☁️中枢</span>' : '';
+    return `<div class="capsule-btn ${isActive ? 'active' : ''}" onclick="selectCandidateProvider('${esc(p.id)}')">
+      ${vaultBadge}<span>${esc(p.label)}</span>
+    </div>`;
+  }).join('');
+}
+
+function selectCandidateProvider(id){
+  document.getElementById('c_provider').value = id;
+  renderCandidateProviderCapsules(id);
+  renderCandidateKeyChecks();
+  renderCandidateQuickModels();
+}
+
+function applyCandidateQuickModel(model, el){
   document.getElementById('c_model').value = model;
+  document.querySelectorAll('#c_quickTags .model-capsule, #c_probedTags .model-capsule').forEach(c => c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  toast(`已选定模型: ${model}`, 'info');
+}
+
+async function probeModelsForCandidate(){
+  const prov = document.getElementById('c_provider').value;
+  if(!prov){ toast('请先点选供应商','err'); return; }
+  const btn = document.getElementById('btnProbeCandidateModels');
+  const box = document.getElementById('c_probedModelsBox');
+  const tags = document.getElementById('c_probedTags');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
+  try {
+    const res = await fetch('/api/admin/probe-models', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider: prov })
+    });
+    const d = await res.json();
+    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
+      tags.innerHTML = d.models.map(m => {
+        const id = typeof m === 'string' ? m : (m.id || m.name);
+        return `<div class="model-capsule" onclick="applyCandidateQuickModel('${esc(id)}', this)"><span>${esc(id)}</span></div>`;
+      }).join('');
+      box.style.display = 'block';
+      toast(`探测成功，发现 ${d.models.length} 个实时可用模型`, 'ok');
+    } else {
+      toast(d.error || '未获取到可用模型列表', 'err');
+    }
+  } catch(e) {
+    toast('探测模型异常: ' + e.message, 'err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测更多模型'; }
+  }
 }
 
 function renderCandidateQuickModels(){
   const prov = document.getElementById('c_provider').value;
-  const type = document.getElementById('c_type').value;
+  const type = document.getElementById('c_type').value || 'chat';
   const quickBox = document.getElementById('c_quickModels');
   const quickTags = document.getElementById('c_quickTags');
 
@@ -2544,26 +2732,39 @@ function renderCandidateQuickModels(){
   }
 
   const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
-  const recModels = preset?.recommended_models || [];
+  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
+  const recModels = preset?.recommended_models || remoteProv?.recommended_models || [];
   if(recModels.length > 0){
     const matching = recModels.filter(rm => !rm.kb_type || rm.kb_type === type);
     const listToRender = matching.length > 0 ? matching : recModels;
-    quickTags.innerHTML = listToRender.map(rm =>
-      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(rm.upstream || rm.name)}')">${esc(rm.name)} (${esc(rm.upstream || rm.name)})</button>`
-    ).join(' ');
+    quickTags.innerHTML = listToRender.map(rm => {
+      const name = typeof rm === 'string' ? rm : (rm.name || rm.id);
+      const upstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
+      return `<div class="model-capsule" onclick="applyCandidateQuickModel('${esc(upstream)}', this)">
+        <span>${esc(name)}</span>
+      </div>`;
+    }).join('');
     quickBox.style.display = 'block';
   } else {
     quickBox.style.display = 'none';
   }
 }
 
-function openCandidateModal(type){
+async function openCandidateModal(type){
+  const curType = type || 'chat';
   document.getElementById('candidateModalTitle').textContent='挂载候选节点';
-  document.getElementById('c_editCat').value=''; document.getElementById('c_editIdx').value='';
-  document.getElementById('c_type').value=type||'chat'; document.getElementById('c_type').disabled=!type;
+  document.getElementById('c_editCat').value=''; 
+  document.getElementById('c_editIdx').value='';
+  document.getElementById('c_type').value = curType;
+  document.querySelectorAll('#c_typeCapsules .capsule-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === curType);
+  });
   const probedBox = document.getElementById('c_probedModelsBox');
   if(probedBox) probedBox.style.display = 'none';
-  populateProviderSelect('c_provider'); 
+  if(!state.vaultManifest){ await fetchVaultManifest(true); }
+  const providers = getAllAvailableProviders();
+  const defaultProv = providers[0] ? providers[0].id : '';
+  renderCandidateProviderCapsules(defaultProv); 
   renderCandidateKeyChecks(); 
   renderCandidateQuickModels();
   document.getElementById('c_model').value='';
@@ -2576,7 +2777,7 @@ function renderCandidateKeyChecks(){
   const probedBox = document.getElementById('c_probedModelsBox');
   if(probedBox) probedBox.style.display = 'none';
 
-  if(!prov){ box.innerHTML='<div class="hint">请先选择供应商</div>'; return; }
+  if(!prov){ box.innerHTML='<div class="hint">请先点选上方供应商</div>'; return; }
   
   const localProv = state.config.providers && state.config.providers[prov];
   const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
@@ -2588,28 +2789,40 @@ function renderCandidateKeyChecks(){
   if(allKeyLabels.length === 0){
     box.innerHTML='<div class="hint">该供应商下暂无可用 Key</div>';
   } else {
-    box.innerHTML=allKeyLabels.map(k=>{
+    box.innerHTML=allKeyLabels.map((k, idx)=>{
       const isLocal = localKeys.includes(k);
-      const tag = isLocal ? '' : ' <span class="badge badge-neutral" style="font-size:10px;padding:1px 4px;">☁️ 中枢</span>';
-      return `<label class="checkbox" style="display:flex;align-items:center;padding:4px 0;cursor:pointer;">
-        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}">
-        <span style="display:flex;align-items:center;gap:4px;">${esc(k)}${tag}</span>
-      </label>`;
+      const isChecked = idx === 0;
+      const tag = isLocal ? '<span class="badge badge-success" style="font-size:10px;padding:0 4px;">✔ 本地</span>' : '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;">☁️ 中枢</span>';
+      return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
+        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
+        <span style="font-weight:600;">${esc(k)}</span>
+        ${tag}
+      </div>`;
     }).join('');
   }
 }
 
-function editCandidate(type,i){
+async function editCandidate(type,i){
   const c=state.config.candidates[type][i];
   document.getElementById('candidateModalTitle').textContent='编辑候选节点';
-  document.getElementById('c_editCat').value=type; document.getElementById('c_editIdx').value=i;
-  document.getElementById('c_type').value=type; document.getElementById('c_type').disabled=true;
+  document.getElementById('c_editCat').value=type; 
+  document.getElementById('c_editIdx').value=i;
+  document.getElementById('c_type').value=type;
+  document.querySelectorAll('#c_typeCapsules .capsule-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === type);
+  });
   const probedBox = document.getElementById('c_probedModelsBox');
   if(probedBox) probedBox.style.display = 'none';
-  populateProviderSelect('c_provider'); document.getElementById('c_provider').value=c.provider;
+  if(!state.vaultManifest){ await fetchVaultManifest(true); }
+  renderCandidateProviderCapsules(c.provider);
   renderCandidateKeyChecks(); 
   renderCandidateQuickModels();
-  document.querySelectorAll('#c_keyList input').forEach(inp=>inp.checked=inp.value===c.key);
+  document.querySelectorAll('#c_keyList .key-capsule').forEach(cap=>{
+    const inp = cap.querySelector('input');
+    const checked = inp.value === c.key;
+    inp.checked = checked;
+    cap.classList.toggle('checked', checked);
+  });
   document.getElementById('c_model').value=c.model;
   openModal('candidateModal');
 }
@@ -2619,7 +2832,7 @@ async function saveCandidate(){
   const provider=document.getElementById('c_provider').value;
   const model=document.getElementById('c_model').value.trim();
   const selected=Array.from(document.querySelectorAll('#c_keyList input:checked')).map(x=>x.value);
-  if(!provider||!selected.length||!model){ toast('请填写完整并至少勾选一个 Key','err'); return; }
+  if(!provider||!selected.length||!model){ toast('请选择供应商、至少勾选一个 Key 并选定模型','err'); return; }
 
   const bindings = selected.map(k => ({ provider, key: k }));
   const ok = await ensureKeysImported(bindings);
