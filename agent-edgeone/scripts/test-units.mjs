@@ -42,6 +42,9 @@ import {
   CIRCUIT_BREAKER_THRESHOLD,
 } from '../edge-functions/lib/cooldowns.js';
 import { PRESETS, PRESET_MAP, getPreset } from '../edge-functions/lib/presets/index.js';
+import { onRequestGet as vaultManifestGet } from '../edge-functions/api/vault/manifest.js';
+import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fetch.js';
+import { onRequestPost as probeModelsPost } from '../edge-functions/api/admin/probe-models.js';
 
 let passed = 0;
 let failed = 0;
@@ -1476,6 +1479,76 @@ test('TransformStream: reasoning filter rewrites reasoning to reasoning_content 
   truthy(processed[1].includes('"content":"答案"'));
   truthy(processed[2].includes('data: [DONE]'));
   truthy(!processed[2].includes('event: done'));
+});
+
+// == Vault Endpoints & Model Probing ==
+test('vault manifest: returns safe provider metadata without leaking secrets', async () => {
+  const req = new Request('http://localhost/api/vault/manifest', {
+    headers: { 'authorization': 'Bearer test-token' },
+  });
+  const env = {
+    PROXY_API_KEY: 'test-token',
+    AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG),
+  };
+  const res = await vaultManifestGet({ request: req, env });
+  eq(res.status, 200);
+  const data = await res.json();
+  truthy(data.ok);
+  truthy(data.providers.sensenova);
+  // Key label is present
+  truthy(data.providers.sensenova.keys.includes('self'));
+  // Raw secret string is NOT leaked
+  truthy(!JSON.stringify(data).includes('sk-sensenova-test-key'));
+});
+
+test('vault manifest: rejects unauthorized access with 401', async () => {
+  const req = new Request('http://localhost/api/vault/manifest');
+  const env = { PROXY_API_KEY: 'secret-key' };
+  const res = await vaultManifestGet({ request: req, env });
+  eq(res.status, 401);
+});
+
+test('vault fetch: returns specific key on demand for authorized caller', async () => {
+  const req = new Request('http://localhost/api/vault/fetch', {
+    method: 'POST',
+    headers: { 'authorization': 'Bearer test-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ provider: 'sensenova', key_label: 'self' }),
+  });
+  const env = {
+    PROXY_API_KEY: 'test-token',
+    AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG),
+  };
+  const res = await vaultFetchPost({ request: req, env });
+  eq(res.status, 200);
+  const data = await res.json();
+  truthy(data.ok);
+  eq(data.provider, 'sensenova');
+  eq(data.provider_config.keys.self, 'sk-sensenova-test-key');
+});
+
+test('vault fetch: returns 404 for unknown provider', async () => {
+  const req = new Request('http://localhost/api/vault/fetch', {
+    method: 'POST',
+    headers: { 'authorization': 'Bearer test-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ provider: 'non-existent', key_label: 'k1' }),
+  });
+  const env = {
+    PROXY_API_KEY: 'test-token',
+    AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG),
+  };
+  const res = await vaultFetchPost({ request: req, env });
+  eq(res.status, 404);
+});
+
+test('probe-models: rejects missing base_url with 400', async () => {
+  const req = new Request('http://localhost/api/admin/probe-models', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const env = {};
+  const res = await probeModelsPost({ request: req, env });
+  eq(res.status, 400);
 });
 
 console.log('\n----');

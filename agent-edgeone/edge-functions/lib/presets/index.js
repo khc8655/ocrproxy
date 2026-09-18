@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-09-14T12:50:11.336Z",
+  "updated_at": "2026-09-18T03:18:03.468Z",
   "providers": [
     {
       "id": "agnes",

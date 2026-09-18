@@ -345,32 +345,16 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <div class="subtabs">
-        <button id="msub-providers" class="active" onclick="switchModelTab('providers')">供应商与 Key</button>
-        <button id="msub-agents" onclick="switchModelTab('agents')">Agent 模型</button>
-        <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
-      </div>
-
-      <!-- Sub-tab: Providers -->
-      <div id="mtab-providers" class="model-subtab active">
-        <div class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-title">供应商与 Key 凭证库</div>
-              <div class="section-desc">统一配置各上游平台的基础 URL 与 API 密钥 · 适配规则与主程序完全解耦</div>
-            </div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-secondary btn-sm" id="btnCheckRuleUpdates" onclick="checkAllRuleUpdates()">🔄 检查规则更新</button>
-              <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ 新增供应商</button>
-            </div>
-          </div>
-          <div id="ruleUpdatesAlert" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--bg-subtle);border:1px solid var(--primary);border-radius:var(--radius-sm);font-size:13px;align-items:center;justify-content:space-between;"></div>
-          <div class="card" id="providersBox"></div>
+      <div class="subtabs" style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:4px;">
+          <button id="msub-agents" class="active" onclick="switchModelTab('agents')">Agent 模型</button>
+          <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
         </div>
+        <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则">🔄 同步中枢规则</button>
       </div>
 
       <!-- Sub-tab: Agents -->
-      <div id="mtab-agents" class="model-subtab">
+      <div id="mtab-agents" class="model-subtab active">
         <div class="section">
           <div class="section-head">
             <div>
@@ -673,82 +657,6 @@
 </div>
 
 <!-- Modals -->
-<div class="modal" id="providerModal">
-  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
-    <div class="modal-head"><h3 id="providerModalTitle">供应商</h3><button class="modal-close" onclick="closeModal('providerModal')">×</button></div>
-    <div class="modal-body">
-      <div class="form-group" id="p_preset_wrap">
-        <label class="form-label">供应商模板与类型 (自定义或官方预设)</label>
-        <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
-          <option value="">-- 自定义供应商 (本地内置·手动填写) --</option>
-        </select>
-        <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
-        <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Base URL 接口基础地址</label>
-        <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">
-      </div>
-      <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_chat" checked>
-            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
-            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_messages">
-            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
-            <span class="text-secondary text-sm">(/v1/messages)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_responses">
-            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
-            <span class="text-secondary text-sm">(/v1/responses)</span>
-          </label>
-        </div>
-      </div>
-      <div class="form-group" id="p_custom_url_wrap" style="margin-top:14px;">
-        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
-          <input type="checkbox" id="p_custom_url_toggle" onchange="onCustomUrlToggleChange()">
-          <span>自定义协议独立端点 / 路径 (高级配置)</span>
-        </label>
-        <div id="p_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL</label>
-          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
-          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
-        </div>
-      </div>
-      <div id="p_models_wrap" class="form-group" style="display:none;margin-top:14px;">
-        <label class="form-label">自动创建推荐模型</label>
-        <div id="p_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--bg-subtle);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
-      </div>
-    </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('providerModal')">取消</button><button class="btn btn-primary" onclick="saveProvider()">保存供应商</button></div>
-  </div>
-</div>
-
-<div class="modal" id="keyModal">
-  <div class="modal-box">
-    <div class="modal-head"><h3 id="keyModalTitle">Key 凭证</h3><button class="modal-close" onclick="closeModal('keyModal')">×</button></div>
-    <div class="modal-body">
-      <input type="hidden" id="k_provider">
-      <input type="hidden" id="k_oldLabel">
-      <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
-      <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
-      <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
-      <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
-      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
-      <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
-    </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('keyModal')">取消</button><button class="btn btn-primary" onclick="saveKey()">保存</button></div>
-  </div>
-</div>
-
 <div class="modal" id="agentModal">
   <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head"><h3 id="agentModalTitle">Agent 模型配置</h3><button class="modal-close" onclick="closeModal('agentModal')">×</button></div>
@@ -759,8 +667,15 @@
         <input type="text" id="a_name" class="form-control" placeholder="例如 deepseek-v4-flash">
       </div>
       <div class="form-group">
-        <label class="form-label">上游实际模型 ID（可选，若与暴露名相同可留空）</label>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="margin-bottom:0;">上游实际模型 ID（可选，若与暴露名相同可留空）</label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:12px;" id="btnProbeAgentModels" onclick="probeModelsForAgent()">🔍 探测模型</button>
+        </div>
         <input type="text" id="a_upstream" class="form-control" placeholder="例如 DeepSeek-V3-Flash">
+      </div>
+      <div id="a_probedModelsBox" class="mb-2" style="display:none;">
+        <div class="text-xs text-secondary mb-1">上游探测到的可用模型 (点击自动填入)：</div>
+        <div id="a_probedTags" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
       </div>
       <div class="form-group">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -798,13 +713,20 @@
         <label class="form-label">供应商</label>
         <select id="c_provider" class="form-control" onchange="renderCandidateKeyChecks(); renderCandidateQuickModels();"></select>
       </div>
+      <div class="form-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="margin-bottom:0;">上游实际模型 ID</label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:12px;" id="btnProbeCandidateModels" onclick="probeModelsForCandidate()">🔍 探测模型</button>
+        </div>
+        <input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B">
+      </div>
+      <div id="c_probedModelsBox" class="mb-2" style="display:none;">
+        <div class="text-xs text-secondary mb-1">上游探测到的可用模型 (点击自动填入)：</div>
+        <div id="c_probedTags" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      </div>
       <div id="c_quickModels" class="mb-2" style="display:none;">
         <div class="text-xs text-secondary mb-1">推荐适配模型 (点击自动填入)：</div>
         <div id="c_quickTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">上游实际模型 ID</label>
-        <input type="text" id="c_model" class="form-control" placeholder="例如 Qwen/Qwen3-Embedding-4B">
       </div>
       <div class="form-group">
         <label class="form-label">选择绑定的 Key</label>
@@ -852,14 +774,15 @@ const state = {
   config: null, 
   stats: null, 
   tab: 'dashboard', 
-  modelTab: 'providers', 
+  modelTab: 'agents', 
   changed: false,
   probingKeys: new Set(),
   probingModels: new Set(),
   presetCatalog: [],
   cachedPresets: {},
   ruleUpdatesMap: {},
-  currentSelectedPreset: null
+  currentSelectedPreset: null,
+  vaultManifest: null
 };
 
 const tabs = [
@@ -908,12 +831,57 @@ async function login(){
 function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }
 function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
 
-// Data & Persistence
+// Data & Persistence & Vault
+async function fetchVaultManifest(silent = true) {
+  try {
+    const res = await fetch('/api/admin/vault/manifest', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok) {
+        state.vaultManifest = data;
+        return data;
+      }
+    }
+  } catch (e) {
+    if (!silent) toast('获取 EdgeOne 中枢清单失败: ' + e.message, 'err');
+  }
+  return null;
+}
+
+async function syncFromEdgeOneVault() {
+  const btn = document.getElementById('btnSyncVault');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 同步中...'; }
+  try {
+    const res = await fetch('/api/admin/vault/sync', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`已成功从中枢同步 ${data.synced_count || 0} 个供应商规则并立即生效`, 'ok');
+      await fetchVaultManifest(true);
+      await loadData();
+    } else {
+      toast('同步失败: ' + (data.error || '未知错误'), 'err');
+    }
+  } catch (e) {
+    toast('同步中枢异常: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔄 同步中枢规则'; }
+  }
+}
+
 async function loadData(){
   try {
     const [cr,sr]=await Promise.all([fetch('/api/admin/config',{headers:headers()}), fetch('/api/admin/stats',{headers:headers()})]);
     if(cr.status===401||sr.status===401){ logout(); return; }
     state.config=await cr.json(); state.stats=await sr.json();
+    fetchVaultManifest(true); // background silent fetch
     updateAccess(); render();
   } catch(e){ toast('加载配置失败: '+e.message,'err'); }
 }
@@ -985,10 +953,13 @@ function render(){
   if(msa) msa.style.display = (runMode === 'kb') ? 'none' : 'inline-block';
   if(msk) msk.style.display = (runMode === 'agent') ? 'none' : 'inline-block';
 
-  if (runMode === 'agent' && state.modelTab === 'kb') state.modelTab = 'providers';
-  if (runMode === 'kb' && state.modelTab === 'agents') state.modelTab = 'providers';
+  if (runMode === 'agent' && state.modelTab === 'kb') state.modelTab = 'agents';
+  if (runMode === 'kb' && state.modelTab === 'agents') state.modelTab = 'kb';
+  if (!['agents', 'kb'].includes(state.modelTab)) {
+    state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
+  }
 
-  ['providers', 'agents', 'kb'].forEach(t => {
+  ['agents', 'kb'].forEach(t => {
     const btn = document.getElementById('msub-' + t);
     const tabEl = document.getElementById('mtab-' + t);
     if (btn) btn.classList.toggle('active', state.modelTab === t);
@@ -1172,7 +1143,7 @@ async function resetStats(){
 // Models dispatcher
 function switchModelTab(id){
   state.modelTab=id;
-  ['providers', 'agents', 'kb'].forEach(t => {
+  ['agents', 'kb'].forEach(t => {
     const btn = document.getElementById('msub-' + t);
     const tabEl = document.getElementById('mtab-' + t);
     if (btn) btn.classList.toggle('active', t === id);
@@ -1181,7 +1152,6 @@ function switchModelTab(id){
   renderModels();
 }
 function renderModels(){
-  if(state.modelTab==='providers') renderProviders();
   if(state.modelTab==='agents') renderAgentModels();
   if(state.modelTab==='kb') renderKbModels();
 }
@@ -2136,23 +2106,147 @@ function applyAgentQuickModel(name, upstream){
   document.getElementById('a_upstream').value = upstream || name;
 }
 
+async function probeModelsForAgent(){
+  const prov = document.getElementById('a_provider').value;
+  if(!prov){ toast('请先选择供应商','err'); return; }
+  const btn = document.getElementById('btnProbeAgentModels');
+  const box = document.getElementById('a_probedModelsBox');
+  const tags = document.getElementById('a_probedTags');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
+  try {
+    const res = await fetch('/api/admin/probe-models', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider: prov })
+    });
+    const d = await res.json();
+    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
+      tags.innerHTML = d.models.map(m => {
+        const id = typeof m === 'string' ? m : (m.id || m.name);
+        return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(id)}','${esc(id)}')">${esc(id)}</button>`;
+      }).join(' ');
+      box.style.display = 'block';
+      toast(`探测成功，发现 ${d.models.length} 个可用模型`, 'ok');
+    } else {
+      toast(d.error || '未获取到可用模型列表', 'err');
+    }
+  } catch(e) {
+    toast('探测模型异常: ' + e.message, 'err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测模型'; }
+  }
+}
+
+async function probeModelsForCandidate(){
+  const prov = document.getElementById('c_provider').value;
+  if(!prov){ toast('请先选择供应商','err'); return; }
+  const btn = document.getElementById('btnProbeCandidateModels');
+  const box = document.getElementById('c_probedModelsBox');
+  const tags = document.getElementById('c_probedTags');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
+  try {
+    const res = await fetch('/api/admin/probe-models', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider: prov })
+    });
+    const d = await res.json();
+    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
+      tags.innerHTML = d.models.map(m => {
+        const id = typeof m === 'string' ? m : (m.id || m.name);
+        return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(id)}')">${esc(id)}</button>`;
+      }).join(' ');
+      box.style.display = 'block';
+      toast(`探测成功，发现 ${d.models.length} 个可用模型`, 'ok');
+    } else {
+      toast(d.error || '未获取到可用模型列表', 'err');
+    }
+  } catch(e) {
+    toast('探测模型异常: ' + e.message, 'err');
+  } finally {
+    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测模型'; }
+  }
+}
+
+async function ensureKeysImported(bindings){
+  const toFetch = [];
+  for(const b of bindings){
+    const hasLocal = state.config.providers &&
+      state.config.providers[b.provider] &&
+      state.config.providers[b.provider].keys &&
+      state.config.providers[b.provider].keys[b.key];
+    if(!hasLocal){
+      toFetch.push(b);
+    }
+  }
+  if(toFetch.length === 0) return true;
+
+  toast(`正在从中枢拉取 ${toFetch.length} 个密钥凭据...`, 'ok');
+  for(const item of toFetch){
+    try {
+      const res = await fetch('/api/admin/vault/fetch-key', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ provider: item.provider, key_label: item.key })
+      });
+      const d = await res.json();
+      if(!d.ok) throw new Error(d.error || '拉取凭据失败');
+    } catch(e) {
+      toast(`从 EdgeOne 中枢拉取 [${item.provider}/${item.key}] 失败: ${e.message}`, 'err');
+      return false;
+    }
+  }
+  // Refresh local state.config so newly fetched provider/key is present
+  const cr = await fetch('/api/admin/config', { headers: headers() });
+  if(cr.ok){
+    state.config = await cr.json();
+  }
+  return true;
+}
+
 function openAgentModal(){ 
   document.getElementById('agentModalTitle').textContent='新增 Agent 模型'; 
   document.getElementById('a_oldName').value=''; 
   document.getElementById('a_name').value=''; 
   document.getElementById('a_name').readOnly=false; 
   document.getElementById('a_upstream').value=''; 
+  const probedBox = document.getElementById('a_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
   populateProviderSelect('a_provider'); 
   renderAgentKeyChecks(); 
   openModal('agentModal'); 
 }
+
 function populateProviderSelect(id){ 
   const sel = document.getElementById(id); 
-  const names = Object.keys(state.config.providers||{}); 
-  sel.innerHTML = names.length ? names.map(p => {
-    const protos = getProviderProtocols(p);
+  if(!sel) return;
+  const localNames = new Set(Object.keys(state.config.providers||{}));
+  const remoteProviders = (state.vaultManifest && state.vaultManifest.providers) || [];
+  
+  const allProviders = [];
+  // 1. Add all local
+  localNames.forEach(name => {
+    const protos = getProviderProtocols(name);
     const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
-    return `<option value="${esc(p)}">${esc(p)} [${protoStr}]</option>`;
+    allProviders.push({
+      id: name,
+      label: `${name} [${protoStr}]`
+    });
+  });
+  
+  // 2. Add remote from vault that are not local
+  remoteProviders.forEach(rp => {
+    if(!localNames.has(rp.id)){
+      const protoStr = (rp.protocols || ['chat']).map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+      allProviders.push({
+        id: rp.id,
+        label: `☁️ [中枢] ${rp.id} [${protoStr}]`
+      });
+    }
+  });
+
+  sel.innerHTML = allProviders.length ? allProviders.map(p => {
+    return `<option value="${esc(p.id)}">${esc(p.label)}</option>`;
   }).join('') : '<option value="">无可用供应商</option>'; 
 }
 
@@ -2163,8 +2257,10 @@ function renderAgentKeyChecks(){
   const quickTags = document.getElementById('a_quickTags');
   const protosBadgeEl = document.getElementById('a_provider_protos');
   const protoInfoEl = document.getElementById('a_model_proto_info');
+  const probedBox = document.getElementById('a_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
 
-  if(!prov || !state.config.providers[prov]){ 
+  if(!prov){ 
     box.innerHTML = '<div class="hint">请先在上方选择供应商</div>'; 
     if(quickBox) quickBox.style.display = 'none';
     if(protosBadgeEl) protosBadgeEl.innerHTML = '';
@@ -2172,7 +2268,10 @@ function renderAgentKeyChecks(){
     return; 
   }
 
-  const provProtos = getProviderProtocols(prov);
+  const localProv = state.config.providers && state.config.providers[prov];
+  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
+
+  const provProtos = localProv ? getProviderProtocols(prov) : (remoteProv?.protocols || ['chat']);
   if(protosBadgeEl) {
     protosBadgeEl.innerHTML = renderProtocolBadges(provProtos, true);
   }
@@ -2184,27 +2283,47 @@ function renderAgentKeyChecks(){
     }
   }
 
-  const keys = Object.keys(state.config.providers[prov].keys || {});
-  box.innerHTML = keys.length ? keys.map(k => `<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('') : '<div class="hint">该供应商下暂无可用 Key</div>';
+  const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
+  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => k.label) : [];
+  const allKeyLabels = Array.from(new Set([...localKeys, ...remoteKeys]));
 
-  // Render quick tags
-  const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
-  if(preset && preset.recommended_models && preset.recommended_models.length > 0 && quickBox && quickTags){
-    quickTags.innerHTML = preset.recommended_models.map(rm =>
-      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(rm.name)}', '${esc(rm.upstream)}')">${esc(rm.name)}</button>`
-    ).join(' ');
+  if(allKeyLabels.length === 0){
+    box.innerHTML = '<div class="hint">该供应商下暂无可用 Key</div>';
+  } else {
+    box.innerHTML = allKeyLabels.map(k => {
+      const isLocal = localKeys.includes(k);
+      const tag = isLocal ? '' : ' <span class="badge badge-neutral" style="font-size:10px;padding:1px 4px;">☁️ 中枢</span>';
+      return `<label class="checkbox" style="display:flex;align-items:center;padding:4px 0;cursor:pointer;">
+        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}">
+        <span style="display:flex;align-items:center;gap:4px;">${esc(k)}${tag}</span>
+      </label>`;
+    }).join('');
+  }
+
+  // Render quick tags (Preset or Remote Vault)
+  const preset = PRESET_DEFINITIONS[prov.toLowerCase()] || remoteProv;
+  const recModels = preset?.recommended_models || remoteProv?.recommended_models || [];
+  if(recModels.length > 0 && quickBox && quickTags){
+    quickTags.innerHTML = recModels.map(rm => {
+      const mName = typeof rm === 'string' ? rm : (rm.name || rm.id);
+      const mUpstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
+      return `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyAgentQuickModel('${esc(mName)}', '${esc(mUpstream)}')">${esc(mName)}</button>`;
+    }).join(' ');
     quickBox.style.display = 'block';
   } else if(quickBox) {
     quickBox.style.display = 'none';
   }
 }
+
 function editAgentModel(name){
   const m=state.config.agent_models[name] || {};
   document.getElementById('agentModalTitle').textContent='编辑 Agent 模型';
   document.getElementById('a_oldName').value=name;
   document.getElementById('a_name').value=name;
-  document.getElementById('a_name').readOnly=false; // Allow editing model name
-  document.getElementById('a_upstream').value=m.upstream_model||''; // Pre-fill upstream model ID
+  document.getElementById('a_name').readOnly=false;
+  document.getElementById('a_upstream').value=m.upstream_model||'';
+  const probedBox = document.getElementById('a_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
   populateProviderSelect('a_provider');
   const providers=[...new Set((m.keys||[]).map(x=>x.provider))];
   if(providers[0]) document.getElementById('a_provider').value=providers[0];
@@ -2213,14 +2332,16 @@ function editAgentModel(name){
   document.querySelectorAll('#a_keyList input').forEach(inp=>{ const p=document.getElementById('a_provider').value; inp.checked=set.has(p+':'+inp.value); });
   const box=document.getElementById('a_keyList');
   providers.slice(1).forEach(p=>{
-    if(!state.config.providers[p]) return;
-    const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label" style="font-weight:700;">${esc(p)}</div>`+Object.keys(state.config.providers[p].keys||{}).map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
+    const pKeys = (state.config.providers && state.config.providers[p] && Object.keys(state.config.providers[p].keys||{})) || [];
+    if(!pKeys.length) return;
+    const div=document.createElement('div'); div.className='mt-2'; div.innerHTML=`<div class="form-label" style="font-weight:700;">${esc(p)}</div>`+pKeys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" data-provider="${esc(p)}" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join('');
     box.appendChild(div);
   });
   document.querySelectorAll('#a_keyList input[data-provider]').forEach(inp=>inp.checked=set.has(inp.dataset.provider+':'+inp.value));
   openModal('agentModal');
 }
-function saveAgentModel(){
+
+async function saveAgentModel(){
   const oldName=(document.getElementById('a_oldName').value||'').trim();
   const name=document.getElementById('a_name').value.trim();
   const upstream=document.getElementById('a_upstream').value.trim();
@@ -2230,6 +2351,10 @@ function saveAgentModel(){
     bindings.push({provider:inp.dataset.provider||document.getElementById('a_provider').value, key:inp.value});
   });
   if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
+
+  const ok = await ensureKeysImported(bindings);
+  if(!ok) return;
+
   if(!state.config.agent_models) state.config.agent_models={};
 
   // Check if adding a new model that collides with an existing model
@@ -2263,9 +2388,10 @@ function saveAgentModel(){
   }
 
   closeModal('agentModal');
-  persistConfig(oldName && oldName!==name ? `Agent 模型已从「${oldName}」重命名为「${name}」并立即生效` : `Agent 模型「${name}」已保存并立即生效`);
+  await persistConfig(oldName && oldName!==name ? `Agent 模型已从「${oldName}」重命名为「${name}」并立即生效` : `Agent 模型「${name}」已保存并立即生效`);
   renderAgentModels();
 }
+
 function deleteAgentModel(name){ 
   if(!confirm('确定要删除 Agent 模型 "'+name+'" 吗？')) return; 
   delete state.config.agent_models[name]; 
@@ -2418,11 +2544,12 @@ function renderCandidateQuickModels(){
   }
 
   const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
-  if(preset && preset.recommended_models && preset.recommended_models.length > 0){
-    const matching = preset.recommended_models.filter(rm => !rm.kb_type || rm.kb_type === type);
-    const listToRender = matching.length > 0 ? matching : preset.recommended_models;
+  const recModels = preset?.recommended_models || [];
+  if(recModels.length > 0){
+    const matching = recModels.filter(rm => !rm.kb_type || rm.kb_type === type);
+    const listToRender = matching.length > 0 ? matching : recModels;
     quickTags.innerHTML = listToRender.map(rm =>
-      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(rm.upstream)}')">${esc(rm.name)} (${esc(rm.upstream)})</button>`
+      `<button type="button" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:12px;cursor:pointer;" onclick="applyCandidateQuickModel('${esc(rm.upstream || rm.name)}')">${esc(rm.name)} (${esc(rm.upstream || rm.name)})</button>`
     ).join(' ');
     quickBox.style.display = 'block';
   } else {
@@ -2434,24 +2561,51 @@ function openCandidateModal(type){
   document.getElementById('candidateModalTitle').textContent='挂载候选节点';
   document.getElementById('c_editCat').value=''; document.getElementById('c_editIdx').value='';
   document.getElementById('c_type').value=type||'chat'; document.getElementById('c_type').disabled=!type;
+  const probedBox = document.getElementById('c_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
   populateProviderSelect('c_provider'); 
   renderCandidateKeyChecks(); 
   renderCandidateQuickModels();
   document.getElementById('c_model').value='';
   openModal('candidateModal');
 }
+
 function renderCandidateKeyChecks(){
   const prov=document.getElementById('c_provider').value;
   const box=document.getElementById('c_keyList');
-  if(!prov||!state.config.providers[prov]){ box.innerHTML='<div class="hint">请先选择供应商</div>'; return; }
-  const keys=Object.keys(state.config.providers[prov].keys||{});
-  box.innerHTML=keys.length?keys.map(k=>`<label class="checkbox" style="display:flex;padding:4px 0;"><input type="checkbox" value="${esc(k)}"> <span>${esc(k)}</span></label>`).join(''):'<div class="hint">该供应商下暂无可用 Key</div>';
+  const probedBox = document.getElementById('c_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
+
+  if(!prov){ box.innerHTML='<div class="hint">请先选择供应商</div>'; return; }
+  
+  const localProv = state.config.providers && state.config.providers[prov];
+  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
+
+  const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
+  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => k.label) : [];
+  const allKeyLabels = Array.from(new Set([...localKeys, ...remoteKeys]));
+
+  if(allKeyLabels.length === 0){
+    box.innerHTML='<div class="hint">该供应商下暂无可用 Key</div>';
+  } else {
+    box.innerHTML=allKeyLabels.map(k=>{
+      const isLocal = localKeys.includes(k);
+      const tag = isLocal ? '' : ' <span class="badge badge-neutral" style="font-size:10px;padding:1px 4px;">☁️ 中枢</span>';
+      return `<label class="checkbox" style="display:flex;align-items:center;padding:4px 0;cursor:pointer;">
+        <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}">
+        <span style="display:flex;align-items:center;gap:4px;">${esc(k)}${tag}</span>
+      </label>`;
+    }).join('');
+  }
 }
+
 function editCandidate(type,i){
   const c=state.config.candidates[type][i];
   document.getElementById('candidateModalTitle').textContent='编辑候选节点';
   document.getElementById('c_editCat').value=type; document.getElementById('c_editIdx').value=i;
   document.getElementById('c_type').value=type; document.getElementById('c_type').disabled=true;
+  const probedBox = document.getElementById('c_probedModelsBox');
+  if(probedBox) probedBox.style.display = 'none';
   populateProviderSelect('c_provider'); document.getElementById('c_provider').value=c.provider;
   renderCandidateKeyChecks(); 
   renderCandidateQuickModels();
@@ -2459,12 +2613,18 @@ function editCandidate(type,i){
   document.getElementById('c_model').value=c.model;
   openModal('candidateModal');
 }
-function saveCandidate(){
+
+async function saveCandidate(){
   const type=document.getElementById('c_type').value;
   const provider=document.getElementById('c_provider').value;
   const model=document.getElementById('c_model').value.trim();
   const selected=Array.from(document.querySelectorAll('#c_keyList input:checked')).map(x=>x.value);
   if(!provider||!selected.length||!model){ toast('请填写完整并至少勾选一个 Key','err'); return; }
+
+  const bindings = selected.map(k => ({ provider, key: k }));
+  const ok = await ensureKeysImported(bindings);
+  if(!ok) return;
+
   if(!state.config.candidates) state.config.candidates={};
   if(!state.config.candidates[type]) state.config.candidates[type]=[];
   const editCat=document.getElementById('c_editCat').value, editIdx=document.getElementById('c_editIdx').value;
@@ -2475,7 +2635,7 @@ function saveCandidate(){
     selected.forEach(k=>state.config.candidates[type].push({provider,key:k,model}));
   }
   closeModal('candidateModal');
-  persistConfig(`候选节点已挂载到 [${type}] 并立即生效`);
+  await persistConfig(`候选节点已挂载到 [${type}] 并立即生效`);
   renderKbModels();
 }
 function reorderCandidate(type, fromIdx, inputVal){
