@@ -840,6 +840,86 @@ tr:hover td, .tbl tbody tr:hover td {
   font-size: 13px;
 }
 
+/* ── Icons & Micro Elements ── */
+.khc-icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  stroke: currentColor;
+  fill: none;
+}
+.btn-xs {
+  padding: 2px 7px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 1;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Key Chips (Compact Flow Layout) ── */
+.key-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+}
+.key-chip:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+.key-chip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+/* ── Compact Gateway Strip ── */
+.gateway-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+}
+.gateway-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.gateway-label {
+  font-size: 12px;
+  color: var(--color-text-2);
+  width: 110px;
+  flex-shrink: 0;
+}
+.gateway-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-1);
+  word-break: break-all;
+}
+.model-chip-clickable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.model-chip-clickable:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
 /* ── Responsive ── */
 @media (max-width: 860px) {
   .stats-grid {
@@ -854,3 +934,4 @@ tr:hover td, .tbl tbody tr:hover td {
     font-size: 12px;
   }
 }
+

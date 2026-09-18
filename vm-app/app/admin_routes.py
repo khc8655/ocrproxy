@@ -1212,59 +1212,182 @@ async def probe_models_endpoint(request: Request):
     provider = (body.get("provider") or "").strip()
     base_url = (body.get("base_url") or "").strip()
     api_key = (body.get("api_key") or "").strip()
+    key_label = (body.get("key_label") or "").strip()
+    key_labels = body.get("key_labels") or []
+    if isinstance(key_labels, str):
+        key_labels = [key_labels] if key_labels.strip() else []
+    if key_label and key_label not in key_labels:
+        key_labels.insert(0, key_label)
 
-    if not base_url and provider:
-        cfg = await get_config()
-        p = cfg.get("providers", {}).get(provider, {})
-        base_url = p.get("base_url", "")
-        if not api_key:
-            keys = p.get("keys", {})
-            if keys:
-                api_key = next(iter(keys.values()))
+    # 1. 整理待测试的 key 候选池: list of (label, key_secret)
+    candidate_keys = []
+    if api_key:
+        candidate_keys.append(("自定义Key", api_key))
+
+    cfg = await get_config()
+    p_local = cfg.get("providers", {}).get(provider, {})
+    if not base_url:
+        base_url = p_local.get("base_url", "")
+
+    local_keys = p_local.get("keys", {})
+    # 如果指定了 key_labels，优先拉取匹配的
+    for kl in key_labels:
+        if kl in local_keys and local_keys[kl]:
+            candidate_keys.append((kl, local_keys[kl]))
+    # 如果没指定或未匹配到，且是已知本地 provider，则添加本地全部 key
+    if not candidate_keys and local_keys:
+        for kl, ksec in local_keys.items():
+            if ksec:
+                candidate_keys.append((kl, ksec))
+
+    # 2. 若本地无 key 或无 base_url，尝试从中枢 EdgeOne 获取
+    edgeone_url = (os.environ.get("EDGEONE_VAULT_URL") or "https://api.khc6.cn").rstrip("/")
+    token = (os.environ.get("EDGEONE_VAULT_TOKEN") or os.environ.get("PROXY_API_KEY") or "").strip()
+    headers_vault = {"Accept": "application/json"}
+    if token:
+        headers_vault["Authorization"] = f"Bearer {token}"
+
+    if provider and (not base_url or not candidate_keys):
+        try:
+            async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+                # 检查 manifest
+                target_vault_keys = list(key_labels)
+                mf_res = await client.get(f"{edgeone_url}/api/vault/manifest", headers=headers_vault)
+                if mf_res.is_success:
+                    manifest = mf_res.json()
+                    v_providers = manifest.get("providers") or {}
+                    v_p = v_providers.get(provider)
+                    if not v_p:
+                        # 尝试大小写不敏感匹配
+                        for vk, vv in v_providers.items():
+                            if vk.lower() == provider.lower():
+                                v_p = vv
+                                provider = vk
+                                break
+                    v_p = v_p or {}
+
+                    if not base_url:
+                        base_url = v_p.get("base_url") or ""
+                    if not target_vault_keys:
+                        raw_vk = v_p.get("keys") or []
+                        for k in raw_vk:
+                            if isinstance(k, str) and k.strip():
+                                target_vault_keys.append(k.strip())
+                            elif isinstance(k, dict) and k.get("label"):
+                                target_vault_keys.append(k.get("label").strip())
+
+                # 逐个从中枢拉取 key
+                for kl in target_vault_keys:
+                    if any(c[0] == kl for c in candidate_keys):
+                        continue
+                    try:
+                        fk_res = await client.post(
+                            f"{edgeone_url}/api/vault/fetch",
+                            headers={**headers_vault, "Content-Type": "application/json"},
+                            json={"provider": provider, "key_label": kl}
+                        )
+                        if fk_res.is_success:
+                            fk_data = fk_res.json()
+                            if fk_data.get("ok"):
+                                r_keys = (fk_data.get("provider_config") or {}).get("keys") or {}
+                                ksec = r_keys.get(kl) or (next(iter(r_keys.values())) if r_keys else "")
+                                if ksec:
+                                    candidate_keys.append((kl, ksec))
+                    except Exception as fe:
+                        logger.warning("Vault fetch key %s for %s failed: %s", kl, provider, fe)
+        except Exception as e:
+            logger.warning("Failed to query vault for provider %s: %s", provider, e)
 
     if not base_url:
-        return JSONResponse(status_code=400, content={"error": "Missing base_url or provider not configured"})
+        return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的 Base URL 配置"})
 
-    urls = []
-    b = base_url.rstrip("/")
-    if b.endswith("/v1"):
-        urls.append(f"{b}/models")
-    else:
-        urls.append(f"{b}/v1/models")
-        urls.append(f"{b}/models")
+    if not candidate_keys:
+        return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的可用 API Key（请先配置或勾选有效凭据）"})
 
-    headers = {"Accept": "application/json", "User-Agent": "ocrproxy-model-prober/1.0"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    # 3. 针对 Google 或通用 OpenAI 进行探测并执行 Fallback 轮询
+    is_google = provider.lower() == "google" or "generativelanguage.googleapis.com" in base_url.lower()
 
-    last_err = None
-    for u in urls:
-        try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-                res = await client.get(u, headers=headers)
-                if not res.is_success:
-                    last_err = f"HTTP {res.status_code}: {res.reason_phrase}"
-                    continue
-                data = res.json()
-                raw_list = []
-                if isinstance(data, dict):
-                    if isinstance(data.get("data"), list):
-                        raw_list = data["data"]
-                    elif isinstance(data.get("models"), list):
-                        raw_list = data["models"]
-                elif isinstance(data, list):
-                    raw_list = data
-                models = [
-                    m if isinstance(m, str) else (m.get("id") or m.get("name") or "")
-                    for m in raw_list
-                    if m
-                ]
-                models = sorted(list(set([m for m in models if m])))
-                return JSONResponse(content={"ok": True, "models": models, "count": len(models), "endpoint": u})
-        except Exception as e:
-            last_err = str(e)
+    probe_errors = []
+    for label, sec_key in candidate_keys:
+        probe_targets = []
+        if is_google:
+            # Google 原生 query key 端点与兼容端点
+            probe_targets.append({
+                "url": f"https://generativelanguage.googleapis.com/v1beta/openai/models",
+                "headers": {"Accept": "application/json", "Authorization": f"Bearer {sec_key}", "User-Agent": "ocrproxy-prober/1.0"}
+            })
+            probe_targets.append({
+                "url": f"https://generativelanguage.googleapis.com/v1beta/models?key={sec_key}",
+                "headers": {"Accept": "application/json", "User-Agent": "ocrproxy-prober/1.0"}
+            })
+        else:
+            b = base_url.rstrip("/")
+            urls = [f"{b}/models"] if b.endswith("/v1") else [f"{b}/v1/models", f"{b}/models"]
+            for u in urls:
+                probe_targets.append({
+                    "url": u,
+                    "headers": {"Accept": "application/json", "Authorization": f"Bearer {sec_key}", "User-Agent": "ocrproxy-prober/1.0"}
+                })
 
-    return JSONResponse(content={"ok": False, "models": [], "count": 0, "error": last_err or "探测失败"})
+        # 尝试当前 key 的各个探针端点
+        for pt in probe_targets:
+            u = pt["url"]
+            hdrs = pt["headers"]
+            try:
+                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                    res = await client.get(u, headers=hdrs)
+                    if not res.is_success:
+                        err_detail = ""
+                        try:
+                            err_json = res.json()
+                            if isinstance(err_json, dict):
+                                if "error" in err_json:
+                                    e_val = err_json["error"]
+                                    if isinstance(e_val, dict) and "message" in e_val:
+                                        err_detail = e_val["message"]
+                                    elif isinstance(e_val, str):
+                                        err_detail = e_val
+                                elif "message" in err_json:
+                                    err_detail = err_json["message"]
+                        except Exception:
+                            pass
+                        if not err_detail:
+                            err_detail = res.reason_phrase
+                        probe_errors.append(f"[{label}] {u} -> HTTP {res.status_code}: {err_detail}")
+                        continue
+                    data = res.json()
+                    raw_list = []
+                    if isinstance(data, dict):
+                        if isinstance(data.get("data"), list):
+                            raw_list = data["data"]
+                        elif isinstance(data.get("models"), list):
+                            raw_list = data["models"]
+                    elif isinstance(data, list):
+                        raw_list = data
+
+                    models = []
+                    for m in raw_list:
+                        m_str = m if isinstance(m, str) else (m.get("id") or m.get("name") or "")
+                        if m_str:
+                            # 针对 Google 规范化模型名 models/gemini-pro -> gemini-pro
+                            if m_str.startswith("models/"):
+                                m_str = m_str[7:]
+                            models.append(m_str)
+
+                    models = sorted(list(set(models)))
+                    if models:
+                        return JSONResponse(content={
+                            "ok": True,
+                            "models": models,
+                            "count": len(models),
+                            "endpoint": u,
+                            "used_key_label": label
+                        })
+            except Exception as e:
+                probe_errors.append(f"[{label}] {u} -> {str(e)}")
+
+    err_summary = "; ".join(probe_errors[-3:]) if probe_errors else "探测失败，上游未返回有效模型"
+    return JSONResponse(content={"ok": False, "models": [], "count": 0, "error": err_summary})
 
 
 @router.post("/vault/manifest")

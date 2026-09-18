@@ -29,7 +29,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版</span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="headerVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.09.19</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -54,38 +54,59 @@
       <div class="section mb-4">
         <div class="section-head">
           <div class="section-title">状态总览</div>
-          <span id="configSourceBadge" class="badge badge-success">KV 同步中</span>
+          <span id="configSourceBadge" class="badge badge-success">KV 已同步</span>
         </div>
         <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
           <div class="stat-card">
+            <div class="stat-label">已纳管供应商</div>
+            <div class="stat-value" id="statProviderCount">0</div>
+            <div class="stat-sub">已就绪 · 可全量下发至 VM</div>
+          </div>
+          <div class="stat-card">
             <div class="stat-label">已配置 Agent 模型</div>
             <div class="stat-value" id="statModelCount">0</div>
-            <div class="stat-sub">OpenAI 兼容路由</div>
+            <div class="stat-sub" id="statKeySub">多 Key 轮询池 (0 个 Key)</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">候选 Key 总数</div>
-            <div class="stat-value" id="statTotalKeys">0</div>
-            <div class="stat-sub">多 Key 轮询池</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">运行模式</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statRuntime">Edge V8</div>
-            <div class="stat-sub" id="statLastModified">3200+ 边缘节点</div>
+            <div class="stat-label">边缘架构与版本</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.09.19</div>
+            <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
       </div>
 
-      <!-- Quick Models Overview -->
+      <!-- Compact Gateway Access Strip -->
       <div class="section">
         <div class="section-head">
-          <div class="section-title">模型状态</div>
-          <button class="btn btn-primary btn-sm" onclick="switchTab('agents')">管理全部模型</button>
+          <div class="section-title">接入网关与可用模型</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="copyAllAvailableModels()">复制全部模型名</button>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('agents')">管理全部模型</button>
+          </div>
         </div>
-        <div class="card table-wrap">
-          <table>
-            <thead><tr><th>模型名称</th><th>上游映射</th><th>候选 Key 数量</th><th>操作</th></tr></thead>
-            <tbody id="quickModelsBody"></tbody>
-          </table>
+        <div class="gateway-card">
+          <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding-bottom:10px;">
+            <span class="gateway-label">Base URL (网关地址)</span>
+            <span class="gateway-val" id="dbBaseUrl">—</span>
+            <button class="btn btn-ghost btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
+          </div>
+          <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding:10px 0;">
+            <span class="gateway-label">客户端凭据 (Key)</span>
+            <span class="gateway-val mono" id="gwClientKeyVal" style="color:var(--color-primary);font-weight:600;">Bearer ...</span>
+            <button class="btn btn-ghost btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
+          </div>
+          <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
+            <span class="gateway-label" style="padding-top:2px;">OpenAI 模型 (openai)</span>
+            <div id="listOpenAiModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
+          </div>
+          <div class="gateway-row" id="rowAnthropicModels" style="padding-top:8px;align-items:flex-start;">
+            <span class="gateway-label" style="padding-top:2px;">Message 模型 (message)</span>
+            <div id="listAnthropicModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
+          </div>
+          <div class="gateway-row" id="rowResponsesModels" style="padding-top:8px;align-items:flex-start;display:none;">
+            <span class="gateway-label" style="padding-top:2px;">Responses (responses)</span>
+            <div id="listResponsesModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -113,11 +134,9 @@
             <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost btn-sm" id="btnCheckRuleUpdates" onclick="checkAllRuleUpdates()">🔄 检查规则更新</button>
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
-        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--color-bg-subtle);border:1px solid var(--color-primary);border-radius:var(--radius-sm);font-size:13px;align-items:center;justify-content:space-between;"></div>
         <div id="providersBox"></div>
       </div>
     </div>
@@ -291,62 +310,51 @@
       <button class="modal-close" onclick="closeModal('providerModal')">关闭</button>
     </div>
     <div class="modal-body">
-      <div class="form-group" id="presetSelectGroup">
-        <label class="form-label">预置官方模板 (动态加载与按需拉取)</label>
-        <select id="m_prov_preset" class="form-control" onchange="onPresetSelected()">
-          <option value="">-- 自定义配置 (手动输入) --</option>
-        </select>
-        <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);"></div>
-      </div>
-
       <div class="form-group">
-        <label class="form-label">供应商标识 (英文标识，如 google, sensenova)</label>
-        <input type="text" id="m_prov_name" class="form-control" placeholder="如 google">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Base URL (API 端点地址)</label>
-        <input type="text" id="m_prov_url" class="form-control" placeholder="如 https://generativelanguage.googleapis.com/v1beta/openai">
+        <label class="form-label">供应商英文标识 (ID，如 deepseek, my-proxy)</label>
+        <input type="text" id="m_prov_name" class="form-control" placeholder="如 deepseek">
       </div>
       <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="m_prov_proto_chat" checked>
-            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
-            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="m_prov_proto_messages">
-            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
-            <span class="text-secondary text-sm">(/v1/messages)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="m_prov_proto_responses">
-            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
-            <span class="text-secondary text-sm">(/v1/responses)</span>
-          </label>
-        </div>
+        <label class="form-label">OpenAI Base URL (协议标识: openai)</label>
+        <input type="text" id="m_prov_url_openai" class="form-control" placeholder="如 https://api.deepseek.com/v1 或 https://api.openai.com/v1">
+        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Chat 协议 (/v1/chat/completions)</div>
       </div>
-      <div class="form-group" id="m_prov_custom_url_wrap" style="margin-top:14px;">
-        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
-          <input type="checkbox" id="m_prov_custom_url_toggle" onchange="onEdgeOneCustomUrlToggleChange()">
-          <span>自定义协议独立端点 / 路径 (高级配置)</span>
-        </label>
-        <div id="m_prov_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
-          <label class="form-label" style="font-size:12px;color:var(--color-text-2);">Anthropic Messages 独立 Base URL</label>
-          <input type="text" id="m_prov_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
-          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
-        </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">Message Base URL (协议标识: message)</label>
+        <input type="text" id="m_prov_url_message" class="form-control" placeholder="如 https://api.minimax.chat/v1 或 https://api.b.ai/v1">
+        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 Anthropic Messages 协议 (/v1/messages)</div>
       </div>
-
-      <div id="m_prov_models_wrap" class="form-group" style="display:none;margin-top:16px;">
-        <label class="form-label">自动创建推荐模型</label>
-        <div id="m_prov_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--color-bg-page);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);"></div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">Responses Base URL (协议标识: responses)</label>
+        <input type="text" id="m_prov_url_responses" class="form-control" placeholder="如 https://api.openai.com/v1">
+        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Responses 协议 (/v1/responses)</div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProviderModal()">保存配置</button>
+      <button class="btn btn-primary" onclick="saveProviderModal()">保存供应商</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Danger Delete Provider Confirm -->
+<div id="deleteConfirmModal" class="modal">
+  <div class="modal-box" style="width:500px;max-height:90vh;overflow-y:auto;border:2px solid var(--color-danger);">
+    <div class="modal-head" style="background:var(--color-danger-50);border-bottom:1px solid var(--color-danger);">
+      <h3 style="color:var(--color-danger);display:flex;align-items:center;gap:8px;">
+        <span>彻底删除供应商确认</span>
+      </h3>
+      <button class="modal-close" onclick="closeModal('deleteConfirmModal')">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div id="deleteConfirmAlert" style="background:var(--color-danger-50);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:12px 14px;color:var(--color-danger);font-size:13px;line-height:1.6;margin-bottom:16px;">
+        <strong>【不可逆警告】</strong> EdgeOne 已与 GitHub 规则源完全解耦。在此删除供应商将从 <strong>EdgeOne KV 存储中彻底物理销毁</strong> 该厂商及其名下的全部凭据，系统将<strong>绝不会</strong>再从 GitHub 自动恢复或拉回！此操作无法撤销。
+      </div>
+      <div id="deleteConfirmDetails" style="font-size:13px;color:var(--color-text-1);background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px;"></div>
+    </div>
+    <div class="modal-foot" style="background:var(--color-bg-subtle);">
+      <button class="btn btn-ghost" onclick="closeModal('deleteConfirmModal')">取消</button>
+      <button class="btn btn-danger" id="btnExecuteDeleteProvider">确认彻底删除</button>
     </div>
   </div>
 </div>
@@ -391,11 +399,10 @@
     <div class="modal-body">
       <input type="hidden" id="m_model_old_name">
       <div class="form-group">
-        <label class="form-label">供应商快捷筛选与推荐模型</label>
+        <label class="form-label">所属供应商 (必选)</label>
         <select id="m_model_prov_filter" class="form-control" onchange="onModelProvFilterChange()">
-          <option value="">全部供应商</option>
+          <option value="" disabled selected>-- 请选择所属供应商 --</option>
         </select>
-        <div id="m_quick_model_tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       </div>
       <div class="form-group">
         <label class="form-label">模型名称 (对外 Model ID，如 glm-5.2, gemini-2.5-flash)</label>
@@ -407,13 +414,15 @@
       </div>
       <div class="form-group">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="margin:0;">候选 Key 绑定序列 (按供应商分组勾选)</label>
+          <label class="form-label" style="margin:0;">候选 Key 绑定序列 (勾选当前供应商可用凭据)</label>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(true)">全选</button>
             <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;height:24px;" onclick="toggleSelectAllKeys(false)">清空</button>
           </div>
         </div>
-        <div id="m_bindings_container" style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px;background:var(--color-bg-page);display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="m_bindings_container" style="max-height:220px;overflow-y:auto;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px;background:var(--color-bg-page);display:flex;flex-direction:column;gap:8px;">
+          <div style="text-align:center;padding:24px;color:var(--color-text-3);font-size:13px;">请先在上方下拉框中选择供应商</div>
+        </div>
       </div>
     </div>
     <div class="modal-foot">
