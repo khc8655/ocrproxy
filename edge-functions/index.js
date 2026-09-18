@@ -1813,8 +1813,8 @@ function renderAgentModels() {
       }
 
       const setActiveBtn = isActive
-        ? `<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>`
-        : `<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('${m}', '${b.key}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;">主</button>`;
+        ? \`<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>\`
+        : \`<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('\${m}', '\${b.key}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;">主</button>\`;
 
       keysRowsHtml += \`
         <div class="provider-row" style="padding:10px 16px;">
@@ -1919,6 +1919,19 @@ function renderProviders() {
       ? \`<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('\${p}')">⬆️ 升级规则至 v\${hasUpdate.remote_version}</button>\`
       : '';
 
+    let cachedModelsBar = '';
+    if (prov.cached_models && prov.cached_models.length > 0) {
+      const topSlice = prov.cached_models.slice(0, 8);
+      const moreCount = prov.cached_models.length - topSlice.length;
+      cachedModelsBar = \`
+        <div style="padding:6px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="badge badge-primary" style="font-size:11px;padding:1px 6px;">已探得 \${prov.cached_models.length} 个模型</span>
+          \${topSlice.map(m => \`<span class="badge badge-neutral" style="font-size:11px;padding:1px 6px;">\${m}</span>\`).join('')}
+          \${moreCount > 0 ? \`<span class="text-secondary" style="font-size:11px;">+\${moreCount} 更多</span>\` : ''}
+        </div>
+      \`;
+    }
+
     card.innerHTML = \`
       <div class="card-head">
         <div>
@@ -1927,14 +1940,46 @@ function renderProviders() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           \${updateBtn}
+          <button class="btn btn-secondary btn-sm" onclick="probeProviderModels('\${p}')" title="向上游 /v1/models 探测可用模型">🔍 探测模型</button>
           <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${p}')">编辑</button>
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${p}')">+ 新增 Key</button>
           <button class="btn btn-danger btn-sm" onclick="deleteProvider('\${p}')">删除供应商</button>
         </div>
       </div>
+      \${cachedModelsBar}
       <div style="background:var(--color-bg-page);">\${keysListHtml || '<div class="empty">暂无 Key</div>'}</div>
     \`;
     box.appendChild(card);
+  }
+}
+
+async function probeProviderModels(p) {
+  const prov = cfg.providers?.[p];
+  if (!prov) return;
+  const keys = Object.values(prov.keys || {});
+  const firstKey = keys[0] || '';
+  toast(\`正在向上游探测「\${p}」可用模型...\`, 'info');
+  try {
+    const res = await fetch('/api/admin/probe-models', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        base_url: prov.base_url,
+        api_key: firstKey,
+        provider: p
+      })
+    });
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.models) && data.models.length > 0) {
+      prov.cached_models = data.models;
+      await persistConfig();
+      renderProviders();
+      toast(\`探测成功，发现 \${data.models.length} 个可用模型并已更新\`, 'ok');
+    } else {
+      toast(\`探测完成: \${data.error || '未返回可用模型'}\`, 'warn');
+    }
+  } catch (e) {
+    toast(\`探测异常: \${e.message}\`, 'err');
   }
 }
 
@@ -2848,7 +2893,7 @@ async function setActiveAgentKey(modelName, keyLabel) {
   cfg.agent_models[modelName].active_key = keyLabel;
   renderAgentModels();
   await persistConfig();
-  toast(`已将模型 ${modelName} 设置为主力 Key: [${keyLabel}]`, 'ok');
+  toast(\`已将模型 \${modelName} 设置为主力 Key: [\${keyLabel}]\`, 'ok');
 }
 
 

@@ -1198,3 +1198,224 @@ async def restart_service_endpoint(request: Request):
         "success": True,
         "message": "服务正在平滑重启中，约 2-3 秒后恢复"
     })
+
+
+@router.post("/probe-models")
+async def probe_models_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    provider = (body.get("provider") or "").strip()
+    base_url = (body.get("base_url") or "").strip()
+    api_key = (body.get("api_key") or "").strip()
+
+    if not base_url and provider:
+        cfg = await get_config()
+        p = cfg.get("providers", {}).get(provider, {})
+        base_url = p.get("base_url", "")
+        if not api_key:
+            keys = p.get("keys", {})
+            if keys:
+                api_key = next(iter(keys.values()))
+
+    if not base_url:
+        return JSONResponse(status_code=400, content={"error": "Missing base_url or provider not configured"})
+
+    urls = []
+    b = base_url.rstrip("/")
+    if b.endswith("/v1"):
+        urls.append(f"{b}/models")
+    else:
+        urls.append(f"{b}/v1/models")
+        urls.append(f"{b}/models")
+
+    headers = {"Accept": "application/json", "User-Agent": "ocrproxy-model-prober/1.0"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    last_err = None
+    for u in urls:
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                res = await client.get(u, headers=headers)
+                if not res.is_success:
+                    last_err = f"HTTP {res.status_code}: {res.reason_phrase}"
+                    continue
+                data = res.json()
+                raw_list = []
+                if isinstance(data, dict):
+                    if isinstance(data.get("data"), list):
+                        raw_list = data["data"]
+                    elif isinstance(data.get("models"), list):
+                        raw_list = data["models"]
+                elif isinstance(data, list):
+                    raw_list = data
+                models = [
+                    m if isinstance(m, str) else (m.get("id") or m.get("name") or "")
+                    for m in raw_list
+                    if m
+                ]
+                models = sorted(list(set([m for m in models if m])))
+                return JSONResponse(content={"ok": True, "models": models, "count": len(models), "endpoint": u})
+        except Exception as e:
+            last_err = str(e)
+
+    return JSONResponse(content={"ok": False, "models": [], "count": 0, "error": last_err or "探测失败"})
+
+
+@router.post("/vault/manifest")
+async def vault_manifest_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    edgeone_url = (body.get("edgeone_url") or os.environ.get("EDGEONE_VAULT_URL") or "https://api.khc6.cn").rstrip("/")
+    token = (body.get("token") or os.environ.get("EDGEONE_VAULT_TOKEN") or os.environ.get("PROXY_API_KEY") or "").strip()
+
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.get(f"{edgeone_url}/api/vault/manifest", headers=headers)
+            if res.status_code == 401:
+                return JSONResponse(status_code=401, content={"ok": False, "error": "EdgeOne 中枢凭据鉴权失败，请检查密码或 Token"})
+            if not res.is_success:
+                return JSONResponse(status_code=res.status_code, content={"ok": False, "error": f"EdgeOne 返回 HTTP {res.status_code}"})
+            return JSONResponse(content=res.json())
+    except Exception as e:
+        logger.error("Failed to connect to EdgeOne Vault manifest: %s", e)
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"连接 EdgeOne 中枢异常: {str(e)}"})
+
+
+@router.post("/vault/fetch-key")
+async def vault_fetch_key_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    provider = body.get("provider")
+    key_label = body.get("key_label")
+    if not provider or not key_label:
+        return JSONResponse(status_code=400, content={"error": "Missing provider or key_label"})
+
+    edgeone_url = (body.get("edgeone_url") or os.environ.get("EDGEONE_VAULT_URL") or "https://api.khc6.cn").rstrip("/")
+    token = (body.get("token") or os.environ.get("EDGEONE_VAULT_TOKEN") or os.environ.get("PROXY_API_KEY") or "").strip()
+
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.post(
+                f"{edgeone_url}/api/vault/fetch",
+                headers=headers,
+                json={"provider": provider, "key_label": key_label}
+            )
+            if res.status_code == 401:
+                return JSONResponse(status_code=401, content={"ok": False, "error": "EdgeOne 中枢凭据鉴权失败"})
+            if not res.is_success:
+                return JSONResponse(status_code=res.status_code, content={"ok": False, "error": f"EdgeOne 返回 HTTP {res.status_code}"})
+            data = res.json()
+            if not data.get("ok"):
+                return JSONResponse(status_code=400, content=data)
+
+            # Auto-import into local config_store
+            prov_cfg = data.get("provider_config") or {}
+            cfg = await get_config()
+            providers = cfg.setdefault("providers", {})
+            local_p = providers.setdefault(provider, {})
+            local_p["name"] = prov_cfg.get("name") or provider
+            local_p["protocol"] = prov_cfg.get("protocol") or "openai"
+            if prov_cfg.get("base_url"):
+                local_p["base_url"] = prov_cfg["base_url"]
+            if prov_cfg.get("anthropic_base_url"):
+                local_p["anthropic_base_url"] = prov_cfg["anthropic_base_url"]
+            if prov_cfg.get("adapter_rules"):
+                local_p["adapter_rules"] = prov_cfg["adapter_rules"]
+            if prov_cfg.get("cached_models"):
+                local_p["cached_models"] = prov_cfg["cached_models"]
+
+            local_keys = local_p.setdefault("keys", {})
+            remote_keys = prov_cfg.get("keys") or {}
+            for k_lbl, k_val in remote_keys.items():
+                if k_lbl and k_val:
+                    local_keys[k_lbl] = k_val
+
+            await save_config(cfg)
+            return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label, "imported": True})
+    except Exception as e:
+        logger.error("Failed to fetch key from EdgeOne Vault: %s", e)
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: {str(e)}"})
+
+
+@router.post("/vault/sync")
+async def vault_sync_endpoint(request: Request):
+    """Manually sync rules and metadata for active providers from EdgeOne Hub."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    edgeone_url = (body.get("edgeone_url") or os.environ.get("EDGEONE_VAULT_URL") or "https://api.khc6.cn").rstrip("/")
+    token = (body.get("token") or os.environ.get("EDGEONE_VAULT_TOKEN") or os.environ.get("PROXY_API_KEY") or "").strip()
+
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.get(f"{edgeone_url}/api/vault/manifest", headers=headers)
+            if not res.is_success:
+                return JSONResponse(status_code=res.status_code, content={"ok": False, "error": f"EdgeOne 返回 HTTP {res.status_code}"})
+            manifest = res.json()
+            remote_providers = manifest.get("providers") or {}
+
+            cfg = await get_config()
+            local_providers = cfg.get("providers") or {}
+            updated = 0
+
+            for p_id, p_cfg in local_providers.items():
+                if p_id in remote_providers:
+                    r_p = remote_providers[p_id]
+                    if r_p.get("adapter_rules"):
+                        p_cfg["adapter_rules"] = r_p["adapter_rules"]
+                    if r_p.get("base_url"):
+                        p_cfg["base_url"] = r_p["base_url"]
+                    if r_p.get("protocol"):
+                        p_cfg["protocol"] = r_p["protocol"]
+                    if r_p.get("models"):
+                        p_cfg["cached_models"] = r_p["models"]
+                    updated += 1
+
+            if updated > 0:
+                await save_config(cfg)
+
+            return JSONResponse(content={
+                "ok": True,
+                "message": f"手动同步完成，已更新 {updated} 个供应商的最新规则",
+                "updated_count": updated
+            })
+    except Exception as e:
+        logger.error("Failed to sync from EdgeOne Vault: %s", e)
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"同步失败: {str(e)}"})
