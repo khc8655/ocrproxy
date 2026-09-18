@@ -488,7 +488,7 @@ function renderAgentModels() {
     
     let strategyLabel = `${keys.length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
     if(strategy === 'manual'){
-      strategyLabel = `${keys.length} 个 Key · 🔒 纯手动直通 (当前使用: ${activeKey})`;
+      strategyLabel = `${keys.length} 个 Key · 纯手动直通 (当前使用: ${activeKey})`;
     } else if(strategy === 'round_robin'){
       strategyLabel = `${keys.length} 个 Key · 轮询负载均衡`;
     } else if(strategy === 'priority_fallback'){
@@ -817,7 +817,7 @@ async function onPresetSelected() {
     descEl.style.display = 'block';
     descEl.style.background = 'var(--color-bg-page)';
     descEl.style.color = 'var(--color-text-2)';
-    descEl.innerHTML = '⚡ <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。';
+    descEl.innerHTML = '<strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。';
     modelsWrap.style.display = 'none';
     modelsList.innerHTML = '';
     return;
@@ -1032,7 +1032,7 @@ async function checkAllRuleUpdates() {
   const alertEl = document.getElementById('ruleUpdatesAlert');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '🔄 检查中...';
+    btn.textContent = '检查中...';
   }
 
   try {
@@ -1057,7 +1057,7 @@ async function checkAllRuleUpdates() {
         alertEl.innerHTML = `
           <div>
             <strong>发现 ${res.updates.length} 个供应商规则有更新</strong>：
-            ${res.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${u.provider_id}: ${u.current_version} ➔ ${u.latest_version || u.remote_version || '最新'}</span>`).join('')}
+            ${res.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${u.provider_id}: ${u.current_version} &rarr; ${u.latest_version || u.remote_version || '最新'}</span>`).join('')}
           </div>
           <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
         `;
@@ -1073,7 +1073,7 @@ async function checkAllRuleUpdates() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 检查规则更新';
+      btn.textContent = '检查规则更新';
     }
   }
 }
@@ -1199,18 +1199,18 @@ async function saveKeyModal() {
           const res = (d.protocols && d.protocols[pr]);
           if (res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
         }
-        toast(`✅ Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
+        toast(`Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
       } else {
         if (diagBox) {
-          let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--color-danger);display:flex;align-items:center;gap:6px;">⚠️ 协议连通性未完全通过 (已阻止保存)</div>';
+          let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--color-danger);display:flex;align-items:center;gap:6px;">协议连通性未完全通过 (已阻止保存)</div>';
           html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
           for (const pr of protos) {
             const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
             const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
             if (res.valid) {
-              html += `<div style="display:flex;align-items:center;gap:6px;color:var(--color-success);"><span>🟢</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
+              html += `<div style="display:flex;align-items:center;gap:6px;color:var(--color-success);"><span class="badge badge-success">通过</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
             } else {
-              html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--color-danger);"><span>🔴</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
+              html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--color-danger);"><span class="badge badge-error">失败</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
             }
           }
           html += '</div>';
@@ -1223,7 +1223,7 @@ async function saveKeyModal() {
       }
     } catch (e) {
       if (diagBox) {
-        diagBox.innerHTML = `<div style="color:var(--color-danger);font-size:12px;">❌ 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+        diagBox.innerHTML = `<div style="color:var(--color-danger);font-size:12px;">验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
         diagBox.style.display = 'block';
       }
       toast('网络请求异常: ' + e.message, 'err');
@@ -1660,7 +1660,7 @@ async function persistConfig() {
   } catch (e) {
     if (badge) {
       badge.className = 'badge badge-danger';
-      badge.textContent = '❌ 同步失败';
+      badge.textContent = '同步失败';
     }
     toast('保存失败: ' + (e?.message || e), 'err');
     return false;

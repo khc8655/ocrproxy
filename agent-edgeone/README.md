@@ -19,13 +19,17 @@
    - **TokenRhythm**：对象形式的 `tool_choice` 自动转为字符串 `"auto"`；
    - **Google Gemini (2.5 / 3 / 3.5+)**：自动映射 `reasoning_effort` 到 `extra_body.google.thinking_config`，并递归清洗 Tool Schema 中的 `$schema` 非标字段；
    - **CORS 浏览器预检**：支持 `/v1/chat/completions` 与 `/v1/messages` 的 `OPTIONS` 204 无鉴权预检请求，使网页端应用（如 Web 版 NextChat、LibreChat 等）无缝直连。
-3. **管理后台 UI (单文件 Web App)**：
-   - **Key 重命名自动联动**：修改 Key 别名时自动级联更新所有 `agent_models` 绑定；
-   - **模型二次编辑与回显**：支持在模型列表中随时二次编辑绑定的 Key 与上游别名；
-   - **一键并行全 Key 探活**：在 Agent 模型卡片上一键发起所有绑定 Key 的并行请求测速；
+3. **管理后台 UI (单文件 Web App & 极简高密设计 · v2026.09.19)**：
+   - **完全解耦 GitHub 规则源**：彻底抛弃依赖 GitHub 动态获取规则更新的机制，所有 15 家模型提供商及 Key 全部固化入 EdgeOne KV；
+   - **首页网关直通条**：替换原有的冗长表格，首页直观呈现日期版本号 (`v2026.09.19`)、已纳管供应商数 (`15 家 (可全量下发至 VM)`)、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
+   - **Key 列表紧凑流式芯片 (Chip Grid)**：彻底废除整行大列表及巨大空白卡片，改为高密度流式芯片布局；当 0 个 Key 时仅显示紧凑浅灰单行提示；
+   - **供应商表单三协议解耦**：添加/编辑供应商时拆分为三个独立的 Base URL（OpenAI Chat、Anthropic Messages、OpenAI Responses），输入即启用、留空即关闭，不进行任何自动补齐；
+   - **协议标准命名统一**：全站规整为 `openai`、`message`、`responses`，并双向兼容底层旧字段；
+   - **添加模型动态联动与专属隔离**：选择供应商时无默认项，未选时 Key 区域显示引导提示；选中某厂商后仅动态渲染该厂商名下的 Key，彻底消除跨厂商 Key 堆砌，并移除了推荐建议填入按钮；
+   - **卡片移除探测与更新按钮**：供应商卡片头部移除“探测模型”按钮，顶部彻底移除“检查规则更新”按钮；
+   - **彻底物理删除强提醒**：删除供应商将从 EdgeOne KV 中永久物理销毁，弹出高危二次确认弹窗并展示名下 Key、关联 Agent 模型及 Candidate 节点，级联安全解绑；
+   - **全站 100% 矢量 SVG 图标**：全端彻底禁止 Emoji 表情符号（0 Emoji 审计），全面采用轻量内联 SVG 图标；
    - **配置数据无损导入/导出**：与 VM 版配置 Schema 100% 互通。
-4. **共享预设 (`shared/presets/`)**：
-   - 统一引用 7 大官方预设（Google、OpenAI、SenseNova、StepFun、SiliconFlow、TokenRhythm、DeepSeek）。
 
 ---
 
@@ -59,7 +63,7 @@ cd agent-edgeone
 # 1. 安装依赖
 npm install
 
-# 2. 执行 132 项自动化单元测试
+# 2. 执行 154 项自动化单元测试
 npm test
 
 # 3. 构建单文件管理后台

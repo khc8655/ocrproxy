@@ -140,6 +140,7 @@
     .btn-sm { padding: 4px 10px; font-size: 12px; height: 28px; }
     .btn-icon { width: 32px; height: 32px; padding: 0; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: #fff; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    .khc-icon { display: inline-block; vertical-align: -0.15em; stroke: currentColor; flex-shrink: 0; }
 
     /* Forms */
     .form-group { margin-bottom: 16px; }
@@ -162,7 +163,7 @@
     td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
 
     /* Badges */
-    .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap; flex-shrink: 0; min-width: 28px; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; line-height: 1.4; white-space: nowrap; flex-shrink: 0; min-width: 24px; }
     .badge-neutral { background: var(--khc-neutral-100); color: var(--text-tertiary); }
     .badge-success { background: var(--khc-success-50); color: var(--success); }
     .badge-warn, .badge-warning { background: var(--khc-warning-50); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
@@ -211,12 +212,13 @@
     .code-block pre { white-space: pre-wrap; word-break: break-all; margin: 0; }
     .copy-btn { position: absolute; top: 10px; right: 10px; padding: 3px 8px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: var(--radius-sm); color: #fff; font-size: 11px; font-weight: 500; cursor: pointer; transition: all .15s; }
     /* Modal */
-    .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+    body.modal-open { overflow: hidden !important; }
+    .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; overscroll-behavior: contain; }
     .modal.show { display: flex; animation: fadeIn .15s ease-out; }
-    .modal-box { width: 480px; max-width: 100%; max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
+    .modal-box { width: 480px; max-width: 100%; max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); border: 1px solid var(--border); overscroll-behavior: contain; }
     .modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .modal-head h3 { font-size: 15px; font-weight: 600; color: var(--text); }
-    .modal-body { padding: 20px; }
+    .modal-body { padding: 20px; overscroll-behavior: contain; }
     .modal-foot { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--khc-neutral-50); display: flex; justify-content: flex-end; gap: 8px; }
     .modal-close { background: none; border: none; font-size: 18px; color: var(--text-secondary); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
     .modal-close:hover { background: var(--khc-neutral-100); color: var(--text); }
@@ -227,6 +229,7 @@
     .toast.show { transform: translateX(0); }
     .toast.ok { border-left: 4px solid var(--success); color: var(--text); }
     .toast.err { border-left: 4px solid var(--error); color: var(--text); }
+    .toast.info { border-left: 4px solid var(--primary); color: var(--text); }
 
     /* Tabs inside page */
     .subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
@@ -268,6 +271,29 @@
     .key-capsule.checked {
       border-color: var(--primary); background: var(--primary-soft);
       color: var(--primary); font-weight: 600;
+    }
+
+    /* Standardized Protocol Badges */
+    .proto-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; padding: 2px 7px;
+      border-radius: 4px; line-height: 1.2;
+    }
+    .proto-openai {
+      background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .proto-anthropic {
+      background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* Probed Modal Items */
+    .probed-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); cursor: pointer; transition: all 0.15s ease;
+    }
+    .probed-item:hover {
+      border-color: var(--primary); background: var(--primary-soft); transform: translateY(-1px);
     }
 
     .model-capsule {
@@ -338,7 +364,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge" id="topModeBadge">v3.3</span>
+      <span class="brand-badge" id="topModeBadge">v2026.09.19</span>
     </div>
     <nav id="topNav"></nav>
     <div class="actions">
@@ -351,6 +377,47 @@
   <main class="main">
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
+      <!-- Section 0: Gateway Access & Available Models (Compact Strip) -->
+      <div class="card card-pad mb-3" id="db-access-card" style="padding:10px 16px; background:var(--bg-card); border:1px solid var(--border);">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; font-size:13px;">
+          <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div style="display:inline-flex; align-items:center; gap:6px;">
+              <span style="font-weight:600; color:var(--text-secondary);">URL:</span>
+              <span class="mono" id="dbBaseUrl" style="color:var(--primary); font-weight:600;">—</span>
+              <button class="btn btn-sm btn-secondary" onclick="copyDbBaseUrl()" title="复制 Base URL" style="padding:2px 7px; font-size:11px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;">
+                <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>复制</span>
+              </button>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:6px;">
+              <span style="font-weight:600; color:var(--text-secondary);">Key:</span>
+              <span class="mono" id="gwClientKeyVal" style="color:var(--text); font-weight:600;">Bearer &lt;CLIENT_KEY&gt;</span>
+              <button class="btn btn-sm btn-secondary" onclick="copyDbClientKey()" title="复制 Key" style="padding:2px 7px; font-size:11px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;">
+                <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>复制</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:5px; font-size:12px; border-top:1px solid var(--border-light); padding-top:6px;">
+          <div id="rowOpenAiModels" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="color:var(--text-secondary); font-weight:600; min-width:96px; display:inline-flex; align-items:center; gap:4px;">
+              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+              OpenAI 模型:
+            </span>
+            <div id="listOpenAiModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
+          </div>
+          <div id="rowAnthropicModels" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="color:var(--text-secondary); font-weight:600; min-width:96px; display:inline-flex; align-items:center; gap:4px;">
+              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Anthropic 模型:
+            </span>
+            <div id="listAnthropicModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Section 1: Agent Metrics Overview -->
       <div class="section mb-4" id="db-section-agent">
         <div class="section-head">
@@ -401,8 +468,8 @@
           <div class="section-desc" id="modelsPanelDesc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则">🔄 同步中枢规则</button>
-          <button class="btn btn-primary btn-sm" id="btnPrimaryModelAction" onclick="handlePrimaryModelAction()">+ 新增 Agent 模型</button>
+          <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 同步中枢规则</button>
+          <button class="btn btn-primary btn-sm" id="btnPrimaryModelAction" onclick="handlePrimaryModelAction()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增 Agent 模型</button>
         </div>
       </div>
 
@@ -417,56 +484,6 @@
       </div>
     </div>
 
-    <!-- Panel: Access -->
-    <div id="panel-access" class="panel">
-      <div class="section">
-        <div class="section-title mb-2">接入网关信息</div>
-        <div class="card card-pad mb-3">
-          <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBase">—</span></div>
-          <div class="flex-between mb-2"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModels">—</span></div>
-          <div class="flex-between"><span class="text-secondary">网关已支持协议</span><span id="accProtocols" style="display:flex;gap:6px;">—</span></div>
-        </div>
-        <div id="acc-section-agent">
-          <!-- 1. OpenAI Chat -->
-          <div class="card card-pad mb-3">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <div style="font-weight:700;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;">
-                <span>1. OpenAI 格式调用 (Chat Completions)</span>
-                <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
-              </div>
-              <span class="text-secondary text-sm">端点：<code>POST /v1/chat/completions</code></span>
-            </div>
-            <div class="text-secondary text-sm mb-2">适用生态：Cursor / Cline (OpenAI 模式) / OpenAI SDK / NextChat / Dify 等全部兼容客户端</div>
-            <div class="code-block"><button class="copy-btn" onclick="copy('accPy')">复制</button><pre id="accPy"></pre></div>
-          </div>
-
-          <!-- 2. Anthropic Messages -->
-          <div class="card card-pad mb-3" id="acc-messages-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <div style="font-weight:700;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;">
-                <span>2. Claude 格式调用 (Anthropic Messages)</span>
-                <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
-              </div>
-              <span class="text-secondary text-sm">端点：<code>POST /v1/messages</code></span>
-            </div>
-            <div class="text-secondary text-sm mb-2">适用生态：Claude Code / Cline (Claude 模式) / Anthropic SDK 原生直通（支持 MiniMax、B.AI 等已适配提供商）</div>
-            <div class="hint-box mb-2" style="font-size:12px;background:var(--bg-subtle);">
-              当前支持 Messages 协议的模型：<b id="accMessagesModels">—</b>
-            </div>
-            <div class="code-block"><button class="copy-btn" onclick="copy('accMessagesPy')">复制</button><pre id="accMessagesPy"></pre></div>
-          </div>
-        </div>
-      </div>
-      <div class="section" id="acc-section-kb">
-        <div class="section-title mb-2">知识库工具接口调用示例</div>
-        <div class="hint-box">知识库入库使用固定别名 <b>chat / embedding / reranker / ocr</b>，无需且不会出现在 /v1/models 列表中。</div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbChat')">复制</button><pre id="accKbChat"></pre></div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbEmb')">复制</button><pre id="accKbEmb"></pre></div>
-        <div class="code-block mb-2"><button class="copy-btn" onclick="copy('accKbRank')">复制</button><pre id="accKbRank"></pre></div>
-        <div class="code-block"><button class="copy-btn" onclick="copy('accKbOcr')">复制</button><pre id="accKbOcr"></pre></div>
-      </div>
-    </div>
-
     <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
@@ -478,8 +495,8 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
             <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存设置</button>
-            <button class="btn btn-success btn-sm" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:4px;font-weight:600;">
-              <span>⚡️</span> 保存并实测验证
+            <button class="btn btn-success btn-sm" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
+              <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 保存并实测验证
             </button>
           </div>
         </div>
@@ -526,13 +543,13 @@
               <label class="form-label" for="s_agentRouting">Agent 模式分流策略 (agent_routing_strategy)</label>
               <select id="s_agentRouting" class="form-control" onchange="onAgentRoutingChange()">
                 <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐，固定当前 Key，遇 429 顺延并长期驻留新 Key</option>
-                <option value="manual">🔒 纯手动直通 (manual) — 锁定当前激活 Key，绝不自动切换，上游状态纯透传</option>
+                <option value="manual">纯手动直通 (manual) — 锁定当前激活 Key，绝不自动切换，上游状态纯透传</option>
                 <option value="round_robin">轮询负载均衡 (round_robin) — 每次请求依次轮流切换 Key，均衡摊销</option>
                 <option value="priority_fallback">主备优先级降级 (priority_fallback) — 严格优先尝试 #1 Key，遇错降级</option>
                 <option value="latency_based">最低延迟优先 (latency_based) — 自动路由至近期延迟最低的优质 Key</option>
               </select>
               <div id="manual-routing-tip" class="hint-box mt-2" style="display:none;color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:10px 14px;font-size:12px;">
-                🔒 <b>纯手动直通模式已生效</b>：系统将直接使用各 Agent 模型指定的当前激活 Key，绝不进行自动切换；所有自动重试、熔断与冷却避让已自动停用，上游响应（含 200/429/500）完全 100% 原始透传。
+                <span class="badge badge-warning" style="margin-right:6px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 纯手动直通生效</span> 系统将直接使用各 Agent 模型指定的当前激活 Key，绝不进行自动切换；所有自动重试、熔断与冷却避让已自动停用，上游响应（含 200/429/500）完全 100% 原始透传。
               </div>
               <span class="hint" id="agent-routing-hint">智能体编程场景（Cursor / Cline）推荐「粘性故障转移」，可保持会话连接与 KV Cache 稳定性，避免频繁切回限流 Key。</span>
             </div>
@@ -681,8 +698,8 @@
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap;">
           <button class="btn btn-secondary" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
           <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
-          <button class="btn btn-success" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:4px;font-weight:600;">
-            <span>⚡️</span> 保存并实测验证
+          <button class="btn btn-success" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
+            <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 保存并实测验证
           </button>
         </div>
       </div>
@@ -695,51 +712,79 @@
   <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
     <div class="modal-head">
       <h3 id="agentModalTitle">Agent 模型配置</h3>
-      <button class="modal-close" onclick="closeModal('agentModal')">×</button>
+      <button class="modal-close" onclick="closeModal('agentModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="a_oldName">
       <input type="hidden" id="a_provider">
 
-      <!-- Step 1: 供应商胶囊选择 -->
+      <!-- Step 1: 供应商下拉选择 -->
       <div class="form-group mb-3">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label class="form-label" style="margin-bottom:0;font-weight:700;">① 点选供应商</label>
-          <span id="a_provider_protos"></span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="refreshVaultManifestInModal()" style="padding:2px 8px;font-size:11px;height:22px;display:inline-flex;align-items:center;gap:4px;" title="从 EdgeOne 中枢拉取最新供应商与凭据">
+            <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            <span>同步中枢</span>
+          </button>
         </div>
-        <div id="a_providerCapsules" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:2px 0;"></div>
+        <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
+          <optgroup label="EdgeOne 服务端托管提供商" id="a_optgroup_vault"></optgroup>
+          <optgroup label="自定义提供商">
+            <option value="__custom__">自定义提供商...</option>
+          </optgroup>
+        </select>
         <div id="a_model_proto_info" class="text-secondary text-sm mt-1" style="font-size:12px;"></div>
       </div>
 
-      <!-- Step 2: Key 胶囊选择 -->
-      <div class="form-group mb-3">
-        <label class="form-label" style="font-weight:700;margin-bottom:8px;">② 点选绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，点击切换/多选)</span></label>
+      <!-- 自定义供应商输入区域 (选择自定义时展开) -->
+      <div id="a_customProviderArea" style="display:none;background:var(--bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px;">
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">自定义供应商标识 (ID)</label>
+          <input type="text" id="a_custom_id" class="form-control" placeholder="例如 custom-openai">
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">Base URL 接口地址</label>
+          <input type="text" id="a_custom_base_url" class="form-control" placeholder="例如 https://api.openai.com">
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">API Key</label>
+          <input type="password" id="a_custom_api_key" class="form-control" placeholder="sk-...">
+        </div>
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">接口协议</label>
+          <select id="a_custom_protocol" class="form-control" style="font-size:12px;">
+            <option value="chat">OpenAI 兼容协议</option>
+            <option value="messages">Anthropic 兼容协议</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Step 2: Key 绑定选择 -->
+      <div class="form-group mb-3" id="a_keyArea">
+        <label class="form-label" style="font-weight:700;margin-bottom:6px;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
       </div>
 
-      <!-- Step 3: 模型胶囊选择 -->
+      <!-- Step 3: 模型快捷标签与探测 -->
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 点选模型 <span class="text-secondary text-sm" style="font-weight:normal;">(点击秒级填入，零键盘输入)</span></label>
-          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;" id="btnProbeAgentModels" onclick="probeModelsForAgent()">🔍 探测更多模型</button>
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;" id="btnProbeAgentModels" onclick="executeProbe('agent')">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 探测上游可用模型
+          </button>
         </div>
-        <!-- 推荐模型胶囊 -->
+        <!-- 推荐模型快捷标签 -->
         <div id="a_quickModels" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1">官方/中枢推荐模型胶囊：</div>
+          <div class="text-xs text-secondary mb-1">官方推荐模型快捷填入：</div>
           <div id="a_quickTags" class="capsule-row"></div>
-        </div>
-        <!-- 探测模型胶囊 -->
-        <div id="a_probedModelsBox" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1">🔍 上游探测到的实时可用模型：</div>
-          <div id="a_probedTags" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
         </div>
       </div>
 
-      <!-- 详细参数 (由胶囊自动填充，亦可微调) -->
+      <!-- 详细参数 (由标签或探测弹窗点选自动填充) -->
       <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
-          <input type="text" id="a_name" class="form-control" placeholder="点击上方模型胶囊自动填入，例如 sf-deepseek">
+          <input type="text" id="a_name" class="form-control" placeholder="点击推荐标签或探测弹窗选择，例如 sf-deepseek">
         </div>
         <div class="form-group mb-0">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>
@@ -758,7 +803,7 @@
   <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
     <div class="modal-head">
       <h3 id="candidateModalTitle">挂载候选节点</h3>
-      <button class="modal-close" onclick="closeModal('candidateModal')">×</button>
+      <button class="modal-close" onclick="closeModal('candidateModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="c_editCat">
@@ -766,42 +811,74 @@
       <input type="hidden" id="c_type" value="chat">
       <input type="hidden" id="c_provider">
 
-      <!-- Step 1: 虚拟角色胶囊 -->
+      <!-- Step 1: 虚拟角色单选 -->
       <div class="form-group mb-3">
         <label class="form-label" style="font-weight:700;margin-bottom:8px;">① 知识库聚合角色</label>
         <div id="c_typeCapsules" class="capsule-row">
-          <div class="capsule-btn active" data-type="chat" onclick="selectCandidateType('chat')">💬 chat (对话与摘要)</div>
-          <div class="capsule-btn" data-type="embedding" onclick="selectCandidateType('embedding')">📐 embedding (向量化)</div>
-          <div class="capsule-btn" data-type="reranker" onclick="selectCandidateType('reranker')">📊 reranker (重排序)</div>
-          <div class="capsule-btn" data-type="ocr" onclick="selectCandidateType('ocr')">🖼️ ocr (图文识别)</div>
+          <div class="capsule-btn active" data-type="chat" onclick="selectCandidateType('chat')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> <span>chat (对话与摘要)</span></div>
+          <div class="capsule-btn" data-type="embedding" onclick="selectCandidateType('embedding')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> <span>embedding (向量化)</span></div>
+          <div class="capsule-btn" data-type="reranker" onclick="selectCandidateType('reranker')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> <span>reranker (重排序)</span></div>
+          <div class="capsule-btn" data-type="ocr" onclick="selectCandidateType('ocr')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> <span>ocr (图文识别)</span></div>
         </div>
       </div>
 
-      <!-- Step 2: 供应商胶囊 -->
+      <!-- Step 2: 供应商下拉选择 -->
       <div class="form-group mb-3">
-        <label class="form-label" style="font-weight:700;margin-bottom:8px;">② 点选供应商</label>
-        <div id="c_providerCapsules" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:2px 0;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="font-weight:700;margin-bottom:0;">② 选择提供商</label>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="refreshVaultManifestInModal()" style="padding:2px 8px;font-size:11px;height:22px;display:inline-flex;align-items:center;gap:4px;" title="从 EdgeOne 中枢拉取最新供应商与凭据">
+            <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            <span>同步中枢</span>
+          </button>
+        </div>
+        <select id="c_providerSelect" class="form-control" onchange="onCandidateProviderSelectChange(this.value)">
+          <optgroup label="EdgeOne 服务端托管提供商" id="c_optgroup_vault"></optgroup>
+          <optgroup label="自定义提供商">
+            <option value="__custom__">自定义提供商...</option>
+          </optgroup>
+        </select>
       </div>
 
-      <!-- Step 3: Key 胶囊 -->
-      <div class="form-group mb-3">
-        <label class="form-label" style="font-weight:700;margin-bottom:8px;">③ 点选绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已选首位，点击切换/多选)</span></label>
+      <!-- 自定义供应商输入区域 -->
+      <div id="c_customProviderArea" style="display:none;background:var(--bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px;">
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">自定义供应商标识 (ID)</label>
+          <input type="text" id="c_custom_id" class="form-control" placeholder="例如 custom-openai">
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">Base URL 接口地址</label>
+          <input type="text" id="c_custom_base_url" class="form-control" placeholder="例如 https://api.openai.com">
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">API Key</label>
+          <input type="password" id="c_custom_api_key" class="form-control" placeholder="sk-...">
+        </div>
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">接口协议</label>
+          <select id="c_custom_protocol" class="form-control" style="font-size:12px;">
+            <option value="chat">OpenAI 兼容协议</option>
+            <option value="messages">Anthropic 兼容协议</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Step 3: Key 绑定 -->
+      <div class="form-group mb-3" id="c_keyArea">
+        <label class="form-label" style="font-weight:700;margin-bottom:6px;">③ 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
         <div id="c_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
       </div>
 
-      <!-- Step 4: 模型胶囊 (推荐 + 探测) -->
+      <!-- Step 4: 模型选择与探测 -->
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label class="form-label" style="margin-bottom:0;font-weight:700;">④ 点选模型 <span class="text-secondary text-sm" style="font-weight:normal;">(点击秒级填入，零键盘输入)</span></label>
-          <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;" id="btnProbeCandidateModels" onclick="probeModelsForCandidate()">🔍 探测更多模型</button>
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">④ 选择模型</label>
+          <button type="button" class="btn btn-secondary btn-sm" style="padding:4px 10px;font-size:12px;" id="btnProbeCandidateModels" onclick="executeProbe('candidate')">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 探测上游可用模型
+          </button>
         </div>
         <div id="c_quickModels" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1">推荐模型胶囊：</div>
+          <div class="text-xs text-secondary mb-1">官方推荐模型快捷填入：</div>
           <div id="c_quickTags" class="capsule-row"></div>
-        </div>
-        <div id="c_probedModelsBox" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1">🔍 上游探测到的实时模型：</div>
-          <div id="c_probedTags" class="capsule-row" style="max-height:130px;overflow-y:auto;padding:8px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
         </div>
       </div>
 
@@ -809,7 +886,7 @@
       <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div class="form-group mb-0">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (例如 Qwen/Qwen2.5-72B-Instruct)</label>
-          <input type="text" id="c_model" class="form-control" placeholder="点击上方模型胶囊自动填入">
+          <input type="text" id="c_model" class="form-control" placeholder="点击上方推荐标签或探测弹窗选择填入">
         </div>
       </div>
     </div>
@@ -820,9 +897,32 @@
   </div>
 </div>
 
+<!-- Modal: Probed Models Selection -->
+<div class="modal" id="probedListModal">
+  <div class="modal-box" style="max-width:540px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <svg class="khc-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <h3 id="probedModalTitle" style="margin:0;font-size:15px;">选择上游可用模型</h3>
+      </div>
+      <button class="modal-close" onclick="closeModal('probedListModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div style="padding:12px 16px 8px 16px;border-bottom:1px solid var(--border);background:var(--bg-subtle);">
+      <input type="text" id="probedSearchInput" class="form-control" placeholder="输入关键字模糊过滤模型 (如 deepseek, qwen)..." oninput="filterProbedModels(this.value)">
+    </div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;padding:12px 16px;">
+      <div id="probedModelsList" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div class="modal-foot" style="display:flex;justify-content:space-between;align-items:center;">
+      <span class="text-secondary text-sm" id="probedCountHint">共 0 个模型</span>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('probedListModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="importModal">
   <div class="modal-box">
-    <div class="modal-head"><h3>导入配置确认</h3><button class="modal-close" onclick="closeModal('importModal')">×</button></div>
+    <div class="modal-head"><h3>导入配置确认</h3><button class="modal-close" onclick="closeModal('importModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="modal-body">
       <div id="importPreview" class="hint-box mb-3" style="line-height:1.7;"></div>
       <div class="form-group"><label class="form-label">选择导入合并策略</label>
@@ -869,14 +969,40 @@ const state = {
 };
 
 const tabs = [
-  { id: 'dashboard', label: '概览', sub: '实时请求统计与错误日志' },
+  { id: 'dashboard', label: '概览', sub: '接入规范、实时请求统计与错误日志' },
   { id: 'models', label: '模型路由', sub: '供应商、Agent 模型与知识库模型' },
-  { id: 'access', label: '接入指南', sub: '客户端接入地址与调用示例' },
   { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' }
 ];
 const KB_TYPES = ['chat','embedding','reranker','ocr'];
 const KB_LABELS = { chat:'Chat 对话', embedding:'Embedding 向量', reranker:'Reranker 重排', ocr:'OCR 识图' };
 const KB_COLORS = { chat:'#2563eb', embedding:'#10b981', reranker:'#f59e0b', ocr:'#8b5cf6' };
+
+const ICONS = {
+  refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
+  zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  reranker: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  xCircle: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  arrowUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+};
+
+function icon(name, size=14, cls='') {
+  const p = ICONS[name] || '';
+  return `<svg class="khc-icon ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
 
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
 function esc(s) { if(s===null||s===undefined)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -955,7 +1081,7 @@ async function syncFromEdgeOneVault() {
   } catch (e) {
     toast('同步中枢异常: ' + e.message, 'err');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '🔄 同步中枢规则'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = icon('refresh') + ' 同步中枢规则'; }
   }
 }
 
@@ -969,17 +1095,31 @@ async function loadData(){
   } catch(e){ toast('加载配置失败: '+e.message,'err'); }
 }
 
+let persistLock = Promise.resolve();
+
 async function persistConfig(msg='配置已保存并立即生效'){
+  const prevLock = persistLock;
+  let releaseLock;
+  persistLock = new Promise(resolve => { releaseLock = resolve; });
+  await prevLock;
+
   try {
-    const r=await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
+    let r = await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
+    if(!r.ok && r.status === 409){
+      const latest = await fetch('/api/admin/config',{headers:headers()}).then(res=>res.json()).catch(()=>null);
+      if(latest && latest._version !== undefined){
+        state.config._version = latest._version;
+        r = await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
+      }
+    }
     if(!r.ok){
-      const err=await r.json().catch(()=>({}));
+      const err = await r.json().catch(()=>({}));
       if (r.status === 409) {
-        alert('⚠️ 配置保存冲突：后端配置已被其他窗口或进程更新！\n\n为防止覆盖他人最新修改，系统已自动重新拉取最新线上配置，请在最新配置基础上重新操作。');
+        alert('配置保存冲突：后端配置已被其他窗口或进程更新！\n\n为防止覆盖他人最新修改，系统已自动重新拉取最新线上配置，请在最新配置基础上重新操作。');
         await loadData();
         return;
       }
-      throw new Error(err.error||'保存配置失败');
+      throw new Error(err.error || '保存配置失败');
     }
     const respData = await r.json().catch(()=>({}));
     if (respData._version !== undefined && state.config) {
@@ -987,7 +1127,11 @@ async function persistConfig(msg='配置已保存并立即生效'){
     }
     if (msg) toast(msg,'ok');
     await loadData();
-  } catch(e){ toast(e.message,'err'); }
+  } catch(e){ 
+    toast(e.message,'err'); 
+  } finally {
+    releaseLock();
+  }
 }
 
 async function reloadRuntimeState(){
@@ -1039,7 +1183,7 @@ function render(){
     if (panelTitle) panelTitle.textContent = 'Agent 模型管理';
     if (panelDesc) panelDesc.textContent = '对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 粘性故障转移';
     if (primaryBtn) {
-      primaryBtn.textContent = '+ 新增 Agent 模型';
+      primaryBtn.innerHTML = icon('plus') + ' 新增 Agent 模型';
       primaryBtn.style.display = 'inline-flex';
     }
     if (mtabAgents) {
@@ -1054,7 +1198,7 @@ function render(){
     if (panelTitle) panelTitle.textContent = '知识库入库虚拟模型';
     if (panelDesc) panelDesc.textContent = '4 个入库专用聚合别名（chat / embedding / reranker / ocr），每个支持挂载多个供应商模型并发轮询';
     if (primaryBtn) {
-      primaryBtn.textContent = '+ 挂载候选节点';
+      primaryBtn.innerHTML = icon('plus') + ' 挂载候选节点';
       primaryBtn.style.display = 'inline-flex';
     }
     if (mtabAgents) {
@@ -1137,8 +1281,87 @@ function renderLogsTable(){
   }).join('');
 }
 
+// Dashboard Gateway & Available Models (Compact Strip)
+function renderDashboardGateway(){
+  const base = window.location.origin + '/v1';
+  const urlEl = document.getElementById('dbBaseUrl');
+  if(urlEl) urlEl.textContent = base;
+
+  const keyVal = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : '';
+  const keyEl = document.getElementById('gwClientKeyVal');
+  if(keyEl) {
+    keyEl.textContent = keyVal ? `Bearer ${keyVal}` : 'Bearer <CLIENT_KEY>';
+  }
+
+  const listOpenAi = document.getElementById('listOpenAiModels');
+  const listAnthropic = document.getElementById('listAnthropicModels');
+  const rowAnthropic = document.getElementById('rowAnthropicModels');
+  if(!listOpenAi || !listAnthropic) return;
+
+  const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
+  let openaiModels = [];
+  let anthropicModels = [];
+
+  if(runMode === 'agent') {
+    const agentModels = state.config?.agent_models || {};
+    Object.keys(agentModels).forEach(mName => {
+      const protos = getModelProtocols(mName);
+      if(protos.includes('messages') || protos.includes('anthropic')) {
+        anthropicModels.push(mName);
+      }
+      if(protos.includes('chat') || protos.includes('openai') || !anthropicModels.includes(mName)) {
+        openaiModels.push(mName);
+      }
+    });
+  } else {
+    // KB mode
+    const candidates = state.config?.candidates || {};
+    KB_TYPES.forEach(t => {
+      const cList = candidates[t] || [];
+      if(cList.length > 0) {
+        openaiModels.push(t);
+      }
+    });
+  }
+
+  const renderTags = (arr, badgeClass) => {
+    if(arr.length === 0) return '<span class="text-secondary" style="font-size:11px;">(无)</span>';
+    return arr.map(m => `<span class="badge ${badgeClass}" style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;">${esc(m)}</span>`).join('');
+  };
+
+  listOpenAi.innerHTML = renderTags(openaiModels, 'badge-info');
+  listAnthropic.innerHTML = renderTags(anthropicModels, 'badge-warning');
+  if(rowAnthropic) {
+    rowAnthropic.style.display = anthropicModels.length > 0 ? 'flex' : 'none';
+  }
+}
+
+function copyDbBaseUrl(){
+  const base = window.location.origin + '/v1';
+  if(navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(base).then(() => toast('Base URL 已复制到剪贴板', 'ok')).catch(() => {
+      prompt('请手动复制 Base URL:', base);
+    });
+  } else {
+    prompt('请手动复制 Base URL:', base);
+  }
+}
+
+function copyDbClientKey(){
+  const keyVal = (state.config && state.config.proxy_api_key) ? `Bearer ${state.config.proxy_api_key}` : '';
+  if(!keyVal) { toast('尚未获取到有效 API Key', 'err'); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(keyVal).then(() => toast('Key 已复制到剪贴板', 'ok')).catch(() => {
+      prompt('请手动复制 Key:', keyVal);
+    });
+  } else {
+    prompt('请手动复制 Key:', keyVal);
+  }
+}
+
 // Dashboard
 function renderDashboard(){
+  renderDashboardGateway();
   const st = state.stats || {};
   const ag = st.agent || { count: 0, success: 0, fallback_count: 0, '429': 0, '5xx': 0, '403': 0, '4xx': 0, models: {} };
   const kb = st.kb || { chat: st.chat||{}, embedding: st.embedding||{}, reranker: st.reranker||{}, ocr: st.ocr||{} };
@@ -1263,29 +1486,32 @@ function renderModels(){
   }
 }
 
-// Protocol Metadata & Helpers (Factual Badges)
+// Protocol Metadata & Helpers (Strict Standard: OpenAI and Anthropic linear SVG)
 const PROTOCOLS = {
-  chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: '支持 OpenAI Chat 格式 (/v1/chat/completions)' },
-  messages: { label: 'Anthropic Messages', short: 'Messages', badgeClass: 'badge-warning', title: '支持 Anthropic Claude Messages 格式 (/v1/messages)' },
-  responses: { label: 'OpenAI Responses', short: 'Responses', badgeClass: 'badge-purple', title: '支持 OpenAI Responses 格式 (/v1/responses)' }
+  chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' },
+  messages: { label: 'Anthropic Messages', short: 'Anthropic', badgeClass: 'badge-warning', title: 'Anthropic 协议' },
+  responses: { label: 'OpenAI Responses', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' }
 };
+
+function getProtocolBadge(proto){
+  const p = (proto || 'openai').toLowerCase();
+  if (p.includes('anthropic') || p.includes('messages') || p.includes('claude')) {
+    return `<span class="proto-badge proto-anthropic" title="Anthropic 协议"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M13.8 3.5l6.7 17h-3.6l-1.4-3.8h-7l-1.4 3.8H3.5l6.7-17h3.6zm-1.1 9.4L11 8.2l-1.7 4.7h3.4z"/></svg> Anthropic</span>`;
+  }
+  return `<span class="proto-badge proto-openai" title="OpenAI 兼容协议"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 15a5 5 0 1 1 5-5 5 5 0 0 1-5 5z"/><circle cx="12" cy="12" r="2"/></svg> OpenAI</span>`;
+}
 
 function getProviderProtocols(name, provObj){
   const p = provObj || (state.config && state.config.providers && state.config.providers[name]) || {};
-  // 1. If user explicitly configured protocols array, strictly honor it
   if (Array.isArray(p.protocols) && p.protocols.length > 0) {
     return p.protocols;
   }
-  // 2. Dynamic fallback based on presets & feature flags
   const protos = ['chat'];
   const lower = (name || '').toLowerCase();
   const clean = lower.replace(/[^a-z0-9]/g, '');
   const preset = PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower];
   if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
     protos.push('messages');
-  }
-  if (p.openai_responses || p.supports_responses) {
-    protos.push('responses');
   }
   return protos;
 }
@@ -1301,11 +1527,14 @@ function getModelProtocols(modelName){
   return set.size ? Array.from(set) : ['chat'];
 }
 
-function renderProtocolBadges(protoList, isShort=true){
-  return (protoList || ['chat']).map(pr => {
-    const meta = PROTOCOLS[pr] || { label: pr, short: pr, badgeClass: 'badge-neutral', title: pr };
-    return `<span class="badge ${meta.badgeClass}" title="${esc(meta.title)}" style="font-weight:600;font-size:11px;padding:2px 7px;">${esc(isShort ? meta.short : meta.label)}</span>`;
-  }).join(' ');
+function renderProtocolBadges(protoList){
+  const list = protoList || ['chat'];
+  const hasAnthropic = list.some(pr => String(pr).toLowerCase().includes('anthropic') || String(pr).toLowerCase().includes('messages'));
+  const hasOpenAI = list.some(pr => !String(pr).toLowerCase().includes('anthropic') && !String(pr).toLowerCase().includes('messages'));
+  const badges = [];
+  if (hasOpenAI || !hasAnthropic) badges.push(getProtocolBadge('openai'));
+  if (hasAnthropic) badges.push(getProtocolBadge('anthropic'));
+  return badges.join(' ');
 }
 
 function renderProviders(){
@@ -1331,7 +1560,7 @@ function renderProviders(){
     const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
     const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
     const updateBtn = hasUpdate
-      ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">⬆️ 升级规则至 v${esc(hasUpdate.remote_version)}</button>`
+      ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级规则至 v${esc(hasUpdate.remote_version)}</button>`
       : '';
     return `<div class="provider-row">
       <div>
@@ -1369,7 +1598,7 @@ function renderAgentModels(){
     
     let strategyLabel = `${(m.keys||[]).length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
     if(strategy === 'manual'){
-      strategyLabel = `${(m.keys||[]).length} 个 Key · 🔒 纯手动直通 (当前使用: ${esc(activeKey)})`;
+      strategyLabel = `${(m.keys||[]).length} 个 Key · 纯手动直通 (当前使用: ${esc(activeKey)})`;
     } else if(strategy === 'round_robin'){
       strategyLabel = `${(m.keys||[]).length} 个 Key · 轮询负载均衡 (依次轮流)`;
     } else if(strategy === 'priority_fallback'){
@@ -1390,8 +1619,8 @@ function renderAgentModels(){
           <div class="meta" style="margin-top:2px;">${strategyLabel}</div>
         </div>
         <div class="flex gap-2" style="flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" id="liveTestBtn-${esc(name)}" onclick="runLiveTest('${esc(name)}')" style="display:flex;align-items:center;gap:4px;font-weight:600;">
-            <span>⚡️</span> 实机验证
+          <button class="btn btn-primary btn-sm" id="liveTestBtn-${esc(name)}" onclick="runLiveTest('${esc(name)}')" style="display:flex;align-items:center;gap:6px;font-weight:600;">
+            ${icon('zap')} 实机验证
           </button>
           <button class="btn btn-secondary btn-sm" id="probeAllBtn-${esc(name)}" onclick="testAgentModelAll('${esc(name)}')" ${isProbingAll?'disabled':''}>
             ${isProbingAll ? '<span class="spinner"></span> 探测中...' : '探活全部'}
@@ -1707,7 +1936,7 @@ async function onProviderPresetChange(){
     descEl.style.display = 'block';
     descEl.style.background = 'var(--bg-subtle)';
     descEl.style.color = 'var(--text-secondary)';
-    descEl.innerHTML = '⚡ <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。';
+    descEl.innerHTML = `${icon('zap')} <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。`;
     modelsWrap.style.display = 'none';
     modelsList.innerHTML = '';
     document.getElementById('p_custom_url_toggle').checked = false;
@@ -1941,7 +2170,7 @@ async function checkAllRuleUpdates(){
   const alertEl = document.getElementById('ruleUpdatesAlert');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '🔄 检查中...';
+    btn.innerHTML = '<span class="spinner"></span> 检查中...';
   }
 
   try {
@@ -1973,7 +2202,7 @@ async function checkAllRuleUpdates(){
           alertEl.innerHTML = `
             <div>
               <strong>发现 ${data.updates.length} 个供应商规则有新版本</strong>：
-              ${data.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${esc(u.provider_id)}: ${esc(u.current_version)} ➔ ${esc(u.remote_version)}</span>`).join('')}
+              ${data.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${esc(u.provider_id)}: ${esc(u.current_version)} &rarr; ${esc(u.remote_version)}</span>`).join('')}
             </div>
             <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
           `;
@@ -1992,7 +2221,7 @@ async function checkAllRuleUpdates(){
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 检查规则更新';
+      btn.innerHTML = icon('refresh') + ' 检查规则更新';
     }
   }
 }
@@ -2141,20 +2370,20 @@ async function saveKey(){
         const res = (d.protocols && d.protocols[pr]);
         if(res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
       }
-      toast(`✅ Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
+      toast(`Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
       commitKey(prov,label,val);
     } else {
       // Scheme A: strict block with detailed per-protocol diagnostics
       if(diagBox){
-        let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--danger);display:flex;align-items:center;gap:6px;">⚠️ 协议连通性未完全通过 (已阻止保存)</div>';
+        let html = `<div style="font-weight:700;margin-bottom:8px;color:var(--danger);display:flex;align-items:center;gap:6px;">${icon('alert', 16)} 协议连通性未完全通过 (已阻止保存)</div>`;
         html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
         for(const pr of protos){
           const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
           const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
           if(res.valid){
-            html += `<div style="display:flex;align-items:center;gap:6px;color:var(--success);"><span>🟢</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
+            html += `<div style="display:flex;align-items:center;gap:6px;color:var(--success);">${icon('checkCircle', 14)} <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
           } else {
-            html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--danger);"><span>🔴</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
+            html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--danger);">${icon('xCircle', 14)} <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
           }
         }
         html += '</div>';
@@ -2166,7 +2395,7 @@ async function saveKey(){
     }
   } catch(e){ 
     if(diagBox){
-      diagBox.innerHTML = `<div style="color:var(--danger);font-size:12px;">❌ 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+      diagBox.innerHTML = `<div style="display:flex;align-items:center;gap:6px;color:var(--danger);font-size:12px;">${icon('xCircle', 14)} 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
       diagBox.style.display = 'block';
     }
     toast('网络请求异常: ' + e.message, 'err');
@@ -2208,16 +2437,36 @@ function commitKey(prov,label,val){
 }
 
 // Provider & Key Helpers for Capsule Flow
+function getVaultProviderList(){
+  if (!state.vaultManifest || !state.vaultManifest.providers) return [];
+  const p = state.vaultManifest.providers;
+  if (Array.isArray(p)) return p;
+  if (typeof p === 'object') {
+    return Object.entries(p).map(([k, v]) => ({ id: v.id || k, ...v }));
+  }
+  return [];
+}
+
+function findVaultProvider(provId){
+  if (!provId) return null;
+  const list = getVaultProviderList();
+  const low = provId.toLowerCase();
+  return list.find(p => p.id === provId || (p.id && p.id.toLowerCase() === low)) || null;
+}
+
 function getAllAvailableProviders(){
   const localNames = new Set(Object.keys(state.config?.providers||{}));
-  const remoteProviders = (state.vaultManifest && state.vaultManifest.providers) || [];
+  const remoteProviders = getVaultProviderList();
   const list = [];
   localNames.forEach(name => {
     const protos = getProviderProtocols(name);
     const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    const preset = PRESET_DEFINITIONS[name.toLowerCase()];
+    const vaultProv = findVaultProvider(name);
+    const label = preset?.name || vaultProv?.name || name;
     list.push({
       id: name,
-      label: name,
+      label: label,
       protoStr: protoStr,
       isVault: false,
       protocols: protos
@@ -2229,7 +2478,7 @@ function getAllAvailableProviders(){
       const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
       list.push({
         id: rp.id,
-        label: rp.id,
+        label: rp.name || rp.id,
         protoStr: protoStr,
         isVault: true,
         protocols: protos
@@ -2246,43 +2495,130 @@ function toggleKeyCapsule(el){
   el.classList.toggle('checked', inp.checked);
 }
 
-function applyAgentQuickModel(name, upstream, el){
-  document.getElementById('a_name').value = name;
-  document.getElementById('a_upstream').value = upstream || name;
-  document.querySelectorAll('#a_quickTags .model-capsule, #a_probedTags .model-capsule').forEach(c => c.classList.remove('active'));
-  if(el) el.classList.add('active');
-  toast(`已选定模型: ${name}`, 'info');
-}
+// Probed Models Selection Modal State & Logic
+let _currentProbedModels = [];
+let _probeTargetModal = 'agent';
 
-async function probeModelsForAgent(){
-  const prov = document.getElementById('a_provider').value;
-  if(!prov){ toast('请先点选供应商','err'); return; }
-  const btn = document.getElementById('btnProbeAgentModels');
-  const box = document.getElementById('a_probedModelsBox');
-  const tags = document.getElementById('a_probedTags');
-  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
+async function executeProbe(targetModal) {
+  _probeTargetModal = targetModal;
+  const isAgent = targetModal === 'agent';
+  const btn = document.getElementById(isAgent ? 'btnProbeAgentModels' : 'btnProbeCandidateModels');
+  
+  let provider = '';
+  let baseUrl = '';
+  let apiKey = '';
+  let keyLabels = [];
+
+  if (isAgent) {
+    const selVal = document.getElementById('a_providerSelect').value;
+    if (selVal === '__custom__') {
+      provider = document.getElementById('a_custom_id').value.trim();
+      baseUrl = document.getElementById('a_custom_base_url').value.trim();
+      apiKey = document.getElementById('a_custom_api_key').value.trim();
+      if (!baseUrl) { toast('请先输入自定义 Base URL', 'err'); return; }
+    } else {
+      provider = selVal;
+      const checkedBoxes = Array.from(document.querySelectorAll('#a_keyList input[type="checkbox"]:checked'));
+      keyLabels = checkedBoxes.map(b => b.value);
+    }
+  } else {
+    // KB mode candidate
+    const selVal = document.getElementById('c_providerSelect').value;
+    if (selVal === '__custom__') {
+      provider = document.getElementById('c_custom_id').value.trim();
+      baseUrl = document.getElementById('c_custom_base_url').value.trim();
+      apiKey = document.getElementById('c_custom_api_key').value.trim();
+      if (!baseUrl) { toast('请先输入自定义 Base URL', 'err'); return; }
+    } else {
+      provider = selVal;
+      const checkedBoxes = Array.from(document.querySelectorAll('#c_keyList input[type="checkbox"]:checked'));
+      keyLabels = checkedBoxes.map(b => b.value);
+    }
+  }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 探测中...'; }
+
   try {
     const res = await fetch('/api/admin/probe-models', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ provider: prov })
+      body: JSON.stringify({
+        provider,
+        base_url: baseUrl,
+        api_key: apiKey,
+        key_label: keyLabels[0] || '',
+        key_labels: keyLabels
+      })
     });
-    const d = await res.json();
-    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
-      tags.innerHTML = d.models.map(m => {
-        const id = typeof m === 'string' ? m : (m.id || m.name);
-        return `<div class="model-capsule" onclick="applyAgentQuickModel('${esc(id)}','${esc(id)}', this)"><span>${esc(id)}</span></div>`;
-      }).join('');
-      box.style.display = 'block';
-      toast(`探测成功，发现 ${d.models.length} 个实时可用模型`, 'ok');
-    } else {
-      toast(d.error || '未获取到可用模型列表', 'err');
+    const data = await res.json();
+    if (!data.ok || !data.models || data.models.length === 0) {
+      toast(data.error || '未探测到可用模型列表，请检查供应商网络或凭据', 'err');
+      return;
     }
+
+    _currentProbedModels = data.models;
+    const titleSuffix = data.used_key_label ? ` (使用凭据: ${data.used_key_label})` : '';
+    document.getElementById('probedModalTitle').textContent = `供应商 [${provider || '自定义'}] 上游可用模型 (${data.models.length})${titleSuffix}`;
+    document.getElementById('probedSearchInput').value = '';
+    renderProbedModelsList(_currentProbedModels);
+    openModal('probedListModal');
+    const succMsg = data.used_key_label ? `使用凭据 [${data.used_key_label}] 探测成功，发现 ${data.models.length} 个模型` : `成功探测到 ${data.models.length} 个可用模型`;
+    toast(succMsg, 'ok');
   } catch(e) {
-    toast('探测模型异常: ' + e.message, 'err');
+    toast(`探测模型异常: ${e.message}`, 'err');
   } finally {
-    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测更多模型'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 探测上游可用模型`;
+    }
   }
+}
+
+function renderProbedModelsList(models) {
+  const listEl = document.getElementById('probedModelsList');
+  const countEl = document.getElementById('probedCountHint');
+  if (countEl) countEl.textContent = `共 ${models.length} 个模型`;
+
+  if (!models.length) {
+    listEl.innerHTML = '<div class="empty" style="padding:20px;">无匹配的模型</div>';
+    return;
+  }
+
+  listEl.innerHTML = models.map(m => `
+    <div class="probed-item" onclick="selectProbedModel('${esc(m)}')">
+      <span class="mono" style="font-size:13px;font-weight:600;color:var(--text);word-break:break-all;">${esc(m)}</span>
+      <button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:11px;">选取</button>
+    </div>
+  `).join('');
+}
+
+function filterProbedModels(kw) {
+  const clean = (kw || '').trim().toLowerCase();
+  if (!clean) {
+    renderProbedModelsList(_currentProbedModels);
+  } else {
+    const filtered = _currentProbedModels.filter(m => m.toLowerCase().includes(clean));
+    renderProbedModelsList(filtered);
+  }
+}
+
+function selectProbedModel(modelName) {
+  if (_probeTargetModal === 'agent') {
+    document.getElementById('a_name').value = modelName;
+    document.getElementById('a_upstream').value = modelName;
+  } else {
+    document.getElementById('c_model').value = modelName;
+  }
+  closeModal('probedListModal');
+  toast(`已选取模型: ${modelName}`, 'ok');
+}
+
+function applyAgentQuickModel(name, upstream, el){
+  document.getElementById('a_name').value = name;
+  document.getElementById('a_upstream').value = upstream || name;
+  document.querySelectorAll('#a_quickTags .model-capsule').forEach(c => c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  toast(`已填入模型: ${name}`, 'info');
 }
 
 async function ensureKeysImported(bindings){
@@ -2309,16 +2645,61 @@ async function ensureKeysImported(bindings){
       const d = await res.json();
       if(!d.ok) throw new Error(d.error || '拉取凭据失败');
     } catch(e) {
-      toast(`从 EdgeOne 中枢拉取 [${item.provider}/${item.key}] 失败: ${e.message}`, 'err');
+      toast(`从凭据中枢拉取密钥 [${item.key}] 失败: ${e.message}`, 'err');
       return false;
     }
   }
-  // Refresh local state.config so newly fetched provider/key is present
-  const cr = await fetch('/api/admin/config', { headers: headers() });
-  if(cr.ok){
-    state.config = await cr.json();
-  }
+  await loadData();
   return true;
+}
+
+async function refreshVaultManifestInModal() {
+  toast('正在从 EdgeOne 中枢拉取最新供应商清单...', 'info');
+  const d = await fetchVaultManifest(false);
+  if (d) {
+    const curA = document.getElementById('a_providerSelect')?.value;
+    const curC = document.getElementById('c_providerSelect')?.value;
+    populateAgentProviderSelect(curA);
+    populateCandidateProviderSelect(curC);
+    toast('已成功同步 EdgeOne 中枢最新配置清单', 'ok');
+  }
+}
+
+function populateAgentProviderSelect(selectedId){
+  const sel = document.getElementById('a_providerSelect');
+  const optVault = document.getElementById('a_optgroup_vault');
+  if(!sel || !optVault) return;
+  const providers = getAllAvailableProviders();
+  
+  optVault.innerHTML = providers.map(p => {
+    return `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`;
+  }).join('');
+
+  const curId = (selectedId && (selectedId === '__custom__' || providers.some(p => p.id === selectedId))) 
+    ? selectedId 
+    : (providers[0] ? providers[0].id : '__custom__');
+  
+  sel.value = curId;
+  onAgentProviderSelectChange(curId);
+}
+
+function onAgentProviderSelectChange(val){
+  document.getElementById('a_provider').value = val;
+  const customArea = document.getElementById('a_customProviderArea');
+  const keyArea = document.getElementById('a_keyArea');
+  const quickBox = document.getElementById('a_quickModels');
+  const protoInfoEl = document.getElementById('a_model_proto_info');
+
+  if(val === '__custom__'){
+    if(customArea) customArea.style.display = 'block';
+    if(keyArea) keyArea.style.display = 'none';
+    if(quickBox) quickBox.style.display = 'none';
+    if(protoInfoEl) protoInfoEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('info', 14)}</span> 请在下方填写自定义供应商的 API 地址与凭据。`;
+  } else {
+    if(customArea) customArea.style.display = 'none';
+    if(keyArea) keyArea.style.display = 'block';
+    renderAgentKeyChecks();
+  }
 }
 
 async function openAgentModal(){ 
@@ -2327,41 +2708,11 @@ async function openAgentModal(){
   document.getElementById('a_name').value=''; 
   document.getElementById('a_name').readOnly=false; 
   document.getElementById('a_upstream').value=''; 
-  const probedBox = document.getElementById('a_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
   if(!state.vaultManifest){ await fetchVaultManifest(true); }
   const providers = getAllAvailableProviders();
-  const defaultProv = providers[0] ? providers[0].id : '';
-  renderAgentProviderCapsules(defaultProv); 
-  renderAgentKeyChecks(); 
+  const defaultProv = providers[0] ? providers[0].id : '__custom__';
+  populateAgentProviderSelect(defaultProv);
   openModal('agentModal'); 
-}
-
-function renderAgentProviderCapsules(selectedId){ 
-  const box = document.getElementById('a_providerCapsules'); 
-  if(!box) return;
-  const providers = getAllAvailableProviders();
-  if(!providers.length){
-    box.innerHTML = '<div class="hint">暂无可用供应商（可点击上方同步中枢规则拉取）</div>';
-    return;
-  }
-  const curId = (selectedId && providers.some(p => p.id === selectedId)) ? selectedId : providers[0].id;
-  document.getElementById('a_provider').value = curId;
-
-  box.innerHTML = providers.map(p => {
-    const isActive = p.id === curId;
-    const vaultBadge = p.isVault ? '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;margin-right:2px;">☁️中枢</span>' : '';
-    return `<div class="capsule-btn ${isActive ? 'active' : ''}" onclick="selectAgentProvider('${esc(p.id)}')">
-      ${vaultBadge}<span>${esc(p.label)}</span>
-      <span class="badge ${isActive ? 'badge-primary' : 'badge-neutral'}" style="font-size:10px;padding:0 4px;">${esc(p.protoStr)}</span>
-    </div>`;
-  }).join('');
-}
-
-function selectAgentProvider(id){
-  document.getElementById('a_provider').value = id;
-  renderAgentProviderCapsules(id);
-  renderAgentKeyChecks();
 }
 
 function renderAgentKeyChecks(){
@@ -2369,36 +2720,25 @@ function renderAgentKeyChecks(){
   const box = document.getElementById('a_keyList');
   const quickBox = document.getElementById('a_quickModels');
   const quickTags = document.getElementById('a_quickTags');
-  const protosBadgeEl = document.getElementById('a_provider_protos');
   const protoInfoEl = document.getElementById('a_model_proto_info');
-  const probedBox = document.getElementById('a_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
 
-  if(!prov){ 
-    box.innerHTML = '<div class="hint">请先点选上方供应商</div>'; 
+  if(!prov || prov === '__custom__'){ 
+    box.innerHTML = '<div class="hint">请先选择上方供应商</div>'; 
     if(quickBox) quickBox.style.display = 'none';
-    if(protosBadgeEl) protosBadgeEl.innerHTML = '';
     if(protoInfoEl) protoInfoEl.innerHTML = '';
     return; 
   }
 
   const localProv = state.config.providers && state.config.providers[prov];
-  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
+  const remoteProv = findVaultProvider(prov);
 
   const provProtos = localProv ? getProviderProtocols(prov) : (remoteProv?.protocols || ['chat']);
-  if(protosBadgeEl) {
-    protosBadgeEl.innerHTML = renderProtocolBadges(provProtos, true);
-  }
   if(protoInfoEl) {
-    if(provProtos.includes('messages')) {
-      protoInfoEl.innerHTML = `💡 供应商 <b>${esc(prov)}</b> 支持 <span class="badge badge-warning" style="font-size:11px;padding:1px 6px;">Anthropic Messages</span>，该模型将同时在 <code>/v1/chat/completions</code> 与 <code>/v1/messages</code> 双协议中可用。`;
-    } else {
-      protoInfoEl.innerHTML = `💡 供应商 <b>${esc(prov)}</b> 支持 <span class="badge badge-success" style="font-size:11px;padding:1px 6px;">OpenAI Chat</span> 协议格式。`;
-    }
+    protoInfoEl.innerHTML = renderProtocolBadges(provProtos);
   }
 
   const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
-  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => k.label) : [];
+  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => typeof k === 'string' ? k : (k.label || k.id || '')).filter(Boolean) : [];
   const allKeyLabels = Array.from(new Set([...localKeys, ...remoteKeys]));
 
   if(allKeyLabels.length === 0){
@@ -2408,8 +2748,8 @@ function renderAgentKeyChecks(){
       const isLocal = localKeys.includes(k);
       const isChecked = idx === 0;
       const tag = isLocal 
-        ? '<span class="badge badge-success" style="font-size:10px;padding:0 4px;">✔ 本地</span>' 
-        : '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;">☁️ 中枢</span>';
+        ? `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>` 
+        : `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`;
       return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
         <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
         <span style="font-weight:600;">${esc(k)}</span>
@@ -2442,13 +2782,10 @@ async function editAgentModel(name){
   document.getElementById('a_name').value=name;
   document.getElementById('a_name').readOnly=false;
   document.getElementById('a_upstream').value=m.upstream_model||'';
-  const probedBox = document.getElementById('a_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
   if(!state.vaultManifest){ await fetchVaultManifest(true); }
   const boundProviders=[...new Set((m.keys||[]).map(x=>x.provider))];
-  const activeProv = boundProviders[0] || (getAllAvailableProviders()[0]?.id || '');
-  renderAgentProviderCapsules(activeProv);
-  renderAgentKeyChecks();
+  const activeProv = boundProviders[0] || (getAllAvailableProviders()[0]?.id || '__custom__');
+  populateAgentProviderSelect(activeProv);
   const set=new Set((m.keys||[]).map(x=>x.provider+':'+x.key));
   document.querySelectorAll('#a_keyList .key-capsule').forEach(cap=>{
     const inp = cap.querySelector('input');
@@ -2463,16 +2800,47 @@ async function saveAgentModel(){
   const oldName=(document.getElementById('a_oldName').value||'').trim();
   const name=document.getElementById('a_name').value.trim();
   const upstream=document.getElementById('a_upstream').value.trim();
-  const provider = document.getElementById('a_provider').value;
+  const selVal=document.getElementById('a_providerSelect').value;
   if(!name){ toast('模型名称不能为空','err'); return; }
-  const bindings=[];
-  document.querySelectorAll('#a_keyList input:checked').forEach(inp=>{
-    bindings.push({provider:inp.dataset.provider||provider, key:inp.value});
-  });
-  if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
 
-  const ok = await ensureKeysImported(bindings);
-  if(!ok) return;
+  let provider = selVal;
+  let bindings = [];
+
+  if (selVal === '__custom__') {
+    const customId = document.getElementById('a_custom_id').value.trim();
+    const customBaseUrl = document.getElementById('a_custom_base_url').value.trim();
+    const customApiKey = document.getElementById('a_custom_api_key').value.trim();
+    const customProto = document.getElementById('a_custom_protocol').value;
+    if (!customId || !customBaseUrl || !customApiKey) {
+      toast('自定义供应商的 ID、Base URL 和 API Key 均不能为空', 'err');
+      return;
+    }
+    provider = customId;
+    if (!state.config.providers) state.config.providers = {};
+    if (!state.config.providers[customId]) {
+      state.config.providers[customId] = {
+        name: customId,
+        base_url: customBaseUrl,
+        protocol: customProto,
+        protocols: [customProto],
+        keys: { 'default': customApiKey }
+      };
+    } else {
+      state.config.providers[customId].base_url = customBaseUrl;
+      state.config.providers[customId].protocol = customProto;
+      state.config.providers[customId].protocols = [customProto];
+      if (!state.config.providers[customId].keys) state.config.providers[customId].keys = {};
+      state.config.providers[customId].keys['default'] = customApiKey;
+    }
+    bindings = [{ provider: customId, key: 'default' }];
+  } else {
+    document.querySelectorAll('#a_keyList input:checked').forEach(inp=>{
+      bindings.push({provider:inp.dataset.provider||provider, key:inp.value});
+    });
+    if(!bindings.length){ toast('请至少勾选绑定一个 Key','err'); return; }
+    const ok = await ensureKeysImported(bindings);
+    if(!ok) return;
+  }
 
   if(!state.config.agent_models) state.config.agent_models={};
 
@@ -2511,10 +2879,10 @@ async function saveAgentModel(){
   renderAgentModels();
 }
 
-function deleteAgentModel(name){ 
+async function deleteAgentModel(name){ 
   if(!confirm('确定要删除 Agent 模型 "'+name+'" 吗？')) return; 
   delete state.config.agent_models[name]; 
-  persistConfig(`Agent 模型「${name}」已删除并立即生效`); 
+  await persistConfig(`Agent 模型「${name}」已删除并立即生效`); 
   renderAgentModels(); 
 }
 function reorderAgentKey(name, fromIdx, inputVal){
@@ -2655,69 +3023,47 @@ function selectCandidateType(type){
   renderCandidateQuickModels();
 }
 
-function renderCandidateProviderCapsules(selectedId){
-  const box = document.getElementById('c_providerCapsules');
-  if(!box) return;
+function populateCandidateProviderSelect(selectedId){
+  const sel = document.getElementById('c_providerSelect');
+  const optVault = document.getElementById('c_optgroup_vault');
+  if(!sel || !optVault) return;
   const providers = getAllAvailableProviders();
-  if(!providers.length){
-    box.innerHTML = '<div class="hint">暂无可用供应商</div>';
-    return;
-  }
-  const curId = (selectedId && providers.some(p => p.id === selectedId)) ? selectedId : providers[0].id;
-  document.getElementById('c_provider').value = curId;
-
-  box.innerHTML = providers.map(p => {
-    const isActive = p.id === curId;
-    const vaultBadge = p.isVault ? '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;margin-right:2px;">☁️中枢</span>' : '';
-    return `<div class="capsule-btn ${isActive ? 'active' : ''}" onclick="selectCandidateProvider('${esc(p.id)}')">
-      ${vaultBadge}<span>${esc(p.label)}</span>
-    </div>`;
+  
+  optVault.innerHTML = providers.map(p => {
+    return `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`;
   }).join('');
+
+  const curId = (selectedId && (selectedId === '__custom__' || providers.some(p => p.id === selectedId))) 
+    ? selectedId 
+    : (providers[0] ? providers[0].id : '__custom__');
+  
+  sel.value = curId;
+  onCandidateProviderSelectChange(curId);
 }
 
-function selectCandidateProvider(id){
-  document.getElementById('c_provider').value = id;
-  renderCandidateProviderCapsules(id);
-  renderCandidateKeyChecks();
-  renderCandidateQuickModels();
+function onCandidateProviderSelectChange(val){
+  document.getElementById('c_provider').value = val;
+  const customArea = document.getElementById('c_customProviderArea');
+  const keyArea = document.getElementById('c_keyArea');
+  const quickBox = document.getElementById('c_quickModels');
+
+  if(val === '__custom__'){
+    if(customArea) customArea.style.display = 'block';
+    if(keyArea) keyArea.style.display = 'none';
+    if(quickBox) quickBox.style.display = 'none';
+  } else {
+    if(customArea) customArea.style.display = 'none';
+    if(keyArea) keyArea.style.display = 'block';
+    renderCandidateKeyChecks();
+    renderCandidateQuickModels();
+  }
 }
 
 function applyCandidateQuickModel(model, el){
   document.getElementById('c_model').value = model;
-  document.querySelectorAll('#c_quickTags .model-capsule, #c_probedTags .model-capsule').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#c_quickTags .model-capsule').forEach(c => c.classList.remove('active'));
   if(el) el.classList.add('active');
-  toast(`已选定模型: ${model}`, 'info');
-}
-
-async function probeModelsForCandidate(){
-  const prov = document.getElementById('c_provider').value;
-  if(!prov){ toast('请先点选供应商','err'); return; }
-  const btn = document.getElementById('btnProbeCandidateModels');
-  const box = document.getElementById('c_probedModelsBox');
-  const tags = document.getElementById('c_probedTags');
-  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spinner"></span> 探测中...'; }
-  try {
-    const res = await fetch('/api/admin/probe-models', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ provider: prov })
-    });
-    const d = await res.json();
-    if(d.ok && Array.isArray(d.models) && d.models.length > 0){
-      tags.innerHTML = d.models.map(m => {
-        const id = typeof m === 'string' ? m : (m.id || m.name);
-        return `<div class="model-capsule" onclick="applyCandidateQuickModel('${esc(id)}', this)"><span>${esc(id)}</span></div>`;
-      }).join('');
-      box.style.display = 'block';
-      toast(`探测成功，发现 ${d.models.length} 个实时可用模型`, 'ok');
-    } else {
-      toast(d.error || '未获取到可用模型列表', 'err');
-    }
-  } catch(e) {
-    toast('探测模型异常: ' + e.message, 'err');
-  } finally {
-    if(btn){ btn.disabled=false; btn.innerHTML='🔍 探测更多模型'; }
-  }
+  toast(`已填入模型: ${model}`, 'info');
 }
 
 function renderCandidateQuickModels(){
@@ -2726,14 +3072,14 @@ function renderCandidateQuickModels(){
   const quickBox = document.getElementById('c_quickModels');
   const quickTags = document.getElementById('c_quickTags');
 
-  if(!prov || !quickBox || !quickTags){
+  if(!prov || prov === '__custom__' || !quickBox || !quickTags){
     if(quickBox) quickBox.style.display = 'none';
     return;
   }
 
   const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
-  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
-  const recModels = preset?.recommended_models || remoteProv?.recommended_models || [];
+  const remoteProv = findVaultProvider(prov);
+  const recModels = preset?.recommended_models || remoteProv?.recommended_models || remoteProv?.models || [];
   if(recModels.length > 0){
     const matching = recModels.filter(rm => !rm.kb_type || rm.kb_type === type);
     const listToRender = matching.length > 0 ? matching : recModels;
@@ -2759,14 +3105,10 @@ async function openCandidateModal(type){
   document.querySelectorAll('#c_typeCapsules .capsule-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.type === curType);
   });
-  const probedBox = document.getElementById('c_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
   if(!state.vaultManifest){ await fetchVaultManifest(true); }
   const providers = getAllAvailableProviders();
-  const defaultProv = providers[0] ? providers[0].id : '';
-  renderCandidateProviderCapsules(defaultProv); 
-  renderCandidateKeyChecks(); 
-  renderCandidateQuickModels();
+  const defaultProv = providers[0] ? providers[0].id : '__custom__';
+  populateCandidateProviderSelect(defaultProv);
   document.getElementById('c_model').value='';
   openModal('candidateModal');
 }
@@ -2774,16 +3116,14 @@ async function openCandidateModal(type){
 function renderCandidateKeyChecks(){
   const prov=document.getElementById('c_provider').value;
   const box=document.getElementById('c_keyList');
-  const probedBox = document.getElementById('c_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
 
-  if(!prov){ box.innerHTML='<div class="hint">请先点选上方供应商</div>'; return; }
+  if(!prov || prov === '__custom__'){ box.innerHTML='<div class="hint">请先选择上方供应商</div>'; return; }
   
   const localProv = state.config.providers && state.config.providers[prov];
-  const remoteProv = (state.vaultManifest?.providers || []).find(p => p.id === prov);
+  const remoteProv = findVaultProvider(prov);
 
   const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
-  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => k.label) : [];
+  const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => typeof k === 'string' ? k : (k.label || k.id || '')).filter(Boolean) : [];
   const allKeyLabels = Array.from(new Set([...localKeys, ...remoteKeys]));
 
   if(allKeyLabels.length === 0){
@@ -2792,7 +3132,9 @@ function renderCandidateKeyChecks(){
     box.innerHTML=allKeyLabels.map((k, idx)=>{
       const isLocal = localKeys.includes(k);
       const isChecked = idx === 0;
-      const tag = isLocal ? '<span class="badge badge-success" style="font-size:10px;padding:0 4px;">✔ 本地</span>' : '<span class="badge badge-neutral" style="font-size:10px;padding:0 4px;">☁️ 中枢</span>';
+      const tag = isLocal 
+        ? `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>` 
+        : `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`;
       return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
         <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
         <span style="font-weight:600;">${esc(k)}</span>
@@ -2811,12 +3153,8 @@ async function editCandidate(type,i){
   document.querySelectorAll('#c_typeCapsules .capsule-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.type === type);
   });
-  const probedBox = document.getElementById('c_probedModelsBox');
-  if(probedBox) probedBox.style.display = 'none';
   if(!state.vaultManifest){ await fetchVaultManifest(true); }
-  renderCandidateProviderCapsules(c.provider);
-  renderCandidateKeyChecks(); 
-  renderCandidateQuickModels();
+  populateCandidateProviderSelect(c.provider);
   document.querySelectorAll('#c_keyList .key-capsule').forEach(cap=>{
     const inp = cap.querySelector('input');
     const checked = inp.value === c.key;
@@ -2829,14 +3167,48 @@ async function editCandidate(type,i){
 
 async function saveCandidate(){
   const type=document.getElementById('c_type').value;
-  const provider=document.getElementById('c_provider').value;
+  const selVal=document.getElementById('c_providerSelect').value;
   const model=document.getElementById('c_model').value.trim();
-  const selected=Array.from(document.querySelectorAll('#c_keyList input:checked')).map(x=>x.value);
-  if(!provider||!selected.length||!model){ toast('请选择供应商、至少勾选一个 Key 并选定模型','err'); return; }
+  if(!model){ toast('请填入或选定模型名称','err'); return; }
 
-  const bindings = selected.map(k => ({ provider, key: k }));
-  const ok = await ensureKeysImported(bindings);
-  if(!ok) return;
+  let provider = selVal;
+  let selected = [];
+
+  if(selVal === '__custom__'){
+    const customId = document.getElementById('c_custom_id').value.trim();
+    const customBaseUrl = document.getElementById('c_custom_base_url').value.trim();
+    const customApiKey = document.getElementById('c_custom_api_key').value.trim();
+    const customProto = document.getElementById('c_custom_protocol').value;
+    if (!customId || !customBaseUrl || !customApiKey) {
+      toast('自定义供应商的 ID、Base URL 和 API Key 均不能为空', 'err');
+      return;
+    }
+    provider = customId;
+    if (!state.config.providers) state.config.providers = {};
+    if (!state.config.providers[customId]) {
+      state.config.providers[customId] = {
+        name: customId,
+        base_url: customBaseUrl,
+        protocol: customProto,
+        protocols: [customProto],
+        keys: { 'default': customApiKey }
+      };
+    } else {
+      state.config.providers[customId].base_url = customBaseUrl;
+      state.config.providers[customId].protocol = customProto;
+      state.config.providers[customId].protocols = [customProto];
+      if (!state.config.providers[customId].keys) state.config.providers[customId].keys = {};
+      state.config.providers[customId].keys['default'] = customApiKey;
+    }
+    selected = ['default'];
+  } else {
+    selected=Array.from(document.querySelectorAll('#c_keyList input:checked')).map(x=>x.value);
+    if(!provider||!selected.length){ toast('请选择供应商并至少勾选一个 Key','err'); return; }
+
+    const bindings = selected.map(k => ({ provider, key: k }));
+    const ok = await ensureKeysImported(bindings);
+    if(!ok) return;
+  }
 
   if(!state.config.candidates) state.config.candidates={};
   if(!state.config.candidates[type]) state.config.candidates[type]=[];
@@ -2877,10 +3249,10 @@ function moveCandidate(type,i,dir){
   persistConfig('候选节点优先级已调整并立即生效'); 
   renderKbModels(); 
 }
-function deleteCandidate(type,i){ 
+async function deleteCandidate(type,i){ 
   if(!confirm('确定要删除该候选节点吗？')) return; 
   state.config.candidates[type].splice(i,1); 
-  persistConfig('候选节点已删除并立即生效'); 
+  await persistConfig('候选节点已删除并立即生效'); 
   renderKbModels(); 
 }
 
@@ -3220,102 +3592,13 @@ async function runLiveTest(modelName){
     `;
     toast(`[${modelName}] 请求异常: ${e.message}`, 'err');
   } finally {
-    if(btn) { btn.disabled = false; btn.innerHTML = '<span>⚡️</span> 实机验证'; }
+    if(btn) { btn.disabled = false; btn.innerHTML = icon('zap') + ' 实机验证'; }
   }
 }
 
-// Access Guide
+// Access Guide -> Handled by renderDashboardGateway directly in dashboard
 function updateAccess(){
-  const base=window.location.origin+'/v1';
-  const models=Object.keys(state.config.agent_models||{});
-  const demo=models[0]||'qwen3.8-flash';
-  const messagesModels=models.filter(m => getModelProtocols(m).includes('messages'));
-  const demoMessages = messagesModels[0] || demo;
-  const proxyKey = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : 'your_proxy_api_key';
-  const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-
-  setText('accBase', base);
-  setText('accModels', models.length ? models.join('、') : '（未配置）');
-  setText('accMessagesModels', messagesModels.length ? messagesModels.join('、') : '暂无可用的 Messages 模型（请为模型绑定 MiniMax 或 B.AI 供应商）');
-
-  const protoContainer = document.getElementById('accProtocols');
-  if (protoContainer) {
-    const activeProtos = new Set(['chat']);
-    if (messagesModels.length || Object.entries(state.config.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('messages'))) {
-      activeProtos.add('messages');
-    }
-    if (Object.entries(state.config.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('responses'))) {
-      activeProtos.add('responses');
-    }
-    protoContainer.innerHTML = renderProtocolBadges(Array.from(activeProtos), false);
-  }
-
-  // 1. OpenAI Chat SDK Example
-  setText('accPy', `from openai import OpenAI
-
-client = OpenAI(
-    api_key="${proxyKey}",
-    base_url="${base}"
-)
-
-# 兼容所有已配置的 Agent 真实模型名
-response = client.chat.completions.create(
-    model="${demo}",
-    messages=[{"role": "user", "content": "你好，请用一句话介绍你自己"}],
-    stream=True
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)`);
-
-  // 2. Anthropic Claude Messages SDK Example
-  setText('accMessagesPy', `import anthropic
-
-client = anthropic.Anthropic(
-    api_key="${proxyKey}",
-    base_url="${base}"  # 直连本网关
-)
-
-# 使用支持 Messages 协议的模型（当前支持：${messagesModels.join(', ') || demoMessages}）
-response = client.messages.create(
-    model="${demoMessages}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "你好，请用一句话介绍你自己"}]
-)
-
-print(response.content[0].text)
-
-# 官方 cURL 标准调用命令：
-# curl -X POST "${base}/messages" \\
-#   -H "x-api-key: ${proxyKey}" \\
-#   -H "anthropic-version: 2023-06-01" \\
-#   -H "Content-Type: application/json" \\
-#   -d '{"model":"${demoMessages}","max_tokens":1024,"messages":[{"role":"user","content":"你好"}]}'`);
-
-  setText('accKbChat', `# 1. 知识库对话与摘要 (固定别名 model="chat")
-curl -X POST "${base}/chat/completions" \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"chat","messages":[{"role":"user","content":"请总结以下文档核心观点"}]}'`);
-
-  setText('accKbEmb', `# 2. 向量化计算 (固定别名 model="embedding")
-curl -X POST "${base}/embeddings" \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"embedding","input":["这是待向量化的第一段文本","第二段文本"]}'`);
-
-  setText('accKbRank', `# 3. 结果精排 (固定别名 model="reranker")
-curl -X POST "${base}/rerank" \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"reranker","query":"如何配置中转服务？","documents":["文档A描述配置方法...","文档B描述退款政策..."]}'`);
-
-  setText('accKbOcr', `# 4. 图文识别与文档理解 (固定别名 model="ocr")
-curl -X POST "${base}/ocr" \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"ocr","image_base64":"<Base64图片数据>","prompt":"请识别图片中的所有文字与表格内容"}'`);
+  renderDashboardGateway();
 }
 
 // Backup & Import
@@ -3370,10 +3653,24 @@ async function confirmImport(){
 }
 
 // Modal / Toast / Copy
-function openModal(id){ document.getElementById(id).classList.add('show'); }
-function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openModal(id){
+  const el = document.getElementById(id);
+  if (el) el.classList.add('show');
+  document.body.classList.add('modal-open');
+}
+function closeModal(id){
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('show');
+  if (!document.querySelector('.modal.show')) {
+    document.body.classList.remove('modal-open');
+  }
+}
 function toast(msg,type){
-  const c=document.getElementById('toasts'); const t=document.createElement('div'); t.className='toast '+type; t.textContent=msg;
+  const c=document.getElementById('toasts'); const t=document.createElement('div');
+  const tType = type || 'info';
+  t.className='toast '+tType;
+  const icName = (tType==='ok'||tType==='success') ? 'checkCircle' : ((tType==='err'||tType==='danger') ? 'xCircle' : 'info');
+  t.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">${icon(icName, 15)}<span>${esc(msg)}</span></span>`;
   c.appendChild(t); setTimeout(()=>t.classList.add('show'),10); setTimeout(()=>{t.classList.remove('show'); setTimeout(()=>t.remove(),250);},3200);
 }
 function copy(id){

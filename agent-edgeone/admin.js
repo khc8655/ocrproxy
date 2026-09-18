@@ -11,6 +11,32 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
+const BUILD_VERSION = 'v2026.09.19';
+
+const ICONS = {
+  refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
+  zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  xCircle: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  server: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'
+};
+
+function icon(name, size=14, cls='') {
+  const p = ICONS[name] || '';
+  return `<svg class="khc-icon ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
 
 function esc(s) {
   if (s === null || s === undefined) return '';
@@ -168,8 +194,10 @@ function toast(msg, type = 'ok') {
   const container = document.getElementById('toastContainer');
   if (!container) return;
   const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
+  const tType = type || 'ok';
+  el.className = `toast ${tType}`;
+  const icName = (tType === 'ok' || tType === 'success') ? 'checkCircle' : ((tType === 'err' || tType === 'danger') ? 'xCircle' : 'info');
+  el.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">${icon(icName, 15)}<span>${esc(msg)}</span></span>`;
   container.appendChild(el);
   setTimeout(() => el.classList.add('show'), 10);
   setTimeout(() => {
@@ -185,7 +213,7 @@ function copySnippet(elementId) {
   navigator.clipboard.writeText(text).then(() => {
     toast('已复制到剪贴板', 'ok');
   }).catch(() => {
-    toast('复制失败，请手动复制', 'err');
+    prompt('请手动复制:', text);
   });
 }
 
@@ -376,13 +404,25 @@ function resetSettingsToDefault() {
 function renderDashboard() {
   const models = Object.keys(cfg.agent_models || {});
   const providers = cfg.providers || {};
+  const provNames = Object.keys(providers);
   let totalKeys = 0;
   for (const p of Object.values(providers)) {
     totalKeys += Object.keys(p.keys || {}).length;
   }
 
-  document.getElementById('statModelCount').textContent = models.length;
-  document.getElementById('statTotalKeys').textContent = totalKeys;
+  const elProvCount = document.getElementById('statProviderCount');
+  if (elProvCount) elProvCount.textContent = provNames.length;
+
+  const elModelCount = document.getElementById('statModelCount');
+  if (elModelCount) elModelCount.textContent = models.length;
+
+  const elKeySub = document.getElementById('statKeySub');
+  if (elKeySub) elKeySub.textContent = `多 Key 轮询池 (${totalKeys} 个 Key)`;
+
+  const elVer = document.getElementById('statVersion');
+  if (elVer) elVer.textContent = BUILD_VERSION;
+  const elHeadVer = document.getElementById('headerVersionBadge');
+  if (elHeadVer) elHeadVer.textContent = BUILD_VERSION;
 
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
@@ -394,73 +434,144 @@ function renderDashboard() {
     }
   }
 
-  // Quick models table
-  const tbody = document.getElementById('quickModelsBody');
-  if (tbody) {
-    tbody.innerHTML = '';
-    if (models.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-secondary" style="text-align:center;padding:24px;">暂未配置 Agent 模型</td></tr>';
-      return;
-    }
+  // Compact Gateway Access Strip
+  renderDashboardGateway();
+}
 
-    for (const m of models) {
-      const item = cfg.agent_models[m];
-      const keys = item.keys || [];
-      const tr = document.createElement('tr');
-      const modelProtos = getModelProtocols(m);
-      const protoBadges = renderProtocolBadges(modelProtos, true);
-      tr.innerHTML = `
-        <td style="font-weight:600;"><span class="mono">${m}</span> <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges}</span></td>
-        <td class="mono text-secondary">${item.upstream_model || m}</td>
-        <td><span class="badge badge-neutral">${keys.length} 个候选 Key</span></td>
-        <td>
-          <button class="btn btn-ghost btn-sm" onclick="switchTab('agents')">查看</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
+function renderDashboardGateway() {
+  const base = window.location.origin + '/v1';
+  const urlEl = document.getElementById('dbBaseUrl');
+  if (urlEl) urlEl.textContent = base;
+
+  const clientKey = getKey() || 'YOUR_PROXY_API_KEY';
+  const keyEl = document.getElementById('gwClientKeyVal');
+  if (keyEl) keyEl.textContent = clientKey ? `Bearer ${clientKey}` : 'Bearer <PROXY_API_KEY>';
+
+  const listOpenAi = document.getElementById('listOpenAiModels');
+  const listAnthropic = document.getElementById('listAnthropicModels');
+  const listResponses = document.getElementById('listResponsesModels');
+  const rowAnthropic = document.getElementById('rowAnthropicModels');
+  const rowResponses = document.getElementById('rowResponsesModels');
+
+  if (!listOpenAi || !listAnthropic) return;
+
+  const agentModels = cfg.agent_models || {};
+  const modelNames = Object.keys(agentModels);
+
+  let openaiModels = [];
+  let messageModels = [];
+  let responsesModels = [];
+
+  modelNames.forEach(m => {
+    const protos = getModelProtocols(m);
+    if (protos.includes('openai')) openaiModels.push(m);
+    if (protos.includes('message')) messageModels.push(m);
+    if (protos.includes('responses')) responsesModels.push(m);
+    if (!protos.includes('openai') && !protos.includes('message') && !protos.includes('responses')) {
+      openaiModels.push(m);
     }
+  });
+
+  const renderChips = (arr, badgeClass) => {
+    if (!arr.length) return '<span class="text-secondary" style="font-size:11px;">(无)</span>';
+    return arr.map(m => `
+      <span class="badge ${badgeClass} model-chip-clickable mono" onclick="copyModelName('${esc(m)}')" title="点击复制模型名称: ${esc(m)}" style="font-size:11px;padding:3px 8px;">
+        ${esc(m)}
+      </span>
+    `).join('');
+  };
+
+  listOpenAi.innerHTML = renderChips(openaiModels, 'badge-info');
+  listAnthropic.innerHTML = renderChips(messageModels, 'badge-warning');
+  if (rowAnthropic) rowAnthropic.style.display = messageModels.length ? 'flex' : 'none';
+
+  if (listResponses) listResponses.innerHTML = renderChips(responsesModels, 'badge-purple');
+  if (rowResponses) rowResponses.style.display = responsesModels.length ? 'flex' : 'none';
+}
+
+function copyDbBaseUrl() {
+  const base = window.location.origin + '/v1';
+  copyText(base, '网关 Base URL 已复制到剪贴板');
+}
+
+function copyDbClientKey() {
+  const key = getKey() || 'YOUR_PROXY_API_KEY';
+  copyText(`Bearer ${key}`, '客户端 API Key 已复制到剪贴板');
+}
+
+function copyModelName(name) {
+  copyText(name, `已复制模型名称: ${name}`);
+}
+
+function copyAllAvailableModels() {
+  const models = Object.keys(cfg.agent_models || {});
+  if (!models.length) {
+    toast('当前暂无可用模型', 'err');
+    return;
+  }
+  copyText(models.join(', '), '已复制全部模型名称');
+}
+
+function copyText(text, successMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast(successMsg, 'ok')).catch(() => {
+      prompt('请手动复制:', text);
+    });
+  } else {
+    prompt('请手动复制:', text);
   }
 }
 
 // Protocol Metadata & Helpers (Factual Badges)
 const PROTOCOLS = {
-  chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: '支持 OpenAI Chat 格式 (/v1/chat/completions)' },
-  messages: { label: 'Anthropic Messages', short: 'Messages', badgeClass: 'badge-warning', title: '支持 Anthropic Claude Messages 格式 (/v1/messages)' },
-  responses: { label: 'OpenAI Responses', short: 'Responses', badgeClass: 'badge-purple', title: '支持 OpenAI Responses 格式 (/v1/responses)' }
+  openai: { label: 'OpenAI', short: 'openai', badgeClass: 'badge-success', title: '支持 OpenAI Chat 协议 (/v1/chat/completions)' },
+  message: { label: 'Message', short: 'message', badgeClass: 'badge-warning', title: '支持 Anthropic Messages 协议 (/v1/messages)' },
+  responses: { label: 'Responses', short: 'responses', badgeClass: 'badge-purple', title: '支持 OpenAI Responses 协议 (/v1/responses)' }
 };
+
+function normalizeProto(pr) {
+  if (pr === 'chat') return 'openai';
+  if (pr === 'messages' || pr === 'anthropic') return 'message';
+  return pr;
+}
 
 function getProviderProtocols(name, provObj){
   const p = provObj || (cfg && cfg.providers && cfg.providers[name]) || {};
+  let rawProtos = [];
   if (Array.isArray(p.protocols) && p.protocols.length > 0) {
-    return p.protocols;
+    rawProtos = p.protocols;
+  } else {
+    rawProtos = ['openai'];
+    const lower = (name || '').toLowerCase();
+    const clean = lower.replace(/[^a-z0-9]/g, '');
+    const preset = PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower];
+    if (p.anthropic_messages || p.anthropic_base_url || p.message_base_url || (preset && preset.anthropic_base_url)) {
+      rawProtos.push('message');
+    }
+    if (p.openai_responses || p.supports_responses || p.responses_base_url) {
+      rawProtos.push('responses');
+    }
   }
-  const protos = ['chat'];
-  const lower = (name || '').toLowerCase();
-  const clean = lower.replace(/[^a-z0-9]/g, '');
-  const preset = PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower];
-  if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
-    protos.push('messages');
-  }
-  if (p.openai_responses || p.supports_responses) {
-    protos.push('responses');
-  }
-  return protos;
+  const set = new Set();
+  rawProtos.forEach(pr => set.add(normalizeProto(pr)));
+  return Array.from(set);
 }
 
 function getModelProtocols(modelName){
   const m = cfg && cfg.agent_models ? cfg.agent_models[modelName] : null;
-  if (!m || !m.keys || !m.keys.length) return ['chat'];
+  if (!m || !m.keys || !m.keys.length) return ['openai'];
   const set = new Set();
   for (const b of m.keys) {
     const provProtos = getProviderProtocols(b.provider);
-    provProtos.forEach(pr => set.add(pr));
+    provProtos.forEach(pr => set.add(normalizeProto(pr)));
   }
-  return set.size ? Array.from(set) : ['chat'];
+  return set.size ? Array.from(set) : ['openai'];
 }
 
 function renderProtocolBadges(protoList, isShort=true){
-  return (protoList || ['chat']).map(pr => {
-    const meta = PROTOCOLS[pr] || { label: pr, short: pr, badgeClass: 'badge-neutral', title: pr };
+  return (protoList || ['openai']).map(pr => {
+    const norm = normalizeProto(pr);
+    const meta = PROTOCOLS[norm] || { label: norm, short: norm, badgeClass: 'badge-neutral', title: norm };
     return `<span class="badge ${meta.badgeClass}" title="${esc(meta.title)}" style="font-weight:600;font-size:11px;padding:2px 7px;">${esc(isShort ? meta.short : meta.label)}</span>`;
   }).join(' ');
 }
@@ -488,7 +599,7 @@ function renderAgentModels() {
     
     let strategyLabel = `${keys.length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
     if(strategy === 'manual'){
-      strategyLabel = `${keys.length} 个 Key · 🔒 纯手动直通 (当前使用: ${activeKey})`;
+      strategyLabel = `${keys.length} 个 Key · ${icon('lock', 12)} 纯手动直通 (当前使用: ${activeKey})`;
     } else if(strategy === 'round_robin'){
       strategyLabel = `${keys.length} 个 Key · 轮询负载均衡`;
     } else if(strategy === 'priority_fallback'){
@@ -569,66 +680,64 @@ function renderProviders() {
     card.className = 'card';
 
     let keysListHtml = '';
-    keyLabels.forEach(k => {
-      const val = keysObj[k];
-      const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
-      const cacheKey = `prov:${p}:${k}`;
-      const latInfo = modelLatencyCache[cacheKey];
-      let latBadge = '';
-      if (latInfo) {
-        latBadge = latInfo.ok
-          ? `<span class="badge badge-success">${latInfo.latency_ms}ms</span>`
-          : `<span class="badge badge-error">${latInfo.status || 'ERR'}</span>`;
-      }
+    if (keyLabels.length > 0) {
+      const chips = keyLabels.map(k => {
+        const val = keysObj[k];
+        const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
+        const cacheKey = `prov:${p}:${k}`;
+        const latInfo = modelLatencyCache[cacheKey];
+        let latBadge = '';
+        if (latInfo) {
+          latBadge = latInfo.ok
+            ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;">${latInfo.latency_ms}ms</span>`
+            : `<span class="badge badge-error" style="font-size:10px;padding:1px 5px;">${latInfo.status || 'ERR'}</span>`;
+        }
 
-      keysListHtml += `
-        <div class="provider-row" style="padding:10px 16px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-weight:600;">${k}</span>
-            <span class="mono text-secondary" style="font-size:12px;">${masked}</span>
+        return `
+          <div class="key-chip">
+            <span style="font-weight:600;">${esc(k)}</span>
+            <span class="mono text-secondary" style="font-size:11px;">${esc(masked)}</span>
             ${latBadge}
+            <div class="key-chip-actions">
+              <button class="btn btn-ghost btn-xs" onclick="testSingleKey('${esc(p)}', '${esc(k)}')" title="测试连通性">${icon('zap', 11)} 测试</button>
+              <button class="btn btn-ghost btn-xs" onclick="openEditKeyModal('${esc(p)}', '${esc(k)}', '${esc(val)}')" title="编辑 Key">${icon('edit', 11)} 编辑</button>
+              <button class="btn btn-danger btn-xs" onclick="deleteKey('${esc(p)}', '${esc(k)}')" title="删除 Key">${icon('trash', 11)} 删除</button>
+            </div>
           </div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="testSingleKey('${p}', '${k}')">测试</button>
-            <button class="btn btn-ghost btn-sm" onclick="openEditKeyModal('${p}', '${k}', '${val}')">编辑</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteKey('${p}', '${k}')">删除</button>
-          </div>
-        </div>
-      `;
-    });
+        `;
+      }).join('');
+      keysListHtml = `<div class="key-chip-list">${chips}</div>`;
+    } else {
+      keysListHtml = `<div style="padding:10px 16px;font-size:12px;color:var(--color-text-3);">暂未绑定 Key，点击右上角「新增 Key」添加凭据</div>`;
+    }
 
     const protos = getProviderProtocols(p, prov);
     const protoBadges = renderProtocolBadges(protos, false);
-    const hasMessages = protos.includes('messages');
+    const hasMessages = protos.includes('message');
     let messagesUrlPart = '';
     if (hasMessages) {
-      if (prov.anthropic_base_url && prov.anthropic_base_url !== prov.base_url) {
-        messagesUrlPart = ` · Messages: ${prov.anthropic_base_url}`;
+      const msgUrl = prov.message_base_url || prov.anthropic_base_url;
+      if (msgUrl && msgUrl !== prov.base_url) {
+        messagesUrlPart = ` · Messages: ${esc(msgUrl)}`;
       } else {
-        messagesUrlPart = ` · Messages: ${prov.anthropic_base_url || prov.base_url} (默认)`;
+        messagesUrlPart = ` · Messages: ${esc(msgUrl || prov.base_url || '')} (默认)`;
       }
     }
     const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
-    const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="预设规则版本">${ver}</span>`;
-    const hasUpdate = RULE_UPDATES_MAP[p];
-    const updateBtn = hasUpdate
-      ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${p}')">⬆️ 升级规则至 v${hasUpdate.remote_version}</button>`
-      : '';
-
+    const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">${ver}</span>`;
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>${p} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge}</span></h3>
-        <div class="meta mono mt-2">${prov.base_url || '—'}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
+          <h3>${esc(p)} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge}</span></h3>
+          <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          ${updateBtn}
-          <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${p}')">编辑</button>
-          <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${p}')">+ 新增 Key</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${p}')">删除供应商</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
         </div>
       </div>
-      <div style="background:var(--color-bg-page);">${keysListHtml || '<div class="empty">暂无 Key</div>'}</div>
+      <div style="background:var(--color-bg-page);">${keysListHtml}</div>
     `;
     box.appendChild(card);
   }
@@ -756,147 +865,7 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
-// ---- Preset Selection & Remote Distribution -----------------------------
-async function loadPresetsCatalog() {
-  const select = document.getElementById('m_prov_preset');
-  if (!select) return;
-  if (!PRESET_CATALOG || PRESET_CATALOG.length === 0) {
-    PRESET_CATALOG = Object.keys(FALLBACK_PRESETS).map(k => ({
-      id: k,
-      name: FALLBACK_PRESETS[k].name,
-      version: FALLBACK_PRESETS[k].version || '1.1.0',
-      description: FALLBACK_PRESETS[k].description
-    }));
-  }
-  populateCatalogSelect(select);
-
-  // Silent background sync for new remote presets without disturbing the UI
-  try {
-    const res = await api('GET', '/api/admin/presets?action=catalog');
-    if (res && res.ok && Array.isArray(res.providers) && res.providers.length > 0) {
-      PRESET_CATALOG = res.providers;
-      populateCatalogSelect(select);
-    }
-  } catch (e) {
-    // Silent fallback
-  }
-}
-
-function populateCatalogSelect(select) {
-  const cur = select.value;
-  const catalog = (PRESET_CATALOG && PRESET_CATALOG.length > 0)
-    ? PRESET_CATALOG
-    : Object.keys(FALLBACK_PRESETS).map(k => ({
-        id: k,
-        name: FALLBACK_PRESETS[k].name,
-        version: FALLBACK_PRESETS[k].version || '1.1.0',
-        description: FALLBACK_PRESETS[k].description
-      }));
-
-  select.innerHTML = '<option value="">-- 自定义供应商 (本地内置·手动填写) --</option>' +
-    '<optgroup label="官方预设厂商模板 (按需选用)">' +
-    catalog.map(p => `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'})</option>`).join('') +
-    '</optgroup>';
-  if (cur !== undefined && cur !== null) select.value = cur;
-}
-
-async function onPresetSelected() {
-  const presetId = document.getElementById('m_prov_preset').value;
-  const nameInput = document.getElementById('m_prov_name');
-  const urlInput = document.getElementById('m_prov_url');
-  const descEl = document.getElementById('m_prov_desc');
-  const modelsWrap = document.getElementById('m_prov_models_wrap');
-  const modelsList = document.getElementById('m_prov_models_list');
-
-  if (!presetId) {
-    currentSelectedPreset = null;
-    nameInput.value = '';
-    urlInput.value = '';
-    nameInput.disabled = false;
-    urlInput.disabled = false;
-    descEl.style.display = 'block';
-    descEl.style.background = 'var(--color-bg-page)';
-    descEl.style.color = 'var(--color-text-2)';
-    descEl.innerHTML = '⚡ <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。';
-    modelsWrap.style.display = 'none';
-    modelsList.innerHTML = '';
-    return;
-  }
-
-  // Fetch preset detail on demand if not cached
-  let preset = CACHED_PRESETS[presetId];
-  if (!preset) {
-    descEl.textContent = '正在按需拉取云端厂商规则与推荐模型...';
-    descEl.style.display = 'block';
-    try {
-      const res = await api('GET', `/api/admin/presets?action=detail&id=${encodeURIComponent(presetId)}`);
-      if (res && res.ok && res.preset) {
-        preset = res.preset;
-        CACHED_PRESETS[presetId] = preset;
-      }
-    } catch (e) {
-      console.warn('Failed to load preset detail on-demand:', e);
-    }
-  }
-  if (!preset && FALLBACK_PRESETS[presetId]) {
-    preset = FALLBACK_PRESETS[presetId];
-  }
-
-  if (!preset) {
-    toast(`未能获取模板「${presetId}」规则`, 'err');
-    return;
-  }
-
-  currentSelectedPreset = preset;
-  nameInput.value = preset.id;
-  urlInput.value = preset.base_url;
-  descEl.textContent = `${preset.description || ''} · 规则版本: v${preset.version || '1.1.0'}`;
-  descEl.style.display = 'block';
-
-  // Preset protocols sync
-  const presetProtos = preset.protocols || (preset.anthropic_base_url ? ['chat', 'messages'] : ['chat']);
-  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = presetProtos.includes('chat');
-  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = presetProtos.includes('messages');
-  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = presetProtos.includes('responses');
-
-  // Custom Anthropic URL
-  const customToggle = document.getElementById('m_prov_custom_url_toggle');
-  const customSection = document.getElementById('m_prov_custom_url_section');
-  const customUrlInput = document.getElementById('m_prov_anthropic_url');
-  if (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) {
-    if (customToggle) customToggle.checked = true;
-    if (customSection) customSection.style.display = 'block';
-    if (customUrlInput) customUrlInput.value = preset.anthropic_base_url;
-  } else {
-    if (customToggle) customToggle.checked = false;
-    if (customSection) customSection.style.display = 'none';
-    if (customUrlInput) customUrlInput.value = '';
-  }
-
-  // Render recommended models checklist
-  modelsList.innerHTML = '';
-  const recModels = preset.recommended_models || [];
-  if (recModels.length > 0) {
-    modelsWrap.style.display = 'block';
-    recModels.forEach((rm) => {
-      const row = document.createElement('div');
-      row.style.marginBottom = '6px';
-      row.innerHTML = `
-        <label class="checkbox" style="align-items:flex-start;">
-          <input type="checkbox" data-model="${rm.name}" data-upstream="${rm.upstream || rm.upstream_model || rm.name}" ${rm.checked !== false ? 'checked' : ''}>
-          <div style="font-size:12px;">
-            <div style="font-weight:600;color:var(--color-text-1);">${rm.name} <span class="mono text-secondary" style="font-weight:normal;">(映射: ${rm.upstream || rm.upstream_model || rm.name})</span></div>
-            <div class="text-secondary" style="font-size:11px;margin-top:2px;">${rm.desc || rm.description || ''}</div>
-          </div>
-        </label>
-      `;
-      modelsList.appendChild(row);
-    });
-  } else {
-    modelsWrap.style.display = 'none';
-  }
-}
-
+// ---- Custom Provider & Protocol Settings ---------------------------------
 function onEdgeOneCustomUrlToggleChange() {
   const isChecked = document.getElementById('m_prov_custom_url_toggle')?.checked;
   const wrap = document.getElementById('m_prov_custom_url_section');
@@ -906,20 +875,11 @@ function onEdgeOneCustomUrlToggleChange() {
 function openAddProviderModal() {
   currentSelectedPreset = null;
   document.getElementById('providerModalTitle').textContent = '新增供应商';
-  document.getElementById('presetSelectGroup').style.display = 'block';
-  document.getElementById('m_prov_preset').value = '';
-  onPresetSelected();
   document.getElementById('m_prov_name').value = '';
   document.getElementById('m_prov_name').disabled = false;
-  document.getElementById('m_prov_url').value = '';
-  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = true;
-  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = false;
-  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = false;
-  const customToggle = document.getElementById('m_prov_custom_url_toggle'); if(customToggle) customToggle.checked = false;
-  const customSection = document.getElementById('m_prov_custom_url_section'); if(customSection) customSection.style.display = 'none';
-  const uInput = document.getElementById('m_prov_anthropic_url'); if(uInput) uInput.value = '';
-  document.getElementById('m_prov_models_wrap').style.display = 'none';
-  loadPresetsCatalog();
+  document.getElementById('m_prov_url_openai').value = '';
+  document.getElementById('m_prov_url_message').value = '';
+  document.getElementById('m_prov_url_responses').value = '';
   openModal('providerModal');
 }
 
@@ -927,186 +887,145 @@ function openEditProviderModal(name) {
   currentSelectedPreset = null;
   const prov = cfg.providers?.[name] || {};
   document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
-  document.getElementById('presetSelectGroup').style.display = 'none';
   document.getElementById('m_prov_name').value = name;
   document.getElementById('m_prov_name').disabled = true;
-  document.getElementById('m_prov_url').value = prov.base_url || '';
-
-  const protos = getProviderProtocols(name, prov);
-  const cChat = document.getElementById('m_prov_proto_chat'); if(cChat) cChat.checked = protos.includes('chat');
-  const cMsg = document.getElementById('m_prov_proto_messages'); if(cMsg) cMsg.checked = protos.includes('messages');
-  const cResp = document.getElementById('m_prov_proto_responses'); if(cResp) cResp.checked = protos.includes('responses');
-
-  const customToggle = document.getElementById('m_prov_custom_url_toggle');
-  const customSection = document.getElementById('m_prov_custom_url_section');
-  const uInput = document.getElementById('m_prov_anthropic_url');
-  if (prov.anthropic_base_url) {
-    if (customToggle) customToggle.checked = true;
-    if (customSection) customSection.style.display = 'block';
-    if (uInput) uInput.value = prov.anthropic_base_url;
-  } else {
-    if (customToggle) customToggle.checked = false;
-    if (customSection) customSection.style.display = 'none';
-    if (uInput) uInput.value = '';
-  }
-
-  document.getElementById('m_prov_desc').style.display = 'none';
-  document.getElementById('m_prov_models_wrap').style.display = 'none';
+  document.getElementById('m_prov_url_openai').value = prov.openai_base_url || prov.base_url || '';
+  document.getElementById('m_prov_url_message').value = prov.message_base_url || prov.anthropic_base_url || '';
+  document.getElementById('m_prov_url_responses').value = prov.responses_base_url || '';
   openModal('providerModal');
 }
 
 async function saveProviderModal() {
   const name = document.getElementById('m_prov_name').value.trim();
-  const url = document.getElementById('m_prov_url').value.trim();
-  if (!name || !url) { toast('请填写供应商与 Base URL', 'err'); return; }
+  const openaiUrl = document.getElementById('m_prov_url_openai').value.trim();
+  const messageUrl = document.getElementById('m_prov_url_message').value.trim();
+  const responsesUrl = document.getElementById('m_prov_url_responses').value.trim();
+
+  if (!name) { toast('请填写供应商英文标识 (ID)', 'err'); return; }
+  if (!openaiUrl && !messageUrl && !responsesUrl) {
+    toast('请至少填写一个协议的 Base URL (有输入即启用)', 'err');
+    return;
+  }
 
   const selectedProtos = [];
-  if (document.getElementById('m_prov_proto_chat')?.checked) selectedProtos.push('chat');
-  if (document.getElementById('m_prov_proto_messages')?.checked) selectedProtos.push('messages');
-  if (document.getElementById('m_prov_proto_responses')?.checked) selectedProtos.push('responses');
-  if (!selectedProtos.length) { toast('请至少选择一种支持的协议类型', 'err'); return; }
+  if (openaiUrl) selectedProtos.push('openai');
+  if (messageUrl) selectedProtos.push('message');
+  if (responsesUrl) selectedProtos.push('responses');
 
   const backupCfg = JSON.parse(JSON.stringify(cfg));
 
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
-  cfg.providers[name].base_url = url;
   cfg.providers[name].protocols = selectedProtos;
-  cfg.providers[name].anthropic_messages = selectedProtos.includes('messages');
 
-  const customToggle = document.getElementById('m_prov_custom_url_toggle');
-  const anthropicUrl = customToggle?.checked ? document.getElementById('m_prov_anthropic_url')?.value.trim() : '';
-  if (selectedProtos.includes('messages') && anthropicUrl) {
-    cfg.providers[name].anthropic_base_url = anthropicUrl;
+  if (openaiUrl) {
+    cfg.providers[name].base_url = openaiUrl;
+    cfg.providers[name].openai_base_url = openaiUrl;
+  } else {
+    delete cfg.providers[name].openai_base_url;
+  }
+
+  if (messageUrl) {
+    cfg.providers[name].anthropic_base_url = messageUrl;
+    cfg.providers[name].message_base_url = messageUrl;
+    cfg.providers[name].anthropic_messages = true;
+    if (!openaiUrl) cfg.providers[name].base_url = messageUrl;
   } else {
     delete cfg.providers[name].anthropic_base_url;
+    delete cfg.providers[name].message_base_url;
+    cfg.providers[name].anthropic_messages = false;
   }
 
-  // If a preset was selected during creation, attach rules and metadata to local config
-  if (currentSelectedPreset && (currentSelectedPreset.id === name || !cfg.providers[name].preset_id)) {
-    cfg.providers[name].preset_id = currentSelectedPreset.id;
-    cfg.providers[name].preset_version = currentSelectedPreset.version || '1.1.0';
-    if (currentSelectedPreset.adapter_rules) {
-      cfg.providers[name].adapter_rules = currentSelectedPreset.adapter_rules;
-    }
-    if (currentSelectedPreset.recommended_models) {
-      cfg.providers[name].recommended_models = currentSelectedPreset.recommended_models;
-    }
-  }
-
-  // If recommended models were checked, auto-register them
-  const checkedModels = document.querySelectorAll('#m_prov_models_list input[type="checkbox"]:checked');
-  if (checkedModels.length > 0) {
-    cfg.agent_models = cfg.agent_models || {};
-    checkedModels.forEach((cb) => {
-      const modelName = cb.dataset.model;
-      const upstream = cb.dataset.upstream || modelName;
-      if (!cfg.agent_models[modelName]) {
-        cfg.agent_models[modelName] = {
-          upstream_model: upstream,
-          keys: [],
-        };
-      }
-    });
+  if (responsesUrl) {
+    cfg.providers[name].responses_base_url = responsesUrl;
+    cfg.providers[name].openai_responses = true;
+    if (!openaiUrl && !messageUrl) cfg.providers[name].base_url = responsesUrl;
+  } else {
+    delete cfg.providers[name].responses_base_url;
+    cfg.providers[name].openai_responses = false;
   }
 
   const ok = await persistConfig();
   if (ok) {
     closeModal('providerModal');
+    toast(`供应商「${name}」已保存并同步至 EdgeOne KV`, 'ok');
   } else {
     cfg = backupCfg;
     renderAll();
   }
 }
 
-async function deleteProvider(name) {
-  if (!confirm(`删除供应商「${name}」及其全部 Key？本地规则与配置将一并清理。`)) return;
-  delete cfg.providers[name];
-  if (RULE_UPDATES_MAP[name]) delete RULE_UPDATES_MAP[name];
-  await persistConfig();
-}
+function deleteProvider(name) {
+  const prov = cfg.providers?.[name];
+  if (!prov) return;
+  const keysObj = prov.keys || {};
+  const keyLabels = Object.keys(keysObj);
 
-// Incremental Rule Updates
-async function checkAllRuleUpdates() {
-  const btn = document.getElementById('btnCheckRuleUpdates');
-  const alertEl = document.getElementById('ruleUpdatesAlert');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '🔄 检查中...';
+  // 检索级联影响的 Agent 模型
+  const affectedModels = [];
+  for (const [mName, m] of Object.entries(cfg.agent_models || {})) {
+    if ((m.keys || []).some(k => k.provider === name)) {
+      affectedModels.push(mName);
+    }
   }
 
-  try {
-    const provs = cfg.providers || {};
-    const payload = {
-      providers: Object.keys(provs).map(id => ({
-        id,
-        version: provs[id].preset_version || '1.0.0',
-        rule_hash: provs[id].rule_hash || ''
-      }))
+  // 检索级联影响的 candidate 节点
+  let affectedCandidates = 0;
+  for (const cat of ['chat', 'embedding', 'reranker', 'ocr']) {
+    const list = cfg.candidates?.[cat] || [];
+    affectedCandidates += list.filter(c => c.provider === name).length;
+  }
+
+  const detailsEl = document.getElementById('deleteConfirmDetails');
+  if (detailsEl) {
+    detailsEl.innerHTML = `
+      <div style="margin-bottom:8px;"><strong>目标供应商：</strong><span class="badge badge-error" style="font-size:12px;">${esc(name)}</span> (${esc(prov.base_url || '')})</div>
+      <div style="margin-bottom:8px;"><strong>名下 API Key：</strong>${keyLabels.length} 个 ${keyLabels.length ? `(<code>${keyLabels.map(esc).join(', ')}</code>)` : '<span class="text-secondary">无</span>'}</div>
+      <div style="margin-bottom:8px;"><strong>关联 Agent 模型：</strong>${affectedModels.length} 个 ${affectedModels.length ? `(<code>${affectedModels.map(esc).join(', ')}</code>)` : '<span class="text-secondary">无直接绑定</span>'}</div>
+      <div><strong>关联 Candidate 节点：</strong>${affectedCandidates} 个 (将一并级联解绑清理)</div>
+    `;
+  }
+
+  const confirmBtn = document.getElementById('btnExecuteDeleteProvider');
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '正在物理彻底删除...';
+      try {
+        delete cfg.providers[name];
+
+        // 级联清理 agent_models 绑定
+        if (cfg.agent_models) {
+          for (const mName of Object.keys(cfg.agent_models)) {
+            cfg.agent_models[mName].keys = (cfg.agent_models[mName].keys || []).filter(x => x.provider !== name);
+            if (!cfg.agent_models[mName].keys.length) {
+              delete cfg.agent_models[mName];
+            }
+          }
+        }
+
+        // 级联清理 candidates
+        if (cfg.candidates) {
+          for (const cat of ['chat', 'embedding', 'reranker', 'ocr']) {
+            if (cfg.candidates[cat]) {
+              cfg.candidates[cat] = cfg.candidates[cat].filter(x => x.provider !== name);
+            }
+          }
+        }
+
+        const ok = await persistConfig();
+        if (ok) {
+          closeModal('deleteConfirmModal');
+          toast(`供应商「${name}」已从 EdgeOne KV 彻底销毁！`, 'ok');
+        }
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '确认彻底删除';
+      }
     };
-
-    const res = await api('POST', '/api/admin/presets?action=check-updates', payload);
-    RULE_UPDATES_MAP = {};
-    if (res && res.ok && Array.isArray(res.updates) && res.updates.length > 0) {
-      res.updates.forEach(u => {
-        RULE_UPDATES_MAP[u.provider_id] = u;
-      });
-
-      if (alertEl) {
-        alertEl.style.display = 'flex';
-        alertEl.innerHTML = `
-          <div>
-            <strong>发现 ${res.updates.length} 个供应商规则有更新</strong>：
-            ${res.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${u.provider_id}: ${u.current_version} ➔ ${u.latest_version || u.remote_version || '最新'}</span>`).join('')}
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
-        `;
-      }
-      toast(`检查完成：发现 ${res.updates.length} 个供应商有新规则`, 'ok');
-    } else {
-      if (alertEl) alertEl.style.display = 'none';
-      toast('所有供应商规则均为最新版本 (无需更新)', 'ok');
-    }
-    renderProviders();
-  } catch (e) {
-    toast(`检查规则更新失败: ${e.message}`, 'err');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🔄 检查规则更新';
-    }
   }
-}
 
-async function applySingleProviderRuleUpdate(pName) {
-  await applyRuleUpdates([pName]);
-}
-
-async function applyAllProviderRuleUpdates() {
-  const ids = Object.keys(RULE_UPDATES_MAP);
-  if (!ids.length) return;
-  await applyRuleUpdates(ids);
-}
-
-async function applyRuleUpdates(providerIds) {
-  try {
-    toast(`正在增量拉取并更新 ${providerIds.join(', ')} 的规则...`, 'ok');
-    const res = await api('POST', '/api/admin/presets?action=update-rules', { provider_ids: providerIds });
-    if (res && res.ok && Array.isArray(res.updated) && res.updated.length > 0) {
-      await loadConfig();
-      providerIds.forEach(id => delete RULE_UPDATES_MAP[id]);
-      const alertEl = document.getElementById('ruleUpdatesAlert');
-      if (alertEl && Object.keys(RULE_UPDATES_MAP).length === 0) {
-        alertEl.style.display = 'none';
-      }
-      toast(`成功更新 ${res.updated.length} 个供应商的规则并已自动生效！`, 'ok');
-      renderProviders();
-    } else {
-      toast(res?.message || '规则更新失败或无变更', 'err');
-    }
-  } catch (e) {
-    toast(`更新规则失败: ${e.message}`, 'err');
-  }
+  openModal('deleteConfirmModal');
 }
 
 function openAddKeyModal(prov) {
@@ -1199,18 +1118,18 @@ async function saveKeyModal() {
           const res = (d.protocols && d.protocols[pr]);
           if (res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
         }
-        toast(`✅ Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
+        toast(`Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
       } else {
         if (diagBox) {
-          let html = '<div style="font-weight:700;margin-bottom:8px;color:var(--color-danger);display:flex;align-items:center;gap:6px;">⚠️ 协议连通性未完全通过 (已阻止保存)</div>';
+          let html = `<div style="font-weight:700;margin-bottom:8px;color:var(--color-danger);display:flex;align-items:center;gap:6px;">${icon('alert', 15)} 协议连通性未完全通过 (已阻止保存)</div>`;
           html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
           for (const pr of protos) {
             const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
             const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
             if (res.valid) {
-              html += `<div style="display:flex;align-items:center;gap:6px;color:var(--color-success);"><span>🟢</span> <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
+              html += `<div style="display:flex;align-items:center;gap:6px;color:var(--color-success);">${icon('checkCircle', 14)} <b>${esc(pName)}</b>: 验证通过 (${res.latency_ms || 0}ms)</div>`;
             } else {
-              html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--color-danger);"><span>🔴</span> <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
+              html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--color-danger);">${icon('xCircle', 14)} <div><b>${esc(pName)}</b>: 验证失败 (${esc(res.error || '请求未通')})</div></div>`;
             }
           }
           html += '</div>';
@@ -1223,7 +1142,7 @@ async function saveKeyModal() {
       }
     } catch (e) {
       if (diagBox) {
-        diagBox.innerHTML = `<div style="color:var(--color-danger);font-size:12px;">❌ 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+        diagBox.innerHTML = `<div style="color:var(--color-danger);font-size:12px;display:flex;align-items:flex-start;gap:6px;">${icon('xCircle', 15)} <div>验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div></div>`;
         diagBox.style.display = 'block';
       }
       toast('网络请求异常: ' + e.message, 'err');
@@ -1271,15 +1190,18 @@ async function deleteKey(prov, label) {
 
 let currentEditingModelKeys = [];
 
-function populateModelProvFilter() {
+function populateModelProvFilter(selectedProv = '') {
   const select = document.getElementById('m_model_prov_filter');
   if (!select) return;
-  select.innerHTML = '<option value="">全部供应商</option>';
+  select.innerHTML = '<option value="" disabled selected>-- 请选择所属供应商 --</option>';
   const providers = cfg.providers || {};
   for (const p of Object.keys(providers)) {
     const opt = document.createElement('option');
     opt.value = p;
     opt.textContent = p;
+    if (selectedProv && p === selectedProv) {
+      opt.selected = true;
+    }
     select.appendChild(opt);
   }
 }
@@ -1287,34 +1209,6 @@ function populateModelProvFilter() {
 function onModelProvFilterChange() {
   const filterProv = document.getElementById('m_model_prov_filter').value;
   renderBindingsCheckboxes(getSelectedBindingsFromDom(), filterProv);
-  renderQuickModelTags(filterProv);
-}
-
-function renderQuickModelTags(prov) {
-  const tagBox = document.getElementById('m_quick_model_tags');
-  if (!tagBox) return;
-  tagBox.innerHTML = '';
-  if (!prov) return;
-
-  const provData = cfg.providers?.[prov];
-  const recModels = provData?.recommended_models || CACHED_PRESETS[prov]?.recommended_models || FALLBACK_PRESETS[prov]?.recommended_models || [];
-  if (recModels && recModels.length > 0) {
-    recModels.forEach(m => {
-      const mName = m.name || m.id;
-      const mUpstream = m.upstream || m.upstream_model || mName;
-      const tag = document.createElement('button');
-      tag.type = 'button';
-      tag.className = 'btn btn-ghost btn-sm';
-      tag.style.cssText = 'font-size:11px;padding:2px 8px;height:24px;background:var(--color-bg-subtle);';
-      tag.textContent = `+ 填入 ${mName}`;
-      tag.onclick = () => {
-        document.getElementById('m_model_name').value = mName;
-        document.getElementById('m_upstream_model').value = mUpstream;
-        toggleProviderKeys(prov, true);
-      };
-      tagBox.appendChild(tag);
-    });
-  }
 }
 
 function getSelectedBindingsFromDom() {
@@ -1353,10 +1247,8 @@ function openAddAgentModal() {
   document.getElementById('m_model_name').disabled = false;
   document.getElementById('m_upstream_model').value = '';
   currentEditingModelKeys = [];
-  populateModelProvFilter();
-  document.getElementById('m_model_prov_filter').value = '';
-  renderBindingsCheckboxes([]);
-  renderQuickModelTags('');
+  populateModelProvFilter('');
+  renderBindingsCheckboxes([], '');
   openModal('agentModal');
 }
 
@@ -1364,14 +1256,13 @@ function openEditModelModal(m) {
   document.getElementById('agentModalTitle').textContent = `编辑 Agent 模型: ${m}`;
   document.getElementById('m_model_old_name').value = m;
   document.getElementById('m_model_name').value = m;
-  document.getElementById('m_model_name').disabled = false; // Allow renaming
+  document.getElementById('m_model_name').disabled = false;
   const item = cfg.agent_models[m] || {};
   document.getElementById('m_upstream_model').value = item.upstream_model || '';
   currentEditingModelKeys = item.keys || [];
-  populateModelProvFilter();
-  document.getElementById('m_model_prov_filter').value = '';
-  renderBindingsCheckboxes(item.keys || []);
-  renderQuickModelTags('');
+  const primaryProv = currentEditingModelKeys[0]?.provider || '';
+  populateModelProvFilter(primaryProv);
+  renderBindingsCheckboxes(item.keys || [], primaryProv);
   openModal('agentModal');
 }
 
@@ -1379,50 +1270,52 @@ function renderBindingsCheckboxes(existingKeys = [], filterProv = '') {
   const container = document.getElementById('m_bindings_container');
   if (!container) return;
   container.innerHTML = '';
-  const providers = cfg.providers || {};
-  let provList = Object.keys(providers);
-  if (filterProv) {
-    provList = provList.filter(p => p === filterProv);
+
+  if (!filterProv) {
+    container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--color-text-3);font-size:13px;">请先在上方下拉框中选择供应商</div>';
+    return;
   }
 
-  let totalKeys = 0;
-  for (const p of provList) {
-    const prov = providers[p];
-    const keysObj = prov.keys || {};
-    const keyLabels = Object.keys(keysObj);
-    if (keyLabels.length === 0) continue;
+  const provObj = cfg.providers?.[filterProv];
+  const keysObj = provObj?.keys || {};
+  const keyLabels = Object.keys(keysObj);
 
-    const groupDiv = document.createElement('div');
-    groupDiv.className = 'provider-key-group';
-    groupDiv.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-sm);background:#fff;padding:8px 12px;';
+  if (keyLabels.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--color-text-3);font-size:13px;">供应商「${esc(filterProv)}」暂未配置任何 Key，请先前往供应商页面添加凭据</div>`;
+    return;
+  }
 
-    let keysCheckboxesHtml = '';
-    keyLabels.forEach(k => {
-      totalKeys++;
-      const isChecked = existingKeys.some(b => b.provider === p && b.key === k);
-      keysCheckboxesHtml += `
-        <label class="checkbox" style="font-size:13px;cursor:pointer;margin:0;">
-          <input type="checkbox" data-provider="${p}" data-key="${k}" ${isChecked ? 'checked' : ''}>
-          <span><span class="key-chip" style="font-weight:600;">${k}</span></span>
-        </label>
-      `;
-    });
+  const groupDiv = document.createElement('div');
+  groupDiv.className = 'provider-key-group';
+  groupDiv.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-sm);background:var(--color-bg-card);padding:10px 14px;';
 
-    groupDiv.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;border-bottom:1px solid var(--color-border);padding-bottom:4px;">
-        <span style="font-weight:700;font-size:13px;color:var(--color-text-primary);">${p}</span>
-        <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 6px;height:20px;" onclick="toggleProviderKeys('${p}')">选择该厂商</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;">
-        ${keysCheckboxesHtml}
-      </div>
+  let keysCheckboxesHtml = '';
+  keyLabels.forEach(k => {
+    const val = keysObj[k] || '';
+    const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
+    const isChecked = existingKeys.some(b => b.provider === filterProv && b.key === k);
+    keysCheckboxesHtml += `
+      <label class="checkbox" style="display:inline-flex;align-items:center;gap:6px;background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;cursor:pointer;margin:0;">
+        <input type="checkbox" data-provider="${esc(filterProv)}" data-key="${esc(k)}" ${isChecked ? 'checked' : ''}>
+        <span style="font-weight:600;">${esc(k)}</span>
+        <span class="mono text-secondary" style="font-size:11px;">(${masked})</span>
+      </label>
     `;
-    container.appendChild(groupDiv);
-  }
+  });
 
-  if (totalKeys === 0) {
-    container.innerHTML = '<div class="text-secondary" style="font-size:12px;padding:8px;">暂无匹配的 Key，请先添加供应商与 Key</div>';
-  }
+  groupDiv.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:1px solid var(--color-border);padding-bottom:6px;">
+      <div>
+        <span style="font-weight:700;font-size:13px;color:var(--color-text-1);">当前供应商：${esc(filterProv)}</span>
+        <span class="text-secondary" style="font-size:11px;margin-left:6px;">(${keyLabels.length} 个可用 Key)</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-xs" onclick="toggleProviderKeys('${esc(filterProv)}')">全选此厂商 Key</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${keysCheckboxesHtml}
+    </div>
+  `;
+  container.appendChild(groupDiv);
 }
 
 async function saveAgentModal() {
@@ -1625,7 +1518,7 @@ async function persistConfig() {
   const badge = document.getElementById('configSourceBadge');
   if (badge) {
     badge.className = 'badge badge-warning';
-    badge.textContent = '⏳ 保存同步中...';
+    badge.innerHTML = `${icon('refresh')} 保存同步中...`;
   }
   try {
     const res = await api('POST', '/api/config', cfg);
@@ -1639,7 +1532,7 @@ async function persistConfig() {
   } catch (e) {
     if (badge) {
       badge.className = 'badge badge-danger';
-      badge.textContent = '❌ 同步失败';
+      badge.innerHTML = `${icon('xCircle')} 同步失败`;
     }
     toast('保存失败: ' + (e?.message || e), 'err');
     return false;

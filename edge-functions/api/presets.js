@@ -6,34 +6,6 @@ import { PRESETS, PRESET_MAP, CATALOG, getPreset } from '../lib/presets/index.js
 import { requireAuth, loadConfig, saveConfig, resolveKvBinding } from '../lib/config.js';
 
 
-const CDN_CATALOG_URLS = [
-  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json',
-  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json',
-];
-
-const CDN_PRESET_BASE_URLS = [
-  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets',
-  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets',
-];
-
-async function fetchRemoteJson(urls, timeoutMs = 2500) {
-  for (const url of urls) {
-    try {
-      let signal;
-      if (typeof AbortController !== 'undefined') {
-        const controller = new AbortController();
-        setTimeout(() => controller.abort(), timeoutMs);
-        signal = controller.signal;
-      }
-      const res = await fetch(url, signal ? { signal } : undefined);
-      if (res && res.ok) {
-        return await res.json();
-      }
-    } catch {}
-  }
-  return null;
-}
-
 export async function onRequestGet(context) {
   try {
     const authErr = requireAuth(context);
@@ -43,13 +15,12 @@ export async function onRequestGet(context) {
     const action = url.searchParams.get('action') || '';
 
     if (action === 'catalog') {
-      const catalogData = await fetchRemoteJson(CDN_CATALOG_URLS, 2000) || CATALOG;
       return new Response(JSON.stringify({
         ok: true,
-        catalog: catalogData,
+        catalog: CATALOG,
       }), {
         status: 200,
-        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=600' },
+        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' },
       });
     }
 
@@ -58,8 +29,7 @@ export async function onRequestGet(context) {
       if (!id) {
         return new Response(JSON.stringify({ error: 'Missing preset id' }), { status: 400, headers: { 'content-type': 'application/json' } });
       }
-      const urls = CDN_PRESET_BASE_URLS.map((b) => `${b}/${id}.json`);
-      const presetData = await fetchRemoteJson(urls, 2500) || getPreset(id);
+      const presetData = getPreset(id);
       if (!presetData) {
         return new Response(JSON.stringify({ error: `Preset '${id}' not found` }), { status: 404, headers: { 'content-type': 'application/json' } });
       }
@@ -68,7 +38,7 @@ export async function onRequestGet(context) {
         preset: presetData,
       }), {
         status: 200,
-        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=600' },
+        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' },
       });
     }
 
@@ -112,7 +82,7 @@ export async function onRequestPost(context) {
     const kv = kvRes?.kv;
 
     if (action === 'check-updates') {
-      const catalogData = await fetchRemoteJson(CDN_CATALOG_URLS, 2000) || CATALOG;
+      const catalogData = CATALOG;
       const catalogMap = Object.fromEntries(((catalogData && catalogData.providers) || []).map((p) => [p.id, p]));
 
       let providersToCheck = Array.isArray(body?.providers) ? body.providers : null;
@@ -194,8 +164,7 @@ export async function onRequestPost(context) {
       const pdata = providers[pid];
       const presId = pdata.preset_id || pid;
 
-      const urls = CDN_PRESET_BASE_URLS.map((b) => `${b}/${presId}.json`);
-      const presetData = await fetchRemoteJson(urls, 2500) || getPreset(presId);
+      const presetData = getPreset(presId);
 
       if (!presetData) {
         failed.push({ provider_id: pid, error: `Failed to fetch rules for preset '${presId}'` });
