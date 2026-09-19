@@ -447,48 +447,29 @@ function renderDashboardGateway() {
 
   const clientKey = getKey() || 'YOUR_PROXY_API_KEY';
   const keyEl = document.getElementById('gwClientKeyVal');
-  if (keyEl) keyEl.textContent = clientKey ? `Bearer ${clientKey}` : 'Bearer <PROXY_API_KEY>';
+  if (keyEl) keyEl.textContent = clientKey || '<PROXY_API_KEY>';
 
-  const listOpenAi = document.getElementById('listOpenAiModels');
-  const listAnthropic = document.getElementById('listAnthropicModels');
-  const listResponses = document.getElementById('listResponsesModels');
-  const rowAnthropic = document.getElementById('rowAnthropicModels');
-  const rowResponses = document.getElementById('rowResponsesModels');
-
-  if (!listOpenAi || !listAnthropic) return;
+  const listContainer = document.getElementById('listAvailableModels');
+  if (!listContainer) return;
 
   const agentModels = cfg.agent_models || {};
   const modelNames = Object.keys(agentModels);
 
-  let openaiModels = [];
-  let messageModels = [];
-  let responsesModels = [];
+  if (!modelNames.length) {
+    listContainer.innerHTML = '<span class="text-secondary" style="font-size:12px;">(暂无可用模型，请在「Agent 模型」中配置)</span>';
+    return;
+  }
 
-  modelNames.forEach(m => {
+  listContainer.innerHTML = modelNames.map(m => {
     const protos = getModelProtocols(m);
-    if (protos.includes('openai')) openaiModels.push(m);
-    if (protos.includes('message')) messageModels.push(m);
-    if (protos.includes('responses')) responsesModels.push(m);
-    if (!protos.includes('openai') && !protos.includes('message') && !protos.includes('responses')) {
-      openaiModels.push(m);
-    }
-  });
-
-  const renderChips = (arr, badgeClass) => {
-    if (!arr.length) return '<span class="text-secondary" style="font-size:11px;">(无)</span>';
-    return arr.map(m => `
-      <span class="badge ${badgeClass} model-chip-clickable mono" onclick="copyModelName('${esc(m)}')" title="点击复制模型名称: ${esc(m)}" style="font-size:11px;padding:3px 8px;">
-        ${esc(m)}
+    const protoBadges = renderProtocolBadges(protos, true);
+    return `
+      <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(m)}')" title="点击复制模型名称: ${esc(m)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--color-bg-page);border:1px solid var(--color-border);">
+        <span style="font-weight:500;color:var(--color-text-1);">${esc(m)}</span>
+        <span style="display:inline-flex;gap:3px;align-items:center;">${protoBadges}</span>
       </span>
-    `).join('');
-  };
-
-  listOpenAi.innerHTML = renderChips(openaiModels, 'badge-info');
-  listAnthropic.innerHTML = renderChips(messageModels, 'badge-warning');
-  if (rowAnthropic) rowAnthropic.style.display = messageModels.length ? 'flex' : 'none';
-
-  if (listResponses) listResponses.innerHTML = renderChips(responsesModels, 'badge-purple');
-  if (rowResponses) rowResponses.style.display = responsesModels.length ? 'flex' : 'none';
+    `;
+  }).join('');
 }
 
 function copyDbBaseUrl() {
@@ -498,7 +479,7 @@ function copyDbBaseUrl() {
 
 function copyDbClientKey() {
   const key = getKey() || 'YOUR_PROXY_API_KEY';
-  copyText(`Bearer ${key}`, '客户端 API Key 已复制到剪贴板');
+  copyText(key, '客户端 API Key 已复制到剪贴板');
 }
 
 function copyModelName(name) {
@@ -664,86 +645,141 @@ function renderAgentModels() {
 
 function renderProviders() {
   const box = document.getElementById('providersBox');
+  const rail = document.getElementById('alphabetNavRail');
+  const railInner = document.getElementById('alphaRailInner');
   if (!box) return;
   box.innerHTML = '';
   const providers = cfg.providers || {};
-  const provNames = Object.keys(providers);
+  const provNames = Object.keys(providers).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
   if (provNames.length === 0) {
     box.innerHTML = '<div class="card card-pad empty">暂未配置供应商</div>';
+    if (rail) rail.style.display = 'none';
     return;
   }
 
-  for (const p of provNames) {
-    const prov = providers[p];
-    const keysObj = prov.keys || {};
-    const keyLabels = Object.keys(keysObj);
-    const card = document.createElement('div');
-    card.className = 'card';
+  // 1. 按首字母构建分组
+  const groups = {};
+  provNames.forEach(p => {
+    const initial = (p.charAt(0) || '#').toUpperCase();
+    const char = /^[A-Z]$/.test(initial) ? initial : '#';
+    if (!groups[char]) groups[char] = [];
+    groups[char].push(p);
+  });
 
-    let keysListHtml = '';
-    if (keyLabels.length > 0) {
-      const chips = keyLabels.map(k => {
-        const val = keysObj[k];
-        const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
-        const cacheKey = `prov:${p}:${k}`;
-        const latInfo = modelLatencyCache[cacheKey];
-        let latBadge = '';
-        if (latInfo) {
-          latBadge = latInfo.ok
-            ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;">${latInfo.latency_ms}ms</span>`
-            : `<span class="badge badge-error" style="font-size:10px;padding:1px 5px;">${latInfo.status || 'ERR'}</span>`;
-        }
+  const sortedChars = Object.keys(groups).sort((a, b) => {
+    if (a === '#') return 1;
+    if (b === '#') return -1;
+    return a.localeCompare(b);
+  });
 
-        return `
-          <div class="key-chip">
-            <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
-              <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">${esc(k)}</span>
-              <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">${esc(masked)}</span>
-              <span class="key-lat-slot" style="display:inline-flex;align-items:center;">${latBadge}</span>
-            </div>
-            <div class="key-chip-actions">
-              <button class="btn btn-secondary btn-xs" onclick="testSingleKey('${esc(p)}', '${esc(k)}')" title="测试连通性">${icon('zap', 11)} 测试</button>
-              <button class="btn btn-secondary btn-xs" onclick="openEditKeyModal('${esc(p)}', '${esc(k)}', '${esc(val)}')" title="编辑 Key">${icon('edit', 11)} 编辑</button>
-              <button class="btn btn-secondary-danger btn-xs" onclick="deleteKey('${esc(p)}', '${esc(k)}')" title="删除 Key">${icon('trash', 11)} 删除</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-      keysListHtml = `<div class="key-chip-list">${chips}</div>`;
+  // 2. 渲染右侧字母索引导航轨 (Alphabet Rail)
+  if (rail && railInner) {
+    if (sortedChars.length <= 1) {
+      rail.style.display = 'none';
     } else {
-      keysListHtml = `<div style="padding:10px 16px;font-size:12px;color:var(--color-text-3);">暂未绑定 Key，点击右上角「新增 Key」添加凭据</div>`;
+      rail.style.display = 'block';
+      railInner.innerHTML = sortedChars.map(ch => `
+        <button type="button" class="alpha-rail-btn" onclick="scrollToAlphaGroup('${ch}')" title="跳转到 ${ch} 组 (${groups[ch].length} 家供应商)">${ch}</button>
+      `).join('');
     }
+  }
 
-    const protos = getProviderProtocols(p, prov);
-    const protoBadges = renderProtocolBadges(protos, false);
-    const hasMessages = protos.includes('message');
-    let messagesUrlPart = '';
-    if (hasMessages) {
-      const msgUrl = prov.message_base_url || prov.anthropic_base_url;
-      if (msgUrl && msgUrl !== prov.base_url) {
-        messagesUrlPart = ` · Messages: ${esc(msgUrl)}`;
-      } else {
-        messagesUrlPart = ` · Messages: ${esc(msgUrl || prov.base_url || '')} (默认)`;
-      }
-    }
-    const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
-    const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">${ver}</span>`;
-    card.innerHTML = `
-      <div class="card-head">
-        <div>
-          <h3>${esc(p)} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge}</span></h3>
-          <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
-          <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
-          <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
-        </div>
-      </div>
-      <div style="background:var(--color-bg-page);">${keysListHtml}</div>
+  // 3. 渲染字母分组与供应商卡片
+  for (const ch of sortedChars) {
+    const list = groups[ch];
+    const divider = document.createElement('div');
+    divider.className = 'alpha-divider';
+    divider.id = `alpha-group-${ch}`;
+    divider.innerHTML = `
+      <span class="alpha-char-badge">${ch}</span>
+      <span class="alpha-divider-meta">${list.length} 家供应商</span>
+      <span class="alpha-divider-line"></span>
     `;
-    box.appendChild(card);
+    box.appendChild(divider);
+
+    for (const p of list) {
+      const prov = providers[p];
+      const keysObj = prov.keys || {};
+      const keyLabels = Object.keys(keysObj);
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.id = `provider-card-${p}`;
+
+      let keysListHtml = '';
+      if (keyLabels.length > 0) {
+        const chips = keyLabels.map(k => {
+          const val = keysObj[k];
+          const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
+          const cacheKey = `prov:${p}:${k}`;
+          const latInfo = modelLatencyCache[cacheKey];
+          let latBadge = '';
+          if (latInfo) {
+            latBadge = latInfo.ok
+              ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;">${latInfo.latency_ms}ms</span>`
+              : `<span class="badge badge-error" style="font-size:10px;padding:1px 5px;">${latInfo.status || 'ERR'}</span>`;
+          }
+
+          return `
+            <div class="key-chip">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
+                <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">${esc(k)}</span>
+                <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">${esc(masked)}</span>
+                <span class="key-lat-slot" style="display:inline-flex;align-items:center;">${latBadge}</span>
+              </div>
+              <div class="key-chip-actions">
+                <button class="btn btn-secondary btn-xs" onclick="testSingleKey('${esc(p)}', '${esc(k)}')" title="测试连通性">${icon('zap', 11)} 测试</button>
+                <button class="btn btn-secondary btn-xs" onclick="openEditKeyModal('${esc(p)}', '${esc(k)}', '${esc(val)}')" title="编辑 Key">${icon('edit', 11)} 编辑</button>
+                <button class="btn btn-secondary-danger btn-xs" onclick="deleteKey('${esc(p)}', '${esc(k)}')" title="删除 Key">${icon('trash', 11)} 删除</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        keysListHtml = `<div class="key-chip-list">${chips}</div>`;
+      } else {
+        keysListHtml = `<div style="padding:10px 16px;font-size:12px;color:var(--color-text-3);">暂未绑定 Key，点击右上角「新增 Key」添加凭据</div>`;
+      }
+
+      const protos = getProviderProtocols(p, prov);
+      const protoBadges = renderProtocolBadges(protos, false);
+      const hasMessages = protos.includes('message');
+      let messagesUrlPart = '';
+      if (hasMessages) {
+        const msgUrl = prov.message_base_url || prov.anthropic_base_url;
+        if (msgUrl && msgUrl !== prov.base_url) {
+          messagesUrlPart = ` · Messages: ${esc(msgUrl)}`;
+        } else {
+          messagesUrlPart = ` · Messages: ${esc(msgUrl || prov.base_url || '')} (默认)`;
+        }
+      }
+      const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
+      const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">${ver}</span>`;
+      card.innerHTML = `
+        <div class="card-head">
+          <div>
+            <h3>${esc(p)} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge}</span></h3>
+            <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
+            <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
+          </div>
+        </div>
+        <div style="background:var(--color-bg-page);">${keysListHtml}</div>
+      `;
+      box.appendChild(card);
+    }
+  }
+}
+
+function scrollToAlphaGroup(ch) {
+  const target = document.getElementById(`alpha-group-${ch}`);
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.classList.remove('alpha-target-highlight');
+    void target.offsetWidth;
+    target.classList.add('alpha-target-highlight');
   }
 }
 

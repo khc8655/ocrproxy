@@ -92,20 +92,12 @@
           </div>
           <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding:10px 0;">
             <span class="gateway-label">客户端凭据 (Key)</span>
-            <span class="gateway-val mono" id="gwClientKeyVal" style="color:var(--color-primary);font-weight:600;">Bearer ...</span>
+            <span class="gateway-val mono" id="gwClientKeyVal">—</span>
             <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
           </div>
           <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
-            <span class="gateway-label" style="padding-top:2px;">OpenAI 模型 (openai)</span>
-            <div id="listOpenAiModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
-          </div>
-          <div class="gateway-row" id="rowAnthropicModels" style="padding-top:8px;align-items:flex-start;">
-            <span class="gateway-label" style="padding-top:2px;">Message 模型 (message)</span>
-            <div id="listAnthropicModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
-          </div>
-          <div class="gateway-row" id="rowResponsesModels" style="padding-top:8px;align-items:flex-start;display:none;">
-            <span class="gateway-label" style="padding-top:2px;">Responses (responses)</span>
-            <div id="listResponsesModels" style="display:flex;flex-wrap:wrap;gap:6px;flex:1;"></div>
+            <span class="gateway-label" style="padding-top:2px;">可用模型</span>
+            <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
           </div>
         </div>
       </div>
@@ -137,7 +129,12 @@
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
-        <div id="providersBox"></div>
+        <div class="providers-layout">
+          <div id="providersBox" class="providers-list-col"></div>
+          <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
+            <div class="alpha-rail-inner" id="alphaRailInner"></div>
+          </aside>
+        </div>
       </div>
     </div>
 

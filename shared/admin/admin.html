@@ -391,7 +391,7 @@
             </div>
             <div style="display:inline-flex; align-items:center; gap:6px;">
               <span style="font-weight:600; color:var(--text-secondary);">Key:</span>
-              <span class="mono" id="gwClientKeyVal" style="color:var(--text); font-weight:600;">Bearer &lt;CLIENT_KEY&gt;</span>
+              <span class="mono" id="gwClientKeyVal" style="color:var(--text); font-weight:400;">&lt;CLIENT_KEY&gt;</span>
               <button class="btn btn-sm btn-secondary" onclick="copyDbClientKey()" title="复制 Key" style="padding:2px 7px; font-size:11px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;">
                 <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                 <span>复制</span>
@@ -400,21 +400,12 @@
           </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:5px; font-size:12px; border-top:1px solid var(--border-light); padding-top:6px;">
-          <div id="rowOpenAiModels" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="color:var(--text-secondary); font-weight:600; min-width:96px; display:inline-flex; align-items:center; gap:4px;">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
-              OpenAI 模型:
-            </span>
-            <div id="listOpenAiModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
-          </div>
-          <div id="rowAnthropicModels" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="color:var(--text-secondary); font-weight:600; min-width:96px; display:inline-flex; align-items:center; gap:4px;">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              Anthropic 模型:
-            </span>
-            <div id="listAnthropicModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
-          </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; border-top:1px solid var(--border-light); padding-top:6px;">
+          <span style="color:var(--text-secondary); font-weight:600; min-width:80px; display:inline-flex; align-items:center; gap:4px;">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+            可用模型:
+          </span>
+          <div id="listAvailableModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
         </div>
       </div>
 
@@ -1290,28 +1281,26 @@ function renderDashboardGateway(){
   const keyVal = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : '';
   const keyEl = document.getElementById('gwClientKeyVal');
   if(keyEl) {
-    keyEl.textContent = keyVal ? `Bearer ${keyVal}` : 'Bearer <CLIENT_KEY>';
+    keyEl.textContent = keyVal ? keyVal : '<CLIENT_KEY>';
   }
 
-  const listOpenAi = document.getElementById('listOpenAiModels');
-  const listAnthropic = document.getElementById('listAnthropicModels');
-  const rowAnthropic = document.getElementById('rowAnthropicModels');
-  if(!listOpenAi || !listAnthropic) return;
+  const listContainer = document.getElementById('listAvailableModels');
+  if(!listContainer) return;
 
   const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
-  let openaiModels = [];
-  let anthropicModels = [];
+  let modelsList = [];
 
   if(runMode === 'agent') {
     const agentModels = state.config?.agent_models || {};
-    Object.keys(agentModels).forEach(mName => {
+    modelsList = Object.keys(agentModels).map(mName => {
       const protos = getModelProtocols(mName);
-      if(protos.includes('messages') || protos.includes('anthropic')) {
-        anthropicModels.push(mName);
-      }
-      if(protos.includes('chat') || protos.includes('openai') || !anthropicModels.includes(mName)) {
-        openaiModels.push(mName);
-      }
+      const protoBadges = renderProtocolBadges(protos, true);
+      return `
+        <span class="badge badge-neutral mono" onclick="copyModelName('${esc(mName)}')" title="点击复制模型名称: ${esc(mName)}" style="cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:2px 7px; font-size:11px;">
+          <span style="font-weight:500;">${esc(mName)}</span>
+          <span style="display:inline-flex; gap:3px;">${protoBadges}</span>
+        </span>
+      `;
     });
   } else {
     // KB mode
@@ -1319,20 +1308,20 @@ function renderDashboardGateway(){
     KB_TYPES.forEach(t => {
       const cList = candidates[t] || [];
       if(cList.length > 0) {
-        openaiModels.push(t);
+        modelsList.push(`
+          <span class="badge badge-neutral mono" onclick="copyModelName('${esc(t)}')" title="点击复制模型名称: ${esc(t)}" style="cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:2px 7px; font-size:11px;">
+            <span style="font-weight:500;">${esc(t)}</span>
+            <span class="badge badge-success" style="font-size:10px; padding:1px 4px;">openai</span>
+          </span>
+        `);
       }
     });
   }
 
-  const renderTags = (arr, badgeClass) => {
-    if(arr.length === 0) return '<span class="text-secondary" style="font-size:11px;">(无)</span>';
-    return arr.map(m => `<span class="badge ${badgeClass}" style="font-family:var(--font-mono);font-size:11px;padding:2px 7px;">${esc(m)}</span>`).join('');
-  };
-
-  listOpenAi.innerHTML = renderTags(openaiModels, 'badge-info');
-  listAnthropic.innerHTML = renderTags(anthropicModels, 'badge-warning');
-  if(rowAnthropic) {
-    rowAnthropic.style.display = anthropicModels.length > 0 ? 'flex' : 'none';
+  if(modelsList.length === 0) {
+    listContainer.innerHTML = '<span class="text-secondary" style="font-size:11px;">(无可用模型)</span>';
+  } else {
+    listContainer.innerHTML = modelsList.join('');
   }
 }
 
@@ -1348,10 +1337,10 @@ function copyDbBaseUrl(){
 }
 
 function copyDbClientKey(){
-  const keyVal = (state.config && state.config.proxy_api_key) ? `Bearer ${state.config.proxy_api_key}` : '';
+  const keyVal = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : '';
   if(!keyVal) { toast('尚未获取到有效 API Key', 'err'); return; }
   if(navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(keyVal).then(() => toast('Key 已复制到剪贴板', 'ok')).catch(() => {
+    navigator.clipboard.writeText(keyVal).then(() => toast('客户端 API Key 已复制到剪贴板', 'ok')).catch(() => {
       prompt('请手动复制 Key:', keyVal);
     });
   } else {
@@ -1540,7 +1529,7 @@ function renderProtocolBadges(protoList){
 function renderProviders(){
   const box=document.getElementById('providersBox');
   const p=state.config.providers||{};
-  const names=Object.keys(p);
+  const names=Object.keys(p).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
   if(!names.length){ box.innerHTML='<div class="empty">暂无供应商配置，请点击右上角新增</div>'; return; }
   box.innerHTML=names.map(name=>{
     const prov=p[name]; const keys=Object.keys(prov.keys||{});
