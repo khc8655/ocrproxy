@@ -448,6 +448,20 @@ nav#topNav button.active {
   filter: brightness(0.92);
 }
 
+.btn-secondary-danger {
+  background: var(--color-bg-card);
+  color: var(--color-text-2);
+  border-color: var(--color-border);
+}
+.btn-secondary-danger:not(:disabled):hover {
+  background: var(--khc-danger-50);
+  border-color: var(--khc-danger-200);
+  color: var(--khc-danger-600);
+}
+.btn-secondary-danger:not(:disabled):active {
+  filter: brightness(0.96);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--color-text-2);
@@ -651,7 +665,7 @@ tr:hover td, .tbl tbody tr:hover td {
   background: var(--color-bg-hover);
 }
 
-.key-chip {
+.key-badge, .model-binding-key {
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -871,34 +885,42 @@ tr:hover td, .tbl tbody tr:hover td {
   border-radius: var(--radius-xs);
 }
 
-/* ── Key Chips (Compact Flow Layout) ── */
+/* ── Key Chips (2-Column Responsive Grid) ── */
 .key-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 16px;
+}
+@media (max-width: 768px) {
+  .key-chip-list {
+    grid-template-columns: 1fr;
+  }
 }
 .key-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  min-height: 38px;
+  box-sizing: border-box;
   box-shadow: var(--shadow-sm);
   transition: all 0.15s ease;
 }
 .key-chip:hover {
-  border-color: var(--color-primary);
+  border-color: var(--khc-primary-300);
   box-shadow: var(--shadow-md);
 }
 .key-chip-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 2px;
+  flex-shrink: 0;
 }
 
 /* ── Compact Gateway Strip ── */
@@ -1035,12 +1057,12 @@ tr:hover td, .tbl tbody tr:hover td {
           <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding-bottom:10px;">
             <span class="gateway-label">Base URL (网关地址)</span>
             <span class="gateway-val" id="dbBaseUrl">—</span>
-            <button class="btn btn-ghost btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
+            <button class="btn btn-secondary btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
           </div>
           <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding:10px 0;">
             <span class="gateway-label">客户端凭据 (Key)</span>
             <span class="gateway-val mono" id="gwClientKeyVal" style="color:var(--color-primary);font-weight:600;">Bearer ...</span>
-            <button class="btn btn-ghost btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
+            <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
           </div>
           <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
             <span class="gateway-label" style="padding-top:2px;">OpenAI 模型 (openai)</span>
@@ -1415,7 +1437,9 @@ const ICONS = {
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   server: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
-  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  arrowUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+  arrowDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'
 };
 
 function icon(name, size=14, cls='') {
@@ -2006,22 +2030,22 @@ function renderAgentModels() {
 
       const setActiveBtn = isActive
         ? \`<span class="badge badge-success" style="font-size:11px;padding:2px 8px;font-weight:600;">使用中</span>\`
-        : \`<button class="btn btn-secondary btn-sm" onclick="setActiveAgentKey('\${m}', '\${b.key}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;">主</button>\`;
+        : \`<button class="btn btn-secondary btn-xs" onclick="setActiveAgentKey('\${esc(m)}', '\${esc(b.key)}')" title="设为主力 Key" style="font-size:11px;padding:2px 6px;">设为主力</button>\`;
 
       keysRowsHtml += \`
         <div class="provider-row" style="padding:10px 16px;">
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="badge badge-neutral">#\${idx+1}</span>
-            <span style="font-weight:600;">\${b.provider}</span>
-            <span class="key-chip">\${b.key}</span>
+            <span style="font-weight:600;">\${esc(b.provider)}</span>
+            <span class="key-badge">\${esc(b.key)}</span>
             \${latBadge}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             \${setActiveBtn}
-            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('\${m}', \${idx}, -1)" \${idx === 0 ? 'disabled' : ''} title="上移">↑</button>
-            <button class="btn btn-ghost btn-sm" onclick="moveModelKeyBinding('\${m}', \${idx}, 1)" \${idx === keys.length - 1 ? 'disabled' : ''} title="下移">↓</button>
-            <button class="btn btn-ghost btn-sm" onclick="testModelKey('\${m}', '\${b.provider}', '\${b.key}')">探活</button>
-            <button class="btn btn-danger btn-sm" onclick="removeModelKeyBinding('\${m}', \${idx})">移除</button>
+            <button class="btn btn-secondary btn-xs" onclick="moveModelKeyBinding('\${esc(m)}', \${idx}, -1)" \${idx === 0 ? 'disabled' : ''} title="上移">\${icon('arrowUp', 11)}</button>
+            <button class="btn btn-secondary btn-xs" onclick="moveModelKeyBinding('\${esc(m)}', \${idx}, 1)" \${idx === keys.length - 1 ? 'disabled' : ''} title="下移">\${icon('arrowDown', 11)}</button>
+            <button class="btn btn-secondary btn-xs" onclick="testModelKey('\${esc(m)}', '\${esc(b.provider)}', '\${esc(b.key)}')">\${icon('zap', 11)} 探活</button>
+            <button class="btn btn-secondary-danger btn-xs" onclick="removeModelKeyBinding('\${esc(m)}', \${idx})">\${icon('trash', 11)} 移除</button>
           </div>
         </div>
       \`;
@@ -2030,13 +2054,13 @@ function renderAgentModels() {
     card.innerHTML = \`
       <div class="card-head">
         <div>
-          <h3>\${m} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${renderProtocolBadges(getModelProtocols(m), true)}</span></h3>
-        <div class="meta mono mt-2">上游映射: \${item.upstream_model || m} · \${strategyLabel}</div>
+          <h3>\${esc(m)} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${renderProtocolBadges(getModelProtocols(m), true)}</span></h3>
+          <div class="meta mono mt-2">上游映射: \${esc(item.upstream_model || m)} · \${strategyLabel}</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost btn-sm" onclick="testAllKeysForModel('\${m}')">探活全部</button>
-          <button class="btn btn-primary btn-sm" onclick="openEditModelModal('\${m}')">编辑</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteModel('\${m}')">删除</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-secondary btn-sm" onclick="testAllKeysForModel('\${esc(m)}')">\${icon('zap')} 探活全部</button>
+          <button class="btn btn-primary btn-sm" onclick="openEditModelModal('\${esc(m)}')">\${icon('edit')} 编辑</button>
+          <button class="btn btn-secondary-danger btn-sm" onclick="deleteModel('\${esc(m)}')">\${icon('trash')} 删除</button>
         </div>
       </div>
       <div style="background:var(--color-bg-page);">\${keysRowsHtml || '<div class="empty">暂未绑定 Key</div>'}</div>
@@ -2080,13 +2104,15 @@ function renderProviders() {
 
         return \`
           <div class="key-chip">
-            <span style="font-weight:600;">\${esc(k)}</span>
-            <span class="mono text-secondary" style="font-size:11px;">\${esc(masked)}</span>
-            \${latBadge}
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
+              <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">\${esc(k)}</span>
+              <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">\${esc(masked)}</span>
+              <span class="key-lat-slot" style="display:inline-flex;align-items:center;">\${latBadge}</span>
+            </div>
             <div class="key-chip-actions">
-              <button class="btn btn-ghost btn-xs" onclick="testSingleKey('\${esc(p)}', '\${esc(k)}')" title="测试连通性">\${icon('zap', 11)} 测试</button>
-              <button class="btn btn-ghost btn-xs" onclick="openEditKeyModal('\${esc(p)}', '\${esc(k)}', '\${esc(val)}')" title="编辑 Key">\${icon('edit', 11)} 编辑</button>
-              <button class="btn btn-danger btn-xs" onclick="deleteKey('\${esc(p)}', '\${esc(k)}')" title="删除 Key">\${icon('trash', 11)} 删除</button>
+              <button class="btn btn-secondary btn-xs" onclick="testSingleKey('\${esc(p)}', '\${esc(k)}')" title="测试连通性">\${icon('zap', 11)} 测试</button>
+              <button class="btn btn-secondary btn-xs" onclick="openEditKeyModal('\${esc(p)}', '\${esc(k)}', '\${esc(val)}')" title="编辑 Key">\${icon('edit', 11)} 编辑</button>
+              <button class="btn btn-secondary-danger btn-xs" onclick="deleteKey('\${esc(p)}', '\${esc(k)}')" title="删除 Key">\${icon('trash', 11)} 删除</button>
             </div>
           </div>
         \`;
@@ -2119,7 +2145,7 @@ function renderProviders() {
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${esc(p)}')">\${icon('edit')} 编辑</button>
           <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${esc(p)}')">\${icon('plus')} 新增 Key</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProvider('\${esc(p)}')">\${icon('trash')} 删除供应商</button>
+          <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('\${esc(p)}')">\${icon('trash')} 删除供应商</button>
         </div>
       </div>
       <div style="background:var(--color-bg-page);">\${keysListHtml}</div>

@@ -432,6 +432,20 @@ nav#topNav button.active {
   filter: brightness(0.92);
 }
 
+.btn-secondary-danger {
+  background: var(--color-bg-card);
+  color: var(--color-text-2);
+  border-color: var(--color-border);
+}
+.btn-secondary-danger:not(:disabled):hover {
+  background: var(--khc-danger-50);
+  border-color: var(--khc-danger-200);
+  color: var(--khc-danger-600);
+}
+.btn-secondary-danger:not(:disabled):active {
+  filter: brightness(0.96);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--color-text-2);
@@ -635,7 +649,7 @@ tr:hover td, .tbl tbody tr:hover td {
   background: var(--color-bg-hover);
 }
 
-.key-chip {
+.key-badge, .model-binding-key {
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -855,34 +869,42 @@ tr:hover td, .tbl tbody tr:hover td {
   border-radius: var(--radius-xs);
 }
 
-/* ── Key Chips (Compact Flow Layout) ── */
+/* ── Key Chips (2-Column Responsive Grid) ── */
 .key-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 16px;
+}
+@media (max-width: 768px) {
+  .key-chip-list {
+    grid-template-columns: 1fr;
+  }
 }
 .key-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  min-height: 38px;
+  box-sizing: border-box;
   box-shadow: var(--shadow-sm);
   transition: all 0.15s ease;
 }
 .key-chip:hover {
-  border-color: var(--color-primary);
+  border-color: var(--khc-primary-300);
   box-shadow: var(--shadow-md);
 }
 .key-chip-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 2px;
+  flex-shrink: 0;
 }
 
 /* ── Compact Gateway Strip ── */
