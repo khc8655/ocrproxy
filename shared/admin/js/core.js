@@ -57,8 +57,22 @@ function icon(name, size=14, cls='') {
 }
 
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
-function esc(s) { if(s===null||s===undefined)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function fmtTime(ms) { if(!ms)return '—'; const d=Date.now()-ms; if(d<0)return '刚刚'; if(d<60000)return Math.floor(d/1000)+'s前'; if(d<3600000)return Math.floor(d/60000)+'m前'; if(d<86400000)return Math.floor(d/3600000)+'h前'; return new Date(ms).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function fmtTime(ms) {
+  if (!ms) return '—';
+  try {
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return '—';
+    const now = new Date();
+    const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    const pad = n => String(n).padStart(2, '0');
+    const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    if (isToday) return timeStr;
+    const dateStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return `${dateStr} ${timeStr}`;
+  } catch (_) {
+    return '—';
+  }
+}
 
 // Init
 (function init(){
