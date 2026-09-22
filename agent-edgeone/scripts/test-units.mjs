@@ -1603,8 +1603,8 @@ test('bundled admin ui: has unified VM-parity agent models UI with capsule modal
   truthy(content.includes('③ 选择模型'));
   truthy(content.includes('id="probedListModal"'));
   // 2. Shared actions & components
-  truthy(content.includes('实测 1+1'));
-  truthy(content.includes('runLiveTest'));
+  truthy(content.includes('全部探活'));
+  truthy(!content.includes('id="liveTestBtn-'));
   truthy(content.includes('reorderAgentKey'));
   truthy(content.includes('修改数字直接调整顺序'));
   // 3. Inlined capsule and table styles

@@ -63,7 +63,15 @@
     if (typeof fmtTime === 'function') return fmtTime(ts);
     if (!ts) return '—';
     try {
-      return new Date(ts).toTimeString().split(' ')[0];
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '—';
+      const now = new Date();
+      const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      const pad = n => String(n).padStart(2, '0');
+      const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      if (isToday) return timeStr;
+      const dateStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      return `${dateStr} ${timeStr}`;
     } catch (_) {
       return '—';
     }
@@ -888,9 +896,6 @@
           <div class="flex gap-2" style="flex-wrap:wrap;display:flex;gap:6px;">
             <button class="btn btn-secondary btn-sm" id="probeAllBtn-${_esc(name)}" onclick="testAgentModelAll('${_esc(name)}')" ${isProbingAll ? 'disabled' : ''}>
               ${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
-            </button>
-            <button class="btn btn-secondary btn-sm" id="liveTestBtn-${_esc(name)}" onclick="runLiveTest('${_esc(name)}')">
-              实测 1+1
             </button>
             <button class="btn btn-secondary btn-sm" onclick="editAgentModel('${_esc(name)}')">编辑</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteAgentModel('${_esc(name)}')">删除</button>
