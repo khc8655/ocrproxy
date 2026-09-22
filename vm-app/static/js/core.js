@@ -1,6 +1,8 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
+const APP_VERSION = 'v2026.09.22';
+
 // State
 const state = { 
   key: sessionStorage.getItem('admin_key') || '', 
@@ -94,12 +96,39 @@ function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; locatio
 
 async function loadData(){
   try {
-    const [cr,sr]=await Promise.all([fetch('/api/admin/config',{headers:headers()}), fetch('/api/admin/stats',{headers:headers()})]);
-    if(cr.status===401||sr.status===401){ logout(); return; }
-    state.config=await cr.json(); state.stats=await sr.json();
+    let cr, sr;
+    try {
+      [cr, sr] = await Promise.all([
+        fetch('/api/admin/config', { headers: headers() }),
+        fetch('/api/admin/stats', { headers: headers() }).catch(() => null)
+      ]);
+    } catch (netErr) {
+      toast('连接服务端失败: ' + netErr.message, 'err');
+      return;
+    }
+
+    if (cr && cr.status === 401) { logout(); return; }
+    if (!cr || !cr.ok) throw new Error('HTTP ' + (cr ? cr.status : 'unknown'));
+
+    state.config = await cr.json();
+
+    // Stats defense: gracefully fallback to empty stats on serverless / 404
+    if (sr && sr.ok) {
+      try {
+        state.stats = await sr.json();
+      } catch (_) {
+        state.stats = { agent: {}, candidates_status: {}, error_logs: [] };
+      }
+    } else {
+      state.stats = { agent: {}, candidates_status: {}, error_logs: [] };
+    }
+
     fetchVaultManifest(true); // background silent fetch
-    updateAccess(); render();
-  } catch(e){ toast('加载配置失败: '+e.message,'err'); }
+    updateAccess();
+    render();
+  } catch(e){
+    toast('加载配置失败: ' + e.message, 'err');
+  }
 }
 
 let persistLock = Promise.resolve();
@@ -156,7 +185,11 @@ function render(){
 
   const runMode = (state.config.run_mode || state.config._run_mode || 'agent').toLowerCase();
 
-  // Top header badge
+  // Top header badges
+  const vBadge = document.getElementById('topVersionBadge');
+  if (vBadge) {
+    vBadge.textContent = APP_VERSION;
+  }
   const badge = document.getElementById('topModeBadge');
   if (badge) {
     if (runMode === 'agent') {

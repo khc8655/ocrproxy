@@ -78,16 +78,18 @@ if (existsSync(vmStaticDir)) {
   writeFileSync(join(vmStaticDir, 'admin.js'), bundledJs, 'utf8');
 }
 
-// 3. Inline CSS: replace <link ...admin.css> with <style>
-const htmlInlinedCss = html.replace(
-  /<link\s+rel="stylesheet"\s+href="[^"]*admin\.css"[^>]*\/?>/i,
-  () => `<style>\n${css}\n</style>`
-);
+// 3. Inline CSS: replace <link ...admin.css...> with <style>
+const cssLinkRegex = /<link\b[^>]*href=["'][^"']*admin\.css[^"']*["'][^>]*\/?>/i;
+if (!cssLinkRegex.test(html)) {
+  console.error('FATAL BUILD ERROR: Could not find admin.css link tag in HTML!');
+  process.exit(1);
+}
+const htmlInlinedCss = html.replace(cssLinkRegex, () => `<style>\n${css}\n</style>`);
 
 // 4. Inline JS: replace modular <script src="/static/js/..."></script> or single <script src="...admin.js"> with single <script>
 let htmlBundled = htmlInlinedCss;
-const modularScriptRegex = /(?:<!--\s*Modular Scripts\s*-->\s*)?(?:<script\s+src="[^"]*\/js\/[^"]+"(?:\s*><\/script>|\s*\/>)\s*)+/i;
-const singleScriptRegex = /<script\s+src="[^"]*admin\.js"[^>]*><\/script>/i;
+const modularScriptRegex = /(?:<!--\s*Modular Scripts[^\n]*-->\s*)?(?:<script\b[^>]*src=["'][^"']*\/js\/[^"']+["'][^>]*>(?:\s*<\/script>)?\s*)+/i;
+const singleScriptRegex = /<script\b[^>]*src=["'][^"']*admin\.js[^"']*["'][^>]*>(?:\s*<\/script>)?/i;
 
 if (modularScriptRegex.test(htmlBundled)) {
   htmlBundled = htmlBundled.replace(modularScriptRegex, () => `<script>\n${bundledJs}\n</script>`);
@@ -96,6 +98,20 @@ if (modularScriptRegex.test(htmlBundled)) {
 } else {
   // Fallback: append before </body>
   htmlBundled = htmlBundled.replace('</body>', `<script>\n${bundledJs}\n</script>\n</body>`);
+}
+
+// === 防线 2: 编译严格强断言 (Fail-Fast Gatekeeper) ===
+if (!htmlBundled.includes('<style>') || !htmlBundled.includes(css.slice(0, 40))) {
+  console.error('FATAL BUILD ERROR: CSS was not properly inlined into bundled HTML!');
+  process.exit(1);
+}
+if (/<link\b[^>]*admin\.css/i.test(htmlBundled)) {
+  console.error('FATAL BUILD ERROR: Residual <link rel="stylesheet"> detected in bundled HTML!');
+  process.exit(1);
+}
+if (/<script\b[^>]*src=["'][^"']*(?:admin\.js|\/js\/)/i.test(htmlBundled)) {
+  console.error('FATAL BUILD ERROR: Residual external <script src> detected in bundled HTML!');
+  process.exit(1);
 }
 
 // 5. Emit edge functions

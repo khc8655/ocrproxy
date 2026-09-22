@@ -45,6 +45,8 @@ import { PRESETS, PRESET_MAP, getPreset } from '../edge-functions/lib/presets/in
 import { onRequestGet as vaultManifestGet } from '../edge-functions/api/vault/manifest.js';
 import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fetch.js';
 import { onRequestPost as probeModelsPost } from '../edge-functions/api/admin/probe-models.js';
+import { onRequestGet as statsGet, onRequestPost as statsPost } from '../edge-functions/api/admin/stats.js';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 let failed = 0;
@@ -1549,6 +1551,47 @@ test('probe-models: rejects missing base_url with 400', async () => {
   const env = {};
   const res = await probeModelsPost({ request: req, env });
   eq(res.status, 400);
+});
+
+test('bundled admin ui: contains inlined css style and modal baseline hidden rules', () => {
+  const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
+  truthy(content.includes('<style>'));
+  truthy(content.includes('.modal'));
+  truthy(content.includes('#app{display:none;}.modal{display:none;}'));
+});
+
+test('bundled admin ui: has zero un-inlined external css or js assets', () => {
+  const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
+  const hasExternalCss = /<link\b[^>]*admin\.css/i.test(content);
+  const hasExternalJs = /<script\b[^>]*src=["'][^"']*(?:admin\.js|\/js\/)/i.test(content);
+  eq(hasExternalCss, false);
+  eq(hasExternalJs, false);
+});
+
+test('bundled admin ui: contains independent topVersionBadge with v2026.09.22', () => {
+  const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
+  truthy(content.includes('id="topVersionBadge"'));
+  truthy(content.includes('v2026.09.22'));
+});
+
+test('edge-functions api/admin/stats: responds with empty stats when authorized and 401 when unauthorized', async () => {
+  const env = { PROXY_API_KEY: 'secret-token' };
+  
+  // 1. Unauthorized
+  const unauthReq = new Request('http://localhost/api/admin/stats');
+  const unauthRes = await statsGet({ request: unauthReq, env });
+  eq(unauthRes.status, 401);
+
+  // 2. Authorized GET
+  const authReq = new Request('http://localhost/api/admin/stats', {
+    headers: { 'authorization': 'Bearer secret-token' }
+  });
+  const authRes = await statsGet({ request: authReq, env });
+  eq(authRes.status, 200);
+  const statsData = await authRes.json();
+  truthy(statsData.ok);
+  truthy(typeof statsData.agent === 'object');
+  truthy(Array.isArray(statsData.error_logs));
 });
 
 console.log('\n----');
