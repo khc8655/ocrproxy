@@ -17,15 +17,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const sharedRoot = join(root, '..', 'shared', 'admin');
 
-// 1. Sync from shared/admin if newer
+// 1. Sync shared/admin to vm-app/static ONLY (NEVER overwrite agent-edgeone!)
 if (existsSync(sharedRoot)) {
   const sharedHtml = join(sharedRoot, 'admin.html');
   const sharedCss = join(sharedRoot, 'admin.css');
   const sharedJsDir = join(sharedRoot, 'js');
-
-  if (existsSync(sharedHtml)) cpSync(sharedHtml, join(root, 'admin.html'));
-  if (existsSync(sharedCss)) cpSync(sharedCss, join(root, 'admin.css'));
-  if (existsSync(sharedJsDir)) cpSync(sharedJsDir, join(root, 'js'), { recursive: true });
 
   const vmStatic = join(root, '..', 'vm-app', 'static');
   if (existsSync(vmStatic)) {
@@ -38,7 +34,6 @@ if (existsSync(sharedRoot)) {
 
 const htmlPath = join(root, 'admin.html');
 const cssPath = join(root, 'admin.css');
-const jsDir = join(root, 'js');
 const jsPath = join(root, 'admin.js');
 
 const indexPath = join(root, 'edge-functions', 'index.js');
@@ -52,31 +47,12 @@ if (!existsSync(htmlPath) || !existsSync(cssPath)) {
 const html = readFileSync(htmlPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 
-// 2. Assemble modular JS in strict dependency order
-let bundledJs = '';
-if (existsSync(jsDir)) {
-  const moduleOrder = ['core.js', 'vault.js', 'providers.js', 'models.js', 'settings.js', 'app.js'];
-  for (const m of moduleOrder) {
-    const p = join(jsDir, m);
-    if (existsSync(p)) {
-      bundledJs += `\n/* === Module: ${m} === */\n` + readFileSync(p, 'utf8') + '\n';
-    }
-  }
-} else if (existsSync(jsPath)) {
-  bundledJs = readFileSync(jsPath, 'utf8');
-}
-
-if (!bundledJs) {
-  console.error('No JS sources found in js/ or admin.js; aborting.');
+// 2. Read EdgeOne standalone JS
+if (!existsSync(jsPath)) {
+  console.error(`Missing input: ${jsPath}`);
   process.exit(1);
 }
-
-// Write back consolidated admin.js for legacy static fallbacks
-writeFileSync(jsPath, bundledJs, 'utf8');
-const vmStaticDir = join(root, '..', 'vm-app', 'static');
-if (existsSync(vmStaticDir)) {
-  writeFileSync(join(vmStaticDir, 'admin.js'), bundledJs, 'utf8');
-}
+const bundledJs = readFileSync(jsPath, 'utf8');
 
 // 3. Inline CSS: replace <link ...admin.css...> with <style>
 const cssLinkRegex = /<link\b[^>]*href=["'][^"']*admin\.css[^"']*["'][^>]*\/?>/i;
