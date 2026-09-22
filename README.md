@@ -236,10 +236,24 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 ```bash
 cd agent-edgeone
 npm install
-npm test            # 运行 154 项自动化单元测试
-npm run build:admin # 构建单文件管理后台
+npm test            # 运行 158 项自动化单元测试（含编译构建强断言门禁）
+npm run build:admin # 构建单文件管理后台（含 Fail-Fast 产物强校验）
 npm run deploy      # 一键发布至 EdgeOne
 ```
+
+---
+
+## 🏛️ 核心架构规范与开发铁律 (Architecture Standards & Anti-Failure Rules)
+
+> [!IMPORTANT]
+> 本项目的最高开发准则已收敛于 [ARCHITECTURE_STANDARDS.md](./ARCHITECTURE_STANDARDS.md)。
+> 所有开发者与 AI 智能体在提交代码前必须严格遵守，杜绝一切低级错误：
+> 1. **构建与静态内联强断言**：构建脚本必须解耦引号与 query 参数限制，末尾强制执行 Fail-Fast 编译强断言，严禁静默输出残次品；
+> 2. **SPA 前端原生防御性设计**：HTML `<head>` 顶层原生硬编码隐藏样式，即使外部 CSS 彻底失效，也绝对禁止向未登录用户裸露后台表单；
+> 3. **UI 容器单职责解耦**：系统版本号（`topVersionBadge`）与运行模式（`topModeBadge`）必须独立 DOM 节点维护，杜绝文本越界覆写；
+> 4. **跨机房协议标准化**：远程主机运维严禁使用易因冒号死锁的裸 `scp -6`，统一全量采用 SSH 管道流传输（`tar ... | ssh ... tar`）；
+> 5. **自动化脚本硬超时熔断**：任何临时与后台测试脚本，首行必须强制注入 5~10 秒硬超时炸弹（`setTimeout` 强制自杀），坚决遵循奥卡姆剃刀轻量验证，杜绝任务死锁假死。
+
 
 ---
 
