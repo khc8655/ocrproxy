@@ -47,12 +47,18 @@ if (!existsSync(htmlPath) || !existsSync(cssPath)) {
 const html = readFileSync(htmlPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 
-// 2. Read EdgeOne standalone JS
+// 2. Read EdgeOne standalone JS & shared agent-models-ui component
 if (!existsSync(jsPath)) {
   console.error(`Missing input: ${jsPath}`);
   process.exit(1);
 }
-const bundledJs = readFileSync(jsPath, 'utf8');
+const agentModelsUiPath = join(sharedRoot, 'js', 'agent-models-ui.js');
+let bundledJs = '';
+if (existsSync(agentModelsUiPath)) {
+  bundledJs += readFileSync(agentModelsUiPath, 'utf8') + '\n\n';
+  console.log(`Bundled shared agent-models-ui component: ${agentModelsUiPath}`);
+}
+bundledJs += readFileSync(jsPath, 'utf8');
 
 // 3. Inline CSS: replace <link ...admin.css...> with <style>
 const cssLinkRegex = /<link\b[^>]*href=["'][^"']*admin\.css[^"']*["'][^>]*\/?>/i;

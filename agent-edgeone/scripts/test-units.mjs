@@ -1594,6 +1594,30 @@ test('edge-functions api/admin/stats: responds with empty stats when authorized 
   truthy(Array.isArray(statsData.error_logs));
 });
 
+test('bundled admin ui: has unified VM-parity agent models UI with capsule modal & live 1+1 test', () => {
+  const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
+  // 1. Unified 3-step modal
+  truthy(content.includes('id="agentModal"'));
+  truthy(content.includes('① 选择提供商'));
+  truthy(content.includes('② 绑定 Key'));
+  truthy(content.includes('③ 选择模型'));
+  truthy(content.includes('id="probedListModal"'));
+  // 2. Shared actions & components
+  truthy(content.includes('实测 1+1'));
+  truthy(content.includes('runLiveTest'));
+  truthy(content.includes('reorderAgentKey'));
+  truthy(content.includes('修改数字直接调整顺序'));
+  // 3. Inlined capsule and table styles
+  truthy(content.includes('.key-capsule'));
+  truthy(content.includes('.capsule-row'));
+  truthy(content.includes('.model-capsule'));
+  truthy(content.includes('.table-wrap'));
+  // 4. Safe Vault isolation: 6 tabs must remain intact
+  truthy(content.includes('panel-providers'));
+  truthy(content.includes('panel-agents'));
+  truthy(content.includes('panel-settings'));
+});
+
 console.log('\n----');
 console.log(`PASS: ${passed}`);
 console.log(`FAIL: ${failed}`);

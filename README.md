@@ -157,7 +157,16 @@ ocrprox (Monorepo)
   - **文本 Tool Call 拯救**：自动捕获模型在文本中输出的代码块与 XML 标签并提取为标准 OpenAI `tool_calls`。
 - **智能 URL 端点补齐**：自动感知供应商是否包含 `/v1` 后缀并智能规整拼接。
 
-### 5. 生产级默认安全加固体系 (Security by Default)
+### 5. 前端组件化解耦架构：EdgeOne 与 VM 端 Agent 模型 UI 统一 (Unified Component)
+为彻底解决多端维护分裂、杜绝整页覆盖的安全红线，前端实施了**组件级逻辑提炼与精准装配 (Component-Level Extraction)**：
+- **核心组件共享 (`shared/admin/js/agent-models-ui.js`)**：
+  - 提炼统一的 Agent 模型渲染、三步式胶囊选择弹窗、上游模型探测、单 Key 探活、全量并发探活、生产 1+1 实时测速、原生数字输入框秒级换序、设为主力 Key 与持久化；
+  - **自适应数据与宿主桥梁**：组件自动根据宿主环境选择存储目标（EdgeOne 写入 KV，VM 写入本地配置文件），自动分流探活端点（EdgeOne 路由至 `/api/test`，VM 路由至 `/api/admin/test-agent-model`），两端操作体验像素级一致；
+- **绝对物理隔离 (Vault Hub 铁律保护)**：
+  - 构建脚本（`build-admin.mjs`）仅在编译时以无副作用方式内联拼接 JS 组件，**绝对禁止跨端覆盖 HTML 骨架**；
+  - EdgeOne 专属的 6 大顶级导航栏（`概览`、`Agent 模型`、`供应商与 Key 凭证库`、`全局策略`、`JSON 配置`、`接入说明`）与真理源凭据中枢（Vault Hub）地位 100% 保持常驻且独立，A-Z 索引轨与全量厂商纳管功能完好无损。
+
+### 6. 生产级默认安全加固体系 (Security by Default)
 系统遵循开箱即安全的原则，在代码层面与一键部署中默认启用全方位加固：
 - **公网文档与元数据彻底隐藏**：生产环境默认关闭 `/docs`、`/redoc` 与 `/openapi.json`（返回 404），彻底阻断外部扫描器侦察接口结构；
 - **全局企业级安全响应头**：所有 HTTP 响应默认注入 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`X-XSS-Protection`、`Referrer-Policy`，并剥除 `Server: uvicorn` 框架指纹；
