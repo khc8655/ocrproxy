@@ -81,12 +81,21 @@ export async function onRequestGet(context) {
       models = preset.recommended_models.map(m => m.name || m.upstream_model).filter(Boolean);
     }
 
+    const protoStr = pCfg.protocol || preset?.protocol || 'openai';
+    const rawProtos = (Array.isArray(pCfg.protocols) && pCfg.protocols.length > 0)
+      ? pCfg.protocols
+      : (protoStr === 'messages' ? ['messages'] : (pCfg.anthropic_messages ? ['chat', 'messages'] : ['chat']));
+    const isAnthropic = Boolean(pCfg.anthropic_messages || rawProtos.includes('messages') || protoStr === 'messages');
+
     manifestProviders[pId] = {
       id: pId,
       name: pCfg.name || preset?.name || pId,
       type: isSpecialized ? 'specialized' : 'standard',
-      protocol: pCfg.protocol || preset?.protocol || 'openai',
+      protocol: protoStr,
+      protocols: rawProtos,
+      anthropic_messages: isAnthropic,
       base_url: pCfg.base_url || preset?.base_url || '',
+      anthropic_base_url: pCfg.anthropic_base_url || preset?.anthropic_base_url || '',
       doc_url: pCfg.doc_url || preset?.doc_url || '',
       description: pCfg.description || preset?.description || '',
       keys: keyLabels,

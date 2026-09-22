@@ -1,66 +1,111 @@
 #!/usr/bin/env node
 /**
- * build-admin.mjs — bundle admin.{html,css,js} into self-contained
- * edge functions:
+ * build-admin.mjs — bundle modular admin.{html,css,js} into self-contained
+ * edge functions and sync static assets:
  *   - edge-functions/index.js (serves GET / directly as admin dashboard)
  *   - edge-functions/admin.js (serves GET /admin or 301 redirects)
  *
  * Usage:  node scripts/build-admin.mjs
- *   Reads:   admin.html, admin.css, admin.js  (in edgeone/)
- *   Writes:  edge-functions/index.js, edge-functions/admin.js
+ *   Reads:   admin.html, admin.css, js/*.js (in agent-edgeone/ or shared/admin/)
+ *   Writes:  admin.js, edge-functions/index.js, edge-functions/admin.js
  */
-import { readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
+const sharedRoot = join(root, '..', 'shared', 'admin');
+
+// 1. Sync from shared/admin if newer
+if (existsSync(sharedRoot)) {
+  const sharedHtml = join(sharedRoot, 'admin.html');
+  const sharedCss = join(sharedRoot, 'admin.css');
+  const sharedJsDir = join(sharedRoot, 'js');
+
+  if (existsSync(sharedHtml)) cpSync(sharedHtml, join(root, 'admin.html'));
+  if (existsSync(sharedCss)) cpSync(sharedCss, join(root, 'admin.css'));
+  if (existsSync(sharedJsDir)) cpSync(sharedJsDir, join(root, 'js'), { recursive: true });
+
+  const vmStatic = join(root, '..', 'vm-app', 'static');
+  if (existsSync(vmStatic)) {
+    if (existsSync(sharedHtml)) cpSync(sharedHtml, join(vmStatic, 'admin.html'));
+    if (existsSync(sharedCss)) cpSync(sharedCss, join(vmStatic, 'admin.css'));
+    if (existsSync(sharedJsDir)) cpSync(sharedJsDir, join(vmStatic, 'js'), { recursive: true });
+    console.log(`Synced shared/admin to vm-app/static: ${vmStatic}`);
+  }
+}
+
 const htmlPath = join(root, 'admin.html');
 const cssPath = join(root, 'admin.css');
+const jsDir = join(root, 'js');
 const jsPath = join(root, 'admin.js');
 
 const indexPath = join(root, 'edge-functions', 'index.js');
 const adminPath = join(root, 'edge-functions', 'admin.js');
 
-for (const p of [htmlPath, cssPath, jsPath]) {
-  if (!existsSync(p)) {
-    console.error(`Missing input: ${p}`);
-    process.exit(1);
-  }
+if (!existsSync(htmlPath) || !existsSync(cssPath)) {
+  console.error(`Missing input: ${htmlPath} or ${cssPath}`);
+  process.exit(1);
 }
 
 const html = readFileSync(htmlPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
-const js = readFileSync(jsPath, 'utf8');
 
-// 1. Inline CSS: replace the <link rel="stylesheet" href="/admin.css"> with a <style>.
-const htmlInlined = html.replace(
-  /<link\s+rel="stylesheet"\s+href="\/admin\.css"\s*\/?>/,
+// 2. Assemble modular JS in strict dependency order
+let bundledJs = '';
+if (existsSync(jsDir)) {
+  const moduleOrder = ['core.js', 'vault.js', 'providers.js', 'models.js', 'settings.js', 'app.js'];
+  for (const m of moduleOrder) {
+    const p = join(jsDir, m);
+    if (existsSync(p)) {
+      bundledJs += `\n/* === Module: ${m} === */\n` + readFileSync(p, 'utf8') + '\n';
+    }
+  }
+} else if (existsSync(jsPath)) {
+  bundledJs = readFileSync(jsPath, 'utf8');
+}
+
+if (!bundledJs) {
+  console.error('No JS sources found in js/ or admin.js; aborting.');
+  process.exit(1);
+}
+
+// Write back consolidated admin.js for legacy static fallbacks
+writeFileSync(jsPath, bundledJs, 'utf8');
+const vmStaticDir = join(root, '..', 'vm-app', 'static');
+if (existsSync(vmStaticDir)) {
+  writeFileSync(join(vmStaticDir, 'admin.js'), bundledJs, 'utf8');
+}
+
+// 3. Inline CSS: replace <link ...admin.css> with <style>
+const htmlInlinedCss = html.replace(
+  /<link\s+rel="stylesheet"\s+href="[^"]*admin\.css"[^>]*\/?>/i,
   () => `<style>\n${css}\n</style>`
 );
-if (!htmlInlined.includes('<style>')) {
-  console.error('admin.html did not contain the expected <link rel="stylesheet" href="/admin.css">; aborting.');
-  process.exit(1);
+
+// 4. Inline JS: replace modular <script src="/static/js/..."></script> or single <script src="...admin.js"> with single <script>
+let htmlBundled = htmlInlinedCss;
+const modularScriptRegex = /(?:<!--\s*Modular Scripts\s*-->\s*)?(?:<script\s+src="[^"]*\/js\/[^"]+"(?:\s*><\/script>|\s*\/>)\s*)+/i;
+const singleScriptRegex = /<script\s+src="[^"]*admin\.js"[^>]*><\/script>/i;
+
+if (modularScriptRegex.test(htmlBundled)) {
+  htmlBundled = htmlBundled.replace(modularScriptRegex, () => `<script>\n${bundledJs}\n</script>`);
+} else if (singleScriptRegex.test(htmlBundled)) {
+  htmlBundled = htmlBundled.replace(singleScriptRegex, () => `<script>\n${bundledJs}\n</script>`);
+} else {
+  // Fallback: append before </body>
+  htmlBundled = htmlBundled.replace('</body>', `<script>\n${bundledJs}\n</script>\n</body>`);
 }
 
-// 2. Inline JS: replace the <script src="/admin.js"></script> with a <script>.
-const htmlBundled = htmlInlined.replace(
-  /<script\s+src="\/admin\.js"\s*><\/script>/,
-  () => `<script>\n${js}\n</script>`
-);
-if (!htmlBundled.includes('<script>')) {
-  console.error('admin.html did not contain the expected <script src="/admin.js"></script>; aborting.');
-  process.exit(1);
-}
-
-// 3. Emit the edge function.
+// 5. Emit edge functions
 const safe = htmlBundled.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
 const banner =
   '/**\n' +
   ' * Self-contained admin UI for OCRProxy EdgeOne.\n' +
   ' *\n' +
-  ' *   Generated by scripts/build-admin.mjs from admin.{html,css,js}\n' +
+  ' *   Generated by scripts/build-admin.mjs from modular admin sources\n' +
   ' *   Do not edit this file directly.\n' +
   ' */\n\n';
 
@@ -92,7 +137,7 @@ const rootAdminPath = join(rootProject, 'edge-functions', 'admin.js');
 
 writeFileSync(indexPath, functionCode, 'utf8');
 writeFileSync(adminPath, functionCode, 'utf8');
-console.log(`Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of HTML inlined)`);
+console.log(`Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of HTML bundled)`);
 
 if (existsSync(join(rootProject, 'edge-functions'))) {
   writeFileSync(rootIndexPath, functionCode, 'utf8');
@@ -100,7 +145,3 @@ if (existsSync(join(rootProject, 'edge-functions'))) {
   cpSync(join(root, 'edge-functions'), join(rootProject, 'edge-functions'), { recursive: true });
   console.log(`Synced all edge-functions to root: ${join(rootProject, 'edge-functions')}`);
 }
-
-
-
-

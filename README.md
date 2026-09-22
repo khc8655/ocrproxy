@@ -22,7 +22,10 @@ ocrprox (Monorepo)
 │
 ├── shared/                            # 共享资源与规范文档
 │   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json (AMD, MiniMax, Google, DeepSeek, etc.)
-│   ├── admin/                         # 跨端共用的现代化 Web 管理后台前端 (HTML / CSS / JS)
+│   ├── admin/                         # 跨端共用的模块化动静分离 Web 管理后台
+│   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器 (~700 行)
+│   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨) (~370 行)
+│   │   └── js/                        # 6 大独立业务领域小脚本 (core, vault, providers, models, settings, app)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
 ├── index.html                         # 个人博客首页 (腾讯云 VM 80 端口托管)
@@ -48,15 +51,25 @@ ocrprox (Monorepo)
 
 ---
 
-## EdgeOne 凭据中枢与 VM 端纯模型管理体系 (EdgeOne Vault Hub & Streamlined VM)
+## EdgeOne 凭据中枢与 VM 双轨凭据架构 (EdgeOne Vault Hub & Local Credential Sovereignty)
 
-为了彻底减轻多节点 VM 部署的配置负担与资源消耗，系统实施了“**EdgeOne 做凭据中枢，VM 侧做极致减法**”的全新演进架构：
+系统确立了“**本地存储为主权基石，中枢托管为增效辅助**”的双轨架构，既能统一享受 EdgeOne 中枢集中下发的厂商与密钥，又完全保留了各 VM 节点的本地自主控制权：
 
-### 1. 职责明确划分
-- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中管理所有适配的特定提供商、标准 OpenAI/Anthropic 提供商及其所有的 API Keys，并支持 `/v1/models` 动态探测与脱敏清单分发；
-- **VM 节点轻量中转 (Pure Model Routing)**：彻底移除 VM 界面上的独立“供应商与 Key”标签页，UI 收敛为纯“模型管理”。添加模型时从 EdgeOne 注册表中按需点选供应商与 Key 胶囊，并支持一键探测上游模型自动填入；
-- **按需无感拉取 (On-Demand Fetching)**：VM 仅在保存模型时按需向 EdgeOne 拉取所选 Key 的凭据密文，绝不全量冗余同步；若 EdgeOne 删除了某个 Key，VM 端未手动删除前依然安全保留；
-- **禁止无意义常驻轮询**：彻底砍掉 VM 后台常驻定时更新进程，全面采用「🔄 同步中枢规则」纯手动更新机制，零后台开销，让 CPU 与内存资源 100% 留给模型高并发中转。
+### 1. 职责与双轨机制
+- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中维护官方适配提供商与其拥有的 API Keys，支持脱敏清单分发与动态探测；中枢鉴权校验边缘函数环境变量 `PROXY_API_KEY`；
+- **VM 本地凭据自主管理 (Local Credential Sovereignty)**：
+  - 完整保留「供应商与 Key 凭证库」管理面板（支持 A-Z 字母索引导航轨与分组标线）；
+  - 支持随时在卡片上自主新增、编辑与删除本地专属 Key，变更直接持久化至 `proxy_config.enc`，绝不依赖或受制于中枢；
+  - 模型配置弹窗内清晰区隔“本地已配置供应商”与“EdgeOne 凭据中枢托管”，并提供行内「+ 添加本地 Key」快捷入口。
+- **Web 端免 `.env` 可视化配置与实时诊断**：
+  - 在管理后台「系统设置」提供 Card 6「EdgeOne 凭据中枢连接与诊断 (Vault Hub)」；
+  - 可视化填入中枢 URL 与 Token（密码可一键显隐），配置直接加密保存于 `proxy_config.enc`，**严禁修改或污染 `.env` 文件**；
+  - 提供一键「测试中枢连通性」，实时诊断连通状态、网络延迟、供应商总数与 Google Key 列表；
+- **全链路透明错误处理 (Zero Silent Errors)**：
+  - 中枢 401（Token 与 EdgeOne PROXY_API_KEY 不匹配）、502（网络不可达）、504（请求超时）均向 Web 端输出透明友好的排查指引，杜绝任何静默吞错。
+- **按需无感拉取与云端绝对权威覆盖 (Cloud Authority & Local Key Sovereignty)**：
+  - **云端作为绝对真理源**：当从 EdgeOne Vault Hub 拉取凭据或执行同步时，云端配置无条件覆盖本地同名供应商的协议 (`protocol`/`protocols`)、思考开关 (`anthropic_messages`)、端点 (`base_url`/`anthropic_base_url`) 及适配规则 (`adapter_rules`)，彻底根治协议识别冲突；
+  - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁。
 
 ---
 
@@ -189,31 +202,31 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 - **全面对齐 EdgeOne**：VM 版本的生命周期管理与 EdgeOne 保持一致，**严禁使用 SSH/SCP 手动登录云主机修改代码**；
 - **唯一代码流向**：本地开发/测试 -> Git 提交并推送至 GitHub 仓库 -> 目标云主机通过 `ocrproxy upgrade` 或网络一键脚本直接拉取最新发布制品更新，杜绝环境漂移。
 
-#### 本地源码安装 (可选)
+#### 一键网络安装与平滑升级 (支持 Caddy 反代与全网直通)
 ```bash
-git clone https://github.com/khc8655/ocrproxy.git /tmp/ocrprox
-cd /tmp/ocrprox
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash
 ```
 
-在安装向导中按需选择模式与端口：
+在安装向导中按需选择端口、密码、模式及反代策略：
 ```
 ------------------------------------------------------------
-  请选择 OCRProxy 运行模式:
-  1) Agent 智能体模式 (推荐海外 VM / 直连海外模型 / Cursor / Cline)
-  2) KB 知识库模式   (推荐国内 VM / 知识库入库 / Dify / FastGPT)
-  3) Full 全功能混合模式 (同时支持 Agent 编程与 KB 知识库)
+  OCRProxy 一键部署与管理中心 (v2026.09.22)
 ------------------------------------------------------------
-输入选项 [1-3] (默认: 1): 1
-请输入服务监听端口 (默认: 3000): 3000
+请输入服务监听端口 (默认: 8787): 8787
+请设置 Web 管理后台密码 (建议 8 位以上，回车自动生成 16 位强随机密码): 
+请选择系统运行模式 (1: Agent 智能体直连模式 [默认] | 2: KB 知识库入库加速模式): 1
+请选择是否启用反向代理 (如 Caddy / Nginx 等):
+  1: 启用反代 (安全推荐：服务仅监听 127.0.0.1 本地端口，外部流量由 Caddy/Nginx 代理)
+  2: 不使用反代 (服务监听 IPv4/IPv6 全网，直接通过 IP:端口 访问) [默认]
 ```
 
-安装脚本将自动：
-1. 配置 `systemd` 服务守护进程（支持 Dual-Stack IPv6/IPv4 `::` 监听）；
+安装脚本自动完成以下配置：
+1. 配置 `systemd` 服务守护进程（支持 Dual-Stack IPv6/IPv4 `::` 或 `127.0.0.1` 监听）；
 2. 自动配置 `journald` 50MB 磁盘日志配额与 7 天保留策略，彻底防止日志占满磁盘；
 3. 生成加密主密钥并创建通用初始配置文件 `/opt/ocrproxy/config/proxy_config.enc`；
 4. 注册 `/usr/local/bin/ocrproxy` CLI 管理命令与 `/etc/sudoers.d/ocrproxy` 免密运维白名单；
-5. 输出独立的管理员密码（用于 Web 登录）与客户端默认 Key（用于 `/v1/*` 接入）。
+5. 安装完成友好打印：本地运行端口、网络监听模式、Web 管理后台默认密码、大模型接入 API Key、Caddyfile 反代推荐配置样例（`flush_interval -1` 无缓冲适配 SSE）、常用运维命令；
+6. 支持随心平滑升级：运行 `ocrproxy upgrade` 或再次执行安装命令，即刻就地无损升级。
 
 ---
 
@@ -223,7 +236,7 @@ bash install.sh
 ```bash
 cd agent-edgeone
 npm install
-npm test            # 运行 106 项自动化单元测试
+npm test            # 运行 154 项自动化单元测试
 npm run build:admin # 构建单文件管理后台
 npm run deploy      # 一键发布至 EdgeOne
 ```

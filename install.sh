@@ -31,6 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
+SCRIPT_VERSION="v2026.09.22"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -72,6 +73,7 @@ CLI_ACTION=""
 CLI_PORT=""
 CLI_PASSWORD=""
 CLI_MODE=""
+CLI_HOST=""
 CLI_TOKEN=""
 KEEP_CONFIG=false
 NON_INTERACTIVE=false
@@ -109,6 +111,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--mode)
             CLI_MODE="$2"
+            shift 2
+            ;;
+        --proxy|--reverse-proxy)
+            CLI_HOST="127.0.0.1"
+            shift
+            ;;
+        --direct|--no-proxy)
+            CLI_HOST="::"
+            shift
+            ;;
+        --host)
+            CLI_HOST="$2"
             shift 2
             ;;
         -y|--yes|--non-interactive)
@@ -222,10 +236,9 @@ setup_cli_and_sudoers() {
         fi
     fi
 
-    # 2. 安装全局快捷管理命令 /usr/local/bin/ocrproxy
-    if [[ ! -f /usr/local/bin/ocrproxy ]] || ! grep -q "ocrproxy upgrade" /usr/local/bin/ocrproxy 2>/dev/null; then
-        info "注册系统管理命令 /usr/local/bin/ocrproxy..."
-        cat << 'EOF_CLI' | run_sudo tee /usr/local/bin/ocrproxy >/dev/null
+    # 2. 安装/更新全局快捷管理命令 /usr/local/bin/ocrproxy
+    info "注册系统管理命令 /usr/local/bin/ocrproxy..."
+    cat << 'EOF_CLI' | run_sudo tee /usr/local/bin/ocrproxy >/dev/null
 #!/bin/bash
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -262,7 +275,14 @@ case "$1" in
         curl -fsSL "${CURL_AUTH[@]}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
         ;;
     status)
-        systemctl status ${SERVICE_NAME}
+        systemctl status ${SERVICE_NAME} --no-pager
+        echo ""
+        PORT=$(sudo grep -oP '^APP_PORT=\K\d+' /opt/ocrproxy/.env 2>/dev/null || grep -oP '^APP_PORT=\K\d+' /opt/ocrproxy/.env 2>/dev/null || echo "8787")
+        HOST=$(sudo grep -oP '^APP_HOST=\K\S+' /opt/ocrproxy/.env 2>/dev/null || grep -oP '^APP_HOST=\K\S+' /opt/ocrproxy/.env 2>/dev/null || echo "::")
+        echo "================================================="
+        echo "  服务监听地址: ${HOST}:${PORT}"
+        echo "  本地管理控制台: http://localhost:${PORT}/"
+        echo "================================================="
         ;;
     restart)
         echo "正在平滑重启 ${SERVICE_NAME}..."
@@ -292,9 +312,8 @@ case "$1" in
         ;;
 esac
 EOF_CLI
-        run_sudo chmod +x /usr/local/bin/ocrproxy 2>/dev/null || true
-        ok "全局命令 ocrproxy 注册就绪"
-    fi
+    run_sudo chmod +x /usr/local/bin/ocrproxy 2>/dev/null || true
+    ok "全局命令 ocrproxy 注册就绪"
 }
 
 # ==============================================================================
@@ -369,9 +388,20 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     echo -e "${GREEN}${BOLD}▶ 检测到已安装 OCRProxy 服务，进入【平滑就地升级】流程${NC}"
     echo ""
 
-    # 读取旧配置中的端口
+    # 读取旧配置中的端口与监听地址
     CURRENT_PORT=$(run_sudo grep -oP '^APP_PORT=\K\d+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "8787")
-    info "当前服务监听端口: ${CURRENT_PORT}"
+    CURRENT_HOST=$(run_sudo grep -oP '^APP_HOST=\K\S+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "::")
+    if [[ -n "$CLI_HOST" ]]; then
+        CURRENT_HOST="$CLI_HOST"
+        if run_sudo grep -q '^APP_HOST=' "${INSTALL_DIR}/.env" 2>/dev/null; then
+            run_sudo sed -i "s|^APP_HOST=.*|APP_HOST=${CURRENT_HOST}|" "${INSTALL_DIR}/.env" 2>/dev/null || true
+        else
+            echo "APP_HOST=${CURRENT_HOST}" | run_sudo tee -a "${INSTALL_DIR}/.env" >/dev/null
+        fi
+    fi
+    CURRENT_PASS=$(run_sudo grep -oP '^ADMIN_PASSWORD=\K.+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "")
+    CURRENT_KEY=$(run_sudo grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" 2>/dev/null || echo "")
+    info "当前服务监听端口: ${CURRENT_PORT} (监听绑定: ${CURRENT_HOST})"
 
     # 确定服务运行用户 (优先读取已运行 systemd 服务中的 User，兼容不同宿主环境)
     SERVICE_USER=$(run_sudo grep -oP '^User=\K\S+' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || echo "${CURRENT_USER}")
@@ -461,12 +491,23 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
 
     echo ""
     echo "=============================================================================="
-    echo -e "${GREEN}${BOLD}  🎉 OCRProxy 平滑升级成功！${NC}"
+    echo -e "${GREEN}${BOLD}  🎉 OCRProxy 平滑升级成功！(${SCRIPT_VERSION})${NC}"
     echo "=============================================================================="
     echo -e "  服务端口: ${BOLD}${CURRENT_PORT}${NC}"
+    echo -e "  监听模式: ${BOLD}${CURRENT_HOST}${NC} $([[ "$CURRENT_HOST" == "127.0.0.1" ]] && echo '(仅本地反代模式)' || echo '(全网直通模式)')"
+    if [[ -n "$CURRENT_PASS" ]]; then
+        echo -e "  管理密码: ${YELLOW}${BOLD}${CURRENT_PASS}${NC}"
+    fi
+    if [[ -n "$CURRENT_KEY" ]]; then
+        echo -e "  代理密钥: ${YELLOW}${CURRENT_KEY}${NC}"
+    fi
     echo -e "  备份目录: ${BACKUP_DIR}"
-    echo -e "  服务状态: ocrproxy status"
-    echo -e "  实时日志: ocrproxy log"
+    echo ""
+    echo -e "  🛠️  常用运维命令 (已全局注册):"
+    echo -e "     查看状态: ${BOLD}ocrproxy status${NC}"
+    echo -e "     查看日志: ${BOLD}ocrproxy log${NC}"
+    echo -e "     重启服务: ${BOLD}ocrproxy restart${NC}"
+    echo -e "     一键升级: ${BOLD}ocrproxy upgrade${NC}"
     echo "=============================================================================="
     echo ""
     exit 0
@@ -540,8 +581,50 @@ else
     fi
 fi
 
-# 运行模式选择
-FINAL_MODE="${CLI_MODE:-${RUN_MODE:-agent}}"
+# 运行模式选择 (agent: 智能体直连 | kb: 知识库入库加速)
+if [[ -n "$CLI_MODE" ]]; then
+    FINAL_MODE="$CLI_MODE"
+elif [[ -n "$RUN_MODE" ]]; then
+    FINAL_MODE="$RUN_MODE"
+elif [[ "$NON_INTERACTIVE" == "true" ]]; then
+    FINAL_MODE="agent"
+else
+    echo -e "请选择系统运行模式 (1: Agent 智能体直连模式 [默认] | 2: KB 知识库入库加速模式):"
+    read -p "请输入选项 [1/2] (默认 1): " INPUT_MODE
+    if [[ "$INPUT_MODE" == "2" || "$INPUT_MODE" == "kb" ]]; then
+        FINAL_MODE="kb"
+    else
+        FINAL_MODE="agent"
+    fi
+fi
+if [[ "$FINAL_MODE" != "agent" && "$FINAL_MODE" != "kb" ]]; then
+    FINAL_MODE="agent"
+fi
+info "已设定运行模式: ${BOLD}${FINAL_MODE}${NC}"
+
+# 4. 网络监听与反向代理模式选择 (Caddy / Nginx / 公网直通)
+if [[ -n "$CLI_HOST" ]]; then
+    FINAL_HOST="$CLI_HOST"
+elif [[ -n "$APP_HOST" ]]; then
+    FINAL_HOST="$APP_HOST"
+elif [[ "$USE_REVERSE_PROXY" == "true" ]]; then
+    FINAL_HOST="127.0.0.1"
+elif [[ "$USE_REVERSE_PROXY" == "false" ]]; then
+    FINAL_HOST="::"
+elif [[ "$NON_INTERACTIVE" == "true" ]]; then
+    FINAL_HOST="::"
+else
+    echo -e "请选择是否启用反向代理 (如 Caddy / Nginx 等):"
+    echo -e "  1: 启用反代 (安全推荐：服务仅监听 127.0.0.1 本地端口，外部流量由 Caddy/Nginx 代理)"
+    echo -e "  2: 不使用反代 (服务监听 IPv4/IPv6 全网，直接通过 IP:端口 访问) [默认]"
+    read -p "请输入选项 [1/2] (默认 2): " INPUT_PROXY_CHOICE
+    if [[ "$INPUT_PROXY_CHOICE" == "1" ]]; then
+        FINAL_HOST="127.0.0.1"
+    else
+        FINAL_HOST="::"
+    fi
+fi
+info "已设定网络监听地址: ${BOLD}${FINAL_HOST}${NC} $([[ "$FINAL_HOST" == "127.0.0.1" ]] && echo '(仅本地反代模式)' || echo '(全网直通模式)')"
 
 # 3. 确定服务运行用户与环境
 info "Step 3/7: 配置系统运行环境..."
@@ -608,6 +691,13 @@ done
 # 保存 GITHUB_TOKEN 到 .env (若有)
 if [[ -n "$GITHUB_TOKEN" ]]; then
     echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> "${INSTALL_DIR}/.env"
+fi
+
+# 保存 APP_HOST 到 .env
+if grep -q '^APP_HOST=' "${INSTALL_DIR}/.env" 2>/dev/null; then
+    sed -i "s|^APP_HOST=.*|APP_HOST=${FINAL_HOST}|" "${INSTALL_DIR}/.env"
+else
+    echo "APP_HOST=${FINAL_HOST}" >> "${INSTALL_DIR}/.env"
 fi
 
 # 从 .env 读取生成的密钥
@@ -691,20 +781,40 @@ PUBLIC_IP=$(detect_public_ip)
 echo ""
 echo "=============================================================================="
 if [[ "$CHECK_SUCCESS" == "true" ]]; then
-    echo -e "${GREEN}${BOLD}  🎉 OCRProxy 安装成功并已正常启动！${NC}"
+    echo -e "${GREEN}${BOLD}  🎉 OCRProxy 安装成功并已正常启动！(${SCRIPT_VERSION})${NC}"
 else
-    echo -e "${YELLOW}${BOLD}  ⚠️ OCRProxy 已安装，服务启动中 (自检暂未就绪)${NC}"
+    echo -e "${YELLOW}${BOLD}  ⚠️ OCRProxy 已安装，服务启动中 (自检暂未就绪) (${SCRIPT_VERSION})${NC}"
 fi
 echo "=============================================================================="
 echo ""
 echo -e "  🌐 ${BOLD}Web 管理控制台${NC}:"
-echo -e "     地址: ${CYAN}http://${PUBLIC_IP}:${FINAL_PORT}/${NC}"
-echo -e "     密码: ${YELLOW}${BOLD}${FINAL_PASSWORD}${NC}"
+if [[ "$FINAL_HOST" == "127.0.0.1" ]]; then
+    echo -e "     本地监听: ${CYAN}http://127.0.0.1:${FINAL_PORT}/${NC} (仅内网绑定，需反代访问)"
+    echo -e "     公网访问: 请配置反向代理 (如 Caddy) 指向 127.0.0.1:${FINAL_PORT}"
+else
+    echo -e "     访问地址: ${CYAN}http://${PUBLIC_IP}:${FINAL_PORT}/${NC}"
+fi
+echo -e "     默认密码: ${YELLOW}${BOLD}${FINAL_PASSWORD}${NC}"
 echo ""
 echo -e "  🔑 ${BOLD}大模型代理接入 (OpenAI 格式)${NC}:"
-echo -e "     端点: ${CYAN}http://${PUBLIC_IP}:${FINAL_PORT}/v1${NC}"
-echo -e "     密钥: ${YELLOW}${PROXY_KEY}${NC}"
+if [[ "$FINAL_HOST" == "127.0.0.1" ]]; then
+    echo -e "     本地端点: ${CYAN}http://127.0.0.1:${FINAL_PORT}/v1${NC}"
+else
+    echo -e "     接入端点: ${CYAN}http://${PUBLIC_IP}:${FINAL_PORT}/v1${NC}"
+fi
+echo -e "     接入密钥: ${YELLOW}${PROXY_KEY}${NC}"
 echo ""
+if [[ "$FINAL_HOST" == "127.0.0.1" ]]; then
+echo -e "  🚀 ${BOLD}Caddy 反向代理推荐配置样例 (Caddyfile)${NC}:"
+echo -e "     -------------------------------------------------------"
+echo -e "     ${CYAN}your-domain.com {${NC}"
+echo -e "         ${CYAN}reverse_proxy 127.0.0.1:${FINAL_PORT} {${NC}"
+echo -e "             ${CYAN}flush_interval -1${NC}  # 禁用缓冲，保障 SSE 流式极速响应"
+echo -e "         ${CYAN}}${NC}"
+echo -e "     ${CYAN}}${NC}"
+echo -e "     -------------------------------------------------------"
+echo ""
+fi
 echo -e "  🛠️  ${BOLD}常用运维命令 (已全局注册)${NC}:"
 echo -e "     查看状态: ${BOLD}ocrproxy status${NC}"
 echo -e "     查看日志: ${BOLD}ocrproxy log${NC}"
