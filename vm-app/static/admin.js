@@ -636,6 +636,11 @@ function copy(id){
  * OCRProxy Admin - EdgeOne Vault Hub & Credential Sync
  */
 async function fetchVaultManifest(silent = true) {
+  const vaultUrl = (state.config && state.config.edgeone_vault && state.config.edgeone_vault.edgeone_url) || '';
+  if (!vaultUrl) {
+    state.vaultManifest = null;
+    return null;
+  }
   try {
     const res = await fetch('/api/admin/vault/manifest', {
       method: 'POST',
