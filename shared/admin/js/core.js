@@ -56,6 +56,16 @@ function icon(name, size=14, cls='') {
   return `<svg class="khc-icon ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
 
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
 function fmtTime(ms) {
   if (!ms) return '—';
