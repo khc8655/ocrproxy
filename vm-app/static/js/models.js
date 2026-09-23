@@ -279,7 +279,11 @@ function populateAgentProviderSelect(selectedId){
   const sel = document.getElementById('a_providerSelect');
   const optLocal = document.getElementById('a_optgroup_local');
   const optVault = document.getElementById('a_optgroup_vault');
-  if(!sel) return;
+  const hasVault = !!(state.config?.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url));
+  const syncBtn = document.getElementById('btnSyncVaultInAgentModal');
+  if (syncBtn) syncBtn.style.display = hasVault ? 'inline-flex' : 'none';
+  if (optVault) optVault.style.display = hasVault ? '' : 'none';
+
   const providers = getAllAvailableProviders();
 
   const localList = providers.filter(p => !p.isVault);
@@ -288,7 +292,7 @@ function populateAgentProviderSelect(selectedId){
   if (optLocal) {
     optLocal.innerHTML = localList.length
       ? localList.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`).join('')
-      : '<option disabled>暂无本地已配置供应商</option>';
+      : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
   }
   if (optVault) {
     optVault.innerHTML = vaultList.length
@@ -313,7 +317,22 @@ function onAgentProviderSelectChange(val){
   if(!val){
     if(keyArea) keyArea.style.display = 'none';
     if(quickBox) quickBox.style.display = 'none';
-    if(protoInfoEl) protoInfoEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('info', 14)}</span> 请先选择或新建供应商。`;
+    if(protoInfoEl) {
+      const providers = getAllAvailableProviders();
+      if (!providers || providers.length === 0) {
+        protoInfoEl.innerHTML = `
+          <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
+            <div style="font-size:12px;color:var(--text);line-height:1.5;">
+              <strong>尚未添加供应商</strong>：请先新建供应商（支持选用 AMD、DeepSeek 等 11 家官方厂商并秒级自动填充规则与模型）
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('agent')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
+              + 立即新建供应商
+            </button>
+          </div>`;
+      } else {
+        protoInfoEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('info', 14)}</span> 请先选择或新建供应商。`;
+      }
+    }
   } else {
     if(keyArea) keyArea.style.display = 'block';
     renderAgentKeyChecks();
