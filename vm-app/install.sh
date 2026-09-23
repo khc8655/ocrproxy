@@ -495,7 +495,6 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
 
     # 更新 Python 依赖
     info "正在增量检查并更新 Python 虚拟环境依赖..."
-    local pypi_index
     pypi_index=$(detect_pypi_index)
     run_sudo "${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${pypi_index}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
     ok "Python 依赖更新完成"
