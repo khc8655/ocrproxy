@@ -807,7 +807,7 @@ async function testVaultConnection(){
 
   if(box){
     box.style.display = 'block';
-    box.innerHTML = `<span style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">${icon('refresh', 14)} 正在探测 EdgeOne 凭据中枢 (${esc(url || 'https://api.khc6.cn')})...</span>`;
+    box.innerHTML = `<span style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">${icon('refresh', 14)} 正在探测 EdgeOne 凭据中枢 (${esc(url || '未配置地址')})...</span>`;
   }
   if(btn) btn.disabled = true;
 
@@ -2867,7 +2867,7 @@ function renderSettings(){
 
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
-  set('cfg_vault_url', vCfg.url || 'https://api.khc6.cn');
+  set('cfg_vault_url', vCfg.url || '');
   set('cfg_vault_token', vCfg.token || '');
 
   onRunModeChange();
@@ -3031,7 +3031,7 @@ async function saveSettings(silent=false){
   const vaultTokenEl = document.getElementById('cfg_vault_token');
   if (vaultUrlEl || vaultTokenEl) {
     c.edgeone_vault = {
-      url: (vaultUrlEl ? vaultUrlEl.value.trim() : '') || 'https://api.khc6.cn',
+      url: (vaultUrlEl ? vaultUrlEl.value.trim() : ''),
       token: (vaultTokenEl ? vaultTokenEl.value.trim() : '')
     };
   }
