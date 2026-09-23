@@ -317,9 +317,13 @@ async def get_presets_catalog_endpoint(request: Request):
         source = "local_fallback"
 
     _CATALOG_CACHE["data"] = catalog_data
-    _CATALOG_CACHE["expires_at"] = now + 600
-
-    return JSONResponse(content={"ok": True, "source": source, "catalog": catalog_data})
+    catalog_providers = catalog_data.get("providers", []) if isinstance(catalog_data, dict) else []
+    return JSONResponse(content={
+        "ok": True,
+        "source": source,
+        "catalog": catalog_data,
+        "providers": catalog_providers,
+    })
 
 
 @router.get("/presets/detail")
@@ -1401,9 +1405,6 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
         or ""
     ).strip().rstrip("/")
 
-    if not edgeone_url:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "请提供 EdgeOne 凭据中枢 URL"})
-
     token = (
         body.get("token")
         or v_cfg.get("token")
@@ -1430,6 +1431,9 @@ async def vault_manifest_endpoint(request: Request):
         pass
 
     edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
+
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -1474,6 +1478,8 @@ async def vault_fetch_key_endpoint(request: Request):
         return JSONResponse(status_code=400, content={"error": "Missing provider or key_label"})
 
     edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -1562,6 +1568,8 @@ async def vault_sync_endpoint(request: Request):
         pass
 
     edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -1648,6 +1656,8 @@ async def vault_test_endpoint(request: Request):
         pass
 
     edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "请先在上方输入 EdgeOne 凭据中枢服务地址"})
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
