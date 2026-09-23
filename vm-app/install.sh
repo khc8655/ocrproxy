@@ -81,6 +81,23 @@ safe_read() {
     printf -v "$var_name" '%s' "$input_val"
 }
 
+# 智能选择最可靠且快速的 PyPI 镜像源 (避开宿主机不可达内网源，如 mirrors.cloud.aliyuncs.com)
+detect_pypi_index() {
+    local candidate_mirrors=(
+        "https://mirrors.aliyun.com/pypi/simple/"
+        "https://pypi.tuna.tsinghua.edu.cn/simple/"
+        "https://mirrors.tencent.com/pypi/simple/"
+        "https://pypi.org/simple/"
+    )
+    for m in "${candidate_mirrors[@]}"; do
+        if curl -s -m 3 -I "$m" 2>/dev/null | grep -qE "HTTP/[0-9.]+ (200|301|302)"; then
+            echo "$m"
+            return 0
+        fi
+    done
+    echo "https://pypi.org/simple/"
+}
+
 # ==============================================================================
 # 解析命令行参数
 # ==============================================================================
@@ -478,7 +495,9 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
 
     # 更新 Python 依赖
     info "正在增量检查并更新 Python 虚拟环境依赖..."
-    run_sudo "${INSTALL_DIR}/venv/bin/pip" install --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
+    local pypi_index
+    pypi_index=$(detect_pypi_index)
+    run_sudo "${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${pypi_index}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
     ok "Python 依赖更新完成"
 
     # 检查并确保 systemd service 使用 run_server.py
@@ -697,8 +716,9 @@ ok "应用核心文件已部署到 ${INSTALL_DIR}"
 # 5. 创建虚拟环境并安装依赖
 info "Step 5/7: 创建 Python 虚拟环境并安装依赖包..."
 python3 -m venv "${INSTALL_DIR}/venv"
-"${INSTALL_DIR}/venv/bin/pip" install --upgrade pip -q
-"${INSTALL_DIR}/venv/bin/pip" install --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
+PYPI_INDEX=$(detect_pypi_index)
+info "选用 PyPI 镜像源: ${PYPI_INDEX} (已启用 --isolated 隔离模式，自动规避宿主机不可达内网源)..."
+"${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${PYPI_INDEX}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
 ok "Python 虚拟环境依赖安装完成"
 
 # 6. 初始化密钥、.env 与加密配置
