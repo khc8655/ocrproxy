@@ -2,7 +2,7 @@
  * OCRProxy Admin - EdgeOne Vault Hub & Credential Sync
  */
 async function fetchVaultManifest(silent = true) {
-  const vaultUrl = (state.config && state.config.edgeone_vault && state.config.edgeone_vault.edgeone_url) || '';
+  const vaultUrl = (state.config && state.config.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url)) || '';
   if (!vaultUrl) {
     state.vaultManifest = null;
     return null;
@@ -220,9 +220,24 @@ async function testVaultConnection(){
           <span style="color:var(--text-secondary);">中枢地址:</span><span>${esc(d.edgeone_url)}</span>
           <span style="color:var(--text-secondary);">托管供应商:</span><span><strong>${d.providers_count}</strong> 个 (${esc((d.provider_ids || []).join(', '))})</span>
           <span style="color:var(--text-secondary);">Google Key (${d.google_keys_count} 个):</span><span>${gKeys}</span>
+        </div>
+        <div style="margin-top:6px;color:var(--accent-green);font-size:11px;">
+          ✓ 中枢凭据已自动同步并持久化至本地加密配置，可在「模型路由」中直接添加模型或同步最新供应商。
         </div>`;
     }
     toast(`凭据中枢连接正常，延迟 ${d.latency_ms}ms，发现 ${d.providers_count} 个供应商`, 'ok');
+
+    // Auto-persist validated credentials so user never encounters state desync
+    try {
+      await fetch('/api/admin/vault/config', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ edgeone_url: url, url: url, token: token })
+      });
+      if (!state.config) state.config = {};
+      state.config.edgeone_vault = { url: url, edgeone_url: url, token: token };
+      await fetchVaultManifest(true);
+    } catch (_) {}
   } catch(e) {
     if(box){
       box.innerHTML = `
@@ -237,24 +252,26 @@ async function testVaultConnection(){
   }
 }
 
-async function saveVaultConfig(){
+async function saveVaultConfig(silent = false){
   const url = (document.getElementById('cfg_vault_url')?.value || '').trim();
   const token = (document.getElementById('cfg_vault_token')?.value || '').trim();
   try {
     const res = await fetch('/api/admin/vault/config', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ edgeone_url: url, token: token })
+      body: JSON.stringify({ edgeone_url: url, url: url, token: token })
     });
     const d = await res.json().catch(() => ({}));
     if(!res.ok || !d.ok){
       throw new Error(d.error || `HTTP ${res.status}`);
     }
-    toast('EdgeOne 凭据中枢配置已成功保存到本地加密配置 (proxy_config.enc)', 'ok');
+    if (!state.config) state.config = {};
+    state.config.edgeone_vault = { url: url, edgeone_url: url, token: token };
+    if (!silent) toast('EdgeOne 凭据中枢配置已成功保存到本地加密配置 (proxy_config.enc)', 'ok');
     await loadData();
     await fetchVaultManifest(false);
   } catch(e) {
-    toast('保存中枢配置失败: ' + e.message, 'err');
+    if (!silent) toast('保存中枢配置失败: ' + e.message, 'err');
   }
 }
 

@@ -288,9 +288,13 @@
     const vaultList = providers.filter(p => p.isVault);
 
     if (optLocal) {
-      optLocal.innerHTML = localList.length
-        ? localList.map(p => `<option value="${_esc(p.id)}">${_esc(p.label)} (${_esc(p.protoStr)})</option>`).join('')
-        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
+      if (localList.length > 0) {
+        optLocal.innerHTML = localList.map(p => `<option value="${_esc(p.id)}">${_esc(p.label)} (${_esc(p.protoStr)})</option>`).join('');
+      } else if (vaultList.length > 0) {
+        optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
+      } else {
+        optLocal.innerHTML = '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
+      }
     } else {
       sel.innerHTML = providers.length
         ? providers.map(p => `<option value="${_esc(p.id)}">${_esc(p.label)}</option>`).join('')

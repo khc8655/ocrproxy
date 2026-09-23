@@ -39,7 +39,7 @@ function renderSettings(){
 
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
-  set('cfg_vault_url', vCfg.url || '');
+  set('cfg_vault_url', vCfg.edgeone_url || vCfg.url || '');
   set('cfg_vault_token', vCfg.token || '');
 
   onRunModeChange();
@@ -202,9 +202,12 @@ async function saveSettings(silent=false){
   const vaultUrlEl = document.getElementById('cfg_vault_url');
   const vaultTokenEl = document.getElementById('cfg_vault_token');
   if (vaultUrlEl || vaultTokenEl) {
+    const vUrl = (vaultUrlEl ? vaultUrlEl.value.trim() : '');
+    const vToken = (vaultTokenEl ? vaultTokenEl.value.trim() : '');
     c.edgeone_vault = {
-      url: (vaultUrlEl ? vaultUrlEl.value.trim() : ''),
-      token: (vaultTokenEl ? vaultTokenEl.value.trim() : '')
+      url: vUrl,
+      edgeone_url: vUrl,
+      token: vToken
     };
   }
 
