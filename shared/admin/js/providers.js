@@ -327,9 +327,14 @@ async function loadPresetsCatalog() {
     const res = await fetch('/api/admin/presets/catalog', { headers: headers() });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.ok && Array.isArray(data.providers)) {
-        state.presetCatalog = data.providers;
-        populateCatalogSelect(select);
+      if (data && data.ok) {
+        const list = (data.catalog && Array.isArray(data.catalog.providers))
+          ? data.catalog.providers
+          : (Array.isArray(data.providers) ? data.providers : null);
+        if (list && list.length > 0) {
+          state.presetCatalog = list;
+          populateCatalogSelect(select);
+        }
       }
     }
   } catch (e) {
