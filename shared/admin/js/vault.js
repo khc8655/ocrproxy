@@ -150,6 +150,11 @@ async function ensureKeysImported(bindings){
 }
 
 async function refreshVaultManifestInModal() {
+  const vaultUrl = (state.config && state.config.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url)) || '';
+  if (!vaultUrl) {
+    toast('当前未配置 EdgeOne 凭据中枢。如需使用中枢功能，请前往「系统设置」填写中枢地址；或直接点击左侧「+ 新建供应商」在本地直接配置。', 'warn');
+    return;
+  }
   toast('正在从 EdgeOne 中枢拉取最新供应商清单...', 'info');
   const d = await fetchVaultManifest(false);
   if (d) {

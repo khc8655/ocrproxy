@@ -784,6 +784,11 @@ async function ensureKeysImported(bindings){
 }
 
 async function refreshVaultManifestInModal() {
+  const vaultUrl = (state.config && state.config.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url)) || '';
+  if (!vaultUrl) {
+    toast('当前未配置 EdgeOne 凭据中枢。如需使用中枢功能，请前往「系统设置」填写中枢地址；或直接点击左侧「+ 新建供应商」在本地直接配置。', 'warn');
+    return;
+  }
   toast('正在从 EdgeOne 中枢拉取最新供应商清单...', 'info');
   const d = await fetchVaultManifest(false);
   if (d) {
@@ -2109,15 +2114,20 @@ function populateAgentProviderSelect(selectedId){
   const optLocal = document.getElementById('a_optgroup_local');
   const optVault = document.getElementById('a_optgroup_vault');
   if(!sel) return;
-  const providers = getAllAvailableProviders();
 
+  const hasVault = !!(state.config?.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url));
+  const syncBtn = document.getElementById('btnSyncVaultInAgentModal');
+  if (syncBtn) syncBtn.style.display = hasVault ? 'inline-flex' : 'none';
+  if (optVault) optVault.style.display = hasVault ? '' : 'none';
+
+  const providers = getAllAvailableProviders();
   const localList = providers.filter(p => !p.isVault);
   const vaultList = providers.filter(p => p.isVault);
 
   if (optLocal) {
     optLocal.innerHTML = localList.length
       ? localList.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`).join('')
-      : '<option disabled>暂无本地已配置供应商</option>';
+      : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
   }
   if (optVault) {
     optVault.innerHTML = vaultList.length
@@ -2142,7 +2152,22 @@ function onAgentProviderSelectChange(val){
   if(!val){
     if(keyArea) keyArea.style.display = 'none';
     if(quickBox) quickBox.style.display = 'none';
-    if(protoInfoEl) protoInfoEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('info', 14)}</span> 请先选择或新建供应商。`;
+    if(protoInfoEl) {
+      const providers = getAllAvailableProviders();
+      if (!providers || providers.length === 0) {
+        protoInfoEl.innerHTML = `
+          <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
+            <div style="font-size:12px;color:var(--text);line-height:1.5;">
+              <strong>尚未添加供应商</strong>：请先新建供应商（支持选用 AMD、DeepSeek 等 11 家官方厂商并秒级自动填充规则与模型）
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('agent')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
+              + 立即新建供应商
+            </button>
+          </div>`;
+      } else {
+        protoInfoEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;">${icon('info', 14)}</span> 请先选择或新建供应商。`;
+      }
+    }
   } else {
     if(keyArea) keyArea.style.display = 'block';
     renderAgentKeyChecks();
@@ -2456,15 +2481,20 @@ function populateCandidateProviderSelect(selectedId){
   const optLocal = document.getElementById('c_optgroup_local');
   const optVault = document.getElementById('c_optgroup_vault');
   if(!sel) return;
-  const providers = getAllAvailableProviders();
 
+  const hasVault = !!(state.config?.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url));
+  const syncCandidateBtn = document.getElementById('btnSyncVaultInCandidateModal');
+  if (syncCandidateBtn) syncCandidateBtn.style.display = hasVault ? 'inline-flex' : 'none';
+  if (optVault) optVault.style.display = hasVault ? '' : 'none';
+
+  const providers = getAllAvailableProviders();
   const localList = providers.filter(p => !p.isVault);
   const vaultList = providers.filter(p => p.isVault);
 
   if (optLocal) {
     optLocal.innerHTML = localList.length
       ? localList.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`).join('')
-      : '<option disabled>暂无本地已配置供应商</option>';
+      : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
   }
   if (optVault) {
     optVault.innerHTML = vaultList.length
@@ -2489,7 +2519,22 @@ function onCandidateProviderSelectChange(val){
   if(!val){
     if(keyArea) keyArea.style.display = 'none';
     if(quickBox) quickBox.style.display = 'none';
-    if(protoInfoEl) protoInfoEl.innerHTML = '';
+    if(protoInfoEl) {
+      const providers = getAllAvailableProviders();
+      if (!providers || providers.length === 0) {
+        protoInfoEl.innerHTML = `
+          <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
+            <div style="font-size:12px;color:var(--text);line-height:1.5;">
+              <strong>尚未添加供应商</strong>：请先新建供应商节点
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('candidate')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
+              + 立即新建供应商
+            </button>
+          </div>`;
+      } else {
+        protoInfoEl.innerHTML = '';
+      }
+    }
   } else {
     if(keyArea) keyArea.style.display = 'block';
     const localProv = state.config.providers && state.config.providers[val];
