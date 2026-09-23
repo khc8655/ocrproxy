@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "tokenSource": "css.json",
-  "componentEvidenceIndex": "components/index.json",
-  "recommendedReadOrder": ["SKILL.md", "AGENT_RULES.md", "README.md", "css.json", "components/index.json", "components/{slug}.json", "preview/component-{slug}.html", "ui_kits/dashboard/index.html"],
-  "coreComponents": ["button", "card", "table", "badge", "navigation", "sidebar"],
-  "supportComponents": []
-}

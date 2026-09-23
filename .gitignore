@@ -21,6 +21,11 @@ tx_khc.pem
 LOCAL_*.md
 ARCHITECTURE_STANDARDS.md
 LOCAL_ENV_SECRETS.md
+agent-edgeone/FEASIBILITY-REPORT.md
+FEASIBILITY-REPORT.md
+
+# Local personal site & workspace assets (STRICTLY LOCAL)
+index.html
 
 # Local test suites & scratch tools (STRICTLY LOCAL, NEVER PUSH TO GITHUB)
 tests/
@@ -30,13 +35,15 @@ scratch/
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE & workspace memory
 .vscode/
 .idea/
 .claude/
+.workbuddy/
+.code-review-graph/
+.design_library/
 
 # Tencent Cloud EdgeOne
 .env
 .edgeone/*
 .tef_dist/*
-  

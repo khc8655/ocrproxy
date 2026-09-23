@@ -39,7 +39,7 @@ function renderSettings(){
 
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
-  set('cfg_vault_url', vCfg.url || 'https://api.khc6.cn');
+  set('cfg_vault_url', vCfg.url || '');
   set('cfg_vault_token', vCfg.token || '');
 
   onRunModeChange();
@@ -203,7 +203,7 @@ async function saveSettings(silent=false){
   const vaultTokenEl = document.getElementById('cfg_vault_token');
   if (vaultUrlEl || vaultTokenEl) {
     c.edgeone_vault = {
-      url: (vaultUrlEl ? vaultUrlEl.value.trim() : '') || 'https://api.khc6.cn',
+      url: (vaultUrlEl ? vaultUrlEl.value.trim() : ''),
       token: (vaultTokenEl ? vaultTokenEl.value.trim() : '')
     };
   }

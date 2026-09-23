@@ -23,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "3q0xqZ7bes6lDUgltZg8uoj6LwXzMpcpwpIQ9wZh")
+PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "")
 UPSTREAM_TIMEOUT_SEC = float(os.environ.get("UPSTREAM_TIMEOUT_SEC", "90"))
 
 _cached_config = None
@@ -45,19 +45,22 @@ async def get_config() -> dict:
         except Exception as e:
             log.warning(f"Failed to parse AGENT_CONFIG_JSON: {e}")
 
-    # Fallback to fetching /api/config
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                "https://api.khc6.cn/api/config",
-                headers={"Authorization": f"Bearer {PROXY_API_KEY}"}
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                _cached_config = data.get("config", data)
-                _cached_time = now
-                return _cached_config
-    except Exception as e:
+    # Fallback to fetching /api/config if CONFIG_SOURCE_URL is configured
+    config_url = os.environ.get("CONFIG_SOURCE_URL")
+    if config_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {}
+                if PROXY_API_KEY:
+                    headers["Authorization"] = f"Bearer {PROXY_API_KEY}"
+                resp = await client.get(config_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    _cached_config = data.get("config", data)
+                    _cached_time = now
+                    return _cached_config
+        except Exception as e:
+            log.warning(f"Failed to fetch config from {config_url}: {e}")
         log.warning(f"Failed to fetch /api/config: {e}")
 
     return _cached_config or {"providers": {}, "agent_models": {}}

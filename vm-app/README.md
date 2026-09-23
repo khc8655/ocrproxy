@@ -320,7 +320,7 @@ venv/bin/python scripts/stability_test.py   # 稳定性/加固
 sudo -u ocrproxy /opt/ocrproxy/venv/bin/python scripts/agent_test.py
 ```
 
-参考实测（腾讯云 VM，2026-08）：Agent 套件 27/27、KB 套件 9/9、稳定性套件 17/17 全部通过（共 53 项）；中转开销 RTT p50 ≈ 3ms、流式首字节开销 ≈ 3ms；3 轮 120 并发大 OCR 后 RSS 稳定 70MB（无泄漏）；5 轮 50 并发 OCR RSS 收敛（r1→2 增 55MB，r4→5 仅增 16MB）；畸形请求、超大 body、上游 500/超时、客户端断连均不崩溃、不泄漏 fd。
+参考基准实测数据（标准 Linux VM 环境，2026-08）：Agent 套件 27/27、KB 套件 9/9、稳定性套件 17/17 全部通过（共 53 项）；中转开销 RTT p50 ≈ 3ms、流式首字节开销 ≈ 3ms；3 轮 120 并发大 OCR 后 RSS 稳定 70MB（无泄漏）；5 轮 50 并发 OCR RSS 收敛（r1→2 增 55MB，r4→5 仅增 16MB）；畸形请求、超大 body、上游 500/超时、客户端断连均不崩溃、不泄漏 fd。
 
 ## 目录结构
 

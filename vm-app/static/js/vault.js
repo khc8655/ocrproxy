@@ -173,7 +173,7 @@ async function testVaultConnection(){
 
   if(box){
     box.style.display = 'block';
-    box.innerHTML = `<span style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">${icon('refresh', 14)} 正在探测 EdgeOne 凭据中枢 (${esc(url || 'https://api.khc6.cn')})...</span>`;
+    box.innerHTML = `<span style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">${icon('refresh', 14)} 正在探测 EdgeOne 凭据中枢 (${esc(url || '未配置地址')})...</span>`;
   }
   if(btn) btn.disabled = true;
 

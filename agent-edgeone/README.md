@@ -1,6 +1,6 @@
 # OCRProxy EdgeOne 边缘函数版本 (`agent-edgeone`)
 
-> 部署于 **腾讯云 EdgeOne Makers (Pages / Edge Functions)** 的无服务器大模型中转代理。
+> 部署于 **EdgeOne Makers (Pages / Edge Functions)** 的无服务器大模型中转代理。
 > 依托 EdgeOne 全球 3200+ 边缘节点实现零冷启动、弹性伸缩、IP 轮询池与全球 Anycast 加速。
 
 ---
@@ -38,8 +38,8 @@
 由于项目已预置经过深度调优的 `edgeone.json` 配置文件，EdgeOne Makers 将**自动读取构建命令、安装命令、Node 20 版本及 API/控制台零缓存网络规则**：
 
 ### 1. EdgeOne 控制台创建项目
-在 [腾讯云 EdgeOne 控制台](https://console.cloud.tencent.com/edgeone) 创建 Makers 项目：
-* **Git 仓库**：选择 `https://github.com/khc8655/ocrprox`
+在 [EdgeOne 控制台](https://console.cloud.tencent.com/edgeone) 创建 Makers 项目：
+* **Git 仓库**：选择 `https://github.com/khc8655/ocrproxy`
 * **根目录 (Root Directory)**：填写 **`agent-edgeone`**
 * **构建与运行设置**：系统将自动读取 `edgeone.json`（已内嵌 `npm run build:admin`、Node 20、禁用 API 缓存、开启 SSE 流式直通 `X-Accel-Buffering: no` 与全域 CORS）。
 

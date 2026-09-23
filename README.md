@@ -15,7 +15,7 @@ ocrprox (Monorepo)
 │   ├── requirements.txt               # 依赖列表
 │   └── scripts/                       # 自动化测试与初始化工具
 │
-├── agent-edgeone/                     # 部署于腾讯云 EdgeOne 边缘函数 (Serverless)
+├── agent-edgeone/                     # 部署于 EdgeOne 边缘函数 (Serverless)
 │   ├── edge-functions/                # V8 边缘函数 (OpenAI 兼容 /v1/* 接口)
 │   ├── admin.html / css / js          # 现代化 EdgeOne 管理后台
 │   └── package.json                   # EdgeOne 构建与 132 项自动化测试套件
@@ -28,7 +28,6 @@ ocrprox (Monorepo)
 │   │   └── js/                        # 6 大独立业务领域小脚本 (core, vault, providers, models, settings, app)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
-├── index.html                         # 个人博客首页 (腾讯云 VM 80 端口托管)
 └── design-system/                     # UI 设计系统 Tokens 与组件库
 ```
 
@@ -36,11 +35,11 @@ ocrprox (Monorepo)
 
 ## 运行模式对比与自适应行为 (`RUN_MODE`)
 
-系统彻底废除臃肿冲突的混合模式，全面收敛为**严格二元的单一模式定位**。海外节点专精 Agent，国内节点专精 KB，彻底杜绝参数竞争与环境干扰：
+系统彻底废除臃肿冲突的混合模式，全面收敛为**严格二元的单一模式定位**。节点专精 Agent，或专精 KB，彻底杜绝参数竞争与环境干扰：
 
 | 维度 | `RUN_MODE=agent` (智能体直连模式) | `RUN_MODE=kb` (知识库入库模式) |
 | :--- | :--- | :--- |
-| **典型部署环境** | 海外原生网络 VM (如 Azure / AWS)，专供 Cursor / Cline 直连 | 国内高防与内网 VM (如 腾讯云 / 阿里云)，专供 Dify / FastGPT 批量知识库入库 |
+| **典型部署环境** | 国际互联网原生网络环境，专供 Cursor / Cline 直连 | 专有企业网络 / 内网服务器环境，专供 Dify / FastGPT 批量知识库入库 |
 | **界面展示呈现** | **彻底消除 Subtab 标签栏**，单页全宽展示 Agent 模型管理与调用深度监控 | **彻底消除 Subtab 标签栏**，单页全宽展示 4 大虚拟聚合模型 (`chat`, `embedding`, `reranker`, `ocr`) |
 | **EdgeOne 资产配置交互** | **极简 3 次点击胶囊流**（点选供应商胶囊 ➔ 点选 Key 胶囊 ➔ 点选模型胶囊 ➔ 保存，零键盘打字） | **极简 3 次点击胶囊流**（角色胶囊 ➔ 供应商胶囊 ➔ Key 胶囊 ➔ 推荐模型胶囊，零键盘打字） |
 | **默认 Key 轮换策略** | **粘性故障转移 (`sticky_failover`)**：锁定当前激活 Key，遇 429 顺延切新 Key 并长期驻留 | **轮询负载均衡 (`round_robin`)**：原子计数轮询各 Key，最大化打散并发与利用 TPM 配额 |

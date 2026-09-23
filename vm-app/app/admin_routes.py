@@ -1398,8 +1398,11 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
         body.get("edgeone_url")
         or v_cfg.get("url")
         or os.environ.get("EDGEONE_VAULT_URL")
-        or "https://api.khc6.cn"
+        or ""
     ).strip().rstrip("/")
+
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "请提供 EdgeOne 凭据中枢 URL"})
 
     token = (
         body.get("token")
@@ -1728,7 +1731,7 @@ async def vault_config_endpoint(request: Request):
     return JSONResponse(content={
         "ok": True,
         "edgeone_vault": {
-            "url": v_cfg.get("url") or "https://api.khc6.cn",
+            "url": v_cfg.get("url") or "",
             "token_masked": masked
         },
         "message": "EdgeOne 凭据中枢配置已成功持久化保存至本地加密文件"
