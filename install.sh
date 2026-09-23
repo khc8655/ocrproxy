@@ -66,6 +66,21 @@ gen_random_str() {
     LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len"
 }
 
+# 安全交互输入工具：支持 curl ... | bash 管道场景，强制从 /dev/tty 终端读取输入，避免管道吞噬脚本代码
+safe_read() {
+    local prompt="$1"
+    local var_name="$2"
+    local input_val=""
+    if [ -t 0 ]; then
+        read -r -p "$prompt" input_val
+    elif [ -r /dev/tty ]; then
+        read -r -p "$prompt" input_val < /dev/tty
+    else
+        input_val=""
+    fi
+    printf -v "$var_name" '%s' "$input_val"
+}
+
 # ==============================================================================
 # 解析命令行参数
 # ==============================================================================
@@ -128,6 +143,22 @@ while [[ $# -gt 0 ]]; do
         -y|--yes|--non-interactive)
             NON_INTERACTIVE=true
             shift
+            ;;
+        -h|--help)
+            echo "OCRProxy 一键部署与管理脚本用法:"
+            echo "  curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash"
+            echo "  或: bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh)\""
+            echo ""
+            echo "选项:"
+            echo "  -p, --port <PORT>        服务监听端口 (默认: 8787)"
+            echo "  -w, --password <PASS>    管理员后台密码"
+            echo "  -m, --mode <agent|kb>    运行模式 (默认: agent)"
+            echo "  --proxy                  启用反向代理模式 (监听 127.0.0.1)"
+            echo "  --direct                 公网直通模式 (监听 :: 双栈) [默认]"
+            echo "  -y, --yes                非交互模式 (自动生成随机密码与默认配置)"
+            echo "  --upgrade                平滑升级已有版本"
+            echo "  --uninstall              卸载 OCRProxy 服务"
+            exit 0
             ;;
         *)
             shift
@@ -341,7 +372,7 @@ if [[ "$CLI_ACTION" == "uninstall" ]]; then
     fi
 
     if [[ "$NON_INTERACTIVE" != "true" ]]; then
-        read -p "确定要卸载 OCRProxy 吗？(y/N): " CONFIRM
+        safe_read "确定要卸载 OCRProxy 吗？(y/N): " CONFIRM
         if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
             info "已取消卸载。"
             exit 0
@@ -559,7 +590,7 @@ elif [[ -n "$APP_PORT" ]]; then
 elif [[ "$NON_INTERACTIVE" == "true" ]]; then
     FINAL_PORT="$DEFAULT_PORT"
 else
-    read -p "请输入服务监听端口 (默认: ${DEFAULT_PORT}): " INPUT_PORT
+    safe_read "请输入服务监听端口 (默认: ${DEFAULT_PORT}): " INPUT_PORT
     FINAL_PORT="${INPUT_PORT:-$DEFAULT_PORT}"
 fi
 
@@ -572,7 +603,7 @@ elif [[ "$NON_INTERACTIVE" == "true" ]]; then
     FINAL_PASSWORD="$(gen_random_str 16)"
 else
     echo -e "请设置 Web 管理后台密码 (建议 8 位以上):"
-    read -p "直接按回车将自动生成 16 位强随机密码: " INPUT_PASS
+    safe_read "直接按回车将自动生成 16 位强随机密码: " INPUT_PASS
     if [[ -z "$INPUT_PASS" ]]; then
         FINAL_PASSWORD="$(gen_random_str 16)"
         info "已为您自动生成随机密码: ${BOLD}${FINAL_PASSWORD}${NC}"
@@ -590,7 +621,7 @@ elif [[ "$NON_INTERACTIVE" == "true" ]]; then
     FINAL_MODE="agent"
 else
     echo -e "请选择系统运行模式 (1: Agent 智能体直连模式 [默认] | 2: KB 知识库入库加速模式):"
-    read -p "请输入选项 [1/2] (默认 1): " INPUT_MODE
+    safe_read "请输入选项 [1/2] (默认 1): " INPUT_MODE
     if [[ "$INPUT_MODE" == "2" || "$INPUT_MODE" == "kb" ]]; then
         FINAL_MODE="kb"
     else
@@ -617,7 +648,7 @@ else
     echo -e "请选择是否启用反向代理 (如 Caddy / Nginx 等):"
     echo -e "  1: 启用反代 (安全推荐：服务仅监听 127.0.0.1 本地端口，外部流量由 Caddy/Nginx 代理)"
     echo -e "  2: 不使用反代 (服务监听 IPv4/IPv6 全网，直接通过 IP:端口 访问) [默认]"
-    read -p "请输入选项 [1/2] (默认 2): " INPUT_PROXY_CHOICE
+    safe_read "请输入选项 [1/2] (默认 2): " INPUT_PROXY_CHOICE
     if [[ "$INPUT_PROXY_CHOICE" == "1" ]]; then
         FINAL_HOST="127.0.0.1"
     else
