@@ -718,11 +718,19 @@ async def save_config_endpoint(request: Request):
                 }
             )
 
-        # 2. Asset preservation: keep existing candidates/agent_models if missing from incoming
+        # 2. Asset preservation: keep existing candidates/agent_models/edgeone_vault if missing from incoming
         if "candidates" not in body or not isinstance(body["candidates"], dict):
             body["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
         if "agent_models" not in body or not isinstance(body["agent_models"], dict):
             body["agent_models"] = current_config.get("agent_models") or {}
+        if "edgeone_vault" not in body or not isinstance(body["edgeone_vault"], dict):
+            if "edgeone_vault" in current_config:
+                body["edgeone_vault"] = current_config["edgeone_vault"]
+        elif isinstance(body.get("edgeone_vault"), dict):
+            v_u = body["edgeone_vault"].get("edgeone_url") or body["edgeone_vault"].get("url") or ""
+            if v_u:
+                body["edgeone_vault"]["url"] = v_u
+                body["edgeone_vault"]["edgeone_url"] = v_u
 
         # 3. Rolling encrypted backups (keep last 20)
         try:
@@ -1400,6 +1408,8 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
 
     edgeone_url = (
         body.get("edgeone_url")
+        or body.get("url")
+        or v_cfg.get("edgeone_url")
         or v_cfg.get("url")
         or os.environ.get("EDGEONE_VAULT_URL")
         or ""
@@ -1725,13 +1735,14 @@ async def vault_config_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    edgeone_url = (body.get("edgeone_url") or "").strip().rstrip("/")
+    edgeone_url = (body.get("edgeone_url") or body.get("url") or "").strip().rstrip("/")
     token = (body.get("token") or "").strip()
 
     cfg = await get_config()
     v_cfg = cfg.setdefault("edgeone_vault", {})
     if edgeone_url:
         v_cfg["url"] = edgeone_url
+        v_cfg["edgeone_url"] = edgeone_url
     if token:
         v_cfg["token"] = token
     await save_config(cfg)
@@ -1742,6 +1753,7 @@ async def vault_config_endpoint(request: Request):
         "ok": True,
         "edgeone_vault": {
             "url": v_cfg.get("url") or "",
+            "edgeone_url": v_cfg.get("edgeone_url") or "",
             "token_masked": masked
         },
         "message": "EdgeOne 凭据中枢配置已成功持久化保存至本地加密文件"
