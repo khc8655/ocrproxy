@@ -172,6 +172,16 @@
     const checkedBoxes = Array.from(document.querySelectorAll(`${keyContainerId} input[type="checkbox"]:checked`));
     const keyLabels = checkedBoxes.map(b => b.value);
 
+    const { cfg } = getCtx();
+    let probeBaseUrl = '';
+    const provs = cfg?.providers || {};
+    const localProv = provs[selVal] || Object.entries(provs).find(([k]) => k.toLowerCase() === selVal.toLowerCase())?.[1];
+    if (localProv?.base_url) {
+      probeBaseUrl = localProv.base_url;
+    } else if (window.PRESET_DEFINITIONS && window.PRESET_DEFINITIONS[selVal]?.base_url) {
+      probeBaseUrl = window.PRESET_DEFINITIONS[selVal].base_url;
+    }
+
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 探测中...'; }
 
     try {
@@ -180,6 +190,7 @@
         headers: _getHeaders(),
         body: JSON.stringify({
           provider: selVal,
+          base_url: probeBaseUrl,
           key_label: keyLabels[0] || '',
           key_labels: keyLabels
         })
