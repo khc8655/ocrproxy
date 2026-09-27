@@ -1542,15 +1542,84 @@ test('vault fetch: returns 404 for unknown provider', async () => {
   eq(res.status, 404);
 });
 
-test('probe-models: rejects missing base_url with 400', async () => {
+test('probe-models: rejects missing base_url with 400 when unknown provider', async () => {
   const req = new Request('http://localhost/api/admin/probe-models', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ provider: 'totally_unknown_provider_xyz' }),
   });
   const env = {};
   const res = await probeModelsPost({ request: req, env });
   eq(res.status, 400);
+  const data = await res.json();
+  truthy(data.error.includes('base_url 不能为空'));
+});
+
+test('probe-models: resolves base_url from preset when base_url omitted', async () => {
+  // Mock global fetch for this test
+  const originalFetch = globalThis.fetch;
+  try {
+    let queriedUrl = '';
+    globalThis.fetch = async (url, opts) => {
+      queriedUrl = String(url);
+      return new Response(JSON.stringify({
+        data: [{ id: 'MiniMax-Text-01' }, { id: 'MiniMax-VL-01' }]
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+
+    const req = new Request('http://localhost/api/admin/probe-models', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'minimax', api_key: 'test-key' }),
+    });
+    const res = await probeModelsPost({ request: req, env: {} });
+    eq(res.status, 200);
+    const data = await res.json();
+    eq(data.ok, true);
+    truthy(queriedUrl.startsWith('https://api.minimaxi.com'));
+    truthy(data.models.includes('MiniMax-Text-01'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('probe-models: loads provider config and keys from KV store', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    let capturedAuth = '';
+    globalThis.fetch = async (url, opts) => {
+      capturedAuth = opts?.headers?.authorization || '';
+      return new Response(JSON.stringify({
+        models: [{ name: 'custom-model-1' }]
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+
+    const fakeKv = {
+      get: async (key) => JSON.stringify({
+        providers: {
+          mycustom: {
+            base_url: 'https://api.custom-ai.com/v1',
+            keys: { 'my-label': 'sk-secret-from-kv' }
+          }
+        },
+        agent_models: {}
+      })
+    };
+
+    const req = new Request('http://localhost/api/admin/probe-models', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'mycustom', key_labels: ['my-label'] }),
+    });
+    const res = await probeModelsPost({ request: req, env: { agent_kv: fakeKv } });
+    eq(res.status, 200);
+    const data = await res.json();
+    eq(data.ok, true);
+    eq(capturedAuth, 'Bearer sk-secret-from-kv');
+    eq(data.used_key_label, 'my-label');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('bundled admin ui: contains inlined css style and modal baseline hidden rules', () => {
