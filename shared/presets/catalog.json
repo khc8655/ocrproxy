@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "updated_at": "2026-09-22T14:42:06.926Z",
+  "updated_at": "2026-09-28T03:45:23.430Z",
   "providers": [
     {
       "id": "agnes",
@@ -54,6 +54,23 @@
         "anthropic_messages": true
       },
       "recommended_models_count": 4
+    },
+    {
+      "id": "cline",
+      "name": "Cline (OpenRouter Hub)",
+      "version": "1.0.0",
+      "rule_hash": "634300ccb435",
+      "protocol": "openai",
+      "base_url": "https://api.cline.bot/api/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://docs.cline.bot/api/overview",
+      "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 7
     },
     {
       "id": "deepseek",
