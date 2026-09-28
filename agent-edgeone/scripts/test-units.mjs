@@ -1349,6 +1349,15 @@ test('getPreset: is case-insensitive', () => {
   eq(p.id, 'google');
 });
 
+test('getPreset: finds cline with OpenRouter hub and model aliases', () => {
+  const p = getPreset('cline');
+  truthy(p);
+  eq(p.id, 'cline');
+  eq(p.base_url, 'https://api.cline.bot/api/v1');
+  truthy(p.adapter_rules?.model_alias?.['cline-free/muse-spark-1.3-contributor']);
+  eq(p.adapter_rules.model_alias['cline-free/muse-spark-1.3-contributor'], 'meta/muse-spark-1.3-contributor');
+});
+
 // ============================================================================
 // Schema v2 Settings & Timeout Defaults Tests
 // ============================================================================

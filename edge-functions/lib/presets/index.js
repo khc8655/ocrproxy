@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-09-22T14:42:06.926Z",
+  "updated_at": "2026-09-28T03:45:23.430Z",
   "providers": [
     {
       "id": "agnes",
@@ -59,6 +59,23 @@ export const CATALOG = {
         "anthropic_messages": true
       },
       "recommended_models_count": 4
+    },
+    {
+      "id": "cline",
+      "name": "Cline (OpenRouter Hub)",
+      "version": "1.0.0",
+      "rule_hash": "634300ccb435",
+      "protocol": "openai",
+      "base_url": "https://api.cline.bot/api/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://docs.cline.bot/api/overview",
+      "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 7
     },
     {
       "id": "deepseek",
@@ -438,6 +455,98 @@ export const PRESETS = [
           "glm-5.3": 120
         }
       }
+    }
+  },
+  {
+    "id": "cline",
+    "name": "Cline (OpenRouter Hub)",
+    "version": "1.0.0",
+    "protocol": "openai",
+    "base_url": "https://api.cline.bot/api/v1",
+    "doc_url": "https://docs.cline.bot/api/overview",
+    "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "multimodal": true
+    },
+    "recommended_models": [
+      {
+        "name": "meta/muse-spark-1.3-contributor",
+        "upstream_model": "meta/muse-spark-1.3-contributor",
+        "description": "Muse Spark 1.3 强推理模型 (已做客户端别名适配)"
+      },
+      {
+        "name": "meta/muse-spark-1.3",
+        "upstream_model": "meta/muse-spark-1.3",
+        "description": "Muse Spark 1.3 经典轻量模型"
+      },
+      {
+        "name": "nvidia/nemotron-3.5-lightning:free",
+        "upstream_model": "nvidia/nemotron-3.5-lightning:free",
+        "description": "Nvidia Nemotron 3.5 高速免费模型"
+      },
+      {
+        "name": "google/gemma-4-26b-a4b-it:free",
+        "upstream_model": "google/gemma-4-26b-a4b-it:free",
+        "description": "Google Gemma 4 免费轻量模型"
+      },
+      {
+        "name": "anthropic/claude-sonnet-4-6",
+        "upstream_model": "anthropic/claude-sonnet-4-6",
+        "description": "Claude Sonnet 4.6 旗舰编程模型"
+      },
+      {
+        "name": "openai/gpt-4o",
+        "upstream_model": "openai/gpt-4o",
+        "description": "OpenAI GPT-4o 旗舰全能模型"
+      },
+      {
+        "name": "deepseek/deepseek-chat",
+        "upstream_model": "deepseek/deepseek-chat",
+        "description": "DeepSeek V3 极速推理模型"
+      }
+    ],
+    "adapter_rules": {
+      "reasoning": {
+        "strategy": "openai_passthrough",
+        "supported_levels": [
+          "none",
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "model_alias": {
+        "cline-free/muse-spark-1.3-contributor": "meta/muse-spark-1.3-contributor",
+        "cline-free/muse-spark-1.3": "meta/muse-spark-1.3",
+        "cline-free/muse-spark-1.2-contributor": "meta/muse-spark-1.2-contributor"
+      },
+      "tools": {
+        "normalize_choice_to_string": true,
+        "strip_json_schema": false,
+        "rescue_from_text": true
+      },
+      "user_tracking": {
+        "passthrough_user": true
+      },
+      "sanitization": {
+        "unsupported_params": []
+      },
+      "error_rules": [
+        {
+          "name": "upstream_rate_limited",
+          "match_status": 500,
+          "match_keywords": [
+            "429",
+            "rate-limited",
+            "upstream_provider_shared_pool"
+          ],
+          "action": "failover",
+          "cooldown_sec": 60,
+          "failover": true
+        }
+      ]
     }
   },
   {
