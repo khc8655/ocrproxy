@@ -1309,7 +1309,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存策略设置</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 保存设置并生效</button>
           </div>
         </div>
         <div class="card card-pad mb-4">
@@ -1422,7 +1422,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <button class="btn btn-ghost btn-sm" onclick="exportConfigJson()">导出备份</button>
             <button class="btn btn-ghost btn-sm" onclick="triggerImportConfig()">导入配置</button>
             <button class="btn btn-ghost btn-sm" onclick="formatRawJson()">格式化 JSON</button>
-            <button class="btn btn-primary btn-sm" onclick="saveRawJson()">保存配置</button>
+            <button class="btn btn-primary btn-sm" onclick="saveRawJson()">💾 保存配置并生效</button>
           </div>
         </div>
         <div class="card card-pad">
@@ -1490,7 +1490,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProviderModal()">保存供应商</button>
+      <button class="btn btn-primary" onclick="saveProviderModal()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -1542,7 +1542,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKeyModal()">保存 Key</button>
+      <button class="btn btn-primary" onclick="saveKeyModal()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -1612,7 +1612,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">保存模型</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -2030,7 +2030,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       : (remoteProv?.protocols || ['chat']);
 
     if (protoInfoEl) {
-      protoInfoEl.innerHTML = _renderProtocolBadges(provProtos);
+      const badgeHtml = _renderProtocolBadges(provProtos);
+      let actionBtnHtml = '';
+      if (localProv && remoteProv) {
+        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-secondary" onclick="window.switchLocalProviderToVault('\${_esc(prov)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>\`;
+      } else if (localProv) {
+        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-ghost" onclick="window.deleteLocalProviderFromModal('\${_esc(prov)}')" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>\`;
+      }
+      protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
     }
 
     const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
@@ -2597,7 +2604,39 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }).join('');
   }
 
+  async function switchLocalProviderToVault(provId) {
+    if (!provId) return;
+    if (!confirm(\`确定要清理本地自建的供应商 [\${provId}] 并切换为使用 EdgeOne 中枢托管吗？\\n\\n清理后将自动切换为中枢统一分发的密钥与规则。\`)) {
+      return;
+    }
+    const { cfg } = getCtx();
+    if (cfg && cfg.providers && cfg.providers[provId]) {
+      delete cfg.providers[provId];
+      await _persist(\`已清理本地自建供应商 [\${provId}]，现已切换为中枢托管\`);
+      _toast(\`已成功切换为 EdgeOne 中枢托管 [\${provId}]\`, 'ok');
+      populateAgentProviderSelect(provId);
+      if (typeof renderProviders === 'function') renderProviders();
+    }
+  }
+
+  async function deleteLocalProviderFromModal(provId) {
+    if (!provId) return;
+    if (!confirm(\`确定要彻底删除本地自建供应商 [\${provId}] 吗？\`)) {
+      return;
+    }
+    const { cfg } = getCtx();
+    if (cfg && cfg.providers && cfg.providers[provId]) {
+      delete cfg.providers[provId];
+      await _persist(\`本地供应商 [\${provId}] 已删除并立即生效\`);
+      _toast(\`供应商 [\${provId}] 已删除\`, 'ok');
+      populateAgentProviderSelect('');
+      if (typeof renderProviders === 'function') renderProviders();
+    }
+  }
+
   // 10. Exports to Window Scope
+  global.switchLocalProviderToVault = switchLocalProviderToVault;
+  global.deleteLocalProviderFromModal = deleteLocalProviderFromModal;
   global.renderAgentModels = renderAgentModels;
   global.renderAgentBindingRow = renderAgentBindingRow;
   global.openAgentModal = openAgentModal;

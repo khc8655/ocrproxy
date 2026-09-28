@@ -385,7 +385,14 @@ function renderAgentKeyChecks(){
 
   const provProtos = localProv ? getProviderProtocols(prov) : (remoteProv?.protocols || ['chat']);
   if(protoInfoEl) {
-    protoInfoEl.innerHTML = renderProtocolBadges(provProtos);
+    const badgeHtml = renderProtocolBadges(provProtos);
+    let actionBtnHtml = '';
+    if (localProv && remoteProv) {
+      actionBtnHtml = `<button type="button" class="btn btn-sm btn-secondary" onclick="switchLocalProviderToVault('${esc(prov)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>`;
+    } else if (localProv) {
+      actionBtnHtml = `<button type="button" class="btn btn-sm btn-ghost" onclick="deleteLocalProviderFromModal('${esc(prov)}')" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>`;
+    }
+    protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
   }
 
   const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
@@ -724,7 +731,14 @@ function onCandidateProviderSelectChange(val){
     const remoteProv = findVaultProvider(val);
     const provProtos = localProv ? getProviderProtocols(val) : (remoteProv?.protocols || ['chat']);
     if(protoInfoEl) {
-      protoInfoEl.innerHTML = renderProtocolBadges(provProtos);
+      const badgeHtml = renderProtocolBadges(provProtos);
+      let actionBtnHtml = '';
+      if (localProv && remoteProv) {
+        actionBtnHtml = `<button type="button" class="btn btn-sm btn-secondary" onclick="switchLocalProviderToVault('${esc(val)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>`;
+      } else if (localProv) {
+        actionBtnHtml = `<button type="button" class="btn btn-sm btn-ghost" onclick="deleteLocalProviderFromModal('${esc(val)}')" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>`;
+      }
+      protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
     }
     renderCandidateKeyChecks();
     renderCandidateQuickModels();
@@ -1061,3 +1075,37 @@ async function runLiveTest(modelName){
 }
 
 // Access Guide -> Handled by renderDashboardGateway directly in dashboard
+
+if (typeof window.switchLocalProviderToVault !== 'function') {
+  window.switchLocalProviderToVault = async function(provId) {
+    if (!provId) return;
+    if (!confirm(`确定要清理本地自建的供应商 [${provId}] 并切换为使用 EdgeOne 中枢托管吗？\n\n清理后将自动切换为中枢统一分发的密钥与规则。`)) {
+      return;
+    }
+    if (state.config && state.config.providers && state.config.providers[provId]) {
+      delete state.config.providers[provId];
+      await persistConfig(`已清理本地自建供应商 [${provId}]，现已切换为中枢托管`);
+      toast(`已成功切换为 EdgeOne 中枢托管 [${provId}]`, 'ok');
+      if (typeof populateAgentProviderSelect === 'function') populateAgentProviderSelect(provId);
+      if (typeof populateCandidateProviderSelect === 'function') populateCandidateProviderSelect(provId);
+      if (typeof renderProviders === 'function') renderProviders();
+    }
+  };
+}
+
+if (typeof window.deleteLocalProviderFromModal !== 'function') {
+  window.deleteLocalProviderFromModal = async function(provId) {
+    if (!provId) return;
+    if (!confirm(`确定要彻底删除本地自建供应商 [${provId}] 吗？`)) {
+      return;
+    }
+    if (state.config && state.config.providers && state.config.providers[provId]) {
+      delete state.config.providers[provId];
+      await persistConfig(`本地供应商 [${provId}] 已删除并立即生效`);
+      toast(`供应商 [${provId}] 已删除`, 'ok');
+      if (typeof populateAgentProviderSelect === 'function') populateAgentProviderSelect('');
+      if (typeof populateCandidateProviderSelect === 'function') populateCandidateProviderSelect('');
+      if (typeof renderProviders === 'function') renderProviders();
+    }
+  };
+}
