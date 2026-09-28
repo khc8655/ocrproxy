@@ -35,7 +35,6 @@
     </div>
     <nav id="topNav"></nav>
     <div class="actions">
-      <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()" title="强制重载配置并重置所有 Key 的冷却与熔断状态">清除并重载</button>
       <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
     </div>
@@ -119,8 +118,8 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <!-- Subtabs for Providers & Models (Hidden: single-page immersive view) -->
-      <div class="subtabs" id="modelsSubTabs" style="display:none !important;">
+      <!-- Subtabs for Providers & Models -->
+      <div class="subtabs" id="modelsSubTabs">
         <button id="msub-agents" class="active" onclick="switchModelTab('agents')">Agent 模型</button>
         <button id="msub-providers" onclick="switchModelTab('providers')">供应商与 Key 凭证库</button>
         <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
@@ -185,7 +184,10 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存设置</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
+              <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>保存设置并生效</span>
+            </button>
             <button class="btn btn-success btn-sm" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
               <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 保存并实测验证
             </button>
@@ -417,21 +419,12 @@
               <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <span>测试中枢连通性</span>
             </button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="saveVaultConfig()" style="display:flex;align-items:center;gap:6px;">
-              <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              <span>保存中枢配置</span>
-            </button>
+            <span class="text-secondary" style="font-size:11px;">提示：连通测试成功后将自动保存；亦可直接点击顶部「保存设置」统一持久化。</span>
           </div>
           <div id="vault_diag_box" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap;">
-          <button class="btn btn-secondary" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
-          <button class="btn btn-success" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
-            <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 保存并实测验证
-          </button>
-        </div>
+
       </div>
     </div>
   </main>
@@ -498,7 +491,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProvider()">保存供应商</button>
+      <button class="btn btn-primary" onclick="saveProvider()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -521,7 +514,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKey()">保存 Key</button>
+      <button class="btn btn-primary" onclick="saveKey()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -600,7 +593,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">保存配置</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -687,7 +680,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('candidateModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveCandidate()">保存挂载</button>
+      <button class="btn btn-primary" onclick="saveCandidate()">✓ 保存并生效</button>
     </div>
   </div>
 </div>
@@ -747,12 +740,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=20260923d"></script>
-  <script src="/static/js/vault.js?v=20260923d"></script>
-  <script src="/static/js/providers.js?v=20260923d"></script>
-  <script src="/static/js/agent-models-ui.js?v=20260923d"></script>
-  <script src="/static/js/models.js?v=20260923d"></script>
-  <script src="/static/js/settings.js?v=20260923d"></script>
-  <script src="/static/js/app.js?v=20260923d"></script>
+  <script src="/static/js/core.js?v=20260928a"></script>
+  <script src="/static/js/vault.js?v=20260928a"></script>
+  <script src="/static/js/providers.js?v=20260928a"></script>
+  <script src="/static/js/agent-models-ui.js?v=20260928a"></script>
+  <script src="/static/js/models.js?v=20260928a"></script>
+  <script src="/static/js/settings.js?v=20260928a"></script>
+  <script src="/static/js/app.js?v=20260928a"></script>
 </body>
 </html>

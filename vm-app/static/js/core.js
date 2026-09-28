@@ -554,9 +554,23 @@ function switchModelTab(id){
 function renderModels(){
   const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
   const subTabs = document.getElementById('modelsSubTabs');
-  if (subTabs) subTabs.style.display = 'none';
+  if (subTabs) {
+    subTabs.style.display = 'flex';
+    const msubAgents = document.getElementById('msub-agents');
+    const msubKb = document.getElementById('msub-kb');
+    const msubProv = document.getElementById('msub-providers');
+    if (msubAgents) msubAgents.style.display = (runMode === 'kb') ? 'none' : '';
+    if (msubKb) msubKb.style.display = (runMode === 'agent') ? 'none' : '';
+    if (msubProv) msubProv.style.display = '';
+  }
 
-  state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
+  if (runMode === 'kb' && state.modelTab === 'agents') {
+    state.modelTab = 'kb';
+  } else if (runMode === 'agent' && state.modelTab === 'kb') {
+    state.modelTab = 'agents';
+  } else if (!state.modelTab) {
+    state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
+  }
   switchModelTab(state.modelTab);
 }
 
