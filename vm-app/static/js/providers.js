@@ -296,6 +296,27 @@ const FALLBACK_PRESETS = {
       { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 原生百万上下文大模型 (自动注入 reasoning_effort 开启深度思考)', checked: true, kb_type: 'chat' },
       { name: 'qwen3.8-flash-next', upstream: 'Qwen3.8-Flash-Next', desc: '千问全新 QSA 稀疏注意力大模型 (26.2万上下文，自动适配 system 消息置顶与安全思考级别)', checked: true, kb_type: 'chat' }
     ]
+  },
+  vertex: {
+    id: 'vertex',
+    name: 'Google Vertex AI (Gemini 3.8 Flash)',
+    version: '1.0.0',
+    base_url: 'https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi',
+    protocols: ['chat'],
+    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考配置',
+    recommended_models: [
+      { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true, kb_type: 'chat' }
+    ],
+    adapter_rules: {
+      model_alias: { 'gemini-3.8-flash': 'google/gemini-3.8-flash' },
+      ensure_google_prefix: true,
+      reasoning: {
+        strategy: 'gemini_thinking_matrix',
+        none_action: 'include_thoughts_false',
+        headroom_elevation: true,
+        model_matrix: { flash: ['low', 'medium', 'high'] }
+      }
+    }
   }
 };
 
