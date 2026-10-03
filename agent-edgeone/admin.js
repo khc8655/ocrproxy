@@ -173,6 +173,18 @@ const FALLBACK_PRESETS = {
       { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 原生百万上下文大模型 (自动注入 reasoning_effort 开启深度思考)', checked: true },
       { name: 'qwen3.8-flash-next', upstream: 'Qwen3.8-Flash-Next', desc: '千问全新 QSA 稀疏注意力大模型 (26.2万上下文，自动适配 system 消息置顶与安全思考级别)', checked: true }
     ]
+  },
+  vertex: {
+    id: 'vertex',
+    name: 'Google Vertex AI (Gemini 3.5+)',
+    version: '1.0.0',
+    base_url: 'https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi',
+    protocols: ['chat'],
+    description: 'Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传',
+    recommended_models: [
+      { name: 'gemini-3.5-flash', upstream: 'google/gemini-3.5-flash', desc: '最新高性价比推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)', checked: true },
+      { name: 'gemini-3.5-pro', upstream: 'google/gemini-3.5-pro', desc: '最新旗舰强推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)', checked: true }
+    ]
   }
 };
 
