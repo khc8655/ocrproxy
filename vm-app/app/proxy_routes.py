@@ -864,9 +864,13 @@ async def chat_completions(request: Request):
         _apply_request_adapter_rules(out, rules, is_agent_mode=not kb_force_no_reasoning, is_anthropic=False)
         url = join_upstream(upstream_base_url, "chat/completions")
         headers = {
-            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if provider.lower() == "vertex" or "aiplatform.googleapis.com" in upstream_base_url.lower():
+            headers["x-goog-api-key"] = str(api_key)
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():

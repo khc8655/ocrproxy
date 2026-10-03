@@ -325,10 +325,15 @@ export async function onRequestPost(context) {
 async function forwardUpstream(resolved, body, isStream, request, env, perAttemptTimeoutMs) {
   const url = buildChatUrl(resolved.baseUrl);
   const upstreamHeaders = {
-    authorization: `Bearer ${resolved.apiKey}`,
     'content-type': 'application/json',
     accept: isStream ? 'text/event-stream' : 'application/json',
   };
+  const isVertex = String(resolved.provider || '').toLowerCase() === 'vertex' || String(resolved.baseUrl || '').includes('aiplatform.googleapis.com');
+  if (isVertex) {
+    upstreamHeaders['x-goog-api-key'] = String(resolved.apiKey);
+  } else {
+    upstreamHeaders['authorization'] = `Bearer ${resolved.apiKey}`;
+  }
   if (isStream) {
     upstreamHeaders['accept-encoding'] = 'identity';
   }

@@ -1043,11 +1043,16 @@ async def test_candidate_endpoint(request: Request):
 
     start_t = time.time()
     try:
+        req_headers = {
+            "Content-Type": "application/json",
+        }
+        if provider_name.lower() == "vertex" or "aiplatform.googleapis.com" in base_url.lower():
+            req_headers["x-goog-api-key"] = str(api_key)
+        else:
+            req_headers["Authorization"] = f"Bearer {api_key}"
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0), follow_redirects=False) as client:
-            resp = await client.post(url, headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }, json=test_body)
+            resp = await client.post(url, headers=req_headers, json=test_body)
             lat_sec = time.time() - start_t
             lat_ms = int(round(lat_sec * 1000))
 
@@ -1141,12 +1146,17 @@ async def test_agent_model_endpoint(request: Request):
         _normalise_for_provider(payload, b.get("provider"))
         start = time.time()
         try:
+            req_headers = {
+                "Content-Type": "application/json",
+            }
+            if str(b.get("provider", "")).lower() == "vertex" or "aiplatform.googleapis.com" in url.lower():
+                req_headers["x-goog-api-key"] = str(api_key)
+            else:
+                req_headers["Authorization"] = f"Bearer {api_key}"
+
             async with sem:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0), follow_redirects=False) as client:
-                    resp = await client.post(url, headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    }, json=payload)
+                    resp = await client.post(url, headers=req_headers, json=payload)
             lat_sec = time.time() - start
             latency_ms = int(lat_sec * 1000)
             ok = 200 <= resp.status_code < 300
