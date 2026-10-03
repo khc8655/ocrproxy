@@ -1330,25 +1330,29 @@ async def probe_models_endpoint(request: Request):
 
     probe_errors = []
     for label, sec_key in candidate_keys:
+        cand_base_url = base_url
+        cand_api_key = sec_key
+        if isinstance(sec_key, dict):
+            cand_api_key = str(sec_key.get("key", ""))
+            cand_base_url = sec_key.get("base_url") or base_url
+
         probe_targets = []
         if is_google:
             # Google 原生 query key 端点与兼容端点
             probe_targets.append({
                 "url": f"https://generativelanguage.googleapis.com/v1beta/openai/models",
-                "headers": {"Accept": "application/json", "Authorization": f"Bearer {sec_key}", "User-Agent": "ocrproxy-prober/1.0"}
+                "headers": {"Accept": "application/json", "Authorization": f"Bearer {cand_api_key}", "User-Agent": "ocrproxy-prober/1.0"}
             })
             probe_targets.append({
-                "url": f"https://generativelanguage.googleapis.com/v1beta/models?key={sec_key}",
+                "url": f"https://generativelanguage.googleapis.com/v1beta/models?key={cand_api_key}",
                 "headers": {"Accept": "application/json", "User-Agent": "ocrproxy-prober/1.0"}
             })
         else:
-            b = base_url.rstrip("/")
-            urls = [f"{b}/models"] if b.endswith("/v1") else [f"{b}/v1/models", f"{b}/models"]
-            for u in urls:
-                probe_targets.append({
-                    "url": u,
-                    "headers": {"Accept": "application/json", "Authorization": f"Bearer {sec_key}", "User-Agent": "ocrproxy-prober/1.0"}
-                })
+            cand_u = join_upstream(cand_base_url, "models")
+            probe_targets.append({
+                "url": cand_u,
+                "headers": {"Accept": "application/json", "Authorization": f"Bearer {cand_api_key}", "User-Agent": "ocrproxy-prober/1.0"}
+            })
 
         # 尝试当前 key 的各个探针端点
         for pt in probe_targets:
