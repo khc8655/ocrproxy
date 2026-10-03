@@ -18,6 +18,7 @@
    - **StepFun**：`reasoning_effort="none"` 自动转为 `"low"`，并自动注入 `reasoning_format="deepseek-style"`（以 `reasoning_content` 透传思考链）；
    - **TokenRhythm**：对象形式的 `tool_choice` 自动转为字符串 `"auto"`；
    - **Google Gemini (2.5 / 3 / 3.5+)**：自动映射 `reasoning_effort` 到 `extra_body.google.thinking_config`，并递归清洗 Tool Schema 中的 `$schema` 非标字段；
+   - **Google Vertex AI (Gemini 3.8 Flash)**：适配官方 OpenAPI 兼容端点（支持 Project ID 与服务区域动态拼接），模型自动规范补齐 `google/` 前缀（`gemini-3.8-flash` ➔ `google/gemini-3.8-flash`），内置 Thinking Config 思考等级矩阵映射与 Schema 严格清洗；
    - **CORS 浏览器预检**：支持 `/v1/chat/completions` 与 `/v1/messages` 的 `OPTIONS` 204 无鉴权预检请求，使网页端应用（如 Web 版 NextChat、LibreChat 等）无缝直连。
 3. **管理后台 UI (单文件 Web App & 极简高密设计 · v2026.09.19)**：
    - **完全解耦 GitHub 规则源**：彻底抛弃依赖 GitHub 动态获取规则更新的机制，所有 15 家模型提供商及 Key 全部固化入 EdgeOne KV；

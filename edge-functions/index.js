@@ -1290,6 +1290,26 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
+        <!-- 官方预设厂商快速选用 -->
+        <div id="officialPresetsBar" class="card card-pad mb-3" style="background:var(--color-bg-2);border:1px dashed var(--color-primary);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:14px;">⚡</span>
+              <div>
+                <span style="font-size:13px;font-weight:700;color:var(--color-text-1);">官方预设厂商库已就绪</span>
+                <span class="text-secondary text-sm" style="margin-left:6px;font-size:12px;">包含 Google Vertex AI (Gemini 3.8 Flash)、AMD、MiniMax、Cline 等官方端点规整规则</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="openAddProviderModal('vertex')" style="font-weight:600;color:var(--color-primary);border-color:var(--color-primary);" title="立即选用 Google Vertex AI (Gemini 3.8 Flash) 官方端点并填 Key">
+                + 选用 Vertex AI (Gemini 3.8 Flash)
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs" onclick="openAddProviderModal()">
+                浏览全部预设模板...
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="providers-layout">
           <div id="providersBox" class="providers-list-col"></div>
           <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
@@ -1468,13 +1488,37 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <button class="modal-close" onclick="closeModal('providerModal')">关闭</button>
     </div>
     <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">供应商英文标识 (ID，如 deepseek, my-proxy)</label>
-        <input type="text" id="m_prov_name" class="form-control" placeholder="如 deepseek">
+      <div class="form-group" id="m_prov_preset_wrap">
+        <label class="form-label">供应商模板与类型 (官方预设或自定义)</label>
+        <select id="m_prov_preset" class="form-control" onchange="onEdgeOnePresetChange()">
+          <option value="">-- 自定义供应商 (手动填写) --</option>
+        </select>
+        <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:8px 12px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);line-height:1.5;"></div>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">供应商英文标识 (ID，如 vertex, deepseek, my-proxy)</label>
+        <input type="text" id="m_prov_name" class="form-control" placeholder="如 vertex 或 deepseek">
+      </div>
+      <!-- Vertex AI 专属配置 (选择 Vertex 预设时展开，纯手动填写) -->
+      <div id="m_prov_vertex_section" style="display:none;margin-top:14px;margin-bottom:14px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+        <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
+          <input type="text" id="m_prov_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onEdgeOneVertexParamChange()">
+        </div>
+        <div class="form-group mb-1" style="margin-top:10px;">
+          <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
+          <input type="text" id="m_prov_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneVertexParamChange()">
+        </div>
+        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
+          💡 提示：输入项目 ID 与区域后将自动实时生成下方标准的 Base URL，无需手动拼装。
+        </div>
       </div>
       <div class="form-group" style="margin-top:14px;">
         <label class="form-label">OpenAI Base URL (协议标识: openai)</label>
-        <input type="text" id="m_prov_url_openai" class="form-control" placeholder="如 https://api.deepseek.com/v1 或 https://api.openai.com/v1">
+        <input type="text" id="m_prov_url_openai" class="form-control" placeholder="如 https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi">
         <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Chat 协议 (/v1/chat/completions)</div>
       </div>
       <div class="form-group" style="margin-top:14px;">
@@ -1486,6 +1530,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <label class="form-label">Responses Base URL (协议标识: responses)</label>
         <input type="text" id="m_prov_url_responses" class="form-control" placeholder="如 https://api.openai.com/v1">
         <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Responses 协议 (/v1/responses)</div>
+      </div>
+      <!-- 推荐模型预览 -->
+      <div id="m_prov_models_wrap" class="form-group" style="display:none;margin-top:14px;">
+        <label class="form-label">官方预设推荐模型 (一期)</label>
+        <div id="m_prov_models_list" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;background:var(--color-bg-2);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);"></div>
       </div>
     </div>
     <div class="modal-foot">
@@ -2841,15 +2890,24 @@ const FALLBACK_PRESETS = {
   },
   vertex: {
     id: 'vertex',
-    name: 'Google Vertex AI (Gemini 3.5+)',
+    name: 'Google Vertex AI (Gemini 3.8 Flash)',
     version: '1.0.0',
     base_url: 'https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi',
     protocols: ['chat'],
-    description: 'Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传',
+    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考配置',
     recommended_models: [
-      { name: 'gemini-3.5-flash', upstream: 'google/gemini-3.5-flash', desc: '最新高性价比推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)', checked: true },
-      { name: 'gemini-3.5-pro', upstream: 'google/gemini-3.5-pro', desc: '最新旗舰强推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)', checked: true }
-    ]
+      { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true }
+    ],
+    adapter_rules: {
+      model_alias: { 'gemini-3.8-flash': 'google/gemini-3.8-flash' },
+      ensure_google_prefix: true,
+      reasoning: {
+        strategy: 'gemini_thinking_matrix',
+        none_action: 'include_thoughts_false',
+        headroom_elevation: true,
+        model_matrix: { flash: ['low', 'medium', 'high'] }
+      }
+    }
   }
 };
 
@@ -2998,6 +3056,7 @@ async function loadAllData() {
     healthData = healthRes;
 
     renderAll();
+    loadEdgeOnePresetsCatalog().catch(() => {});
   } catch (e) {
     console.error('Failed to load data', e);
     throw e;
@@ -3350,10 +3409,17 @@ function renderProviders() {
       }
       const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">\${ver}</span>\`;
+      const displayName = (prov.name && prov.name !== p)
+        ? \`\${esc(prov.name)} <span class="mono text-secondary" style="font-size:12px;font-weight:normal;">(\${esc(p)})</span>\`
+        : esc(p);
+      const vertexMetaHtml = (prov.project_id || prov.location)
+        ? \`<div class="meta mono mt-1" style="font-size:12px;color:var(--color-primary);font-weight:600;">🌐 GCP 项目: \${esc(prov.project_id || '未配置')} · 区域: \${esc(prov.location || 'global')}</div>\`
+        : '';
       card.innerHTML = \`
         <div class="card-head">
           <div>
-            <h3>\${esc(p)} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge}</span></h3>
+            <h3>\${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge}</span></h3>
+            \${vertexMetaHtml}
             <div class="meta mono mt-2">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -3501,21 +3567,208 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
 }
 
-// ---- Custom Provider & Protocol Settings ---------------------------------
+// ---- Custom Provider & Preset Management ---------------------------------
 function onEdgeOneCustomUrlToggleChange() {
   const isChecked = document.getElementById('m_prov_custom_url_toggle')?.checked;
   const wrap = document.getElementById('m_prov_custom_url_section');
   if (wrap) wrap.style.display = isChecked ? 'block' : 'none';
 }
 
-function openAddProviderModal() {
+async function loadEdgeOnePresetsCatalog() {
+  const select = document.getElementById('m_prov_preset');
+  if (!select) return;
+
+  if (!PRESET_CATALOG || PRESET_CATALOG.length === 0) {
+    PRESET_CATALOG = Object.keys(FALLBACK_PRESETS).map(k => ({
+      id: k,
+      name: FALLBACK_PRESETS[k].name,
+      version: FALLBACK_PRESETS[k].version || '1.1.0',
+      description: FALLBACK_PRESETS[k].description
+    }));
+  }
+  populateEdgeOneCatalogSelect(select);
+
+  try {
+    const res = await fetch('/api/admin/presets/catalog', { headers: { 'Authorization': 'Bearer ' + getKey() } });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok) {
+        const list = (data.catalog && Array.isArray(data.catalog.providers))
+          ? data.catalog.providers
+          : (Array.isArray(data.providers) ? data.providers : null);
+        if (list && list.length > 0) {
+          PRESET_CATALOG = list;
+          populateEdgeOneCatalogSelect(select);
+        }
+      }
+    }
+  } catch (e) {
+    // Silent fallback
+  }
+}
+
+function populateEdgeOneCatalogSelect(select) {
+  if (!select) return;
+  const cur = select.value;
+  const catalog = (PRESET_CATALOG && PRESET_CATALOG.length > 0)
+    ? PRESET_CATALOG
+    : Object.keys(FALLBACK_PRESETS).map(k => ({
+        id: k,
+        name: FALLBACK_PRESETS[k].name,
+        version: FALLBACK_PRESETS[k].version || '1.1.0',
+        description: FALLBACK_PRESETS[k].description
+      }));
+
+  select.innerHTML = '<option value="">-- 自定义供应商 (手动填写) --</option>' +
+    '<optgroup label="官方预设厂商模板 (按需选用)">' +
+    catalog.map(p => \`<option value="\${p.id}">\${p.name} (v\${p.version || '1.1.0'})</option>\`).join('') +
+    '</optgroup>';
+  if (cur !== undefined && cur !== null && cur !== '') select.value = cur;
+}
+
+function onEdgeOneVertexParamChange() {
+  const proj = (document.getElementById('m_prov_vertex_project')?.value || '').trim();
+  const locRaw = (document.getElementById('m_prov_vertex_location')?.value || '').trim() || 'global';
+  const loc = locRaw.toLowerCase();
+  const projDisplay = proj || '{PROJECT_ID}';
+
+  let baseUrl = '';
+  if (loc === 'global') {
+    baseUrl = \`https://aiplatform.googleapis.com/v1/projects/\${projDisplay}/locations/global/endpoints/openapi\`;
+  } else {
+    baseUrl = \`https://\${loc}-aiplatform.googleapis.com/v1/projects/\${projDisplay}/locations/\${loc}/endpoints/openapi\`;
+  }
+
+  const urlInput = document.getElementById('m_prov_url_openai');
+  if (urlInput) {
+    urlInput.value = baseUrl;
+  }
+}
+
+async function onEdgeOnePresetChange() {
+  const select = document.getElementById('m_prov_preset');
+  const presetId = select ? select.value : '';
+  const nameInput = document.getElementById('m_prov_name');
+  const openaiInput = document.getElementById('m_prov_url_openai');
+  const messageInput = document.getElementById('m_prov_url_message');
+  const responsesInput = document.getElementById('m_prov_url_responses');
+  const descEl = document.getElementById('m_prov_desc');
+  const vertexSection = document.getElementById('m_prov_vertex_section');
+  const modelsWrap = document.getElementById('m_prov_models_wrap');
+  const modelsList = document.getElementById('m_prov_models_list');
+
+  if (!presetId) {
+    currentSelectedPreset = null;
+    if (descEl) descEl.style.display = 'none';
+    if (vertexSection) vertexSection.style.display = 'none';
+    if (modelsWrap) modelsWrap.style.display = 'none';
+    nameInput.disabled = false;
+    return;
+  }
+
+  let preset = CACHED_PRESETS[presetId];
+  if (!preset) {
+    if (descEl) {
+      descEl.textContent = '正在获取官方预设规则...';
+      descEl.style.display = 'block';
+    }
+    try {
+      const res = await fetch(\`/api/presets?action=detail&id=\${encodeURIComponent(presetId)}\`, {
+        headers: { 'Authorization': 'Bearer ' + getKey() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.ok && data.preset) {
+          preset = data.preset;
+          CACHED_PRESETS[presetId] = preset;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch remote preset detail:', e);
+    }
+  }
+  if (!preset && FALLBACK_PRESETS[presetId]) {
+    preset = FALLBACK_PRESETS[presetId];
+  }
+
+  if (!preset) {
+    toast(\`未能获取模板「\${presetId}」规则\`, 'err');
+    return;
+  }
+
+  currentSelectedPreset = preset;
+  nameInput.value = preset.id;
+  nameInput.disabled = true;
+
+  if (descEl) {
+    descEl.textContent = \`\${preset.description || ''} · 规则版本: v\${preset.version || '1.1.0'}\`;
+    descEl.style.display = 'block';
+  }
+
+  if (preset.id === 'vertex') {
+    if (vertexSection) vertexSection.style.display = 'block';
+    onEdgeOneVertexParamChange();
+    if (messageInput) messageInput.value = '';
+    if (responsesInput) responsesInput.value = '';
+  } else {
+    if (vertexSection) vertexSection.style.display = 'none';
+    if (openaiInput) openaiInput.value = preset.base_url || '';
+    if (messageInput) messageInput.value = (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) ? preset.anthropic_base_url : (preset.protocols?.includes('messages') ? preset.base_url : '');
+    if (responsesInput) responsesInput.value = '';
+  }
+
+  // Recommended models preview
+  const recModels = preset.recommended_models || [];
+  if (modelsWrap && modelsList) {
+    if (recModels.length > 0) {
+      modelsWrap.style.display = 'block';
+      modelsList.innerHTML = recModels.map(rm => \`
+        <div style="font-size:12px;display:flex;align-items:flex-start;gap:6px;line-height:1.4;">
+          <span style="font-weight:700;color:var(--color-primary);">•</span>
+          <div>
+            <div style="font-weight:600;color:var(--color-text-1);">\${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: \${esc(rm.upstream || rm.upstream_model || rm.name)})</span></div>
+            <div class="text-secondary" style="font-size:11px;">\${esc(rm.desc || rm.description || '')}</div>
+          </div>
+        </div>
+      \`).join('');
+    } else {
+      modelsWrap.style.display = 'none';
+    }
+  }
+}
+
+function openAddProviderModal(presetId) {
   currentSelectedPreset = null;
   document.getElementById('providerModalTitle').textContent = '新增供应商';
-  document.getElementById('m_prov_name').value = '';
-  document.getElementById('m_prov_name').disabled = false;
+  const nameInput = document.getElementById('m_prov_name');
+  nameInput.value = '';
+  nameInput.disabled = false;
   document.getElementById('m_prov_url_openai').value = '';
   document.getElementById('m_prov_url_message').value = '';
   document.getElementById('m_prov_url_responses').value = '';
+
+  const vertexSection = document.getElementById('m_prov_vertex_section');
+  if (vertexSection) vertexSection.style.display = 'none';
+  const vProj = document.getElementById('m_prov_vertex_project');
+  if (vProj) vProj.value = '';
+  const vLoc = document.getElementById('m_prov_vertex_location');
+  if (vLoc) vLoc.value = 'global';
+
+  const descEl = document.getElementById('m_prov_desc');
+  if (descEl) descEl.style.display = 'none';
+  const modelsWrap = document.getElementById('m_prov_models_wrap');
+  if (modelsWrap) modelsWrap.style.display = 'none';
+
+  const presetSelect = document.getElementById('m_prov_preset');
+  if (presetSelect) {
+    populateEdgeOneCatalogSelect(presetSelect);
+    presetSelect.value = presetId || '';
+  }
+
+  if (presetId) {
+    onEdgeOnePresetChange();
+  }
+
   openModal('providerModal');
 }
 
@@ -3523,11 +3776,53 @@ function openEditProviderModal(name) {
   currentSelectedPreset = null;
   const prov = cfg.providers?.[name] || {};
   document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
-  document.getElementById('m_prov_name').value = name;
-  document.getElementById('m_prov_name').disabled = true;
+  const nameInput = document.getElementById('m_prov_name');
+  nameInput.value = name;
+  nameInput.disabled = true;
+
   document.getElementById('m_prov_url_openai').value = prov.openai_base_url || prov.base_url || '';
   document.getElementById('m_prov_url_message').value = prov.message_base_url || prov.anthropic_base_url || '';
   document.getElementById('m_prov_url_responses').value = prov.responses_base_url || '';
+
+  const presetSelect = document.getElementById('m_prov_preset');
+  if (presetSelect) {
+    populateEdgeOneCatalogSelect(presetSelect);
+    presetSelect.value = prov.preset_id || (PRESET_DEFINITIONS[name] ? name : '');
+  }
+
+  const descEl = document.getElementById('m_prov_desc');
+  if (descEl) descEl.style.display = 'none';
+
+  const vertexSection = document.getElementById('m_prov_vertex_section');
+  const isVertex = name === 'vertex' || prov.preset_id === 'vertex' || prov.project_id || (prov.base_url && prov.base_url.includes('aiplatform.googleapis.com'));
+  if (isVertex && vertexSection) {
+    vertexSection.style.display = 'block';
+    const vProj = document.getElementById('m_prov_vertex_project');
+    if (vProj) vProj.value = prov.project_id || '';
+    const vLoc = document.getElementById('m_prov_vertex_location');
+    if (vLoc) vLoc.value = prov.location || 'global';
+  } else if (vertexSection) {
+    vertexSection.style.display = 'none';
+  }
+
+  const modelsWrap = document.getElementById('m_prov_models_wrap');
+  const modelsList = document.getElementById('m_prov_models_list');
+  const recModels = prov.recommended_models || PRESET_DEFINITIONS[name]?.recommended_models || [];
+  if (modelsWrap && modelsList && recModels.length > 0) {
+    modelsWrap.style.display = 'block';
+    modelsList.innerHTML = recModels.map(rm => \`
+      <div style="font-size:12px;display:flex;align-items:flex-start;gap:6px;line-height:1.4;">
+        <span style="font-weight:700;color:var(--color-primary);">•</span>
+        <div>
+          <div style="font-weight:600;color:var(--color-text-1);">\${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: \${esc(rm.upstream || rm.upstream_model || rm.name)})</span></div>
+          <div class="text-secondary" style="font-size:11px;">\${esc(rm.desc || rm.description || '')}</div>
+        </div>
+      </div>
+    \`).join('');
+  } else if (modelsWrap) {
+    modelsWrap.style.display = 'none';
+  }
+
   openModal('providerModal');
 }
 
@@ -3536,6 +3831,8 @@ async function saveProviderModal() {
   const openaiUrl = document.getElementById('m_prov_url_openai').value.trim();
   const messageUrl = document.getElementById('m_prov_url_message').value.trim();
   const responsesUrl = document.getElementById('m_prov_url_responses').value.trim();
+  const presetSelect = document.getElementById('m_prov_preset');
+  const presetId = presetSelect ? presetSelect.value : '';
 
   if (!name) { toast('请填写供应商英文标识 (ID)', 'err'); return; }
   if (!openaiUrl && !messageUrl && !responsesUrl) {
@@ -3581,10 +3878,49 @@ async function saveProviderModal() {
     cfg.providers[name].openai_responses = false;
   }
 
+  const activePreset = currentSelectedPreset || (presetId ? PRESET_DEFINITIONS[presetId] : (PRESET_DEFINITIONS[name] || null));
+  if (activePreset) {
+    cfg.providers[name].preset_id = activePreset.id || presetId || name;
+    cfg.providers[name].preset_version = activePreset.version || '1.0.0';
+    if (activePreset.name) cfg.providers[name].name = activePreset.name;
+    if (activePreset.description) cfg.providers[name].description = activePreset.description;
+    if (activePreset.features) cfg.providers[name].features = activePreset.features;
+    if (activePreset.recommended_models && !cfg.providers[name].recommended_models) {
+      cfg.providers[name].recommended_models = activePreset.recommended_models;
+    }
+    if (activePreset.adapter_rules && !cfg.providers[name].adapter_rules) {
+      cfg.providers[name].adapter_rules = activePreset.adapter_rules;
+    }
+  }
+
+  const isVertex = name === 'vertex' || presetId === 'vertex' || cfg.providers[name].preset_id === 'vertex' || (openaiUrl && openaiUrl.includes('aiplatform.googleapis.com'));
+  if (isVertex) {
+    const vProj = (document.getElementById('m_prov_vertex_project')?.value || '').trim();
+    const vLoc = (document.getElementById('m_prov_vertex_location')?.value || '').trim() || 'global';
+    cfg.providers[name].project_id = vProj;
+    cfg.providers[name].location = vLoc;
+    cfg.providers[name].preset_id = 'vertex';
+    cfg.providers[name].name = 'Google Vertex AI (Gemini 3.8 Flash)';
+    cfg.providers[name].adapter_rules = {
+      model_alias: { 'gemini-3.8-flash': 'google/gemini-3.8-flash' },
+      ensure_google_prefix: true,
+      reasoning: {
+        strategy: 'gemini_thinking_matrix',
+        none_action: 'include_thoughts_false',
+        headroom_elevation: true,
+        model_matrix: { flash: ['low', 'medium', 'high'] }
+      }
+    };
+    cfg.providers[name].recommended_models = [
+      { name: 'gemini-3.8-flash', upstream_model: 'google/gemini-3.8-flash', description: '最新高性能推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)' }
+    ];
+  }
+
   const ok = await persistConfig();
   if (ok) {
     closeModal('providerModal');
     toast(\`供应商「\${name}」已保存并同步至 EdgeOne KV\`, 'ok');
+    renderAll();
   } else {
     cfg = backupCfg;
     renderAll();

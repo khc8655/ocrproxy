@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-03T07:45:06.872Z",
+  "updated_at": "2026-10-03T08:11:37.816Z",
   "providers": [
     {
       "id": "agnes",
@@ -213,14 +213,14 @@ export const CATALOG = {
     },
     {
       "id": "vertex",
-      "name": "Google Vertex AI (Gemini 3.5+)",
+      "name": "Google Vertex AI (Gemini 3.8 Flash)",
       "version": "1.0.0",
-      "rule_hash": "69ce20948a07",
+      "rule_hash": "0a224da56c14",
       "protocol": "vertex_openai",
       "base_url": "https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi",
       "anthropic_base_url": null,
       "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
-      "description": "Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传",
+      "description": "Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash 架构，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考等级配置",
       "features": {
         "native_thinking": true,
         "multimodal": true,
@@ -228,7 +228,7 @@ export const CATALOG = {
         "require_project_id": true,
         "require_location": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 1
     }
   ]
 };
@@ -1004,12 +1004,12 @@ export const PRESETS = [
   },
   {
     "id": "vertex",
-    "name": "Google Vertex AI (Gemini 3.5+)",
+    "name": "Google Vertex AI (Gemini 3.8 Flash)",
     "version": "1.0.0",
     "protocol": "vertex_openai",
     "base_url": "https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi",
     "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
-    "description": "Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传",
+    "description": "Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash 架构，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考等级配置",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -1019,20 +1019,14 @@ export const PRESETS = [
     },
     "recommended_models": [
       {
-        "name": "gemini-3.5-flash",
-        "upstream_model": "google/gemini-3.5-flash",
-        "description": "最新高性价比推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)"
-      },
-      {
-        "name": "gemini-3.5-pro",
-        "upstream_model": "google/gemini-3.5-pro",
-        "description": "最新旗舰强推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)"
+        "name": "gemini-3.8-flash",
+        "upstream_model": "google/gemini-3.8-flash",
+        "description": "最新高性能推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)"
       }
     ],
     "adapter_rules": {
       "model_alias": {
-        "gemini-3.5-flash": "google/gemini-3.5-flash",
-        "gemini-3.5-pro": "google/gemini-3.5-pro"
+        "gemini-3.8-flash": "google/gemini-3.8-flash"
       },
       "ensure_google_prefix": true,
       "reasoning": {
@@ -1043,10 +1037,6 @@ export const PRESETS = [
           "flash": [
             "low",
             "medium",
-            "high"
-          ],
-          "pro": [
-            "low",
             "high"
           ]
         }
