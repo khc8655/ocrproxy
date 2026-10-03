@@ -613,7 +613,8 @@ export function validateConfig(cfg) {
       p.keys = {};
     }
     for (const [k, v] of Object.entries(p.keys)) {
-      if (typeof v !== 'string' || !v) {
+      const keyVal = (typeof v === 'object' && v !== null) ? v.key : v;
+      if (typeof keyVal !== 'string' || !keyVal) {
         return `provider "${name}" key "${k}" must be a non-empty string`;
       }
     }

@@ -16,8 +16,8 @@
     <h2>OCRProxy</h2>
     <p>OCRProxy 控制台</p>
     <div class="form-group">
-      <label class="form-label" for="loginKey">管理员密码</label>
-      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD" autocomplete="current-password">
+      <label class="form-label" for="loginKey">管理员凭证</label>
+      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 或 PROXY_API_KEY" autocomplete="current-password">
     </div>
     <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
     <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
@@ -126,7 +126,7 @@
       </div>
 
       <!-- Sub-tab: Agent Models -->
-      <div id="mtab-agents" class="model-subtab active">
+      <div id="mtab-agents" class="model-subtab panel-agents active">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div class="section-title">Agent 模型管理</div>
@@ -141,7 +141,7 @@
       </div>
 
       <!-- Sub-tab: Providers & Keys -->
-      <div id="mtab-providers" class="model-subtab">
+      <div id="mtab-providers" class="model-subtab panel-providers">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div class="section-title">供应商与 Key 凭证库</div>

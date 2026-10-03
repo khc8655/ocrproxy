@@ -2,6 +2,7 @@
  * OCRProxy Admin - Core Framework & UI Foundation
  */
 const APP_VERSION = 'v2026.09.22';
+const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State
 const state = { 
@@ -106,11 +107,11 @@ function switchTab(id){
 async function login(){
   const k=document.getElementById('loginKey').value.trim();
   loginErr('');
-  if(!k){ loginErr('请输入管理员密码'); return; }
+  if(!k){ loginErr('请输入管理员凭证'); return; }
   try {
     const r=await fetch('/api/admin/config',{headers:{'Authorization':'Bearer '+k}});
     if(r.ok){ state.key=k; sessionStorage.setItem('admin_key',k); showApp(); toast('登录成功','ok'); loadData(); }
-    else loginErr('密码无效，请检查配置的 ADMIN_PASSWORD');
+    else loginErr('凭证无效，请检查 ADMIN_PASSWORD 或 PROXY_API_KEY');
   } catch(e){ loginErr('连接服务失败: '+e.message); }
 }
 function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }
@@ -216,7 +217,10 @@ function render(){
   }
   const badge = document.getElementById('topModeBadge');
   if (badge) {
-    if (runMode === 'agent') {
+    if (IS_EDGEONE) {
+      badge.className = 'brand-badge badge badge-success';
+      badge.textContent = 'EdgeOne 边缘版 (Agent 模式)';
+    } else if (runMode === 'agent') {
       badge.className = 'brand-badge badge badge-success';
       badge.textContent = 'Agent 智能体直连';
     } else {
@@ -224,6 +228,8 @@ function render(){
       badge.textContent = 'KB 知识库入库';
     }
   }
+  const mtabKbSub = document.getElementById('msub-kb');
+  if (mtabKbSub && IS_EDGEONE) mtabKbSub.style.display = 'none';
 
   // Log filter bar: in single mode (agent or kb), hide filter bar
   const lfb = document.getElementById('logFilterBar');
@@ -583,16 +589,26 @@ function updateAccess(){
 // Backup & Import
 async function exportConfig(){
   try {
-    const r=await fetch('/api/admin/config/export',{headers:headers()});
-    if(!r.ok) throw new Error('导出失败');
-    const disposition = r.headers.get('Content-Disposition') || '';
-    let filename = 'ocrproxy_config.json';
-    const match = disposition.match(/filename="?([^";]+)"?/);
-    if(match && match[1]) filename = match[1];
-    const blob=await r.blob(), url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
-    toast('配置导出成功','ok');
-  } catch(e){ toast('导出异常: '+e.message,'err'); }
+    let blob, filename = `ocrproxy_config_${new Date().toISOString().slice(0,10)}.json`;
+    try {
+      const r = await fetch('/api/admin/config/export', { headers: headers() });
+      if (r.ok) {
+        const disposition = r.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if(match && match[1]) filename = match[1];
+        blob = await r.blob();
+      }
+    } catch (_) {}
+
+    if (!blob) {
+      if (!state.config) throw new Error('当前无可用配置数据');
+      blob = new Blob([JSON.stringify(state.config, null, 2)], { type: 'application/json' });
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+    toast('配置导出成功', 'ok');
+  } catch(e){ toast('导出异常: ' + e.message, 'err'); }
 }
 let pendingImport=null;
 function handleImportFile(e){
@@ -665,3 +681,10 @@ function copy(id){
   const text=document.getElementById(id).textContent;
   navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板','ok')).catch(()=>toast('复制失败','err'));
 }
+
+// Cross-environment compatibility aliases
+window.doLogin = login;
+window.doLogout = logout;
+window.loadAllData = loadData;
+window.exportConfigJson = exportConfig;
+
