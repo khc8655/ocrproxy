@@ -525,10 +525,6 @@ function openProviderModal(sourceModal){
   document.getElementById('p_custom_url_toggle').checked = false;
   document.getElementById('p_custom_url_section').style.display = 'none';
   document.getElementById('p_anthropic_url').value = '';
-  const vSec = document.getElementById('p_vertex_section');
-  if (vSec) vSec.style.display = 'none';
-  if (document.getElementById('p_vertex_project')) document.getElementById('p_vertex_project').value = '';
-  if (document.getElementById('p_vertex_location')) document.getElementById('p_vertex_location').value = 'global';
   document.getElementById('p_models_wrap').style.display = 'none';
   document.getElementById('p_models_list').innerHTML = '';
   loadPresetsCatalog();
@@ -544,28 +540,6 @@ function editProvider(name){
   document.getElementById('p_name').value = name;
   document.getElementById('p_name').disabled = true;
   document.getElementById('p_url').value = p.base_url || '';
-
-  const isVertex = name === 'vertex' || p.preset_id === 'vertex' || Boolean(p.project_id) || (p.base_url && p.base_url.includes('aiplatform.googleapis.com'));
-  const vSec = document.getElementById('p_vertex_section');
-  if (vSec) {
-    if (isVertex) {
-      vSec.style.display = 'block';
-      let proj = p.project_id || '';
-      let loc = p.location || '';
-      if (!proj && p.base_url) {
-        const m = p.base_url.match(/projects\/([^/]+)/);
-        if (m) proj = m[1];
-      }
-      if (!loc && p.base_url) {
-        const m = p.base_url.match(/locations\/([^/]+)/);
-        if (m) loc = m[1];
-      }
-      if (document.getElementById('p_vertex_project')) document.getElementById('p_vertex_project').value = proj;
-      if (document.getElementById('p_vertex_location')) document.getElementById('p_vertex_location').value = loc || 'global';
-    } else {
-      vSec.style.display = 'none';
-    }
-  }
 
   const protos = getProviderProtocols(name, p);
   document.getElementById('p_proto_chat').checked = protos.includes('chat');
@@ -592,23 +566,6 @@ function saveProvider(){
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
 
   const isEdit = document.getElementById('p_name').disabled;
-  const isVertex = (state.currentSelectedPreset && state.currentSelectedPreset.id === 'vertex') ||
-                   (isEdit && (state.config.providers[name]?.preset_id === 'vertex' || name === 'vertex' || Boolean(state.config.providers[name]?.project_id))) ||
-                   url.includes('aiplatform.googleapis.com');
-  let vertexProject = '';
-  let vertexLocation = '';
-  if (isVertex) {
-    vertexProject = (document.getElementById('p_vertex_project')?.value || '').trim();
-    vertexLocation = (document.getElementById('p_vertex_location')?.value || '').trim() || 'global';
-    if (!vertexProject) {
-      toast('Google Cloud Vertex AI 必须填写 GCP 项目 ID (Project ID)', 'err');
-      return;
-    }
-    if (url.includes('{PROJECT_ID}')) {
-      toast('请将 Base URL 中的 {PROJECT_ID} 替换为实际项目 ID', 'err');
-      return;
-    }
-  }
 
   const selectedProtos = [];
   if(document.getElementById('p_proto_chat').checked) selectedProtos.push('chat');
@@ -626,10 +583,6 @@ function saveProvider(){
     state.config.providers[name].base_url = url;
     state.config.providers[name].protocols = selectedProtos;
     state.config.providers[name].anthropic_messages = selectedProtos.includes('messages');
-    if (isVertex) {
-      state.config.providers[name].project_id = vertexProject;
-      state.config.providers[name].location = vertexLocation;
-    }
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
     } else {
@@ -642,10 +595,6 @@ function saveProvider(){
       protocols: selectedProtos,
       anthropic_messages: selectedProtos.includes('messages')
     };
-    if (isVertex) {
-      state.config.providers[name].project_id = vertexProject;
-      state.config.providers[name].location = vertexLocation;
-    }
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
     }

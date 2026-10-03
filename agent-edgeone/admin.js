@@ -1025,12 +1025,6 @@ function openAddProviderModal(presetId) {
   document.getElementById('m_prov_url_message').value = '';
   document.getElementById('m_prov_url_responses').value = '';
 
-  const vertexSection = document.getElementById('m_prov_vertex_section');
-  if (vertexSection) vertexSection.style.display = 'none';
-  const vProj = document.getElementById('m_prov_vertex_project');
-  if (vProj) vProj.value = '';
-  const vLoc = document.getElementById('m_prov_vertex_location');
-  if (vLoc) vLoc.value = 'global';
 
   const descEl = document.getElementById('m_prov_desc');
   if (descEl) descEl.style.display = 'none';
