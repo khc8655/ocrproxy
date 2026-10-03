@@ -16,16 +16,16 @@ ocrprox (Monorepo)
 │   └── scripts/                       # 自动化测试与初始化工具
 │
 ├── agent-edgeone/                     # 部署于 EdgeOne 边缘函数 (Serverless)
-│   ├── edge-functions/                # V8 边缘函数 (OpenAI 兼容 /v1/* 接口)
-│   ├── admin.html / css / js          # 现代化 EdgeOne 管理后台
-│   └── package.json                   # EdgeOne 构建与 132 项自动化测试套件
+│   ├── edge-functions/                # V8 边缘函数 (自包含极速内联单体，由 build-admin.mjs 自动生成)
+│   ├── admin.html / css / js          # 由 shared/admin 编译输出的单体产物 (带自动生成警示)
+│   └── package.json                   # EdgeOne 构建与 167 项自动化测试套件
 │
-├── shared/                            # 共享资源与规范文档
-│   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json (AMD, MiniMax, Google, DeepSeek, etc.)
-│   ├── admin/                         # 跨端共用的模块化动静分离 Web 管理后台
+├── shared/                            # 共享资源与唯一规范源
+│   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json
+│   ├── admin/                         # 全局唯一的前端开发真理源 (Single Source of Truth)
 │   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器 (~700 行)
-│   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨) (~370 行)
-│   │   └── js/                        # 6 大独立业务领域小脚本 (core, vault, providers, models, settings, app)
+│   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨)
+│   │   └── js/                        # 7 大独立业务领域小脚本 (core, vault, providers, agent-models-ui, models, settings, app)
 │   └── docs/config-schema.md          # 统一配置规范文档
 │
 └── design-system/                     # UI 设计系统 Tokens 与组件库

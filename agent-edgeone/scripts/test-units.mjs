@@ -1157,6 +1157,26 @@ test('validateConfig: rejects empty key value', () => {
   truthy(validateConfig(bad));
 });
 
+test('validateConfig: accepts key with metadata object (e.g. vertex project_id, base_url)', () => {
+  const ok = {
+    providers: {
+      vertex: {
+        base_url: 'https://aiplatform.googleapis.com',
+        keys: {
+          jjb: {
+            key: 'AQ.Ab8RN6Lv...',
+            project_id: 'jjb111',
+            location: 'global',
+            base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/jjb111/locations/global/endpoints/openapi'
+          }
+        }
+      }
+    },
+    agent_models: {}
+  };
+  eq(validateConfig(ok), null);
+});
+
 test('validateConfig: rejects missing agent_models', () => {
   truthy(validateConfig({ providers: { s1: { base_url: 'x', keys: { k1: 'v' } } } }));
 });

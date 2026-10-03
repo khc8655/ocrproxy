@@ -42,6 +42,20 @@ function renderSettings(){
   set('cfg_vault_url', vCfg.edgeone_url || vCfg.url || '');
   set('cfg_vault_token', vCfg.token || '');
 
+  // EdgeOne Environment Adaptations: hide remote vault config and host restart
+  if (typeof IS_EDGEONE !== 'undefined' && IS_EDGEONE) {
+    const vaultCard = document.getElementById('cfg_vault_url')?.closest('.card');
+    if (vaultCard) vaultCard.style.display = 'none';
+    const restartCard = document.getElementById('s_autoRestart')?.closest('.card');
+    if (restartCard) restartCard.style.display = 'none';
+    if (modeEl) {
+      Array.from(modeEl.options).forEach(opt => {
+        if (opt.value !== 'agent') opt.style.display = 'none';
+      });
+      modeEl.value = 'agent';
+    }
+  }
+
   onRunModeChange();
   updateRoutingSettingsState();
 }
