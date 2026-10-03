@@ -1012,11 +1012,16 @@ async def test_candidate_endpoint(request: Request):
     if not provider:
         return JSONResponse(status_code=400, content={"error": f"Provider '{provider_name}' not found"})
 
-    api_key = provider.get("keys", {}).get(key_label)
-    if not api_key:
+    api_key_raw = provider.get("keys", {}).get(key_label)
+    if not api_key_raw:
         return JSONResponse(status_code=400, content={"error": f"Key '{key_label}' not found for provider '{provider_name}'"})
 
-    base_url = provider.get("base_url", "")
+    if isinstance(api_key_raw, dict):
+        api_key = str(api_key_raw.get("key", ""))
+        base_url = api_key_raw.get("base_url") or provider.get("base_url", "")
+    else:
+        api_key = str(api_key_raw)
+        base_url = provider.get("base_url", "")
     try:
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
@@ -1109,11 +1114,16 @@ async def test_agent_model_endpoint(request: Request):
         if not provider:
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": None, "error": "Provider not found"}
-        api_key = provider.get("keys", {}).get(b.get("key"))
-        if not api_key:
+        api_key_raw = provider.get("keys", {}).get(b.get("key"))
+        if not api_key_raw:
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": None, "error": "Key not found"}
-        base_url = provider.get("base_url", "")
+        if isinstance(api_key_raw, dict):
+            api_key = str(api_key_raw.get("key", ""))
+            base_url = api_key_raw.get("base_url") or provider.get("base_url", "")
+        else:
+            api_key = str(api_key_raw)
+            base_url = provider.get("base_url", "")
         try:
             parsed = urlparse(base_url)
             if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):

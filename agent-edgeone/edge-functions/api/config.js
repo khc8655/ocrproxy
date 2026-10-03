@@ -234,14 +234,18 @@ export async function onRequestGet(context) {
         { status: 404, headers: { 'content-type': 'application/json' } }
       );
     }
-    const apiKey = provider.keys?.[keyLabel];
-    if (!apiKey) {
+    const apiKeyRaw = provider.keys?.[keyLabel];
+    if (!apiKeyRaw) {
       return new Response(
         JSON.stringify({ error: { type: 'not_found', message: `Key "${keyLabel}" not found` } }),
         { status: 404, headers: { 'content-type': 'application/json' } }
       );
     }
-    const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
+    const apiKey = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null) ? (apiKeyRaw.key || '') : String(apiKeyRaw);
+    const rawBaseUrl = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null && apiKeyRaw.base_url)
+      ? apiKeyRaw.base_url
+      : (provider.base_url || '');
+    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
     const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,
@@ -315,11 +319,15 @@ export async function onRequestPut(context) {
     if (!provider) {
       return new Response(JSON.stringify({ error: { type: 'not_found', message: `Provider "${providerName}" not found` } }), { status: 404 });
     }
-    const apiKey = provider.keys?.[keyLabel];
-    if (!apiKey) {
+    const apiKeyRaw = provider.keys?.[keyLabel];
+    if (!apiKeyRaw) {
       return new Response(JSON.stringify({ error: { type: 'not_found', message: `Key "${keyLabel}" not found` } }), { status: 404 });
     }
-    const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
+    const apiKey = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null) ? (apiKeyRaw.key || '') : String(apiKeyRaw);
+    const rawBaseUrl = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null && apiKeyRaw.base_url)
+      ? apiKeyRaw.base_url
+      : (provider.base_url || '');
+    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
     const result = await probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel);
     return new Response(JSON.stringify(result), {
       status: 200,

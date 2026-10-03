@@ -494,13 +494,17 @@ export function resolveBinding(config, binding) {
   if (!provider) {
     throw new ConfigError(`Provider "${binding.provider}" not in providers map.`);
   }
-  const apiKey = provider.keys?.[binding.keyLabel];
-  if (!apiKey) {
+  const apiKeyRaw = provider.keys?.[binding.keyLabel];
+  if (!apiKeyRaw) {
     throw new ConfigError(
       `Key "${binding.keyLabel}" not in provider "${binding.provider}".`
     );
   }
-  const baseUrl = (provider.base_url || '').replace(/\/+$/, '');
+  const apiKey = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null) ? (apiKeyRaw.key || '') : String(apiKeyRaw);
+  const rawBaseUrl = (typeof apiKeyRaw === 'object' && apiKeyRaw !== null && apiKeyRaw.base_url)
+    ? apiKeyRaw.base_url
+    : (provider.base_url || '');
+  const baseUrl = rawBaseUrl.replace(/\/+$/, '');
   if (!baseUrl) {
     throw new ConfigError(`Provider "${binding.provider}" has no base_url.`);
   }
