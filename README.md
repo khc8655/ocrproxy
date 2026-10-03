@@ -133,9 +133,14 @@ ocrprox (Monorepo)
   - **SenseNova (商汤)**：原生支持标准 `reasoning_effort` (`none/low/medium/high`)，支持 `sensenova-6.8-flash-lite`, `deepseek-v4-flash`, `glm-5.2`；
   - **StepFun (阶跃)**：`none` 自动映射为 `low` 降级（防止上游 400），自动注入 `reasoning_format: "deepseek-style"` 以在 SSE 流中返回 `reasoning_content`；
   - **Agnes AI**：全面支持最新 `agnes-3.0-flash` 旗舰开源推理模型与 `agnes-2.5-flash`；Agent 模式下缺省默认开启思考（`default_thinking: true` 自动映射为 `chat_template_kwargs: {"enable_thinking": true}`），客户端传 `reasoning_effort: "none"` 时精准关闭；KB 模式严格锁死禁用思考以保障毫秒级低延迟；内置 `max_tokens_ceiling: 65536` 钳制保护（杜绝 Hermes 等 Agent 工具超限 400 报错）；
-  - **Google AI Studio (Gemini)**：
+  - **Google AI Studio**：
     - **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`，Gemma 模型自动规避；
     - **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考 Token 耗尽导致的空响应与截断；
+  - **Google Vertex AI**：
+    - **官方 OpenAPI 规范端点与智能 URL 路由**：适配 `https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/endpoints/openapi`，智能路由严格消除多余 `/v1/` 拼接错误；
+    - **Key 级专属凭据头自动注入**：针对 API Key 认证自动注入专属 `x-goog-api-key: <KEY>` 凭据头（替换普通 Bearer 认证，规避 Google 401 UNAUTHENTICATED 错误）；
+    - **模型 ID 自动补齐**：自动规范化 `google/` 前缀（`gemini-3.8-flash` ➔ `google/gemini-3.8-flash`）；
+    - **Thinking 矩阵与安全签名保活**：完整支持 `none` (关闭)、`low`、`medium`、`high` 思考等级映射，在多轮工具调用时自动保活 Google 特有的 `thought_signature` 安全签名；
   - **MiniMax (国内官方订阅 & Anthropic Messages 双通道)**：
     - **双通道直通**：OpenAI 协议直通 `https://api.minimaxi.com/v1/chat/completions`，Messages 协议直通 `https://api.minimax.cn/anthropic/v1/messages`；
     - **非标参数清洗**：自动剥离 Claude 3.7 专有的 `output_config` 等非标字段（防止 MiniMax 报 400 错误）；
