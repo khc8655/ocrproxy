@@ -1,6 +1,6 @@
 {
   "id": "cline",
-  "name": "Cline (OpenRouter Hub)",
+  "name": "Cline",
   "version": "1.0.0",
   "protocol": "openai",
   "base_url": "https://api.cline.bot/api/v1",
@@ -51,7 +51,12 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "openai_passthrough",
-      "supported_levels": ["none", "low", "medium", "high"]
+      "supported_levels": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ]
     },
     "model_alias": {
       "cline-free/muse-spark-1.3-contributor": "meta/muse-spark-1.3-contributor",
@@ -73,7 +78,11 @@
       {
         "name": "upstream_rate_limited",
         "match_status": 500,
-        "match_keywords": ["429", "rate-limited", "upstream_provider_shared_pool"],
+        "match_keywords": [
+          "429",
+          "rate-limited",
+          "upstream_provider_shared_pool"
+        ],
         "action": "failover",
         "cooldown_sec": 60,
         "failover": true

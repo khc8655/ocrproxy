@@ -1388,7 +1388,7 @@ test('getPreset: finds bai preset with sanitized id "B.AI"', () => {
 test('getPreset: finds google preset with recommended models', () => {
   const p = getPreset('google');
   truthy(p);
-  eq(p.name, 'Google AI Studio (Gemini)');
+  eq(p.name, 'Google AI Studio');
   truthy(p.base_url.includes('generativelanguage.googleapis.com'));
   truthy(p.recommended_models.length >= 2);
   const modelNames = p.recommended_models.map(m => m.name);

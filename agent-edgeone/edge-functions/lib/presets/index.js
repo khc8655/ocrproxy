@@ -9,7 +9,7 @@ export const CATALOG = {
   "providers": [
     {
       "id": "agnes",
-      "name": "Agnes AI (爱格尼斯)",
+      "name": "Agnes AI",
       "version": "1.2.0",
       "rule_hash": "aaa5a822991a",
       "protocol": "openai",
@@ -62,7 +62,7 @@ export const CATALOG = {
     },
     {
       "id": "cline",
-      "name": "Cline (OpenRouter Hub)",
+      "name": "Cline",
       "version": "1.0.0",
       "rule_hash": "634300ccb435",
       "protocol": "openai",
@@ -95,7 +95,7 @@ export const CATALOG = {
     },
     {
       "id": "google",
-      "name": "Google AI Studio (Gemini)",
+      "name": "Google AI Studio",
       "version": "1.1.0",
       "rule_hash": "19fbf45af855",
       "protocol": "google_openai",
@@ -130,7 +130,7 @@ export const CATALOG = {
     },
     {
       "id": "openai",
-      "name": "OpenAI 官方 / 标准兼容中转",
+      "name": "OpenAI 官方",
       "version": "1.1.0",
       "rule_hash": "3ddc251503f8",
       "protocol": "openai",
@@ -236,7 +236,7 @@ export const CATALOG = {
 export const PRESETS = [
   {
     "id": "agnes",
-    "name": "Agnes AI (爱格尼斯)",
+    "name": "Agnes AI",
     "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
@@ -478,7 +478,7 @@ export const PRESETS = [
   },
   {
     "id": "cline",
-    "name": "Cline (OpenRouter Hub)",
+    "name": "Cline",
     "version": "1.0.0",
     "protocol": "openai",
     "base_url": "https://api.cline.bot/api/v1",
@@ -617,7 +617,7 @@ export const PRESETS = [
   },
   {
     "id": "google",
-    "name": "Google AI Studio (Gemini)",
+    "name": "Google AI Studio",
     "version": "1.1.0",
     "protocol": "google_openai",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -731,7 +731,7 @@ export const PRESETS = [
   },
   {
     "id": "openai",
-    "name": "OpenAI 官方 / 标准兼容中转",
+    "name": "OpenAI 官方",
     "version": "1.1.0",
     "protocol": "openai",
     "base_url": "https://api.openai.com/v1",
