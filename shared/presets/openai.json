@@ -1,6 +1,6 @@
 {
   "id": "openai",
-  "name": "OpenAI 官方 / 标准兼容中转",
+  "name": "OpenAI 官方",
   "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.openai.com/v1",
@@ -36,7 +36,12 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "openai_passthrough",
-      "supported_levels": ["none", "low", "medium", "high"]
+      "supported_levels": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ]
     },
     "tools": {
       "normalize_choice_to_string": false,

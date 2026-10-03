@@ -1,6 +1,6 @@
 {
   "id": "google",
-  "name": "Google AI Studio (Gemini)",
+  "name": "Google AI Studio",
   "version": "1.1.0",
   "protocol": "google_openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -38,8 +38,16 @@
       "none_action": "include_thoughts_false",
       "headroom_elevation": true,
       "model_matrix": {
-        "flash": ["minimal", "low", "medium", "high"],
-        "pro": ["low", "high"]
+        "flash": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "pro": [
+          "low",
+          "high"
+        ]
       }
     },
     "tools": {
