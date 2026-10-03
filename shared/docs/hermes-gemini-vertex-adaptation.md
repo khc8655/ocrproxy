@@ -429,6 +429,20 @@ https://{host}/v1beta1/projects/{project_id}/locations/{region}/endpoints/openap
 
 **Region 优先级**：显式参数 > `VERTEX_REGION` 环境变量 > `config.yaml` 的 `vertex.region` > 默认 `"global"`
 
+#### 4.2.1 OCRProxy 网关工程实战避坑要点 (URL 拼接与认证头)
+
+在实现大模型网关中转 Google Vertex AI 时，需特别规避以下两个致命问题：
+
+1. **URL 拼接规整 (严禁附加 `/v1/`)**：
+   - Vertex OpenAPI 端点路径中已包含 `/v1beta1/.../endpoints/openapi`，且本身即为兼容端点；
+   - 网关在 `join_upstream()` 或反代路径重写时，若盲目追加 `/v1/`（导致变为 `/openapi/v1/chat/completions`），Google 端点会直接报 **HTTP 404 Not Found**；
+   - 解决方案：网关路由检测到 `/endpoints/openapi` 或已有 `/v\d+[^/]*/` 版本路径时，必须仅在尾部追加 `/chat/completions`，绝不追加 `/v1/`。
+
+2. **API Key 认证头规范 (`x-goog-api-key` 铁律)**：
+   - 当开发者在 Google Cloud 控制台创建 API Key 访问 Vertex AI OpenAPI 端点时，**Google 严格要求必须使用 `x-goog-api-key: <KEY>` 请求头**；
+   - 若网关使用传统的 `Authorization: Bearer <KEY>` 发送请求，Google 服务器会将 Key 误解析为 OAuth2 Access Token，导致鉴权失败报错：`API_KEY_SERVICE_BLOCKED`（**HTTP 401 UNAUTHENTICATED**）；
+   - 解决方案：网关在上游转发（`proxy_routes.py` 和 EdgeOne `forwardUpstream`）以及后端模型探活（`probe_upstream_models`）中，当上游匹配 Vertex AI OpenAPI 时，自动注入 `x-goog-api-key: <KEY>` 并移除/替换 Bearer Token。
+
 ### 4.3 ProviderProfile 注册
 
 **文件**: `plugins/model-providers/vertex/__init__.py`

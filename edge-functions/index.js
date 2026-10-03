@@ -2870,11 +2870,11 @@ const FALLBACK_PRESETS = {
   },
   vertex: {
     id: 'vertex',
-    name: 'Google Vertex AI (Gemini 3.8 Flash)',
+    name: 'Google Vertex AI',
     version: '1.0.0',
     base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
-    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
+    description: 'Google Cloud Vertex AI 官方大模型端点。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
     recommended_models: [
       { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true }
     ],
@@ -3854,7 +3854,7 @@ async function saveProviderModal() {
   const isVertex = name === 'vertex' || presetId === 'vertex' || cfg.providers[name].preset_id === 'vertex' || (openaiUrl && openaiUrl.includes('aiplatform.googleapis.com'));
   if (isVertex) {
     cfg.providers[name].preset_id = 'vertex';
-    cfg.providers[name].name = 'Google Vertex AI (Gemini 3.8 Flash)';
+    cfg.providers[name].name = 'Google Vertex AI';
     cfg.providers[name].adapter_rules = {
       model_alias: { 'gemini-3.8-flash': 'google/gemini-3.8-flash' },
       ensure_google_prefix: true,

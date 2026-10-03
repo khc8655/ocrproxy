@@ -13,7 +13,8 @@
 | **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） | 独立记账在 `stats.kb[type]`，看板显示 4 项入库任务指标，与 Agent 互不干扰 |
 | **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**模型为主的 `agent_models` 字典**取该模型的 Key 列表按序调用，429/500 自动切换下一个 Key；支持 `upstream_model` 上游 ID 重写 | 独立记账在 `stats.agent`，提供**模型 ID 调用排行看板**与**故障切换 (Failover) 深度监控** |
 
-- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。仅对极少数上游不兼容的字段值做规范化（如 StepFun 不接受 `reasoning_effort="none"` → 自动降级为 `"low"`；TokenRhythm 不接受对象形式 `tool_choice` → 自动转为 `"auto"`），避免 400 错误
+- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。仅对极少数上游不兼容的字段值做规范化（如 StepFun 不接受 `reasoning_effort="none"` → 自动降级为 `"low"`；TokenRhythm 不接受对象形式 `tool_choice` → 自动转为 `"auto"`；Google Vertex AI 自动补齐 `google/` 前缀、映射思考等级矩阵与保活 `thought_signature`），避免 400 错误
+- **Google Vertex AI 协议级深度适配**：支持官方 OpenAPI 端点（`/endpoints/openapi`），智能识别并消除 `/v1` 拼接错误；针对 API Key 认证自动注入专属 `x-goog-api-key: <KEY>` 鉴权头（替换 Bearer 格式，根治 401 UNAUTHENTICATED 错误）；支持 Key 级独立绑定 Project ID 与 Location；
 - **Agent 模型维度深度追踪**：按模型 ID 实时汇总调用量占比、成功率、平均耗时、429 限流次数、5xx 异常次数、多 Key 自动切换次数（Failovers）、最后错误原因与发生时间
 - **探活与节点健康状态隔离**：Agent 探活与调用采用专属节点 Key（`agent:{model}:{provider}:{key}`），KB 采用（`kb:{type}:{provider}:{key}`），同一个 Key 在不同场景下的健康状态互不污染
 - **分类错误日志**：支持在后台按「全部」、「🤖 仅看 Agent」、「📚 仅看 KB」快速过滤错误记录
@@ -145,6 +146,21 @@ curl -X POST https://your-domain.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "deepseek-ai/DeepSeek-V3", "messages": [{"role": "user", "content": "你好"}], "stream": true}'
 ```
+
+#### 调用 Google Vertex AI 推理模型 (Gemini 3.8 Flash)：
+```bash
+# OCRProxy 自动将 gemini-3.8-flash 规范化为 google/gemini-3.8-flash 并注入 x-goog-api-key 认证头
+curl -X POST https://your-domain.com/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_PROXY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3.8-flash",
+    "messages": [{"role": "user", "content": "请简要解释什么是薛定谔的猫"}],
+    "reasoning_effort": "high",
+    "stream": true
+  }'
+```
+
 
 ### 查看可用模型
 

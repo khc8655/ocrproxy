@@ -23,6 +23,18 @@ Agent 模式用于向 Cursor / Cline / OpenClaw / Hermes 等智能体工具提�
       "keys": {
         "KeyMain": "AIzaSy..."
       }
+    },
+    "vertex": {
+      "preset_id": "vertex",
+      "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
+      "keys": {
+        "MyGCP": {
+          "key": "AIzaSy...",
+          "project_id": "my-gcp-project-123",
+          "location": "global",
+          "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/my-gcp-project-123/locations/global/endpoints/openapi"
+        }
+      }
     }
   },
   "agent_models": {
@@ -38,10 +50,25 @@ Agent 模式用于向 Cursor / Cline / OpenClaw / Hermes 等智能体工具提�
       "keys": [
         { "provider": "google", "key": "KeyMain" }
       ]
+    },
+    "gemini-3.8-flash": {
+      "upstream_model": "google/gemini-3.8-flash",
+      "keys": [
+        { "provider": "vertex", "key": "MyGCP" }
+      ]
     }
   }
 }
 ```
+
+> **注意 (Vertex AI Key 级元数据绑定)**：
+> Google Cloud Vertex AI 每个 Key 可独立绑定 `project_id`、`location`（默认 `global`）和渲染后的具体 `base_url`。
+> 当请求发往 Vertex AI 端点时：
+> 1. 采用 Key 自带的 `base_url` 路由；
+> 2. 鉴权头自动注入专属 `x-goog-api-key: <KEY>`（非 Bearer 格式）；
+> 3. 模型名自动规范化补齐 `google/` 前缀；
+> 4. URL 拼接严格规整，严禁拼接多余的 `/v1/`。
+
 
 ---
 
