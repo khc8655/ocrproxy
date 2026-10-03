@@ -453,6 +453,22 @@ test('normalize: google skips thinking_config for gemma models', () => {
   eq(body.extra_body?.google?.thinking_config, undefined);
 });
 
+// normaliseForProvider — Google Vertex AI (Gemini 3.5+)
+test('normalize: vertex prefixes model with google/ and maps reasoning_effort', () => {
+  const body = { model: 'gemini-3.5-flash', reasoning_effort: 'medium' };
+  normaliseForProvider(body, 'vertex');
+  eq(body.model, 'google/gemini-3.5-flash');
+  eq(body.reasoning_effort, undefined);
+  deepEq(body.extra_body?.google?.thinking_config, { include_thoughts: true, thinking_level: 'medium' });
+});
+
+test('normalize: vertex preserves existing google/ prefix on model', () => {
+  const body = { model: 'google/gemini-3.5-pro', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'vertex');
+  eq(body.model, 'google/gemini-3.5-pro');
+  deepEq(body.extra_body?.google?.thinking_config, { include_thoughts: false });
+});
+
 // normaliseForProvider — Agnes AI
 test('normalize: agnes reasoning "high" → chat_template_kwargs.enable_thinking: true', () => {
   const body = { model: 'agnes-2.5-flash', reasoning_effort: 'high' };
@@ -1356,6 +1372,29 @@ test('getPreset: finds cline with OpenRouter hub and model aliases', () => {
   eq(p.base_url, 'https://api.cline.bot/api/v1');
   truthy(p.adapter_rules?.model_alias?.['cline-free/muse-spark-1.3-contributor']);
   eq(p.adapter_rules.model_alias['cline-free/muse-spark-1.3-contributor'], 'meta/muse-spark-1.3-contributor');
+});
+
+test('getPreset: finds vertex with Gemini 3.5+ models and Project ID requirement', () => {
+  const p = getPreset('vertex');
+  truthy(p);
+  eq(p.id, 'vertex');
+  eq(p.name, 'Google Vertex AI (Gemini 3.5+)');
+  truthy(p.features?.require_project_id);
+  truthy(p.features?.require_location);
+  const modelNames = p.recommended_models.map(m => m.name);
+  truthy(modelNames.includes('gemini-3.5-flash'));
+  truthy(modelNames.includes('gemini-3.5-pro'));
+  const upstreamNames = p.recommended_models.map(m => m.upstream_model);
+  truthy(upstreamNames.includes('google/gemini-3.5-flash'));
+  truthy(upstreamNames.includes('google/gemini-3.5-pro'));
+});
+
+test('buildChatUrl: correctly preserves Vertex openapi endpoint path', () => {
+  const globalUrl = 'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/endpoints/openapi';
+  eq(buildChatUrl(globalUrl), 'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/endpoints/openapi/chat/completions');
+
+  const regionalUrl = 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/endpoints/openapi';
+  eq(buildChatUrl(regionalUrl), 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/endpoints/openapi/chat/completions');
 });
 
 // ============================================================================

@@ -97,6 +97,24 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
+  // 1b. Model alias mapping (e.g. cline-free/muse-spark-1.3 -> meta/muse-spark-1.3, gemini-3.5-flash -> google/gemini-3.5-flash)
+  const aliasMap = rules.model_alias;
+  if (aliasMap && typeof aliasMap === 'object') {
+    for (const [k, v] of Object.entries(aliasMap)) {
+      if (modelName === k.toLowerCase() || modelName === v.toLowerCase()) {
+        body.model = v;
+        break;
+      }
+    }
+  }
+
+  // 1c. Ensure Google prefix for Vertex AI
+  if (rules.ensure_google_prefix) {
+    if (typeof body.model === 'string' && body.model && !body.model.startsWith('google/')) {
+      body.model = 'google/' + body.model;
+    }
+  }
+
   // 2. Sanitization (parameter blacklisting and clamping)
   const stripParams = rules.sanitization?.strip_params || rules.sanitization?.unsupported_params;
   if (Array.isArray(stripParams)) {

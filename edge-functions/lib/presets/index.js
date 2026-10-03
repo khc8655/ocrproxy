@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-09-28T07:12:33.331Z",
+  "updated_at": "2026-10-03T07:45:06.872Z",
   "providers": [
     {
       "id": "agnes",
@@ -210,6 +210,25 @@ export const CATALOG = {
         "tools": true
       },
       "recommended_models_count": 3
+    },
+    {
+      "id": "vertex",
+      "name": "Google Vertex AI (Gemini 3.5+)",
+      "version": "1.0.0",
+      "rule_hash": "69ce20948a07",
+      "protocol": "vertex_openai",
+      "base_url": "https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi",
+      "anthropic_base_url": null,
+      "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
+      "description": "Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true,
+        "require_project_id": true,
+        "require_location": true
+      },
+      "recommended_models_count": 2
     }
   ]
 };
@@ -973,6 +992,69 @@ export const PRESETS = [
       "tools": {
         "normalize_choice_to_string": true,
         "strip_json_schema": false,
+        "rescue_from_text": true
+      },
+      "user_tracking": {
+        "passthrough_user": true
+      },
+      "sanitization": {
+        "unsupported_params": []
+      }
+    }
+  },
+  {
+    "id": "vertex",
+    "name": "Google Vertex AI (Gemini 3.5+)",
+    "version": "1.0.0",
+    "protocol": "vertex_openai",
+    "base_url": "https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi",
+    "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
+    "description": "Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传",
+    "features": {
+      "native_thinking": true,
+      "multimodal": true,
+      "tools": true,
+      "require_project_id": true,
+      "require_location": true
+    },
+    "recommended_models": [
+      {
+        "name": "gemini-3.5-flash",
+        "upstream_model": "google/gemini-3.5-flash",
+        "description": "最新高性价比推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)"
+      },
+      {
+        "name": "gemini-3.5-pro",
+        "upstream_model": "google/gemini-3.5-pro",
+        "description": "最新旗舰强推理模型 (官方 OpenAI 端点强制要求 google/ 前缀)"
+      }
+    ],
+    "adapter_rules": {
+      "model_alias": {
+        "gemini-3.5-flash": "google/gemini-3.5-flash",
+        "gemini-3.5-pro": "google/gemini-3.5-pro"
+      },
+      "ensure_google_prefix": true,
+      "reasoning": {
+        "strategy": "gemini_thinking_matrix",
+        "none_action": "include_thoughts_false",
+        "headroom_elevation": true,
+        "model_matrix": {
+          "flash": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "pro": [
+            "low",
+            "high"
+          ]
+        }
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "strip_json_schema": true,
+        "deep_schema_sanitization": true,
         "rescue_from_text": true
       },
       "user_tracking": {
