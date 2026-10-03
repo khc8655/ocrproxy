@@ -167,9 +167,24 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
     if not rules or not isinstance(rules, dict):
         return
 
+    # 1a. Model alias mapping (e.g. cline-free/... -> meta/..., gemini-3.8-flash -> google/gemini-3.8-flash)
+    alias_map = rules.get("model_alias", {})
+    if isinstance(alias_map, dict) and alias_map:
+        raw_m = str(out.get("model", ""))
+        if raw_m in alias_map:
+            out["model"] = alias_map[raw_m]
+        elif raw_m.lower() in alias_map:
+            out["model"] = alias_map[raw_m.lower()]
+
+    # 1b. Ensure Google Prefix (for Vertex AI)
+    if rules.get("ensure_google_prefix") and out.get("model"):
+        m_str = str(out["model"])
+        if not m_str.startswith("google/"):
+            out["model"] = f"google/{m_str}"
+
     m_name = str(out.get("model", "")).lower()
 
-    # 1. Model casing mapping
+    # 1c. Model casing mapping
     casing_map = rules.get("case_sensitive_models", {})
     if isinstance(casing_map, dict):
         for k, v in casing_map.items():
