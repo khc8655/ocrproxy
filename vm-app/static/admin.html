@@ -449,6 +449,23 @@
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
         <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova">
       </div>
+      <!-- Vertex AI 专属配置 (选择 Vertex 预设时展开，纯手动填写) -->
+      <div id="p_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--error);font-weight:bold;">*</span></label>
+          <input type="text" id="p_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onVertexParamChange()">
+        </div>
+        <div class="form-group mb-1">
+          <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
+          <input type="text" id="p_vertex_location" class="form-control" placeholder="global" value="global" oninput="onVertexParamChange()">
+        </div>
+        <div class="text-secondary" style="font-size:11px;margin-top:6px;line-height:1.4;">
+          💡 提示：输入项目 ID 与区域后将自动实时生成下方标准的 Base URL，无需手动拼装。
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label">Base URL 接口基础地址</label>
         <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">

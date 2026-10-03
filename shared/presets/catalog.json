@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "updated_at": "2026-09-28T07:12:33.331Z",
+  "updated_at": "2026-10-03T07:45:06.872Z",
   "providers": [
     {
       "id": "agnes",
@@ -205,6 +205,25 @@
         "tools": true
       },
       "recommended_models_count": 3
+    },
+    {
+      "id": "vertex",
+      "name": "Google Vertex AI (Gemini 3.5+)",
+      "version": "1.0.0",
+      "rule_hash": "69ce20948a07",
+      "protocol": "vertex_openai",
+      "base_url": "https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi",
+      "anthropic_base_url": null,
+      "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
+      "description": "Google Cloud Vertex AI 官方大模型端点，适配 Gemini 3.5+ 架构，支持 Project ID/区域动态拼接、Thinking 思考等级与多轮 Tool Calling 签名透传",
+      "features": {
+        "native_thinking": true,
+        "multimodal": true,
+        "tools": true,
+        "require_project_id": true,
+        "require_location": true
+      },
+      "recommended_models_count": 2
     }
   ]
 }
