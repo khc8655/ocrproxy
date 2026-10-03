@@ -24,25 +24,27 @@ import { normaliseForProvider } from '../lib/normalize.js';
 
 
 function checkAuth(request, env) {
-  const need = env?.PROXY_API_KEY;
-  if (!need) return null;
+  const adminPass = env?.ADMIN_PASSWORD;
+  const proxyKey = env?.PROXY_API_KEY;
+  if (!adminPass && !proxyKey) return null;
+
   const got = request.headers.get('authorization') || '';
-  if (got !== `Bearer ${need}`) {
-    return new Response(
-      JSON.stringify({
-        error: {
-          type: 'authentication_error',
-          message: 'Missing or invalid Authorization header.',
-          code: 'invalid_api_key',
-        },
-      }),
-      {
-        status: 401,
-        headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-      }
-    );
-  }
-  return null;
+  if (adminPass && got === `Bearer ${adminPass}`) return null;
+  if (proxyKey && got === `Bearer ${proxyKey}`) return null;
+
+  return new Response(
+    JSON.stringify({
+      error: {
+        type: 'authentication_error',
+        message: 'Missing or invalid Authorization header.',
+        code: 'invalid_api_key',
+      },
+    }),
+    {
+      status: 401,
+      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
+    }
+  );
 }
 
 async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '') {

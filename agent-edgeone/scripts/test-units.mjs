@@ -25,6 +25,7 @@ import {
   kvNotBoundResponse,
   KV_BINDING_CANDIDATES,
   DEFAULT_SETTINGS,
+  checkAuth,
 } from '../edge-functions/lib/config.js';
 import { normaliseForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream } from '../edge-functions/lib/normalize.js';
 import {
@@ -1814,6 +1815,33 @@ test('bundled admin ui: has isolated EdgeOne vault hub admin UI per ARCHITECTURE
   truthy(content.includes('id="panel-access"'));
   // 3. Independent version badge
   truthy(content.includes('id="topVersionBadge"'));
+  // 4. Guaranteed agent model UI functions
+  truthy(content.includes('renderAgentModels'));
+  truthy(content.includes('saveAgentModel'));
+});
+
+test('checkAuth supports both ADMIN_PASSWORD and PROXY_API_KEY', () => {
+  const env = { ADMIN_PASSWORD: 'admin_secret_pwd', PROXY_API_KEY: 'proxy_secret_key' };
+  
+  // 1. Authorized via ADMIN_PASSWORD
+  const adminReq = new Request('http://localhost/api/config', {
+    headers: { 'authorization': 'Bearer admin_secret_pwd' }
+  });
+  eq(checkAuth(adminReq, env), null);
+
+  // 2. Authorized via PROXY_API_KEY
+  const proxyReq = new Request('http://localhost/api/config', {
+    headers: { 'authorization': 'Bearer proxy_secret_key' }
+  });
+  eq(checkAuth(proxyReq, env), null);
+
+  // 3. Rejected invalid credentials
+  const badReq = new Request('http://localhost/api/config', {
+    headers: { 'authorization': 'Bearer wrong_pwd' }
+  });
+  const res = checkAuth(badReq, env);
+  truthy(res instanceof Response);
+  eq(res.status, 401);
 });
 
 console.log('\n----');
