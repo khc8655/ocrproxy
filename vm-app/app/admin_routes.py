@@ -310,13 +310,19 @@ async def get_presets_catalog_endpoint(request: Request):
     if _CATALOG_CACHE["data"] and _CATALOG_CACHE["expires_at"] > now:
         return JSONResponse(content={"ok": True, "source": "cache", "catalog": _CATALOG_CACHE["data"]})
 
-    catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
-    source = "remote"
-    if not catalog_data:
-        catalog_data = _get_local_catalog()
-        source = "local_fallback"
+    local_catalog = _get_local_catalog()
+    if local_catalog and isinstance(local_catalog, dict) and local_catalog.get("providers"):
+        catalog_data = local_catalog
+        source = "local"
+    else:
+        catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
+        source = "remote"
+        if not catalog_data:
+            catalog_data = local_catalog
+            source = "local_fallback"
 
     _CATALOG_CACHE["data"] = catalog_data
+    _CATALOG_CACHE["expires_at"] = now + 60.0
     catalog_providers = catalog_data.get("providers", []) if isinstance(catalog_data, dict) else []
     return JSONResponse(content={
         "ok": True,
