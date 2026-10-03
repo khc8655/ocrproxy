@@ -37,6 +37,10 @@ function checkAuth(request, env) {
 }
 
 export async function onRequestPost(context) {
+  return handleVaultFetch(context);
+}
+
+export async function handleVaultFetch(context, options = {}) {
   const { request, env } = context;
   const authErr = checkAuth(request, env);
   if (authErr) return authErr;
@@ -53,6 +57,7 @@ export async function onRequestPost(context) {
   }
 
   const { provider, key_label, keys, credentials_only, include_rules } = body || {};
+  const isCredentialsOnly = Boolean(options.forceCredentialsOnly || credentials_only === true || include_rules === false);
   if (!provider) {
     return new Response(
       JSON.stringify({ ok: false, error: 'provider 字段不能为空' }),
@@ -95,7 +100,6 @@ export async function onRequestPost(context) {
     }
   }
 
-  const isCredentialsOnly = credentials_only === true || include_rules === false;
   if (isCredentialsOnly) {
     const singleKeyObj = key_label && targetKeys[key_label] ? targetKeys[key_label] : null;
     const singleKeyVal = (typeof singleKeyObj === 'object' && singleKeyObj !== null) ? singleKeyObj.key : singleKeyObj;
