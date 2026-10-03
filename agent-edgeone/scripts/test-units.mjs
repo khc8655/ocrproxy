@@ -44,6 +44,7 @@ import {
 import { PRESETS, PRESET_MAP, getPreset } from '../edge-functions/lib/presets/index.js';
 import { onRequestGet as vaultManifestGet } from '../edge-functions/api/vault/manifest.js';
 import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fetch.js';
+import { onRequestPost as vaultCredentialsPost } from '../edge-functions/api/vault/credentials.js';
 import { onRequestPost as probeModelsPost } from '../edge-functions/api/admin/probe-models.js';
 import { onRequestGet as statsGet, onRequestPost as statsPost } from '../edge-functions/api/admin/stats.js';
 import { readFileSync } from 'node:fs';
@@ -1615,6 +1616,51 @@ test('vault fetch: returns specific key on demand for authorized caller', async 
   truthy(data.ok);
   eq(data.provider, 'sensenova');
   eq(data.provider_config.keys.self, 'sk-sensenova-test-key');
+  truthy(data.provider_config.adapter_rules); // Full mode includes adapter_rules
+});
+
+test('vault fetch with credentials_only=true: returns base_url and key without adapter_rules', async () => {
+  const req = new Request('http://localhost/api/vault/fetch', {
+    method: 'POST',
+    headers: { 'authorization': 'Bearer test-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ provider: 'sensenova', key_label: 'self', credentials_only: true }),
+  });
+  const env = {
+    PROXY_API_KEY: 'test-token',
+    AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG),
+  };
+  const res = await vaultFetchPost({ request: req, env });
+  eq(res.status, 200);
+  const data = await res.json();
+  truthy(data.ok);
+  eq(data.provider, 'sensenova');
+  eq(data.key_label, 'self');
+  eq(data.key, 'sk-sensenova-test-key');
+  truthy(data.base_url);
+  // Strictly excludes internal adapter rules
+  eq(data.adapter_rules, undefined);
+  eq(data.provider_config, undefined);
+});
+
+test('vault credentials endpoint: dedicated endpoint strictly excludes adapter_rules and provides flattened fields', async () => {
+  const req = new Request('http://localhost/api/vault/credentials', {
+    method: 'POST',
+    headers: { 'authorization': 'Bearer test-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ provider: 'sensenova', key_label: 'self' }),
+  });
+  const env = {
+    PROXY_API_KEY: 'test-token',
+    AGENT_CONFIG_JSON: JSON.stringify(SAMPLE_CONFIG),
+  };
+  const res = await vaultCredentialsPost({ request: req, env });
+  eq(res.status, 200);
+  const data = await res.json();
+  truthy(data.ok);
+  eq(data.key, 'sk-sensenova-test-key');
+  eq(data.key_label, 'self');
+  truthy(data.base_url);
+  eq(data.adapter_rules, undefined);
+  eq(data.provider_config, undefined);
 });
 
 test('vault fetch: returns 404 for unknown provider', async () => {

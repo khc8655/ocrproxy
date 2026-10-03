@@ -52,7 +52,7 @@ export async function onRequestPost(context) {
     );
   }
 
-  const { provider, key_label, keys } = body || {};
+  const { provider, key_label, keys, credentials_only, include_rules } = body || {};
   if (!provider) {
     return new Response(
       JSON.stringify({ ok: false, error: 'provider 字段不能为空' }),
@@ -93,6 +93,37 @@ export async function onRequestPost(context) {
     if (pCfg.keys && pCfg.keys[label]) {
       targetKeys[label] = pCfg.keys[label];
     }
+  }
+
+  const isCredentialsOnly = credentials_only === true || include_rules === false;
+  if (isCredentialsOnly) {
+    const singleKeyObj = key_label && targetKeys[key_label] ? targetKeys[key_label] : null;
+    const singleKeyVal = (typeof singleKeyObj === 'object' && singleKeyObj !== null) ? singleKeyObj.key : singleKeyObj;
+    const singleBaseUrl = (typeof singleKeyObj === 'object' && singleKeyObj !== null && singleKeyObj.base_url)
+      ? singleKeyObj.base_url
+      : (pCfg.base_url || preset?.base_url || '');
+
+    const respData = {
+      ok: true,
+      provider,
+      base_url: singleBaseUrl || pCfg.base_url || preset?.base_url || '',
+      keys: targetKeys,
+    };
+    if (key_label && singleKeyVal) {
+      respData.key_label = key_label;
+      respData.key = singleKeyVal;
+      if (typeof singleKeyObj === 'object' && singleKeyObj !== null) {
+        if (singleKeyObj.project_id) respData.project_id = singleKeyObj.project_id;
+        if (singleKeyObj.location) respData.location = singleKeyObj.location;
+      }
+    }
+    return new Response(JSON.stringify(respData), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      },
+    });
   }
 
   const protoStr = pCfg.protocol || preset?.protocol || 'openai';
