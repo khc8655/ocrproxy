@@ -131,13 +131,20 @@ function renderProviders(){
     for (const name of list) {
       const prov = p[name];
       const keys = Object.keys(prov.keys || {});
-      const keyChips = keys.map(k => `
-        <span class="key-chip">
-          <b>${esc(k)}</b>
-          <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
-          <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
-        </span>
-      `).join('');
+      const keyChips = keys.map(k => {
+        const val = prov.keys[k];
+        const gcpBadge = (typeof val === 'object' && val !== null && (val.project_id || val.location))
+          ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
+          : '';
+        return `
+          <span class="key-chip">
+            <b>${esc(k)}</b>
+            ${gcpBadge}
+            <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
+            <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
+          </span>
+        `;
+      }).join('');
 
       const protos = getProviderProtocols(name, prov);
       const protoBadges = renderProtocolBadges(protos, false);
@@ -301,9 +308,9 @@ const FALLBACK_PRESETS = {
     id: 'vertex',
     name: 'Google Vertex AI (Gemini 3.8 Flash)',
     version: '1.0.0',
-    base_url: 'https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi',
+    base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
-    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考配置',
+    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
     recommended_models: [
       { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true, kb_type: 'chat' }
     ],
@@ -381,23 +388,24 @@ function populateCatalogSelect(select) {
   if (cur !== undefined && cur !== null) select.value = cur;
 }
 
-// Vertex AI dynamic Base URL computation
-function onVertexParamChange(){
-  const proj = (document.getElementById('p_vertex_project')?.value || '').trim();
-  const locRaw = (document.getElementById('p_vertex_location')?.value || '').trim() || 'global';
+// Vertex AI dynamic Base URL computation (Key Level)
+function onKeyVertexParamChange(){
+  const proj = (document.getElementById('k_vertex_project')?.value || '').trim();
+  const locRaw = (document.getElementById('k_vertex_location')?.value || '').trim() || 'global';
   const loc = locRaw.toLowerCase();
-  const projDisplay = proj || '{PROJECT_ID}';
+  const projDisplay = proj || '{project_id}';
   
   let baseUrl = '';
   if (loc === 'global') {
-    baseUrl = `https://aiplatform.googleapis.com/v1/projects/${projDisplay}/locations/global/endpoints/openapi`;
+    baseUrl = `https://aiplatform.googleapis.com/v1beta1/projects/${projDisplay}/locations/global/endpoints/openapi`;
   } else {
-    baseUrl = `https://${loc}-aiplatform.googleapis.com/v1/projects/${projDisplay}/locations/${loc}/endpoints/openapi`;
+    baseUrl = `https://${loc}-aiplatform.googleapis.com/v1beta1/projects/${projDisplay}/locations/${loc}/endpoints/openapi`;
   }
-  const urlInput = document.getElementById('p_url');
-  if (urlInput) {
-    urlInput.value = baseUrl;
+  const urlDisplay = document.getElementById('k_vertex_computed_url');
+  if (urlDisplay) {
+    urlDisplay.textContent = baseUrl;
   }
+  return { proj, loc, baseUrl };
 }
 
 // Preset Selection Handler
@@ -408,11 +416,6 @@ async function onProviderPresetChange(){
   const descEl = document.getElementById('p_desc');
   const modelsWrap = document.getElementById('p_models_wrap');
   const modelsList = document.getElementById('p_models_list');
-  const vSec = document.getElementById('p_vertex_section');
-
-  if (vSec) {
-    vSec.style.display = (presetId === 'vertex') ? 'block' : 'none';
-  }
 
   if(!presetId){
     state.currentSelectedPreset = null;
@@ -464,10 +467,6 @@ async function onProviderPresetChange(){
   urlInput.value = preset.base_url;
   descEl.textContent = `${preset.description || ''} · 规则版本: v${preset.version || '1.1.0'}`;
   descEl.style.display = 'block';
-
-  if (preset.id === 'vertex') {
-    onVertexParamChange();
-  }
 
   // Preset protocols sync
   const presetProtos = preset.protocols || (preset.anthropic_base_url ? ['chat', 'messages'] : ['chat']);
@@ -825,7 +824,10 @@ async function applyRuleUpdates(providerIds){
   }
 }
 
-let _onKeySavedCallback = null;
+function isVertexProvider(prov){
+  const p = state.config?.providers?.[prov];
+  return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
+}
 
 function openKeyModal(prov, onSavedCallback){ 
   _onKeySavedCallback = onSavedCallback || null;
@@ -843,16 +845,40 @@ function openKeyModal(prov, onSavedCallback){
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
+
+  const vSec = document.getElementById('k_vertex_section');
+  if (isVertexProvider(prov) && vSec) {
+    vSec.style.display = 'block';
+    const pProj = document.getElementById('k_vertex_project'); if (pProj) pProj.value = '';
+    const pLoc = document.getElementById('k_vertex_location'); if (pLoc) pLoc.value = 'global';
+    onKeyVertexParamChange();
+  } else if (vSec) {
+    vSec.style.display = 'none';
+  }
+
   openModal('keyModal'); 
 }
 function editKey(prov,label){ 
   const p=state.config.providers[prov]||{}; 
+  const currentKeyObj = p.keys && p.keys[label];
+  let keyVal = '';
+  let projVal = '';
+  let locVal = 'global';
+
+  if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
+    keyVal = currentKeyObj.key || '';
+    projVal = currentKeyObj.project_id || '';
+    locVal = currentKeyObj.location || 'global';
+  } else {
+    keyVal = String(currentKeyObj || '');
+  }
+
   document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; 
   document.getElementById('k_provider').value=prov; 
   document.getElementById('k_oldLabel').value=label; 
   document.getElementById('k_label').value=label; 
   document.getElementById('k_label').disabled=false; 
-  document.getElementById('k_value').value=(p.keys&&p.keys[label])||''; 
+  document.getElementById('k_value').value=keyVal; 
   document.getElementById('k_skip').checked=true; 
   const diagBox = document.getElementById('k_diag_box');
   if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
@@ -861,6 +887,17 @@ function editKey(prov,label){
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
+
+  const vSec = document.getElementById('k_vertex_section');
+  if (isVertexProvider(prov) && vSec) {
+    vSec.style.display = 'block';
+    const pProj = document.getElementById('k_vertex_project'); if (pProj) pProj.value = projVal;
+    const pLoc = document.getElementById('k_vertex_location'); if (pLoc) pLoc.value = locVal;
+    onKeyVertexParamChange();
+  } else if (vSec) {
+    vSec.style.display = 'none';
+  }
+
   openModal('keyModal'); 
 }
 async function deleteKey(prov,label){ 
@@ -891,10 +928,32 @@ async function saveKey(){
     return; 
   }
 
-  if(skip){ commitKey(prov,label,val); return; }
+  const isVertex = isVertexProvider(prov);
+  let vertexKeyMeta = null;
+  if (isVertex) {
+    const vProj = (document.getElementById('k_vertex_project')?.value || '').trim();
+    const vLoc = (document.getElementById('k_vertex_location')?.value || '').trim() || 'global';
+    if (!vProj) {
+      toast('请填写该 Key 归属的 GCP 项目 ID (Project ID)', 'err');
+      return;
+    }
+    const locLower = vLoc.toLowerCase();
+    const host = (locLower === 'global') ? 'aiplatform.googleapis.com' : `${locLower}-aiplatform.googleapis.com`;
+    const computedBaseUrl = `https://${host}/v1beta1/projects/${vProj}/locations/${locLower}/endpoints/openapi`;
+    vertexKeyMeta = {
+      key: val,
+      project_id: vProj,
+      location: locLower,
+      base_url: computedBaseUrl
+    };
+  }
+
+  const finalKeyVal = vertexKeyMeta || val;
+  if(skip){ commitKey(prov,label,finalKeyVal); return; }
 
   const pObj = (state.config.providers && state.config.providers[prov]) || {};
   const protos = getProviderProtocols(prov, pObj);
+  const testBaseUrl = vertexKeyMeta ? vertexKeyMeta.base_url : pObj.base_url;
 
   document.getElementById('k_spinner').style.display='block';
   try {
@@ -904,7 +963,7 @@ async function saveKey(){
       method: 'POST',
       headers: headers(),
       body: JSON.stringify({
-        base_url: pObj.base_url,
+        base_url: testBaseUrl,
         anthropic_base_url: pObj.anthropic_base_url,
         api_key: val,
         provider: prov,
@@ -928,7 +987,7 @@ async function saveKey(){
         if(res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
       }
       toast(`Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
-      commitKey(prov,label,val);
+      commitKey(prov,label,finalKeyVal);
     } else {
       // Scheme A: strict block with detailed per-protocol diagnostics
       if(diagBox){

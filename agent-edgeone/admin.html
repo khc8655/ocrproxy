@@ -130,26 +130,6 @@
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
-        <!-- 官方预设厂商快速选用 -->
-        <div id="officialPresetsBar" class="card card-pad mb-3" style="background:var(--color-bg-2);border:1px dashed var(--color-primary);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:14px;">⚡</span>
-              <div>
-                <span style="font-size:13px;font-weight:700;color:var(--color-text-1);">官方预设厂商库已就绪</span>
-                <span class="text-secondary text-sm" style="margin-left:6px;font-size:12px;">包含 Google Vertex AI (Gemini 3.8 Flash)、AMD、MiniMax、Cline 等官方端点规整规则</span>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary btn-xs" onclick="openAddProviderModal('vertex')" style="font-weight:600;color:var(--color-primary);border-color:var(--color-primary);" title="立即选用 Google Vertex AI (Gemini 3.8 Flash) 官方端点并填 Key">
-                + 选用 Vertex AI (Gemini 3.8 Flash)
-              </button>
-              <button type="button" class="btn btn-ghost btn-xs" onclick="openAddProviderModal()">
-                浏览全部预设模板...
-              </button>
-            </div>
-          </div>
-        </div>
         <div class="providers-layout">
           <div id="providersBox" class="providers-list-col"></div>
           <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
@@ -339,23 +319,6 @@
         <label class="form-label">供应商英文标识 (ID，如 vertex, deepseek, my-proxy)</label>
         <input type="text" id="m_prov_name" class="form-control" placeholder="如 vertex 或 deepseek">
       </div>
-      <!-- Vertex AI 专属配置 (选择 Vertex 预设时展开，纯手动填写) -->
-      <div id="m_prov_vertex_section" style="display:none;margin-top:14px;margin-bottom:14px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
-        <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
-        </div>
-        <div class="form-group mb-2">
-          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
-          <input type="text" id="m_prov_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onEdgeOneVertexParamChange()">
-        </div>
-        <div class="form-group mb-1" style="margin-top:10px;">
-          <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
-          <input type="text" id="m_prov_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneVertexParamChange()">
-        </div>
-        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
-          💡 提示：输入项目 ID 与区域后将自动实时生成下方标准的 Base URL，无需手动拼装。
-        </div>
-      </div>
       <div class="form-group" style="margin-top:14px;">
         <label class="form-label">OpenAI Base URL (协议标识: openai)</label>
         <input type="text" id="m_prov_url_openai" class="form-control" placeholder="如 https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi">
@@ -420,6 +383,23 @@
       <div class="form-group">
         <label class="form-label">Key 别名</label>
         <input type="text" id="m_key_label" class="form-control" placeholder="如 自己">
+      </div>
+      <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
+      <div id="m_key_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+        <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+        </div>
+        <div class="form-group mb-2">
+          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
+          <input type="text" id="m_key_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onEdgeOneKeyVertexParamChange()">
+        </div>
+        <div class="form-group mb-1" style="margin-top:10px;">
+          <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
+          <input type="text" id="m_key_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneKeyVertexParamChange()">
+        </div>
+        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
+          🔗 动态计算 Base URL: <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">API Key 密钥明文 (sk-...)</label>

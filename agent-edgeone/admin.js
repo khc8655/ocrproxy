@@ -178,9 +178,9 @@ const FALLBACK_PRESETS = {
     id: 'vertex',
     name: 'Google Vertex AI (Gemini 3.8 Flash)',
     version: '1.0.0',
-    base_url: 'https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi',
+    base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
-    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash，支持 Project ID/区域手动填写拼接、google/ 前缀自动规整与思考配置',
+    description: 'Google Cloud Vertex AI 官方大模型端点，一期重点适配 Gemini 3.8 Flash。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
     recommended_models: [
       { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true }
     ],
@@ -651,7 +651,11 @@ function renderProviders() {
       if (keyLabels.length > 0) {
         const chips = keyLabels.map(k => {
           const val = keysObj[k];
-          const masked = val ? `${val.slice(0, 6)}...${val.slice(-4)}` : '';
+          const rawKeyStr = (typeof val === 'object' && val !== null) ? (val.key || '') : String(val || '');
+          const masked = rawKeyStr ? `${rawKeyStr.slice(0, 6)}...${rawKeyStr.slice(-4)}` : '';
+          const gcpBadge = (typeof val === 'object' && val !== null && (val.project_id || val.location))
+            ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 6px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
+            : '';
           const cacheKey = `prov:${p}:${k}`;
           const latInfo = modelLatencyCache[cacheKey];
           let latBadge = '';
@@ -663,14 +667,15 @@ function renderProviders() {
 
           return `
             <div class="key-chip">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;flex-wrap:wrap;">
                 <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">${esc(k)}</span>
+                ${gcpBadge}
                 <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">${esc(masked)}</span>
                 <span class="key-lat-slot" style="display:inline-flex;align-items:center;">${latBadge}</span>
               </div>
               <div class="key-chip-actions">
                 <button class="btn btn-secondary btn-xs" onclick="testSingleKey('${esc(p)}', '${esc(k)}')" title="测试连通性">${icon('zap', 11)} 测试</button>
-                <button class="btn btn-secondary btn-xs" onclick="openEditKeyModal('${esc(p)}', '${esc(k)}', '${esc(val)}')" title="编辑 Key">${icon('edit', 11)} 编辑</button>
+                <button class="btn btn-secondary btn-xs" onclick="openEditKeyModal('${esc(p)}', '${esc(k)}')" title="编辑 Key">${icon('edit', 11)} 编辑</button>
                 <button class="btn btn-secondary-danger btn-xs" onclick="deleteKey('${esc(p)}', '${esc(k)}')" title="删除 Key">${icon('trash', 11)} 删除</button>
               </div>
             </div>
@@ -698,14 +703,10 @@ function renderProviders() {
       const displayName = (prov.name && prov.name !== p)
         ? `${esc(prov.name)} <span class="mono text-secondary" style="font-size:12px;font-weight:normal;">(${esc(p)})</span>`
         : esc(p);
-      const vertexMetaHtml = (prov.project_id || prov.location)
-        ? `<div class="meta mono mt-1" style="font-size:12px;color:var(--color-primary);font-weight:600;">🌐 GCP 项目: ${esc(prov.project_id || '未配置')} · 区域: ${esc(prov.location || 'global')}</div>`
-        : '';
       card.innerHTML = `
         <div class="card-head">
           <div>
             <h3>${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge}</span></h3>
-            ${vertexMetaHtml}
             <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -912,23 +913,24 @@ function populateEdgeOneCatalogSelect(select) {
   if (cur !== undefined && cur !== null && cur !== '') select.value = cur;
 }
 
-function onEdgeOneVertexParamChange() {
-  const proj = (document.getElementById('m_prov_vertex_project')?.value || '').trim();
-  const locRaw = (document.getElementById('m_prov_vertex_location')?.value || '').trim() || 'global';
+function onEdgeOneKeyVertexParamChange() {
+  const proj = (document.getElementById('m_key_vertex_project')?.value || '').trim();
+  const locRaw = (document.getElementById('m_key_vertex_location')?.value || '').trim() || 'global';
   const loc = locRaw.toLowerCase();
-  const projDisplay = proj || '{PROJECT_ID}';
+  const projDisplay = proj || '{project_id}';
 
   let baseUrl = '';
   if (loc === 'global') {
-    baseUrl = `https://aiplatform.googleapis.com/v1/projects/${projDisplay}/locations/global/endpoints/openapi`;
+    baseUrl = `https://aiplatform.googleapis.com/v1beta1/projects/${projDisplay}/locations/global/endpoints/openapi`;
   } else {
-    baseUrl = `https://${loc}-aiplatform.googleapis.com/v1/projects/${projDisplay}/locations/${loc}/endpoints/openapi`;
+    baseUrl = `https://${loc}-aiplatform.googleapis.com/v1beta1/projects/${projDisplay}/locations/${loc}/endpoints/openapi`;
   }
 
-  const urlInput = document.getElementById('m_prov_url_openai');
-  if (urlInput) {
-    urlInput.value = baseUrl;
+  const urlDisplay = document.getElementById('m_key_vertex_computed_url');
+  if (urlDisplay) {
+    urlDisplay.textContent = baseUrl;
   }
+  return { proj, loc, baseUrl };
 }
 
 async function onEdgeOnePresetChange() {
@@ -939,14 +941,12 @@ async function onEdgeOnePresetChange() {
   const messageInput = document.getElementById('m_prov_url_message');
   const responsesInput = document.getElementById('m_prov_url_responses');
   const descEl = document.getElementById('m_prov_desc');
-  const vertexSection = document.getElementById('m_prov_vertex_section');
   const modelsWrap = document.getElementById('m_prov_models_wrap');
   const modelsList = document.getElementById('m_prov_models_list');
 
   if (!presetId) {
     currentSelectedPreset = null;
     if (descEl) descEl.style.display = 'none';
-    if (vertexSection) vertexSection.style.display = 'none';
     if (modelsWrap) modelsWrap.style.display = 'none';
     nameInput.disabled = false;
     return;
@@ -991,17 +991,9 @@ async function onEdgeOnePresetChange() {
     descEl.style.display = 'block';
   }
 
-  if (preset.id === 'vertex') {
-    if (vertexSection) vertexSection.style.display = 'block';
-    onEdgeOneVertexParamChange();
-    if (messageInput) messageInput.value = '';
-    if (responsesInput) responsesInput.value = '';
-  } else {
-    if (vertexSection) vertexSection.style.display = 'none';
-    if (openaiInput) openaiInput.value = preset.base_url || '';
-    if (messageInput) messageInput.value = (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) ? preset.anthropic_base_url : (preset.protocols?.includes('messages') ? preset.base_url : '');
-    if (responsesInput) responsesInput.value = '';
-  }
+  if (openaiInput) openaiInput.value = preset.base_url || '';
+  if (messageInput) messageInput.value = (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) ? preset.anthropic_base_url : (preset.protocols?.includes('messages') ? preset.base_url : '');
+  if (responsesInput) responsesInput.value = '';
 
   // Recommended models preview
   const recModels = preset.recommended_models || [];
@@ -1079,18 +1071,6 @@ function openEditProviderModal(name) {
   const descEl = document.getElementById('m_prov_desc');
   if (descEl) descEl.style.display = 'none';
 
-  const vertexSection = document.getElementById('m_prov_vertex_section');
-  const isVertex = name === 'vertex' || prov.preset_id === 'vertex' || prov.project_id || (prov.base_url && prov.base_url.includes('aiplatform.googleapis.com'));
-  if (isVertex && vertexSection) {
-    vertexSection.style.display = 'block';
-    const vProj = document.getElementById('m_prov_vertex_project');
-    if (vProj) vProj.value = prov.project_id || '';
-    const vLoc = document.getElementById('m_prov_vertex_location');
-    if (vLoc) vLoc.value = prov.location || 'global';
-  } else if (vertexSection) {
-    vertexSection.style.display = 'none';
-  }
-
   const modelsWrap = document.getElementById('m_prov_models_wrap');
   const modelsList = document.getElementById('m_prov_models_list');
   const recModels = prov.recommended_models || PRESET_DEFINITIONS[name]?.recommended_models || [];
@@ -1164,6 +1144,10 @@ async function saveProviderModal() {
     cfg.providers[name].openai_responses = false;
   }
 
+  // 清理历史上挂在 Provider 级的 project_id 和 location（统一迁移至具体 Key 绑定）
+  delete cfg.providers[name].project_id;
+  delete cfg.providers[name].location;
+
   const activePreset = currentSelectedPreset || (presetId ? PRESET_DEFINITIONS[presetId] : (PRESET_DEFINITIONS[name] || null));
   if (activePreset) {
     cfg.providers[name].preset_id = activePreset.id || presetId || name;
@@ -1181,10 +1165,6 @@ async function saveProviderModal() {
 
   const isVertex = name === 'vertex' || presetId === 'vertex' || cfg.providers[name].preset_id === 'vertex' || (openaiUrl && openaiUrl.includes('aiplatform.googleapis.com'));
   if (isVertex) {
-    const vProj = (document.getElementById('m_prov_vertex_project')?.value || '').trim();
-    const vLoc = (document.getElementById('m_prov_vertex_location')?.value || '').trim() || 'global';
-    cfg.providers[name].project_id = vProj;
-    cfg.providers[name].location = vLoc;
     cfg.providers[name].preset_id = 'vertex';
     cfg.providers[name].name = 'Google Vertex AI (Gemini 3.8 Flash)';
     cfg.providers[name].adapter_rules = {
@@ -1286,6 +1266,11 @@ function deleteProvider(name) {
   openModal('deleteConfirmModal');
 }
 
+function isVertexProvider(prov) {
+  const p = cfg.providers?.[prov];
+  return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
+}
+
 function openAddKeyModal(prov) {
   document.getElementById('keyModalTitle').textContent = `为 ${prov} 新增 Key`;
   document.getElementById('m_key_prov').value = prov;
@@ -1299,15 +1284,39 @@ function openAddKeyModal(prov) {
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
+
+  const vSec = document.getElementById('m_key_vertex_section');
+  if (isVertexProvider(prov) && vSec) {
+    vSec.style.display = 'block';
+    const pProj = document.getElementById('m_key_vertex_project'); if (pProj) pProj.value = '';
+    const pLoc = document.getElementById('m_key_vertex_location'); if (pLoc) pLoc.value = 'global';
+    onEdgeOneKeyVertexParamChange();
+  } else if (vSec) {
+    vSec.style.display = 'none';
+  }
+
   openModal('keyModal');
 }
 
-function openEditKeyModal(prov, label, val) {
+function openEditKeyModal(prov, label) {
+  const currentKeyObj = cfg.providers?.[prov]?.keys?.[label];
+  let keyVal = '';
+  let projVal = '';
+  let locVal = 'global';
+
+  if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
+    keyVal = currentKeyObj.key || '';
+    projVal = currentKeyObj.project_id || '';
+    locVal = currentKeyObj.location || 'global';
+  } else {
+    keyVal = String(currentKeyObj || '');
+  }
+
   document.getElementById('keyModalTitle').textContent = `编辑 ${prov} Key: ${label}`;
   document.getElementById('m_key_prov').value = prov;
   document.getElementById('m_key_old_label').value = label;
   document.getElementById('m_key_label').value = label;
-  document.getElementById('m_key_val').value = val;
+  document.getElementById('m_key_val').value = keyVal;
   const skipCb = document.getElementById('m_key_skip'); if (skipCb) skipCb.checked = true;
   const diagBox = document.getElementById('m_key_diag_box'); if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
   const hintEl = document.getElementById('m_key_proto_hint');
@@ -1315,6 +1324,17 @@ function openEditKeyModal(prov, label, val) {
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
+
+  const vSec = document.getElementById('m_key_vertex_section');
+  if (isVertexProvider(prov) && vSec) {
+    vSec.style.display = 'block';
+    const pProj = document.getElementById('m_key_vertex_project'); if (pProj) pProj.value = projVal;
+    const pLoc = document.getElementById('m_key_vertex_location'); if (pLoc) pLoc.value = locVal;
+    onEdgeOneKeyVertexParamChange();
+  } else if (vSec) {
+    vSec.style.display = 'none';
+  }
+
   openModal('keyModal');
 }
 
@@ -1328,6 +1348,26 @@ async function saveKeyModal() {
   if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
 
   if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
+
+  const isVertex = isVertexProvider(prov);
+  let vertexKeyMeta = null;
+  if (isVertex) {
+    const vProj = (document.getElementById('m_key_vertex_project')?.value || '').trim();
+    const vLoc = (document.getElementById('m_key_vertex_location')?.value || '').trim() || 'global';
+    if (!vProj) {
+      toast('请填写该 Key 归属的 GCP 项目 ID (Project ID)', 'err');
+      return;
+    }
+    const locLower = vLoc.toLowerCase();
+    const host = (locLower === 'global') ? 'aiplatform.googleapis.com' : `${locLower}-aiplatform.googleapis.com`;
+    const computedBaseUrl = `https://${host}/v1beta1/projects/${vProj}/locations/${locLower}/endpoints/openapi`;
+    vertexKeyMeta = {
+      key: val,
+      project_id: vProj,
+      location: locLower,
+      base_url: computedBaseUrl
+    };
+  }
 
   cfg.providers[prov] = cfg.providers[prov] || { keys: {} };
   cfg.providers[prov].keys = cfg.providers[prov].keys || {};
@@ -1345,6 +1385,7 @@ async function saveKeyModal() {
     if (spinner) spinner.style.display = 'block';
     const pObj = cfg.providers[prov] || {};
     const protos = getProviderProtocols(prov, pObj);
+    const testBaseUrl = vertexKeyMeta ? vertexKeyMeta.base_url : pObj.base_url;
 
     try {
       const controller = new AbortController();
@@ -1353,7 +1394,7 @@ async function saveKeyModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getKey()}` },
         body: JSON.stringify({
-          base_url: pObj.base_url,
+          base_url: testBaseUrl,
           anthropic_base_url: pObj.anthropic_base_url,
           api_key: val,
           provider: prov,
@@ -1423,7 +1464,7 @@ async function saveKeyModal() {
     }
   }
 
-  cfg.providers[prov].keys[label] = val;
+  cfg.providers[prov].keys[label] = vertexKeyMeta || val;
   const ok = await persistConfig();
   if (ok) {
     closeModal('keyModal');

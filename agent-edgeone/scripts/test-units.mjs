@@ -244,6 +244,29 @@ test('resolveBinding: trims trailing slashes from base url', () => {
   eq(r.baseUrl, 'https://api.sensenova.cn/v1');
 });
 
+test('resolveBinding: supports object key with custom base_url (Vertex AI pattern)', () => {
+  const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  cfg.providers.vertex = {
+    name: 'Google Vertex AI',
+    base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
+    keys: {
+      'custom-key': {
+        key: 'AIzaSyTestKey123',
+        project_id: 'my-custom-proj',
+        location: 'us-central1',
+        base_url: 'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-custom-proj/locations/us-central1/endpoints/openapi'
+      }
+    }
+  };
+  cfg.agent_models['vertex-model'] = {
+    keys: [{ provider: 'vertex', key: 'custom-key', upstream_model: 'google/gemini-3.8-flash' }]
+  };
+  const b = listBindings(cfg, 'vertex-model')[0];
+  const r = resolveBinding(cfg, b);
+  eq(r.apiKey, 'AIzaSyTestKey123');
+  eq(r.baseUrl, 'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/my-custom-proj/locations/us-central1/endpoints/openapi');
+});
+
 test('resolveBinding: throws ConfigError if provider disappears', () => {
   const cfg = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
   const b = listBindings(cfg, 'multi-key-model')[0];

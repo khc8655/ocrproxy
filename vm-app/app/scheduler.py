@@ -660,12 +660,17 @@ async def schedule(
                 logger.warning(f"Provider {provider_name} not found in config")
                 continue
 
-            api_key = provider.get("keys", {}).get(key_label)
-            if not api_key:
+            api_key_raw = provider.get("keys", {}).get(key_label)
+            if not api_key_raw:
                 logger.warning(f"Key {key_label} not found for provider {provider_name}")
                 continue
 
-            base_url = provider.get("base_url", "")
+            if isinstance(api_key_raw, dict):
+                api_key = str(api_key_raw.get("key", ""))
+                base_url = api_key_raw.get("base_url") or provider.get("base_url", "")
+            else:
+                api_key = str(api_key_raw)
+                base_url = provider.get("base_url", "")
 
             attempt_seq += 1
             provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
