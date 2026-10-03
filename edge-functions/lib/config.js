@@ -533,7 +533,14 @@ export function buildChatUrl(baseUrl) {
   if (cleaned.endsWith('/chat/completions')) {
     return cleaned;
   }
-  if (cleaned.endsWith('/v1') || cleaned.endsWith('/v1beta/openai') || cleaned.includes('/v1/')) {
+  if (
+    cleaned.endsWith('/v1')
+    || cleaned.endsWith('/v1beta/openai')
+    || cleaned.includes('/v1/')
+    || cleaned.includes('/endpoints/openapi')
+    || /\/v\d+[^/]*\//.test(cleaned)
+    || /\/v\d+(\.[^/]+)?(\/.*)?$/.test(cleaned)
+  ) {
     return `${cleaned}/chat/completions`;
   }
   return `${cleaned}/v1/chat/completions`;

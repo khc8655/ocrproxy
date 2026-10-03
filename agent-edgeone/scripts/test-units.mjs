@@ -1423,7 +1423,7 @@ test('getPreset: finds vertex with Gemini 3.8 Flash model and Project ID require
   const p = getPreset('vertex');
   truthy(p);
   eq(p.id, 'vertex');
-  eq(p.name, 'Google Vertex AI (Gemini 3.8 Flash)');
+  eq(p.name, 'Google Vertex AI');
   truthy(p.features?.require_project_id);
   truthy(p.features?.require_location);
   const modelNames = p.recommended_models.map(m => m.name);
