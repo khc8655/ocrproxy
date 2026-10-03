@@ -1798,28 +1798,22 @@ test('edge-functions api/admin/stats: responds with empty stats when authorized 
   truthy(Array.isArray(statsData.error_logs));
 });
 
-test('bundled admin ui: has unified VM-parity agent models UI with capsule modal & live 1+1 test', () => {
+test('bundled admin ui: has isolated EdgeOne vault hub admin UI per ARCHITECTURE_STANDARDS Rule 1', () => {
   const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
-  // 1. Unified 3-step modal
-  truthy(content.includes('id="agentModal"'));
-  truthy(content.includes('① 选择提供商'));
-  truthy(content.includes('② 绑定 Key'));
-  truthy(content.includes('③ 选择模型'));
-  truthy(content.includes('id="probedListModal"'));
-  // 2. Shared actions & components
-  truthy(content.includes('全部探活'));
-  truthy(!content.includes('id="liveTestBtn-'));
-  truthy(content.includes('reorderAgentKey'));
-  truthy(content.includes('修改数字直接调整顺序'));
-  // 3. Inlined capsule and table styles
-  truthy(content.includes('.key-capsule'));
-  truthy(content.includes('.capsule-row'));
-  truthy(content.includes('.model-capsule'));
-  truthy(content.includes('.table-wrap'));
-  // 4. Safe Vault isolation: 6 tabs must remain intact
-  truthy(content.includes('panel-providers'));
-  truthy(content.includes('panel-agents'));
-  truthy(content.includes('panel-settings'));
+  // 1. Independent authentication overlay & token
+  truthy(content.includes('id="loginOverlay"'));
+  truthy(content.includes('id="loginKey"'));
+  truthy(content.includes('ocrproxy_edge_token'));
+  truthy(content.includes('/api/config'));
+  // 2. Safe Vault isolation: 6 top-level panels must remain intact
+  truthy(content.includes('id="panel-dashboard"'));
+  truthy(content.includes('id="panel-agents"'));
+  truthy(content.includes('id="panel-providers"'));
+  truthy(content.includes('id="panel-settings"'));
+  truthy(content.includes('id="panel-raw"'));
+  truthy(content.includes('id="panel-access"'));
+  // 3. Independent version badge
+  truthy(content.includes('id="topVersionBadge"'));
 });
 
 console.log('\n----');
