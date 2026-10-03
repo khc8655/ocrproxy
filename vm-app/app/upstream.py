@@ -16,8 +16,15 @@ def join_upstream(base_url: str, path: str) -> str:
     if base.endswith(f"/{clean_path}"):
         return base
 
-    # If base already contains /v1, /v1beta/openai, or /v\d+
-    if base.endswith("/v1") or "/v1/" in base or base.endswith("/v1beta/openai") or re.search(r"/v\d+(\.[^/]+)?(/.*)?$", base):
+    # If base already contains /v1, /v1beta/openai, /endpoints/openapi, or any API version segment
+    if (
+        base.endswith("/v1")
+        or "/v1/" in base
+        or base.endswith("/v1beta/openai")
+        or "/endpoints/openapi" in base
+        or re.search(r"/v\d+[^/]*/", base)
+        or re.search(r"/v\d+(\.[^/]+)?(/.*)?$", base)
+    ):
         return f"{base}/{clean_path}"
 
     # Default to injecting /v1/
