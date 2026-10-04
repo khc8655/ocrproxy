@@ -1238,6 +1238,150 @@ async def restart_service_endpoint(request: Request):
     })
 
 
+def _parse_version_tuple(v_str: str) -> tuple:
+    """Parse vYYYY.MM.DD[-NN] or semver into comparable tuple."""
+    if not v_str:
+        return (0, 0, 0, 0)
+    s = v_str.strip().lstrip("v")
+    # Check for date version like 2026.10.04-01 or 2026.10.04
+    m = re.match(r"^(\d{4})\.(\d{2})\.(\d{2})(?:-(\d+))?$", s)
+    if m:
+        year, month, day, patch = m.groups()
+        return (int(year), int(month), int(day), int(patch or 0))
+    # Fallback to standard semver numbers
+    parts = []
+    for x in re.split(r"[\.-]", s):
+        if x.isdigit():
+            parts.append(int(x))
+    while len(parts) < 4:
+        parts.append(0)
+    return tuple(parts[:4])
+
+
+def _load_local_version_info() -> dict:
+    """Read local version.json from project root or /opt/ocrproxy."""
+    search_paths = [
+        Path(__file__).resolve().parent.parent / "version.json",
+        Path(__file__).resolve().parent.parent.parent / "version.json",
+        Path("/opt/ocrproxy/version.json"),
+    ]
+    for p in search_paths:
+        if p.is_file():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return {
+        "version": "v2026.10.04",
+        "release_date": "2026-10-04",
+        "title": "OCRProxy VM Gateway",
+        "changelog": []
+    }
+
+
+@router.get("/system/version")
+async def get_system_version_endpoint(request: Request):
+    """Return local application version information."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    info = _load_local_version_info()
+    return JSONResponse(content={
+        "ok": True,
+        "current_version": info.get("version", "v2026.10.04"),
+        "release_date": info.get("release_date", ""),
+        "commit": info.get("commit", ""),
+        "title": info.get("title", ""),
+        "changelog": info.get("changelog", [])
+    })
+
+
+@router.get("/system/check-update")
+async def check_system_update_endpoint(request: Request):
+    """Check for new OCRProxy releases from GitHub."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    local_info = _load_local_version_info()
+    curr_v = local_info.get("version", "v2026.10.04")
+
+    remote_url = "https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json"
+    remote_data = None
+    try:
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(remote_url)
+            if resp.status_code == 200:
+                remote_data = resp.json()
+    except Exception as e:
+        logger.warning(f"Failed to fetch remote version from GitHub: {e}")
+
+    if not remote_data or not isinstance(remote_data, dict):
+        return JSONResponse(content={
+            "ok": True,
+            "has_update": False,
+            "current_version": curr_v,
+            "latest_version": curr_v,
+            "release_date": local_info.get("release_date", ""),
+            "title": local_info.get("title", ""),
+            "changelog": local_info.get("changelog", []),
+            "checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "notice": "未能连接到 GitHub 检查更新，当前保持本地版本"
+        })
+
+    latest_v = remote_data.get("version", curr_v)
+    curr_tuple = _parse_version_tuple(curr_v)
+    latest_tuple = _parse_version_tuple(latest_v)
+    has_update = latest_tuple > curr_tuple
+
+    return JSONResponse(content={
+        "ok": True,
+        "has_update": has_update,
+        "current_version": curr_v,
+        "latest_version": latest_v,
+        "release_date": remote_data.get("release_date", ""),
+        "title": remote_data.get("title", ""),
+        "changelog": remote_data.get("changelog", []),
+        "checked_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+
+@router.post("/system/upgrade")
+async def upgrade_system_endpoint(request: Request):
+    """Trigger background smooth upgrade for OCRProxy."""
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    logger.warning("Admin requested OCRProxy system OTA upgrade via web interface")
+
+    async def _do_upgrade():
+        await asyncio.sleep(0.5)
+        try:
+            # First try executing /usr/local/bin/ocrproxy upgrade
+            upgrade_cmd = ["/usr/local/bin/ocrproxy", "upgrade"]
+            if not os.path.exists("/usr/local/bin/ocrproxy"):
+                upgrade_cmd = ["bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"]
+
+            proc = await asyncio.create_subprocess_exec(
+                *upgrade_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                logger.info("OCRProxy system upgrade completed successfully via Web Admin")
+            else:
+                logger.error(f"OCRProxy system upgrade failed: code={proc.returncode}, err={stderr.decode(errors='ignore')}")
+        except Exception as e:
+            logger.error(f"Exception during background system upgrade: {e}")
+
+    asyncio.create_task(_do_upgrade())
+    return JSONResponse(content={
+        "ok": True,
+        "message": "程序升级已在后台启动，服务正在平滑更新并重启，请在 6-10 秒后刷新页面"
+    })
+
+
 @router.post("/probe-models")
 async def probe_models_endpoint(request: Request):
     if not _check_auth(request):

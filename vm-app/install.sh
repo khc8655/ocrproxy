@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.09.22"
+SCRIPT_VERSION="v2026.10.04"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -274,10 +274,16 @@ optimize_network_routing() {
 # ==============================================================================
 setup_cli_and_sudoers() {
     # 1. 注册免密重启白名单 (仅针对 ocrproxy 服务的极低权限操作，免去日常升级输密码)
-    if [[ -d /etc/sudoers.d && "$CURRENT_USER" != "root" ]]; then
+    if [[ -d /etc/sudoers.d ]]; then
         local sudoers_file="/etc/sudoers.d/ocrproxy"
-        local expected_rule="${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl status ${SERVICE_NAME}, /usr/bin/systemctl stop ${SERVICE_NAME}, /usr/bin/systemctl start ${SERVICE_NAME}, /usr/bin/systemctl reload ${SERVICE_NAME}, /usr/bin/systemctl daemon-reload, /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl stop ${SERVICE_NAME}, /bin/systemctl start ${SERVICE_NAME}, /bin/systemctl reload ${SERVICE_NAME}, /bin/systemctl daemon-reload"
-        if [[ ! -f "$sudoers_file" ]] || ! grep -q "daemon-reload" "$sudoers_file" 2>/dev/null; then
+        local expected_rule=""
+        if [[ "$CURRENT_USER" != "root" ]]; then
+            expected_rule="${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl status ${SERVICE_NAME}, /usr/bin/systemctl stop ${SERVICE_NAME}, /usr/bin/systemctl start ${SERVICE_NAME}, /usr/bin/systemctl reload ${SERVICE_NAME}, /usr/bin/systemctl daemon-reload, /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl stop ${SERVICE_NAME}, /bin/systemctl start ${SERVICE_NAME}, /bin/systemctl reload ${SERVICE_NAME}, /bin/systemctl daemon-reload
+"
+        fi
+        # 允许服务专属运行账户 ocrproxy 免密执行重启与升级 (使 Web 管理后台一键平滑升级与重启生效)
+        expected_rule="${expected_rule}${SERVICE_NAME} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}, /usr/local/bin/ocrproxy upgrade, /usr/local/bin/ocrproxy restart"
+        if [[ ! -f "$sudoers_file" ]] || ! grep -q "${SERVICE_NAME}" "$sudoers_file" 2>/dev/null; then
             info "配置免密服务运维白名单 (/etc/sudoers.d/ocrproxy)..."
             echo "$expected_rule" | run_sudo tee "$sudoers_file" >/dev/null 2>&1 || true
             run_sudo chmod 440 "$sudoers_file" 2>/dev/null || true
