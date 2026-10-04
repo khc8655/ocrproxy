@@ -1773,10 +1773,10 @@ test('bundled admin ui: has zero un-inlined external css or js assets', () => {
   eq(hasExternalJs, false);
 });
 
-test('bundled admin ui: contains independent topVersionBadge with v2026.09.22', () => {
+test('bundled admin ui: contains independent topVersionBadge with v2026.10.04-01', () => {
   const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
   truthy(content.includes('id="topVersionBadge"'));
-  truthy(content.includes('v2026.09.22'));
+  truthy(content.includes('v2026.10.04-01'));
 });
 
 test('edge-functions api/admin/stats: responds with empty stats when authorized and 401 when unauthorized', async () => {
