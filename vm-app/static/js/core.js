@@ -1,7 +1,7 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.10.04';
+const APP_VERSION = 'v2026.10.04-01';
 const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State
@@ -547,6 +547,9 @@ function handlePrimaryModelAction(){
 
 function switchModelTab(id){
   state.modelTab = id;
+  const subTabs = document.getElementById('modelsSubTabs');
+  if (subTabs) subTabs.style.display = 'none';
+
   document.querySelectorAll('#modelsSubTabs button').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('msub-' + id);
   if (btn) btn.classList.add('active');
@@ -564,22 +567,11 @@ function renderModels(){
   const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
   const subTabs = document.getElementById('modelsSubTabs');
   if (subTabs) {
-    subTabs.style.display = 'flex';
-    const msubAgents = document.getElementById('msub-agents');
-    const msubKb = document.getElementById('msub-kb');
-    const msubProv = document.getElementById('msub-providers');
-    if (msubAgents) msubAgents.style.display = (runMode === 'kb') ? 'none' : '';
-    if (msubKb) msubKb.style.display = (runMode === 'agent') ? 'none' : '';
-    if (msubProv) msubProv.style.display = '';
+    subTabs.style.display = 'none';
   }
 
-  if (runMode === 'kb' && state.modelTab === 'agents') {
-    state.modelTab = 'kb';
-  } else if (runMode === 'agent' && state.modelTab === 'kb') {
-    state.modelTab = 'agents';
-  } else if (!state.modelTab) {
-    state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
-  }
+  // Scheme A (Strict): Agent mode locks to 'agents', KB mode locks to 'kb'
+  state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
   switchModelTab(state.modelTab);
 }
 
