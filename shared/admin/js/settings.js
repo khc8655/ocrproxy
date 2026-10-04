@@ -168,6 +168,119 @@ async function restartService(){
   }
 }
 
+async function checkSystemUpdate(manual=true){
+  const btn = document.getElementById('btnCheckAppUpdate');
+  const infoBox = document.getElementById('appUpdateInfoBox');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = icon('refresh') + ' 正在检测更新...';
+  }
+  try {
+    const r = await fetch('/api/admin/system/check-update', { headers: headers() });
+    if (!r.ok) throw new Error('检测程序更新接口响应异常 (' + r.status + ')');
+    const data = await r.json();
+    
+    // Update badge if available
+    const badge = document.getElementById('topVersionBadge');
+    if (badge && data.current_version) {
+      badge.textContent = data.current_version;
+    }
+
+    if (!infoBox) return;
+
+    if (data.has_update) {
+      infoBox.style.display = 'block';
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:14px;margin-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <span class="badge badge-warning" style="font-weight:700;">🚀 发现新程序版本: ${esc(data.latest_version)}</span>
+              <span style="font-size:12px;color:var(--text-secondary);margin-left:8px;">当前运行版本: ${esc(data.current_version)} (发布日期: ${esc(data.release_date)})</span>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="upgradeSystem()" style="font-weight:600;">一键在线平滑升级</button>
+          </div>
+          ${data.title ? `<div style="font-weight:600;margin-top:8px;font-size:13px;color:var(--text);">${esc(data.title)}</div>` : ''}
+          ${Array.isArray(data.changelog) && data.changelog.length ? `
+            <ul style="margin:6px 0 0 18px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
+              ${data.changelog.map(item => `<li>${esc(item)}</li>`).join('')}
+            </ul>
+          ` : ''}
+          <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
+            💡 升级过程为在线热更新并平滑重启守护进程，所有 Key、模型与环境配置 100% 保持无损。
+          </div>
+        </div>
+      `;
+      if (manual) toast(`检测到新程序版本: ${data.latest_version}，可立即一键升级`, 'ok');
+    } else {
+      infoBox.style.display = 'block';
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;margin-top:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
+          <div style="color:var(--text-secondary);">
+            ✅ 当前已是最新程序版本: <strong style="color:var(--primary);">${esc(data.current_version)}</strong> ${data.release_date ? `(${esc(data.release_date)})` : ''}
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary);">检测时间: ${esc(data.checked_at || '')}</span>
+        </div>
+      `;
+      if (manual) toast('当前 OCRProxy 程序已是最新版本，无需升级', 'ok');
+    }
+  } catch(e) {
+    if (manual) toast('检测程序更新失败: ' + e.message, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = icon('search') + ' 检查程序更新';
+    }
+  }
+}
+
+async function upgradeSystem(){
+  if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在约 5-10 秒内平滑重载生效')) return;
+  try {
+    const r = await fetch('/api/admin/system/upgrade', { method: 'POST', headers: headers() });
+    if (!r.ok) throw new Error('发起升级请求失败 (' + r.status + ')');
+    const res = await r.json();
+    toast(res.message || '程序升级已在后台启动，正在平滑更新...', 'ok');
+
+    // Show persistent overlay/modal
+    let countdown = 8;
+    const infoBox = document.getElementById('appUpdateInfoBox');
+    if (infoBox) {
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--primary);border-radius:var(--radius-md);padding:14px;margin-top:10px;text-align:center;">
+          <div style="font-weight:600;color:var(--primary);font-size:14px;">🔄 正在执行程序在线平滑升级与服务重启...</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;">请稍候，系统正在拉取最新代码并验证服务，预计 <span id="upgradeCountdown" style="font-weight:700;color:var(--warning);">${countdown}</span> 秒后自动重新连接</div>
+        </div>
+      `;
+    }
+
+    const timer = setInterval(async () => {
+      countdown--;
+      const cdEl = document.getElementById('upgradeCountdown');
+      if (cdEl) cdEl.textContent = countdown;
+      if (countdown <= 0) {
+        clearInterval(timer);
+        let retries = 8;
+        while (retries > 0) {
+          try {
+            await loadData();
+            toast('🎉 程序在线升级成功！当前页面已自动恢复至最新版', 'ok');
+            await checkSystemUpdate(false);
+            return;
+          } catch(e) {
+            retries--;
+            await new Promise(res => setTimeout(res, 1200));
+          }
+        }
+        location.reload();
+      }
+    }, 1000);
+
+  } catch(e) {
+    toast('发起在线升级失败: ' + e.message, 'err');
+  }
+}
+
+
 async function saveSettings(silent=false){
   const c=state.config||{};
 

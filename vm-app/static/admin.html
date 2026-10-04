@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.09.22</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.04</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -353,6 +353,21 @@
             <div class="hint-box mt-3" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:10px 14px;">
               <b>日志空间保护机制：</b>系统底层配置了 <code>journald</code> 50MB 磁盘配额自动轮转（<code>SystemMaxUse=50M</code>, 7天保留），内存错误日志严格限定在 100 条以内，无需重启即可确保长期运行磁盘与内存零积压。
             </div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+              <div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:2px;">程序版本在线检测与 OTA 升级 (System OTA Upgrade)</div>
+                <div class="text-secondary text-sm">在线检查 GitHub 最新发行版本并平滑升级后端程序（配置与 Key 100% 保持无损）</div>
+              </div>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">
+                  <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 检查程序更新
+                </button>
+              </div>
+            </div>
+            <div id="appUpdateInfoBox" style="display:none;"></div>
           </div>
 
           <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">

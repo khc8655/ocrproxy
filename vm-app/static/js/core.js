@@ -1,7 +1,7 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.09.22';
+const APP_VERSION = 'v2026.10.04';
 const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State
@@ -149,6 +149,9 @@ async function loadData(){
     }
 
     fetchVaultManifest(true); // background silent fetch
+    if (!IS_EDGEONE && typeof checkSystemUpdate === 'function') {
+      checkSystemUpdate(false); // background silent version check on VM
+    }
     updateAccess();
     render();
   } catch(e){

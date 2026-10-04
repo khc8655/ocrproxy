@@ -1,0 +1,13 @@
+{
+  "version": "v2026.10.04",
+  "release_date": "2026-10-04",
+  "commit": "6426db1",
+  "title": "Google Vertex AI 协议级中转与程序版本在线管理",
+  "changelog": [
+    "新增 Web 管理端在线检测程序更新与一键平滑升级功能",
+    "全面适配 Google Vertex AI 官方 OpenAPI 端点与 x-goog-api-key 专属鉴权头",
+    "修复 OpenAPI 路径去重 (规避 /v1 错误拼接 404)",
+    "规范化统一版本号体系 (vYYYY.MM.DD[-NN])",
+    "供应商预设名称纯净化并修复真理源缓存"
+  ]
+}
