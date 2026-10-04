@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.04</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.04-01</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -118,8 +118,8 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <!-- Subtabs for Providers & Models -->
-      <div class="subtabs" id="modelsSubTabs">
+      <!-- Subtabs for Providers & Models (Hidden by default in Scheme A) -->
+      <div class="subtabs" id="modelsSubTabs" style="display:none !important;">
         <button id="msub-agents" class="active" onclick="switchModelTab('agents')">Agent 模型</button>
         <button id="msub-providers" onclick="switchModelTab('providers')">供应商与 Key 凭证库</button>
         <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>

@@ -1,13 +1,13 @@
 {
-  "version": "v2026.10.04",
+  "version": "v2026.10.04-01",
   "release_date": "2026-10-04",
-  "commit": "6426db1",
-  "title": "Google Vertex AI 协议级中转与程序版本在线管理",
+  "commit": "HEAD",
+  "title": "UI 架构全面审查与方案 A 彻底重构 (彻底清除二级子 Tab)",
   "changelog": [
-    "新增 Web 管理端在线检测程序更新与一键平滑升级功能",
-    "全面适配 Google Vertex AI 官方 OpenAPI 端点与 x-goog-api-key 专属鉴权头",
-    "修复 OpenAPI 路径去重 (规避 /v1 错误拼接 404)",
-    "规范化统一版本号体系 (vYYYY.MM.DD[-NN])",
-    "供应商预设名称纯净化并修复真理源缓存"
+    "彻底重构模型路由控制流，在 Agent/KB 模式下彻底杜绝「供应商与 Key 凭证库」二级子 Tab 暴露",
+    "确立单一真相源 (Single Source of Truth)：清理 models.js 中所有冗余老旧 Agent 模型代码",
+    "将本地 Key 删除与弹窗状态统一收敛至 agent-models-ui.js",
+    "清理历史遗留废弃文件 (shared/admin/components, admin.js 单文件)",
+    "规范版本更新体系至 v2026.10.04-01"
   ]
 }
