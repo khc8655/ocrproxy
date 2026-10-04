@@ -20,9 +20,9 @@
    - **Google Gemini (2.5 / 3 / 3.5+)**：自动映射 `reasoning_effort` 到 `extra_body.google.thinking_config`，并递归清洗 Tool Schema 中的 `$schema` 非标字段；
    - **Google Vertex AI**：适配官方 OpenAPI 兼容端点（支持 Project ID 与服务区域动态拼接），智能路由消除 `/v1` 拼接错误；自动注入专属 `x-goog-api-key: <KEY>` 凭据头（替换 Bearer 规避 401 UNAUTHENTICATED 错误）；模型自动规范补齐 `google/` 前缀（`gemini-3.8-flash` ➔ `google/gemini-3.8-flash`），内置 Thinking Config 思考等级矩阵映射与 Schema 严格清洗；
    - **CORS 浏览器预检**：支持 `/v1/chat/completions` 与 `/v1/messages` 的 `OPTIONS` 204 无鉴权预检请求，使网页端应用（如 Web 版 NextChat、LibreChat 等）无缝直连。
-3. **管理后台 UI (单文件 Web App & 极简高密设计 · v2026.09.19)**：
-   - **完全解耦 GitHub 规则源**：彻底抛弃依赖 GitHub 动态获取规则更新的机制，所有 15 家模型提供商及 Key 全部固化入 EdgeOne KV；
-   - **首页网关直通条**：替换原有的冗长表格，首页直观呈现日期版本号 (`v2026.09.19`)、已纳管供应商数 (`15 家 (可全量下发至 VM)`)、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
+3. **管理后台 UI (单文件 Web App & 极简高密设计 · v2026.10.04-01)**：
+   - **完全解耦 GitHub 规则源**：彻底抛弃依赖 GitHub 动态获取规则更新的机制，所有模型提供商及 Key 全部固化入 EdgeOne KV；
+   - **首页网关直通条**：替换原有的冗长表格，首页直观呈现日期版本号 (`v2026.10.04-01`)、已纳管供应商数、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
    - **Key 列表紧凑流式芯片 (Chip Grid)**：彻底废除整行大列表及巨大空白卡片，改为高密度流式芯片布局；当 0 个 Key 时仅显示紧凑浅灰单行提示；
    - **供应商表单三协议解耦**：添加/编辑供应商时拆分为三个独立的 Base URL（OpenAI Chat、Anthropic Messages、OpenAI Responses），输入即启用、留空即关闭，不进行任何自动补齐；
    - **协议标准命名统一**：全站规整为 `openai`、`message`、`responses`，并双向兼容底层旧字段；
