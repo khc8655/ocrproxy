@@ -1,7 +1,7 @@
 {
-  "version": "v2026.10.04",
+  "version": "v2026.10.04-01",
   "release_date": "2026-10-04",
-  "commit": "6426db1",
+  "commit": "bf7bcd3",
   "title": "Google Vertex AI 协议级中转与程序版本在线管理",
   "changelog": [
     "新增 Web 管理端在线检测程序更新与一键平滑升级功能",
