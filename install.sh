@@ -216,6 +216,7 @@ prepare_source_code() {
         mkdir -p "$target_extract_dir/source"
         cp -r "$script_dir/vm-app" "$target_extract_dir/source/"
         cp -r "$script_dir/shared" "$target_extract_dir/source/"
+        cp "$script_dir/version.json" "$target_extract_dir/source/" 2>/dev/null || true
         return 0
     fi
 
@@ -253,6 +254,7 @@ prepare_source_code() {
     mkdir -p "$target_extract_dir/source"
     cp -r "$target_extract_dir/extracted/vm-app" "$target_extract_dir/source/"
     cp -r "$target_extract_dir/extracted/shared" "$target_extract_dir/source/"
+    cp "$target_extract_dir/extracted/version.json" "$target_extract_dir/source/" 2>/dev/null || true
     ok "源码下载与校验解压完成"
 }
 
@@ -482,6 +484,7 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     run_sudo cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
     run_sudo cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
     run_sudo cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
+    run_sudo cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
     run_sudo chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
     if [[ ! -e "/opt/shared" ]]; then
         run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
@@ -714,6 +717,7 @@ cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
 cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
+cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
 run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
 ok "应用核心文件已部署到 ${INSTALL_DIR}"
