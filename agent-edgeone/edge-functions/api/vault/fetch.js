@@ -24,14 +24,15 @@ import {
 import { getPreset } from '../../lib/presets/index.js';
 
 function checkAuth(request, env) {
-  const adminPass = env?.ADMIN_PASSWORD;
-  const vaultToken = env?.VAULT_ACCESS_TOKEN;
-  // Fail-closed: Must have at least ADMIN_PASSWORD or VAULT_ACCESS_TOKEN configured
-  if (!adminPass && !vaultToken) {
+  const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
+  const vaultToken = env?.VAULT_ACCESS_TOKEN ? String(env.VAULT_ACCESS_TOKEN).trim() : '';
+  const proxyKey = env?.PROXY_API_KEY ? String(env.PROXY_API_KEY).trim() : '';
+
+  if (!adminPass && !vaultToken && !proxyKey) {
     return new Response(
       JSON.stringify({
         ok: false,
-        error: 'EdgeOne 未配置 ADMIN_PASSWORD 或 VAULT_ACCESS_TOKEN，为保护上游密钥机密性，金库接口已拒绝访问（Fail-Closed）。',
+        error: 'EdgeOne 未配置 ADMIN_PASSWORD、VAULT_ACCESS_TOKEN 或 PROXY_API_KEY，金库接口已拒绝访问（Fail-Closed）。',
       }),
       { status: 503, headers: { 'content-type': 'application/json' } }
     );
@@ -40,20 +41,9 @@ function checkAuth(request, env) {
   const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
   const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
 
-  // Explicitly deny inference token PROXY_API_KEY from reading vault keys
-  const proxyKey = env?.PROXY_API_KEY;
-  if (proxyKey && token === String(proxyKey).trim() && token !== String(adminPass).trim() && token !== String(vaultToken).trim()) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: 'Forbidden: 推理凭证 PROXY_API_KEY 无权调用机要密钥接口 (/api/vault/*)，必须使用管理员密码或专有金库凭据。',
-      }),
-      { status: 403, headers: { 'content-type': 'application/json' } }
-    );
-  }
-
-  if (adminPass && token === String(adminPass).trim()) return null;
-  if (vaultToken && token === String(vaultToken).trim()) return null;
+  if (adminPass && token === adminPass) return null;
+  if (vaultToken && token === vaultToken) return null;
+  if (proxyKey && token === proxyKey) return null;
 
   return new Response(
     JSON.stringify({
