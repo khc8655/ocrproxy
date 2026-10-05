@@ -234,49 +234,94 @@ async function checkSystemUpdate(manual=true){
 }
 
 async function upgradeSystem(){
-  if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在约 5-10 秒内平滑重载生效')) return;
+  if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在后台自动完成重载生效')) return;
+  
+  const infoBox = document.getElementById('appUpdateInfoBox');
+  if (infoBox) {
+    infoBox.innerHTML = `
+      <div style="background:var(--bg-subtle);border:1px solid var(--primary);border-radius:var(--radius-md);padding:14px;margin-top:10px;text-align:center;">
+        <div style="font-weight:600;color:var(--primary);font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span class="spinner"></span> 正在下载最新制品并就地平滑升级...
+        </div>
+        <div id="upgradeStatusText" style="font-size:12px;color:var(--text-secondary);margin-top:6px;">正在连接 GitHub 拉取更新，服务重载期间会自动重新连接，请稍候...</div>
+      </div>
+    `;
+  }
+
   try {
     const r = await fetch('/api/admin/system/upgrade', { method: 'POST', headers: headers() });
-    if (!r.ok) throw new Error('发起升级请求失败 (' + r.status + ')');
-    const res = await r.json();
-    toast(res.message || '程序升级已在后台启动，正在平滑更新...', 'ok');
-
-    // Show persistent overlay/modal
-    let countdown = 8;
-    const infoBox = document.getElementById('appUpdateInfoBox');
-    if (infoBox) {
-      infoBox.innerHTML = `
-        <div style="background:var(--bg-subtle);border:1px solid var(--primary);border-radius:var(--radius-md);padding:14px;margin-top:10px;text-align:center;">
-          <div style="font-weight:600;color:var(--primary);font-size:14px;">🔄 正在执行程序在线平滑升级与服务重启...</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;">请稍候，系统正在拉取最新代码并验证服务，预计 <span id="upgradeCountdown" style="font-weight:700;color:var(--warning);">${countdown}</span> 秒后自动重新连接</div>
-        </div>
-      `;
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || ('发起升级请求失败 HTTP ' + r.status));
     }
+    const res = await r.json();
+    toast(res.message || '程序升级已在后台执行，正在平滑更新...', 'ok');
 
-    const timer = setInterval(async () => {
-      countdown--;
-      const cdEl = document.getElementById('upgradeCountdown');
-      if (cdEl) cdEl.textContent = countdown;
-      if (countdown <= 0) {
-        clearInterval(timer);
-        let retries = 8;
-        while (retries > 0) {
-          try {
-            await loadData();
-            toast('🎉 程序在线升级成功！当前页面已自动恢复至最新版', 'ok');
-            await checkSystemUpdate(false);
-            return;
-          } catch(e) {
-            retries--;
-            await new Promise(res => setTimeout(res, 1200));
+    // 简单轻量的服务探活：直接轮询 /health 接口直至服务恢复
+    const statusTextEl = document.getElementById('upgradeStatusText');
+    if (statusTextEl) statusTextEl.textContent = '正在等待服务完成重启，已自动开启连通性探测...';
+
+    // 先等待 2 秒让后台任务拉起升级
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    let attempts = 0;
+    const maxAttempts = 30; // 最多探测 45 秒 (每 1.5 秒一次)
+    const checkTimer = setInterval(async () => {
+      attempts++;
+      try {
+        const hr = await fetch('/health', { cache: 'no-store' });
+        if (hr.ok) {
+          clearInterval(checkTimer);
+          // 获取最新版本信息并更新界面
+          const verRes = await fetch('/api/admin/system/version', { headers: headers() }).then(res => res.json()).catch(() => null);
+          const newVer = verRes?.current_version || '';
+          const badge = document.getElementById('topVersionBadge');
+          if (badge && newVer) badge.textContent = newVer;
+
+          if (infoBox) {
+            infoBox.innerHTML = `
+              <div style="background:var(--bg-subtle);border:1px solid var(--success);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
+                <div style="font-weight:600;color:var(--success);font-size:14px;">🎉 系统在线升级成功！</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前运行版本已刷新为: <strong style="color:var(--primary);">${esc(newVer)}</strong></div>
+              </div>
+            `;
           }
+          toast('🎉 系统已成功平滑升级至最新版本！', 'ok');
+          return;
         }
-        location.reload();
+      } catch (_) {
+        // 重启中，网络暂时不可达属于正常现象
       }
-    }, 1000);
+
+      if (statusTextEl) {
+        statusTextEl.textContent = `服务正在应用更新并重载 (${attempts}/${maxAttempts})，请稍候...`;
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(checkTimer);
+        if (infoBox) {
+          infoBox.innerHTML = `
+            <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
+              <div style="font-weight:600;color:var(--warning);font-size:14px;">⚠️ 升级任务已提交，探测连接超时</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">服务可能在安装依赖或重新拉起中，您可手动刷新页面或在终端执行 <code>ocrproxy status</code> 查看。</div>
+              <button class="btn btn-secondary btn-sm" onclick="location.reload()" style="margin-top:8px;">刷新页面</button>
+            </div>
+          `;
+        }
+      }
+    }, 1500);
 
   } catch(e) {
     toast('发起在线升级失败: ' + e.message, 'err');
+    if (infoBox) {
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--danger);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
+          <div style="font-weight:600;color:var(--danger);font-size:14px;">❌ 发起升级失败</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${esc(e.message)}</div>
+          <button class="btn btn-secondary btn-sm" onclick="checkSystemUpdate(true)" style="margin-top:8px;">重新检查</button>
+        </div>
+      `;
+    }
   }
 }
 

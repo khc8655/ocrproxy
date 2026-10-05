@@ -1356,29 +1356,37 @@ async def upgrade_system_endpoint(request: Request):
 
     async def _do_upgrade():
         await asyncio.sleep(0.5)
-        try:
-            # First try executing /usr/local/bin/ocrproxy upgrade
-            upgrade_cmd = ["/usr/local/bin/ocrproxy", "upgrade"]
-            if not os.path.exists("/usr/local/bin/ocrproxy"):
-                upgrade_cmd = ["bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"]
+        success = False
+        # 1. 尝试调用全局注册的 ocrproxy upgrade (带 sudo 保护)
+        for cmd in [
+            ["sudo", "-n", "/usr/local/bin/ocrproxy", "upgrade"],
+            ["/usr/local/bin/ocrproxy", "upgrade"],
+            ["sudo", "-n", "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
+            ["bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
+        ]:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode == 0:
+                    logger.info(f"OCRProxy system upgrade succeeded via: {' '.join(cmd)}")
+                    success = True
+                    break
+                else:
+                    logger.warning(f"Upgrade attempt with {' '.join(cmd)} exited with {proc.returncode}: {stderr.decode(errors='ignore')[:300]}")
+            except Exception as e:
+                logger.warning(f"Upgrade attempt with {' '.join(cmd)} raised: {e}")
 
-            proc = await asyncio.create_subprocess_exec(
-                *upgrade_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode == 0:
-                logger.info("OCRProxy system upgrade completed successfully via Web Admin")
-            else:
-                logger.error(f"OCRProxy system upgrade failed: code={proc.returncode}, err={stderr.decode(errors='ignore')}")
-        except Exception as e:
-            logger.error(f"Exception during background system upgrade: {e}")
+        if not success:
+            logger.error("All system upgrade command variants failed")
 
     asyncio.create_task(_do_upgrade())
     return JSONResponse(content={
         "ok": True,
-        "message": "程序升级已在后台启动，服务正在平滑更新并重启，请在 6-10 秒后刷新页面"
+        "message": "程序升级任务已成功派发至后台执行"
     })
 
 

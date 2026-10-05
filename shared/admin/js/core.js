@@ -149,9 +149,6 @@ async function loadData(){
     }
 
     fetchVaultManifest(true); // background silent fetch
-    if (!IS_EDGEONE && typeof checkSystemUpdate === 'function') {
-      checkSystemUpdate(false); // background silent version check on VM
-    }
     updateAccess();
     render();
   } catch(e){
