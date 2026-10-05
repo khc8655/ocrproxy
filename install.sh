@@ -516,6 +516,11 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
         run_sudo sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
         need_reload=true
     fi
+    if grep -q "NoNewPrivileges=true" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
+        info "调整服务沙箱安全属性 (启用子进程 sudo 白名单免密支持)..."
+        run_sudo sed -i 's/NoNewPrivileges=true/NoNewPrivileges=false/' "/etc/systemd/system/${SERVICE_NAME}.service"
+        need_reload=true
+    fi
     if systemd-detect-virt --container >/dev/null 2>&1; then
         run_sudo sed -i -E '/(Protect|Restrict|LockPersonality|PrivateTmp|NoNewPrivileges|ReadWritePaths)/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
         need_reload=true
@@ -763,12 +768,12 @@ fi
 # 从 .env 读取生成的密钥
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
 
-# 容器环境自适应
-SANDBOX_OPTS="NoNewPrivileges=true
+# 容器与沙箱环境自适应 (允许以非特权用户运行的服务通过 sudo 白名单调用管理命令)
+SANDBOX_OPTS="NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}/config
+ReadWritePaths=${INSTALL_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
