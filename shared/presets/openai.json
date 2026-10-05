@@ -1,11 +1,11 @@
 {
   "id": "openai",
   "name": "OpenAI 官方",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.openai.com/v1",
   "doc_url": "https://platform.openai.com/docs",
-  "description": "OpenAI 官方 API 或标准兼容中转网关，原生支持 reasoning_effort 思考控制与多模态",
+  "description": "OpenAI 官方 API 或标准兼容中转网关，纯中转零损耗极速透传，原生支持 reasoning_effort 思考控制与多模态",
   "features": {
     "native_thinking": true,
     "tools": true,
@@ -46,7 +46,7 @@
     "tools": {
       "normalize_choice_to_string": false,
       "strip_json_schema": false,
-      "rescue_from_text": true
+      "rescue_from_text": false
     },
     "user_tracking": {
       "passthrough_user": true

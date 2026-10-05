@@ -25,15 +25,44 @@ import { getPreset } from '../../lib/presets/index.js';
 
 function checkAuth(request, env) {
   const adminPass = env?.ADMIN_PASSWORD;
-  const proxyKey = env?.PROXY_API_KEY;
-  if (!adminPass && !proxyKey) return null;
+  const vaultToken = env?.VAULT_ACCESS_TOKEN;
+  // Fail-closed: Must have at least ADMIN_PASSWORD or VAULT_ACCESS_TOKEN configured
+  if (!adminPass && !vaultToken) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: 'EdgeOne 未配置 ADMIN_PASSWORD 或 VAULT_ACCESS_TOKEN，为保护上游密钥机密性，金库接口已拒绝访问（Fail-Closed）。',
+      }),
+      { status: 503, headers: { 'content-type': 'application/json' } }
+    );
+  }
 
-  const got = request.headers.get('authorization') || '';
-  if (adminPass && got === `Bearer ${adminPass}`) return null;
-  if (proxyKey && got === `Bearer ${proxyKey}`) return null;
+  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+
+  // Explicitly deny inference token PROXY_API_KEY from reading vault keys
+  const proxyKey = env?.PROXY_API_KEY;
+  if (proxyKey && token === String(proxyKey).trim() && token !== String(adminPass).trim() && token !== String(vaultToken).trim()) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: 'Forbidden: 推理凭证 PROXY_API_KEY 无权调用机要密钥接口 (/api/vault/*)，必须使用管理员密码或专有金库凭据。',
+      }),
+      { status: 403, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  if (adminPass && token === String(adminPass).trim()) return null;
+  if (vaultToken && token === String(vaultToken).trim()) return null;
 
   return new Response(
-    JSON.stringify({ error: { type: 'authentication_error', message: 'Missing or invalid Authorization header.', code: 'invalid_api_key' } }),
+    JSON.stringify({
+      error: {
+        type: 'authentication_error',
+        message: 'Missing or invalid Authorization header for Vault access.',
+        code: 'invalid_vault_token',
+      },
+    }),
     { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } }
   );
 }

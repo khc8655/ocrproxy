@@ -8,6 +8,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
+    "build:presets": "node scripts/build-presets.mjs",
     "build:admin": "node scripts/build-admin.mjs",
     "dev": "npm run build:admin && edgeone makers dev",
     "deploy": "npm run build:admin && edgeone makers deploy",

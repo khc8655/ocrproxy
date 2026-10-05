@@ -260,53 +260,23 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
-  // 6. Reasoning strategy execution
+  // 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
   const reasoningRules = rules.reasoning;
   if (reasoningRules && typeof reasoningRules === 'object') {
     const strat = reasoningRules.strategy || 'openai_passthrough';
 
-    let modelSpecific = {};
-    if (reasoningRules.model_rules && typeof reasoningRules.model_rules === 'object') {
-      for (const [mPrefix, mCfg] of Object.entries(reasoningRules.model_rules)) {
-        if (modelName.includes(mPrefix.toLowerCase())) {
-          modelSpecific = mCfg;
-          break;
-        }
-      }
-    }
-
     if (!isAgentMode) {
-      // KB mode: suppress thinking latency
+      // KB mode: suppress thinking latency for Gemini
       if (strat === 'gemini_thinking_matrix') {
         delete body.reasoning_effort;
         body.extra_body = body.extra_body || {};
         body.extra_body.google = body.extra_body.google || {};
         body.extra_body.google.thinking_config = { include_thoughts: false };
-      } else if (strat === 'minimax_adaptive') {
-        delete body.reasoning_effort;
-        delete body.reasoning_split;
-        body.thinking = { type: 'disabled' };
-      } else if (strat === 'chat_template_kwargs') {
-        delete body.reasoning_effort;
-        body.chat_template_kwargs = body.chat_template_kwargs || {};
-        const enableKey = reasoningRules.enable_key || 'enable_thinking';
-        body.chat_template_kwargs[enableKey] = false;
-      } else if (strat === 'effort_remapping') {
-        delete body.thinking;
-        const noneFb = modelSpecific.none_fallback || reasoningRules.none_fallback;
-        const noneAct = modelSpecific.none_action || reasoningRules.none_action;
-        if (noneAct === 'omit' && !noneFb) {
-          delete body.reasoning_effort;
-        } else if (noneFb) {
-          body.reasoning_effort = noneFb;
-        } else {
-          body.reasoning_effort = 'none';
-        }
       } else {
         body.reasoning_effort = 'none';
       }
     } else {
-      // Agent mode
+      // Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
       if (strat === 'gemini_thinking_matrix') {
         const isGemma = modelName.startsWith('gemma');
         let thinkingEnabled = false;
@@ -354,91 +324,9 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
             body.max_completion_tokens = 65535;
           }
         }
-      } else if (strat === 'minimax_adaptive') {
-        const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
-        if (rawEffort !== null) {
-          delete body.reasoning_effort;
-          if (rawEffort === 'none' || rawEffort === 'false') {
-            body.thinking = { type: 'disabled' };
-            delete body.reasoning_split;
-          } else {
-            if (reasoningRules.enable_reasoning_split !== false) {
-              body.reasoning_split = true;
-            }
-            body.thinking = { type: 'adaptive' };
-          }
-        } else if (body.thinking && typeof body.thinking === 'object') {
-          const t = String(body.thinking.type || '').toLowerCase();
-          if (t === 'disabled') {
-            body.thinking = { type: 'disabled' };
-            delete body.reasoning_split;
-          } else {
-            if (reasoningRules.enable_reasoning_split !== false) {
-              body.reasoning_split = true;
-            }
-            body.thinking = { type: 'adaptive' };
-          }
-        } else {
-          if (reasoningRules.enable_reasoning_split !== false) {
-            body.reasoning_split = true;
-          }
-          if (!body.thinking) {
-            body.thinking = { type: reasoningRules.default_type || 'adaptive' };
-          }
-        }
-      } else if (strat === 'chat_template_kwargs') {
-        const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
-        if (rawEffort !== null) {
-          delete body.reasoning_effort;
-          body.chat_template_kwargs = body.chat_template_kwargs || {};
-          const enableKey = reasoningRules.enable_key || 'enable_thinking';
-          if (body.chat_template_kwargs[enableKey] === undefined) {
-            body.chat_template_kwargs[enableKey] = (rawEffort !== 'none' && rawEffort !== 'false');
-          }
-        } else if (reasoningRules.default_thinking) {
-          body.chat_template_kwargs = body.chat_template_kwargs || {};
-          const enableKey = reasoningRules.enable_key || 'enable_thinking';
-          if (body.chat_template_kwargs[enableKey] === undefined) {
-            body.chat_template_kwargs[enableKey] = true;
-          }
-        }
-      } else if (strat === 'effort_remapping') {
-        if (reasoningRules.strip_thinking) {
-          delete body.thinking;
-        }
-        if (body.reasoning_effort !== undefined) {
-          const reStr = String(body.reasoning_effort).toLowerCase();
-          const supported = modelSpecific.supported_levels || reasoningRules.supported_levels || ['low', 'medium', 'high'];
-          const fallbacks = modelSpecific.level_fallback || reasoningRules.level_fallback || {};
-          const noneFb = modelSpecific.none_fallback || reasoningRules.none_fallback;
-          const noneAct = modelSpecific.none_action || reasoningRules.none_action;
-
-          if (reStr === 'none' || reStr === 'false') {
-            if (supported.includes('none') && !noneFb && noneAct !== 'omit') {
-              body.reasoning_effort = 'none';
-            } else if (noneFb) {
-              body.reasoning_effort = noneFb;
-            } else if (noneAct === 'omit') {
-              delete body.reasoning_effort;
-            } else {
-              body.reasoning_effort = 'low';
-            }
-          } else if (fallbacks[reStr]) {
-            body.reasoning_effort = fallbacks[reStr];
-          } else if (!supported.includes(reStr)) {
-            body.reasoning_effort = fallbacks[reStr] || reasoningRules.default_effort || 'medium';
-          }
-        } else {
-          const defaultEff = modelSpecific.default_effort || reasoningRules.default_effort;
-          if (defaultEff) {
-            body.reasoning_effort = defaultEff;
-          }
-        }
-      } else if (strat === 'openai_passthrough') {
-        const supported = reasoningRules.supported_levels || ['none', 'low', 'medium', 'high'];
-        if (body.reasoning_effort === 'none' && !supported.includes('none')) {
-          body.reasoning_effort = reasoningRules.none_fallback || 'low';
-        }
+      } else {
+        // All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
+        // Pure passthrough: preserve reasoning_effort and payload format untouched
       }
     }
   }
@@ -447,38 +335,6 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
   if (isAnthropic) {
     if (!body.max_tokens || typeof body.max_tokens !== 'number' || body.max_tokens <= 0) {
       body.max_tokens = 4096;
-    }
-
-    const anthropicRules = rules.anthropic;
-    if (anthropicRules && typeof anthropicRules === 'object') {
-      if (anthropicRules.strip_thinking) {
-        const thinking = body.thinking;
-        delete body.thinking;
-        if (anthropicRules.thinking_to_output_config) {
-          if (thinking && typeof thinking === 'object' && String(thinking.type || '').toLowerCase() !== 'disabled') {
-            body.output_config = { effort: anthropicRules.default_effort || 'medium' };
-          } else if (body.output_config && typeof body.output_config === 'object') {
-            const eff = String(body.output_config.effort || '').toLowerCase();
-            const modelRules = anthropicRules.model_rules || {};
-            for (const [mk, mc] of Object.entries(modelRules)) {
-              if (modelName.includes(mk.toLowerCase())) {
-                const fb = mc.level_fallback || {};
-                if (fb[eff]) {
-                  body.output_config.effort = fb[eff];
-                }
-                break;
-              }
-            }
-          }
-        }
-      } else if (anthropicRules.thinking_to_adaptive) {
-        if (body.thinking && typeof body.thinking === 'object') {
-          const t = String(body.thinking.type || '').toLowerCase();
-          if (t === 'enabled' || (!body.thinking.type && body.thinking.budget_tokens)) {
-            body.thinking.type = 'adaptive';
-          }
-        }
-      }
     }
   }
 
@@ -513,8 +369,10 @@ export function normaliseMessagesForProvider(body, provider, configOverride = nu
  */
 export function normalizeResponseReasoning(data, rules = {}) {
   if (!data || typeof data !== 'object') return data;
-  const respRules = rules?.response || {};
-  const reasoningFields = respRules.reasoning_fields || ['reasoning_split', 'reasoning_content', 'reasoning'];
+  const respRules = rules?.response;
+  if (!respRules || typeof respRules !== 'object') return data;
+  const reasoningFields = respRules.reasoning_fields;
+  if (!Array.isArray(reasoningFields) || reasoningFields.length === 0) return data;
 
   if (Array.isArray(data.choices)) {
     for (const ch of data.choices) {
@@ -594,53 +452,78 @@ export function rescueToolCallsFromText(content) {
 }
 
 /**
- * Wraps an upstream ReadableStream so that if no chunk is emitted for
- * `intervalMs` (default 15s), an SSE comment ": keep-alive\n\n" is enqueued
- * to maintain the connection with downstream clients / edge gateways.
+ * Wraps an upstream ReadableStream or reader with pull-based backpressure and keep-alive SSE comments.
+ * If no chunk is emitted for `intervalMs` (default 15s), an SSE comment ": keep-alive\n\n" is enqueued
+ * to maintain the connection with downstream clients / edge gateways without buffering leaks.
+ * Supports optional `initialChunk` from upstream chunk peeking.
  */
-export function createKeepAliveStream(upstreamBody, intervalMs = 15000) {
-  if (!upstreamBody || typeof upstreamBody.getReader !== 'function') {
-    return upstreamBody;
+export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialChunk = null) {
+  if (!bodyOrReader) return null;
+  const reader = typeof bodyOrReader.getReader === 'function' ? bodyOrReader.getReader() : bodyOrReader;
+  if (!reader || typeof reader.read !== 'function') {
+    return bodyOrReader;
   }
-  const reader = upstreamBody.getReader();
+
   const encoder = new TextEncoder();
   let timer = null;
+  let unconsumedInitial = initialChunk;
+
+  const resetTimer = (controller) => {
+    if (timer) clearInterval(timer);
+    timer = setInterval(() => {
+      try {
+        controller.enqueue(encoder.encode(': keep-alive\n\n'));
+      } catch (e) {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+    }, intervalMs);
+  };
 
   return new ReadableStream({
-    async start(controller) {
-      const scheduleKeepAlive = () => {
-        timer = setTimeout(() => {
-          try {
-            controller.enqueue(encoder.encode(': keep-alive\n\n'));
-            scheduleKeepAlive();
-          } catch (e) {}
-        }, intervalMs);
-      };
+    start(controller) {
+      resetTimer(controller);
+    },
+    async pull(controller) {
+      if (unconsumedInitial) {
+        const chunk = unconsumedInitial;
+        unconsumedInitial = null;
+        resetTimer(controller);
+        controller.enqueue(chunk);
+        return;
+      }
 
-      scheduleKeepAlive();
       try {
-        while (true) {
-          const { done, value } = await reader.read();
+        const { done, value } = await reader.read();
+        if (done) {
           if (timer) {
-            clearTimeout(timer);
+            clearInterval(timer);
             timer = null;
           }
-          if (done) {
-            break;
-          }
+          controller.close();
+        } else if (value) {
+          resetTimer(controller);
           controller.enqueue(value);
-          scheduleKeepAlive();
         }
-        controller.close();
       } catch (err) {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
         controller.error(err);
-      } finally {
-        if (timer) clearTimeout(timer);
       }
     },
     cancel(reason) {
-      if (timer) clearTimeout(timer);
-      return reader.cancel(reason);
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      try {
+        return reader.cancel(reason);
+      } catch (e) {}
     }
   });
 }
+

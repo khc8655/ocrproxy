@@ -205,24 +205,61 @@ export function bindingId(b) {
   return `${b.provider}:${b.keyLabel}${modelPart}`;
 }
 
+export const RATE_LIMIT_KEYWORDS = Object.freeze([
+  'tpm', 'rpm', 'qps', 'rate limit', 'rate_limit', 'ratelimit',
+  'requests per minute', 'tokens per minute', 'tokens per day',
+  'per minute', 'per-minute', 'per second', 'per-second',
+  'too many requests', 'concurrency', 'concurrent', '429001',
+  'traffic control', 'slow down', 'try again later'
+]);
+
+export const HARD_QUOTA_KEYWORDS = Object.freeze([
+  'insufficient_quota', 'allocated quota exceeded', 'exceeded your current quota',
+  'credit balance is too low', 'insufficient balance', 'balance is insufficient',
+  'balance not enough', 'no balance', 'account arrears', 'account abnormal or account balance',
+  'free usage limit exceeded', 'daily free usage limit', 'freeusagelimit',
+  'free quota has been exhausted', 'free quota exhausted', 'free allowance exhausted',
+  'free quota is exhausted', 'quota has been exhausted', 'allowance exhausted',
+  'credit insufficient balance', 'balance=0', 'credit is 0', 'credit depleted',
+  '欠费', '余额不足', '配额不足', '额度不足', '账户欠费', '免费额度用尽', '免费额度已用完',
+  '超出总额度', '超出配额限制'
+]);
+
 /**
  * Classify an upstream response and return the cooldown duration it
  * should trigger (in seconds).  0 means "no cooldown needed".
  *
- * Mirrors VM's scheduler.py logic for the cases that make sense here.
+ * Mirrors VM's scheduler.py logic for unified failure classification.
  */
 export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_timeout' */, errBody = '') {
   if (kind === 'empty_stream') return COOLDOWN_DURATIONS.EMPTY_STREAM;
   if (kind === 'read_timeout') return COOLDOWN_DURATIONS.READ_TIMEOUT;
+
+  const lower = (errBody || '').toLowerCase();
+  const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
+  const hasHardQuotaKw = Boolean(lower && (
+    HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
+    (lower.includes('balance') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w))) ||
+    (lower.includes('credit') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w)))
+  ));
+
+  const isQuota = Boolean(
+    [400, 401, 402, 403, 429].includes(status) &&
+    hasHardQuotaKw &&
+    !hasRateLimitKw
+  );
+
+  if (isQuota) return COOLDOWN_DURATIONS.QUOTA_403;
   if (status === 429) return COOLDOWN_DURATIONS.TPM_429;
   if (status === 403) return COOLDOWN_DURATIONS.QUOTA_403;
+
   if (status === 400) {
-    const lower = (errBody || '').toLowerCase();
-    if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('subscription')) {
-      return COOLDOWN_DURATIONS.QUOTA_403;
+    if (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w))) {
+      return COOLDOWN_DURATIONS.KEY_DRIFT;
     }
-    return 0;
+    return 0; // Client-side parameter error, do not cooldown
   }
+
   if (status === 401 || status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
   if (status >= 500) return COOLDOWN_DURATIONS.SERVER_5XX;
   return 0;
@@ -231,19 +268,26 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 /**
  * Decide if a status code should trigger failover to the next candidate.
  * 2xx → no, return to client
- * 400 → no (unless credit / balance quota issue), return to client (likely request-level)
- * 408 / 429 / 5xx / empty stream → yes
- * 401 / 403 / 404 → also yes (key-level, but mark with longer cooldown)
+ * 400 → no (unless key/quota/billing issue), return to client (client-level param error)
+ * 404 / 422 → no, client error
+ * 408 / 429 / 5xx / empty stream / read timeout → yes
+ * 401 / 403 → yes
  */
 export function shouldFailover(status, kind, errBody = '') {
   if (kind === 'empty_stream' || kind === 'read_timeout') return true;
   if (status >= 200 && status < 300) return false;
+  if (status === 404 || status === 422) return false;
+
   if (status === 400) {
     const lower = (errBody || '').toLowerCase();
-    if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('subscription')) {
-      return true;
-    }
-    return false;
+    const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
+    const hasHardQuotaKw = Boolean(lower && (
+      HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
+      (lower.includes('balance') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w))) ||
+      (lower.includes('credit') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w)))
+    ));
+    const isKeyIssue = hasHardQuotaKw || (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w)));
+    return Boolean(isKeyIssue);
   }
   return true;
 }

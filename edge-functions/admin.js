@@ -1690,6 +1690,110 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 (function(global){
   'use strict';
 
+  // State draft for modal key bindings to prevent multi-provider binding loss
+  let modalBindings = [];
+
+  // Event Delegation Initializers (eliminates inline JS interpolation & XSS vectors)
+  function initAgentModelsDelegation() {
+    const box = document.getElementById('agentModelsBox');
+    if (!box || box._hasDelegated) return;
+    box._hasDelegated = true;
+
+    box.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const model = btn.dataset.model;
+      if (!action) return;
+
+      if (action === 'edit-model') {
+        editAgentModel(model);
+      } else if (action === 'delete-model') {
+        deleteAgentModel(model);
+      } else if (action === 'probe-model-all') {
+        testAgentModelAll(model);
+      } else if (action === 'set-active-key') {
+        const key = btn.dataset.key;
+        setActiveAgentKey(model, key);
+      } else if (action === 'probe-key') {
+        const idx = parseInt(btn.dataset.index, 10);
+        testAgentKey(model, idx);
+      } else if (action === 'delete-key') {
+        const idx = parseInt(btn.dataset.index, 10);
+        deleteAgentKey(model, idx);
+      } else if (action === 'collapse-panel') {
+        const panel = btn.closest('[id^="liveTestRes-"]') || btn.closest('[id^="agentProbe-"]');
+        if (panel) panel.style.display = 'none';
+      }
+    });
+
+    box.addEventListener('change', (e) => {
+      const input = e.target.closest('[data-action="reorder-key"]');
+      if (!input) return;
+      const model = input.dataset.model;
+      const idx = parseInt(input.dataset.index, 10);
+      reorderAgentKey(model, idx, input.value);
+    });
+  }
+
+  function initModalDelegation() {
+    const keyList = document.getElementById('a_keyList');
+    if (keyList && !keyList._hasDelegated) {
+      keyList._hasDelegated = true;
+      keyList.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-action="remove-local-key"]');
+        if (delBtn) {
+          e.stopPropagation();
+          removeLocalKeyFromModal(delBtn.dataset.prov, delBtn.dataset.key, e);
+          return;
+        }
+        const cap = e.target.closest('.key-capsule');
+        if (cap) {
+          toggleKeyCapsule(cap);
+        }
+      });
+    }
+
+    const quickTags = document.getElementById('a_quickTags');
+    if (quickTags && !quickTags._hasDelegated) {
+      quickTags._hasDelegated = true;
+      quickTags.addEventListener('click', (e) => {
+        const cap = e.target.closest('[data-action="apply-quick-model"]');
+        if (cap) {
+          applyAgentQuickModel(cap.dataset.name, cap.dataset.upstream, cap);
+        }
+      });
+    }
+
+    const probedList = document.getElementById('probedModelsList');
+    if (probedList && !probedList._hasDelegated) {
+      probedList._hasDelegated = true;
+      probedList.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action="select-probed-model"]');
+        if (item) {
+          selectProbedModel(item.dataset.model);
+        }
+      });
+    }
+
+    const protoInfo = document.getElementById('a_model_proto_info');
+    if (protoInfo && !protoInfo._hasDelegated) {
+      protoInfo._hasDelegated = true;
+      protoInfo.addEventListener('click', (e) => {
+        const switchBtn = e.target.closest('[data-action="switch-provider-vault"]');
+        if (switchBtn) {
+          switchLocalProviderToVault(switchBtn.dataset.prov);
+          return;
+        }
+        const delProvBtn = e.target.closest('[data-action="delete-local-provider"]');
+        if (delProvBtn) {
+          deleteLocalProviderFromModal(delProvBtn.dataset.prov);
+          return;
+        }
+      });
+    }
+  }
+
   // 1. Internal Context Resolution & Fallbacks
   function getCtx() {
     const isVm = (typeof state !== 'undefined' && state && state.config);
@@ -1909,11 +2013,12 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
 
     listEl.innerHTML = models.map(m => \`
-      <div class="probed-item" onclick="selectProbedModel('\${_esc(m)}')">
+      <div class="probed-item" data-action="select-probed-model" data-model="\${_esc(m)}">
         <span class="mono" style="font-size:13px;font-weight:600;color:var(--text, var(--color-text-1));word-break:break-all;">\${_esc(m)}</span>
-        <button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:11px;">选取</button>
+        <button type="button" class="btn btn-sm btn-primary" data-action="select-probed-model" data-model="\${_esc(m)}" style="padding:3px 10px;font-size:11px;">选取</button>
       </div>
     \`).join('');
+    initModalDelegation();
   }
 
   function filterProbedModels(kw) {
@@ -1955,6 +2060,15 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (!inp) return;
     inp.checked = !inp.checked;
     el.classList.toggle('checked', inp.checked);
+    const prov = inp.dataset.provider || document.getElementById('a_provider')?.value || '';
+    const keyVal = inp.value;
+    if (inp.checked) {
+      if (!modalBindings.some(b => b.provider === prov && b.key === keyVal)) {
+        modalBindings.push({ provider: prov, key: keyVal });
+      }
+    } else {
+      modalBindings = modalBindings.filter(b => !(b.provider === prov && b.key === keyVal));
+    }
   }
 
   // 4. Populate and Handle Provider Selection in Agent Modal
@@ -2063,9 +2177,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       const badgeHtml = _renderProtocolBadges(provProtos);
       let actionBtnHtml = '';
       if (localProv && remoteProv) {
-        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-secondary" onclick="window.switchLocalProviderToVault('\${_esc(prov)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>\`;
+        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-secondary" data-action="switch-provider-vault" data-prov="\${_esc(prov)}" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>\`;
       } else if (localProv) {
-        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-ghost" onclick="window.deleteLocalProviderFromModal('\${_esc(prov)}')" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>\`;
+        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-ghost" data-action="delete-local-provider" data-prov="\${_esc(prov)}" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>\`;
       }
       protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
     }
@@ -2075,23 +2189,28 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const purelyLocalKeys = localKeys.filter(k => !remoteKeys.includes(k));
     const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
 
+    const isNewModel = !document.getElementById('a_oldName')?.value;
+    if (isNewModel && modalBindings.length === 0 && allKeyLabels.length > 0) {
+      modalBindings.push({ provider: prov, key: allKeyLabels[0] });
+    }
+
     if (allKeyLabels.length === 0) {
       box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方添加本地 Key 或同步中枢规则</div>';
     } else {
-      box.innerHTML = allKeyLabels.map((k, idx) => {
+      box.innerHTML = allKeyLabels.map((k) => {
         const isVault = remoteKeys.includes(k);
         const isLocal = localKeys.includes(k);
-        const isChecked = idx === 0;
+        const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
         const tag = isVault 
           ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
           : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`;
 
         const deleteBtn = (!isVault && isLocal)
-          ? \`<button type="button" class="btn-ghost" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key" onclick="removeLocalKeyFromModal('\${_esc(prov)}', '\${_esc(k)}', event)">×</button>\`
+          ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
           : '';
 
-        return \`<div class="key-capsule \${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
-          <input type="checkbox" value="\${_esc(k)}" data-is-local="\${isLocal}" \${isChecked ? 'checked' : ''} style="display:none;">
+        return \`<div class="key-capsule \${isChecked ? 'checked' : ''}" data-action="toggle-key-capsule">
+          <input type="checkbox" value="\${_esc(k)}" data-provider="\${_esc(prov)}" data-is-local="\${isLocal}" \${isChecked ? 'checked' : ''} style="display:none;">
           <span style="font-weight:600;">\${_esc(k)}</span>
           \${tag}
           \${deleteBtn}
@@ -2113,7 +2232,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       quickTags.innerHTML = recModels.map(rm => {
         const mName = typeof rm === 'string' ? rm : (rm.name || rm.id);
         const mUpstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
-        return \`<div class="model-capsule" onclick="applyAgentQuickModel('\${_esc(mName)}', '\${_esc(mUpstream)}', this)">
+        return \`<div class="model-capsule" data-action="apply-quick-model" data-name="\${_esc(mName)}" data-upstream="\${_esc(mUpstream)}">
           <span>\${_esc(mName)}</span>
         </div>\`;
       }).join('');
@@ -2121,10 +2240,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     } else if (quickBox) {
       quickBox.style.display = 'none';
     }
+
+    initModalDelegation();
   }
 
   // 5. Open & Edit Model Modal
   async function openAgentModal() {
+    modalBindings = [];
     const title = document.getElementById('agentModalTitle');
     if (title) title.textContent = '新增 Agent 模型';
     const aOld = document.getElementById('a_oldName');
@@ -2141,11 +2263,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const defaultProv = providers[0] ? providers[0].id : '';
     populateAgentProviderSelect(defaultProv);
     _openModal('agentModal');
+    initModalDelegation();
   }
 
   async function editAgentModel(name) {
     const { cfg } = getCtx();
     const m = (cfg.agent_models && cfg.agent_models[name]) || {};
+    modalBindings = (m.keys || []).map(x => ({ provider: x.provider, key: x.key }));
+
     const title = document.getElementById('agentModalTitle');
     if (title) title.textContent = '编辑 Agent 模型';
     const aOld = document.getElementById('a_oldName');
@@ -2162,15 +2287,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const boundProviders = [...new Set((m.keys || []).map(x => x.provider))];
     const activeProv = boundProviders[0] || (_getAllProvidersList()[0]?.id || '');
     populateAgentProviderSelect(activeProv);
-
-    const set = new Set((m.keys || []).map(x => x.provider + ':' + x.key));
-    document.querySelectorAll('#a_keyList .key-capsule').forEach(cap => {
-      const inp = cap.querySelector('input');
-      const checked = set.has(activeProv + ':' + inp.value);
-      inp.checked = checked;
-      cap.classList.toggle('checked', checked);
-    });
     _openModal('agentModal');
+    initModalDelegation();
   }
 
   async function saveAgentModel() {
@@ -2183,10 +2301,20 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const provider = selVal;
     if (!provider) { _toast('请先选择所属供应商', 'err'); return; }
 
-    const bindings = [];
-    document.querySelectorAll('#a_keyList input:checked').forEach(inp => {
-      bindings.push({ provider: inp.dataset.provider || provider, key: inp.value });
+    // Sync currently displayed checkboxes in modal to modalBindings
+    document.querySelectorAll('#a_keyList input[type="checkbox"]').forEach(inp => {
+      const p = inp.dataset.provider || provider;
+      const k = inp.value;
+      if (inp.checked) {
+        if (!modalBindings.some(b => b.provider === p && b.key === k)) {
+          modalBindings.push({ provider: p, key: k });
+        }
+      } else {
+        modalBindings = modalBindings.filter(b => !(b.provider === p && b.key === k));
+      }
     });
+
+    const bindings = modalBindings.filter(b => b.provider && b.key);
     if (!bindings.length) { _toast('请至少勾选绑定一个 Key', 'err'); return; }
 
     if (typeof ensureKeysImported === 'function') {
@@ -2197,6 +2325,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
 
+    // Collision check 1: Adding keys to an existing model during creation
     if (!oldName && cfg.agent_models[name]) {
       const existing = cfg.agent_models[name];
       const existingKeySet = new Set((existing.keys || []).map(k => \`\${k.provider}:\${k.key}\`));
@@ -2217,11 +2346,27 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       if (upstream && upstream !== name) {
         existing.upstream_model = upstream;
       }
-    } else {
-      if (oldName && oldName !== name) { delete cfg.agent_models[oldName]; }
-      const entry = { keys: bindings };
+    }
+    // Collision check 2: Renaming to another existing model
+    else if (oldName && oldName !== name && cfg.agent_models[name]) {
+      _toast(\`目标模型 ID「\${name}」已存在，不能重命名覆盖已有模型！\`, 'err');
+      document.getElementById('a_name')?.focus();
+      return;
+    }
+    // Normal save or valid rename
+    else {
+      const existing = (oldName && cfg.agent_models[oldName]) ? cfg.agent_models[oldName] : {};
+      if (oldName && oldName !== name) {
+        delete cfg.agent_models[oldName];
+      }
+      const entry = { ...existing, keys: bindings };
       if (upstream && upstream !== name) {
         entry.upstream_model = upstream;
+      } else {
+        delete entry.upstream_model;
+      }
+      if (entry.active_key && !bindings.some(b => b.key === entry.active_key)) {
+        delete entry.active_key;
       }
       cfg.agent_models[name] = entry;
     }
@@ -2456,7 +2601,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
                 <span style="color:var(--text-secondary);font-size:12px;">往返耗时: <b>\${elapsed}ms</b></span>
                 \${Number(fallbacks) > 0 ? \`<span class="badge badge-warning">故障转移重试: \${fallbacks}次</span>\` : ''}
               </div>
-              <button class="btn btn-sm" onclick="this.closest('div').parentElement.parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+              <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
             </div>
             <div style="font-size:12px;background:var(--bg, var(--color-bg-page));padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border, var(--color-border));color:var(--text, var(--color-text-1));">
               <span style="color:var(--text-secondary);">模型输出：</span>\${_esc(content.trim())}
@@ -2478,7 +2623,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               <span class="badge badge-error" style="font-weight:700;">HTTP \${resp.status}</span>
               <span style="color:var(--error, #f53f3f);font-size:12px;">\${_esc(errText)}</span>
             </div>
-            <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+            <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
           </div>
         \`;
         _toast(\`[\${modelName}] 实测失败: HTTP \${resp.status}\`, 'err');
@@ -2487,7 +2632,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       resBox.innerHTML = \`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <span style="color:var(--error, #f53f3f);font-size:12px;">实测网络异常: \${_esc(e.message)}</span>
-          <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
+          <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
         </div>
       \`;
       _toast(\`实测异常: \${e.message}\`, 'err');
@@ -2540,7 +2685,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     const orderInputHtml = \`<input type="number" min="1" max="\${totalCount}" value="\${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
-        onchange="reorderAgentKey('\${_esc(modelName)}', \${i}, this.value)" title="修改数字直接调整顺序">\`;
+        data-action="reorder-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="修改数字直接调整顺序">\`;
 
     const { cfg, stats: fullStats } = getCtx();
     const list = cfg.agent_models?.[modelName]?.keys || [];
@@ -2550,14 +2695,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     const setActiveBtn = isActive
       ? \`<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>\`
-      : \`<button class="btn btn-sm btn-secondary" onclick="setActiveAgentKey('\${_esc(modelName)}','\${_esc(binding.key)}')" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>\`;
+      : \`<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="\${_esc(modelName)}" data-key="\${_esc(binding.key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>\`;
 
     const actions = \`
       \${setActiveBtn}
-      <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-\${_esc(probeKeyId)}" onclick="testAgentKey('\${_esc(modelName)}',\${i})" title="测试此 Key 连通性" \${isProbing ? 'disabled' : ''}>
+      <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-\${_esc(probeKeyId)}" data-action="probe-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="测试此 Key 连通性" \${isProbing ? 'disabled' : ''}>
         \${isProbing ? '<span class="spinner"></span>' : '测'}
       </button>
-      <button class="btn btn-icon btn-sm btn-secondary-danger" onclick="deleteAgentKey('\${_esc(modelName)}',\${i})" title="删除绑定">×</button>
+      <button class="btn btn-icon btn-sm btn-secondary-danger" data-action="delete-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="删除绑定">×</button>
     \`;
 
     return \`<tr>
@@ -2620,11 +2765,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="meta" style="margin-top:2px;font-size:12px;color:var(--text-secondary);">\${strategyLabel}</div>
           </div>
           <div class="flex gap-2" style="flex-wrap:wrap;display:flex;gap:6px;">
-            <button class="btn btn-secondary btn-sm" id="probeAllBtn-\${_esc(name)}" onclick="testAgentModelAll('\${_esc(name)}')" \${isProbingAll ? 'disabled' : ''}>
+            <button class="btn btn-secondary btn-sm" id="probeAllBtn-\${_esc(name)}" data-action="probe-model-all" data-model="\${_esc(name)}" \${isProbingAll ? 'disabled' : ''}>
               \${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="editAgentModel('\${_esc(name)}')">编辑</button>
-            <button class="btn btn-secondary-danger btn-sm" onclick="deleteAgentModel('\${_esc(name)}')">删除</button>
+            <button class="btn btn-secondary btn-sm" data-action="edit-model" data-model="\${_esc(name)}">编辑</button>
+            <button class="btn btn-secondary-danger btn-sm" data-action="delete-model" data-model="\${_esc(name)}">删除</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -2637,6 +2782,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <div id="agentProbe-\${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
       </div>\`;
     }).join('');
+
+    initAgentModelsDelegation();
   }
 
   async function switchLocalProviderToVault(provId) {
@@ -2727,6 +2874,20 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   global.populateAgentProviderSelect = populateAgentProviderSelect;
   global.onAgentProviderSelectChange = onAgentProviderSelectChange;
   global.renderAgentKeyChecks = renderAgentKeyChecks;
+  global.initAgentModelsDelegation = initAgentModelsDelegation;
+  global.initModalDelegation = initModalDelegation;
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        initAgentModelsDelegation();
+        initModalDelegation();
+      });
+    } else {
+      initAgentModelsDelegation();
+      initModalDelegation();
+    }
+  }
 
 })(typeof window !== 'undefined' ? window : globalThis);
 

@@ -14,28 +14,44 @@ import {
 export async function onRequestGet(context) {
   const { env } = context;
 
-  // Optional auth
+  // Fail-closed auth
   const authNeeded = env?.PROXY_API_KEY;
-  if (authNeeded) {
-    const got = context.request.headers.get('authorization') || '';
-    if (got !== `Bearer ${authNeeded}`) {
-      return new Response(
-        JSON.stringify({
-          error: {
-            type: 'authentication_error',
-            message: 'Missing or invalid Authorization header.',
-            code: 'invalid_api_key',
-          },
-        }),
-        {
-          status: 401,
-          headers: {
-            'content-type': 'application/json',
-            'www-authenticate': 'Bearer',
-          },
-        }
-      );
-    }
+  if (!authNeeded) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'configuration_error',
+          message: 'Server misconfiguration: PROXY_API_KEY is not configured in EdgeOne environment variables. Requests are blocked in fail-closed mode.',
+          code: 'auth_unconfigured',
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          'content-type': 'application/json',
+        },
+      }
+    );
+  }
+  const rawAuth = context.request.headers.get('authorization') || context.request.headers.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+  if (token !== String(authNeeded).trim()) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'authentication_error',
+          message: 'Missing or invalid Authorization header.',
+          code: 'invalid_api_key',
+        },
+      }),
+      {
+        status: 401,
+        headers: {
+          'content-type': 'application/json',
+          'www-authenticate': 'Bearer',
+        },
+      }
+    );
   }
 
   let config;

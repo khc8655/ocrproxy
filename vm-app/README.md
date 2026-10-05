@@ -13,7 +13,11 @@
 | **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） | 独立记账在 `stats.kb[type]`，看板显示 4 项入库任务指标，与 Agent 互不干扰 |
 | **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**模型为主的 `agent_models` 字典**取该模型的 Key 列表按序调用，429/500 自动切换下一个 Key；支持 `upstream_model` 上游 ID 重写 | 独立记账在 `stats.agent`，提供**模型 ID 调用排行看板**与**故障切换 (Failover) 深度监控** |
 
-- **Agent 模式完全透明**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。仅对极少数上游不兼容的字段值做规范化（如 StepFun 不接受 `reasoning_effort="none"` → 自动降级为 `"low"`；TokenRhythm 不接受对象形式 `tool_choice` → 自动转为 `"auto"`；Google Vertex AI 自动补齐 `google/` 前缀、映射思考等级矩阵与保活 `thought_signature`），避免 400 错误
+- **Agent 模式完全透明 (v2026.10.04-02)**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。
+  - **OpenAI 零拷贝极速转发 (Fast-Path)**：命中原生中转时直接提取二进制 `raw_bytes`，跳过 Python 字典反序列化；响应直接下发原始 bytes，跳过 JSON 重编码；流式 SSE 原生字节直通，彻底删除 `_filter_chunk` 正则拦截；
+  - **除 Gemini 外思考不转化**：彻底清除 MiniMax、StepFun、AMD、B.AI、Agnes 的思考等级重映射，客户端指定什么档位就透传什么档位；
+  - **Gemini 唯一适配例外**：严格仅针对 Google AI Studio 与 Google Vertex AI 保留 `gemini_thinking_matrix`、思考预算自动提升以及 Tool Schema `$schema`/`additionalProperties` 深度清洗；
+  - **Tool Choice 结构化原生支持**：全面关闭 `normalize_choice_to_string`，完美兼容 Cursor、Cline 指定的精细化对象工具调用。
 - **Google Vertex AI 协议级深度适配**：支持官方 OpenAPI 端点（`/endpoints/openapi`），智能识别并消除 `/v1` 拼接错误；针对 API Key 认证自动注入专属 `x-goog-api-key: <KEY>` 鉴权头（替换 Bearer 格式，根治 401 UNAUTHENTICATED 错误）；支持 Key 级独立绑定 Project ID 与 Location；
 - **Agent 模型维度深度追踪**：按模型 ID 实时汇总调用量占比、成功率、平均耗时、429 限流次数、5xx 异常次数、多 Key 自动切换次数（Failovers）、最后错误原因与发生时间
 - **探活与节点健康状态隔离**：Agent 探活与调用采用专属节点 Key（`agent:{model}:{provider}:{key}`），KB 采用（`kb:{type}:{provider}:{key}`），同一个 Key 在不同场景下的健康状态互不污染
@@ -34,6 +38,8 @@
 
 - **全局并发背压**：整个进程最多 30 个在途上游请求，超出自动排队（不丢请求、不 OOM）
 - **Per-Key 并发限制**：每个 Key 独立并发限制（默认 5），防止打崩上游配额
+- **流式全生命周期租约 (`ConcurrencyLease`)**：调度器将并发名额移交流式生成器，确保在整个 SSE 传输期间（即使长达数分钟）并发锁始终保持，流传输完毕或客户端断开后瞬时释放，防止名额提前释放引发并发风暴
+- **单调硬时限控制 (Monotonic Hard Deadline)**：采用 `time.monotonic()` 锚定硬截止时间，消除动态 1.5x 预算上浮；信号量排队超时快速降级，杜绝长尾堆积
 - **OCR 内存优化**：base64 图片只构建一次 data-URL，原始请求体提前释放，内存拷贝从 3 份降至 1 份
 - **全响应资源释放**：所有上游响应（成功/失败/流式/非流式）在不再需要时立即调用 `resp.aclose()` 归还连接池，防止高并发下的连接泄漏
 - **请求体大小限制**：chat/embedding/rerank 端点 10MB 硬上限，OCR 端点 20MB（base64 图片固有更大），在解析 JSON 前即拒绝超大请求体
@@ -507,3 +513,33 @@ curl -sf http://127.0.0.1:8787/health
 nano /opt/ocrproxy/.env  # 修改 APP_PORT
 systemctl restart ocrproxy
 ```
+
+---
+
+## 本地开发与准入测试指引 (Development & Testing)
+
+### 1. 本地启动 VM 服务
+```bash
+cd vm-app
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 启动本地 FastAPI 服务 (默认端口 8787)
+uvicorn app.main:app --host 0.0.0.0 --port 8787 --reload
+```
+
+### 2. 核心适配器与零拷贝单元测试
+在代码库根目录下运行：
+```bash
+python3 tests/test_adapter_audit_suite.py
+```
+断言包括：`ScheduleResult` 零拷贝懒加载、OpenAI 纯透传、非 Gemini 思考不转化等 24 项测试。
+
+### 3. 模型生产级上线准入自动化测试
+当在本地或远程节点配置了新模型后，执行端到端全量准入检验：
+```bash
+python3 tests/test_live_models_suite.py --model <模型名>
+```
+确保全量 6 维度测试 100% 通过（【🟢 生产可用 · 达到正式上线标准】）。
+

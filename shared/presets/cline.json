@@ -1,11 +1,11 @@
 {
   "id": "cline",
   "name": "Cline",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "protocol": "openai",
   "base_url": "https://api.cline.bot/api/v1",
   "doc_url": "https://docs.cline.bot/api/overview",
-  "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+  "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配客户端受限模型别名映射与原生直通。",
   "features": {
     "native_thinking": true,
     "tools": true,
@@ -64,9 +64,9 @@
       "cline-free/muse-spark-1.2-contributor": "meta/muse-spark-1.2-contributor"
     },
     "tools": {
-      "normalize_choice_to_string": true,
+      "normalize_choice_to_string": false,
       "strip_json_schema": false,
-      "rescue_from_text": true
+      "rescue_from_text": false
     },
     "user_tracking": {
       "passthrough_user": true

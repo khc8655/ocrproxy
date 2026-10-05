@@ -42,6 +42,7 @@ import {
   shouldFailover,
   bindingId,
   recordFailure,
+  getCooldownsBatch,
 } from '../../lib/cooldowns.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
@@ -140,6 +141,7 @@ export async function onRequestPost(context) {
 
   const configuredActiveKey = config.agent_models?.[body.model]?.active_key;
   const candidatePool = orderBindings(allBindings, body.model, strategy, configuredActiveKey);
+  const cooldowns = await getCooldownsBatch(candidatePool, kv);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // 1. Deadline check
@@ -166,16 +168,45 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 2. Pick next candidate respecting provider quotas & fast-failover down list
-    const binding = candidatePool.find((b) => {
+    // 2. Pick next candidate respecting provider quotas, fast-failover down list, and cooldowns
+    let binding = candidatePool.find((b) => {
       if (tried.has(bindingId(b))) return false;
       const provAttempts = providerAttempts.get(b.provider) || 0;
       if (provAttempts >= maxAttemptsPerProv) return false;
       if (downProviders.has(b.provider) && hasMultipleProviders) return false;
+      const cdExpiry = cooldowns.get(bindingId(b)) || 0;
+      if (cdExpiry > Date.now()) return false;
       return true;
     });
 
-    if (!binding) break;
+    if (!binding) {
+      // Check if unattempted candidates are in cooldown and we can wait within budget
+      const unattempted = candidatePool.filter(b => !tried.has(bindingId(b)));
+      const expiries = unattempted
+        .map(b => cooldowns.get(bindingId(b)) || 0)
+        .filter(exp => exp > Date.now());
+
+      if (expiries.length > 0 && attempt === 0) {
+        const minExpiry = Math.min(...expiries);
+        const waitMs = minExpiry - Date.now();
+        const remainingBudgetMs = deadline - Date.now();
+        if (waitMs > 0 && waitMs <= Math.min(3000, remainingBudgetMs)) {
+          await new Promise(r => setTimeout(r, waitMs + 50));
+          const refreshed = await getCooldownsBatch(candidatePool, kv);
+          for (const [k, v] of refreshed) cooldowns.set(k, v);
+          binding = candidatePool.find((b) => {
+            if (tried.has(bindingId(b))) return false;
+            const provAttempts = providerAttempts.get(b.provider) || 0;
+            if (provAttempts >= maxAttemptsPerProv) return false;
+            if (downProviders.has(b.provider) && hasMultipleProviders) return false;
+            const cd = cooldowns.get(bindingId(b)) || 0;
+            return cd <= Date.now();
+          });
+        }
+      }
+      if (!binding) break;
+    }
+
     tried.add(bindingId(binding));
     providerAttempts.set(binding.provider, (providerAttempts.get(binding.provider) || 0) + 1);
 
@@ -374,41 +405,41 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
   // 2xx — process normally
   if (upstreamResp.status >= 200 && upstreamResp.status < 300) {
     if (isStream) {
-      if (!upstreamResp.body) {
-        console.warn(`[EdgeOne:EmptyStream] url=${url} status=200 but stream was empty`);
-        return { kind: 'empty_stream', status: 200, response: null };
+      if (!upstreamResp.body || typeof upstreamResp.body.getReader !== 'function') {
+        console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} but body missing or not streamable`);
+        return { kind: 'empty_stream', status: upstreamResp.status, response: null };
       }
+      const reader = upstreamResp.body.getReader();
+      let firstChunk = null;
+      try {
+        const { done, value } = await reader.read();
+        if (done || !value || value.length === 0) {
+          console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} stream closed without emitting data`);
+          try { await reader.cancel(); } catch (_) {}
+          return { kind: 'empty_stream', status: upstreamResp.status, errorText: 'Stream closed without emitting data', response: null };
+        }
+        firstChunk = value;
+      } catch (readErr) {
+        console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} peek first chunk error: ${readErr?.message || readErr}`);
+        try { await reader.cancel(); } catch (_) {}
+        return { kind: 'empty_stream', status: upstreamResp.status, errorText: readErr?.message || String(readErr), response: null };
+      }
+
       return {
         kind: 'success',
         status: upstreamResp.status,
-        response: new Response(createKeepAliveStream(upstreamResp.body, 15000), {
+        response: new Response(createKeepAliveStream(reader, 15000, firstChunk), {
           status: upstreamResp.status,
           headers: buildOutHeaders(upstreamResp),
         }),
       };
     }
-    // Non-streaming: read buffer and normalize reasoning to reasoning_content if present
+    // Non-streaming: direct zero-copy byte pass-through
     const rawBytes = await upstreamResp.arrayBuffer();
-    let finalBytes = rawBytes;
-    try {
-      const text = new TextDecoder().decode(rawBytes);
-      if (text.includes('"reasoning":')) {
-        const json = JSON.parse(text);
-        if (Array.isArray(json?.choices)) {
-          for (const c of json.choices) {
-            if (c?.message?.reasoning && !c.message.reasoning_content) {
-              c.message.reasoning_content = c.message.reasoning;
-            }
-          }
-          finalBytes = new TextEncoder().encode(JSON.stringify(json));
-        }
-      }
-    } catch {}
-
     return {
       kind: 'success',
       status: upstreamResp.status,
-      response: new Response(finalBytes, {
+      response: new Response(rawBytes, {
         status: upstreamResp.status,
         headers: buildOutHeaders(upstreamResp),
       }),
@@ -454,7 +485,26 @@ function buildOutHeaders(upstreamResp) {
 
 function checkAuth(request, env, config) {
   const need = env?.PROXY_API_KEY || config?.proxy_api_key;
-  if (!need) return null;
+  if (!need) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'configuration_error',
+          message: 'Server misconfiguration: PROXY_API_KEY is not configured in EdgeOne environment variables. Requests are blocked in fail-closed mode.',
+          code: 'auth_unconfigured',
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          'content-type': 'application/json',
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, POST, OPTIONS',
+          'access-control-allow-headers': '*',
+        },
+      }
+    );
+  }
   const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
   const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
   if (token !== String(need).trim()) {

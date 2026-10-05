@@ -38,7 +38,7 @@ import urllib.parse
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 
 from .config_store import get_config, clear_cache
 from .scheduler import (
@@ -160,6 +160,18 @@ def _sanitize_gemini_schema(schema):
     return clean
 
 
+def _clone_request_payload(body: dict) -> dict:
+    """Isolate mutable payload fields across candidate failovers with targeted Copy-on-Write."""
+    out = dict(body)
+    if "messages" in body and isinstance(body["messages"], list):
+        out["messages"] = copy.deepcopy(body["messages"])
+    if "tools" in body and isinstance(body["tools"], list):
+        out["tools"] = copy.deepcopy(body["tools"])
+    if "extra_body" in body and isinstance(body["extra_body"], dict):
+        out["extra_body"] = copy.deepcopy(body["extra_body"])
+    return out
+
+
 def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is_anthropic: bool = False) -> None:
     """Pure declarative rule executor for all upstream providers.
     Mutates `out` in place according to provider adapter_rules schema.
@@ -265,10 +277,13 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
             thinking_policy = "passback_required"
 
     if thinking_policy and "messages" in out and isinstance(out["messages"], list):
+        new_msgs = []
         for m in out["messages"]:
             if not isinstance(m, dict) or m.get("role") != "assistant":
+                new_msgs.append(m)
                 continue
-            content = m.get("content")
+            m_copy = dict(m)
+            content = m_copy.get("content")
             if isinstance(content, list):
                 new_content = []
                 for b in content:
@@ -278,10 +293,12 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                         elif thinking_policy == "strict_signature" and not b.get("signature"):
                             continue
                     new_content.append(b)
-                m["content"] = new_content
-            elif thinking_policy == "strip":
-                m.pop("reasoning_content", None)
-                m.pop("reasoning", None)
+                m_copy["content"] = new_content
+            if thinking_policy == "strip":
+                m_copy.pop("reasoning_content", None)
+                m_copy.pop("reasoning", None)
+            new_msgs.append(m_copy)
+        out["messages"] = new_msgs
 
     # 4. Tools schema normalization
     tools_rules = rules.get("tools", {})
@@ -314,46 +331,22 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
             if ik not in out:
                 out[ik] = iv
 
-    # 6. Reasoning strategy execution
+    # 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
     reasoning_rules = rules.get("reasoning", {})
     if reasoning_rules and isinstance(reasoning_rules, dict):
         strat = reasoning_rules.get("strategy", "openai_passthrough")
 
-        model_specific = {}
-        for m_prefix, m_cfg in reasoning_rules.get("model_rules", {}).items():
-            if m_prefix.lower() in m_name:
-                model_specific = m_cfg
-                break
-
         if not is_agent_mode:
-            # KB mode: suppress thinking latency
+            # KB mode: suppress thinking latency for Gemini
             if strat == "gemini_thinking_matrix":
                 out.pop("reasoning_effort", None)
                 out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
                     "include_thoughts": False
                 }
-            elif strat == "minimax_adaptive":
-                out.pop("reasoning_effort", None)
-                out.pop("reasoning_split", None)
-                out["thinking"] = {"type": "disabled"}
-            elif strat == "chat_template_kwargs":
-                out.pop("reasoning_effort", None)
-                enable_key = reasoning_rules.get("enable_key", "enable_thinking")
-                out.setdefault("chat_template_kwargs", {})[enable_key] = False
-            elif strat == "effort_remapping":
-                out.pop("thinking", None)
-                none_fb = model_specific.get("none_fallback") or reasoning_rules.get("none_fallback")
-                none_act = model_specific.get("none_action") or reasoning_rules.get("none_action")
-                if none_act == "omit" and not none_fb:
-                    out.pop("reasoning_effort", None)
-                elif none_fb:
-                    out["reasoning_effort"] = none_fb
-                else:
-                    out["reasoning_effort"] = "none"
             else:
                 out["reasoning_effort"] = "none"
         else:
-            # Agent mode
+            # Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
             if strat == "gemini_thinking_matrix":
                 is_gemma = m_name.startswith("gemma")
                 thinking_enabled = False
@@ -390,69 +383,10 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                         out["max_tokens"] = 65535
                     if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
                         out["max_completion_tokens"] = 65535
-
-            elif strat == "minimax_adaptive":
-                re = out.pop("reasoning_effort", None)
-                if re is not None and str(re).lower() in ("none", "false"):
-                    out["thinking"] = {"type": "disabled"}
-                    out.pop("reasoning_split", None)
-                elif "thinking" in out and isinstance(out["thinking"], dict) and str(out["thinking"].get("type", "")).lower() == "disabled":
-                    out["thinking"] = {"type": "disabled"}
-                    out.pop("reasoning_split", None)
-                else:
-                    if reasoning_rules.get("enable_reasoning_split", True):
-                        out["reasoning_split"] = True
-                    if "thinking" not in out:
-                        out["thinking"] = {"type": reasoning_rules.get("default_type", "adaptive")}
-
-            elif strat == "chat_template_kwargs":
-                re = out.pop("reasoning_effort", None)
-                if re is not None:
-                    effort = str(re).lower()
-                    ctk = out.setdefault("chat_template_kwargs", {})
-                    enable_key = reasoning_rules.get("enable_key", "enable_thinking")
-                    if enable_key not in ctk:
-                        ctk[enable_key] = effort not in ("none", "false")
-                elif reasoning_rules.get("default_thinking", False):
-                    ctk = out.setdefault("chat_template_kwargs", {})
-                    enable_key = reasoning_rules.get("enable_key", "enable_thinking")
-                    if enable_key not in ctk:
-                        ctk[enable_key] = True
-
-            elif strat == "effort_remapping":
-                if reasoning_rules.get("strip_thinking"):
-                    out.pop("thinking", None)
-                re = out.get("reasoning_effort")
-                if re is not None:
-                    re_str = str(re).lower()
-                    supported = model_specific.get("supported_levels") or reasoning_rules.get("supported_levels", ["low", "medium", "high"])
-                    fallbacks = model_specific.get("level_fallback") or reasoning_rules.get("level_fallback", {})
-                    none_fb = model_specific.get("none_fallback") or reasoning_rules.get("none_fallback")
-                    none_act = model_specific.get("none_action") or reasoning_rules.get("none_action")
-
-                    if re_str in ("none", "false"):
-                        if "none" in supported and not none_fb and none_act != "omit":
-                            out["reasoning_effort"] = "none"
-                        elif none_fb:
-                            out["reasoning_effort"] = none_fb
-                        elif none_act == "omit":
-                            out.pop("reasoning_effort", None)
-                        else:
-                            out["reasoning_effort"] = "low"
-                    elif re_str in fallbacks:
-                        out["reasoning_effort"] = fallbacks[re_str]
-                    elif re_str not in supported:
-                        out["reasoning_effort"] = fallbacks.get(re_str, reasoning_rules.get("default_effort", "medium"))
-                else:
-                    default_eff = model_specific.get("default_effort") or reasoning_rules.get("default_effort")
-                    if default_eff:
-                        out["reasoning_effort"] = default_eff
-
-            elif strat == "openai_passthrough":
-                supported = reasoning_rules.get("supported_levels", ["none", "low", "medium", "high"])
-                re = out.get("reasoning_effort")
-                if re == "none" and "none" not in supported:
-                    out["reasoning_effort"] = reasoning_rules.get("none_fallback", "low")
+            else:
+                # All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
+                # Pure passthrough: preserve reasoning_effort and payload format untouched
+                pass
 
     # 7. Anthropic Messages endpoint specific rules
     if is_anthropic:
@@ -460,36 +394,17 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
         if not isinstance(mt, int) or mt <= 0:
             out["max_tokens"] = 4096
 
-        anthropic_rules = rules.get("anthropic", {})
-        if anthropic_rules and isinstance(anthropic_rules, dict):
-            if anthropic_rules.get("strip_thinking"):
-                thinking = out.pop("thinking", None)
-                if anthropic_rules.get("thinking_to_output_config"):
-                    if thinking and isinstance(thinking, dict) and str(thinking.get("type", "")).lower() != "disabled":
-                        out["output_config"] = {"effort": anthropic_rules.get("default_effort", "medium")}
-                    elif "output_config" in out and isinstance(out["output_config"], dict):
-                        eff = str(out["output_config"].get("effort", "")).lower()
-                        model_rules = anthropic_rules.get("model_rules", {})
-                        for mk, mc in model_rules.items():
-                            if mk.lower() in m_name:
-                                fb = mc.get("level_fallback", {})
-                                if eff in fb:
-                                    out["output_config"]["effort"] = fb[eff]
-                                break
-            elif anthropic_rules.get("thinking_to_adaptive"):
-                thinking = out.get("thinking")
-                if isinstance(thinking, dict):
-                    t = str(thinking.get("type", "")).lower()
-                    if t == "enabled" or (not t and "budget_tokens" in thinking):
-                        thinking["type"] = "adaptive"
-
 
 def _normalize_response_data(data: dict, rules: dict) -> None:
     """Normalize response JSON (non-streaming) based on declarative response rules."""
     if not isinstance(data, dict):
         return
     resp_rules = rules.get("response", {}) if isinstance(rules, dict) else {}
-    reasoning_fields = resp_rules.get("reasoning_fields", ["reasoning_split", "reasoning_content", "reasoning"])
+    if not resp_rules:
+        return
+    reasoning_fields = resp_rules.get("reasoning_fields")
+    if not reasoning_fields or not isinstance(reasoning_fields, list):
+        return
 
     choices = data.get("choices")
     if isinstance(choices, list):
@@ -652,8 +567,8 @@ def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     return min(180.0, timeout * min(3, max(candidate_count, 1)))
 
 
-async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES):
-    """Parse the request JSON body, returning (body, error_response).
+async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES, return_raw_bytes: bool = False):
+    """Parse the request JSON body, returning (body, error_response) or (body, raw_bytes, error_response).
 
     Enforces max_bytes limit on both Content-Length header and chunked streams
     to prevent memory exhaustion / OOM under concurrent loads.
@@ -662,12 +577,13 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
     if cl:
         try:
             if int(cl) > max_bytes:
-                return None, JSONResponse(
+                err = JSONResponse(
                     status_code=413,
                     content={"error": {"message": f"Request body too large (max {max_bytes // (1024 * 1024)}MB)",
                                        "type": "invalid_request_error",
                                        "code": "payload_too_large"}},
                 )
+                return (None, None, err) if return_raw_bytes else (None, err)
         except (ValueError, TypeError):
             pass
 
@@ -676,32 +592,40 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
         async for chunk in request.stream():
             body_bytes.extend(chunk)
             if len(body_bytes) > max_bytes:
-                return None, JSONResponse(
+                err = JSONResponse(
                     status_code=413,
                     content={"error": {"message": f"Request body too large (max {max_bytes // (1024 * 1024)}MB)",
                                        "type": "invalid_request_error",
                                        "code": "payload_too_large"}},
                 )
+                return (None, None, err) if return_raw_bytes else (None, err)
         if not body_bytes:
-            return None, JSONResponse(
+            err = JSONResponse(
                 status_code=400,
                 content={"error": {"message": "Invalid JSON body or aborted upload",
                                    "type": "invalid_request_error"}},
             )
-        return json.loads(body_bytes.decode("utf-8")), None
+            return (None, None, err) if return_raw_bytes else (None, err)
+        raw = bytes(body_bytes)
+        parsed = json.loads(raw.decode("utf-8"))
+        if return_raw_bytes:
+            return parsed, raw, None
+        return parsed, None
     except json.JSONDecodeError:
-        return None, JSONResponse(
+        err = JSONResponse(
             status_code=400,
             content={"error": {"message": "Invalid JSON body or aborted upload",
                                "type": "invalid_request_error"}},
         )
+        return (None, None, err) if return_raw_bytes else (None, err)
     except Exception as e:
         logger.warning("Error reading request body: %s", e)
-        return None, JSONResponse(
+        err = JSONResponse(
             status_code=400,
             content={"error": {"message": "Invalid JSON body or aborted upload",
                                "type": "invalid_request_error"}},
         )
+        return (None, None, err) if return_raw_bytes else (None, err)
 
 
 def _get_active_run_mode(config: dict) -> str:
@@ -776,12 +700,26 @@ async def chat_completions(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    body, err = await _parse_json_body(request)
+    body, raw_body_bytes, err = await _parse_json_body(request, return_raw_bytes=True)
     if err:
         return err
     model_name = body.get("model", "")
     is_stream = body.get("stream", False)
     kb_force_no_reasoning = False
+
+    messages = body.get("messages")
+    if not isinstance(messages, list) or len(messages) == 0:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "Missing or invalid 'messages': must be a non-empty array of message objects.",
+                    "type": "invalid_request_error",
+                    "param": "messages",
+                    "code": "missing_required_field" if messages is None or (isinstance(messages, list) and len(messages) == 0) else "invalid_type",
+                }
+            }
+        )
 
     run_mode = _get_active_run_mode(config)
 
@@ -856,8 +794,8 @@ async def chat_completions(request: Request):
     }
 
     def build_request(cand, api_key, upstream_base_url):
-        # Shallow-copy dict to isolate top-level mutations without expensive deep copies
-        out = dict(body)
+        # Isolate top-level and nested mutable fields (messages, tools, extra_body) via copy-on-write
+        out = _clone_request_payload(body)
         out["model"] = cand["model"]
         provider = cand.get("provider", "")
         rules = cand.get("adapter_rules") or _get_preset_rules(provider)
@@ -875,21 +813,41 @@ async def chat_completions(request: Request):
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
                 headers[str(hk)] = str(hv)
+
+        # Fast-Path: when target model is identical and provider/rules require zero mutation,
+        # pass raw bytes directly to upstream without expensive re-serialization.
+        is_passthrough = (
+            cand["model"] == model_name
+            and not kb_force_no_reasoning
+            and (
+                provider.lower() == "openai"
+                or (
+                    isinstance(rules, dict)
+                    and rules.get("reasoning", {}).get("strategy") == "openai_passthrough"
+                    and not rules.get("model_alias")
+                    and not rules.get("messages")
+                    and not rules.get("sanitization", {}).get("strip_params")
+                    and not rules.get("tools", {}).get("deep_schema_sanitization")
+                )
+            )
+        )
+        if is_passthrough and raw_body_bytes:
+            return "POST", url, headers, raw_body_bytes
+
         return "POST", url, headers, out
 
     if is_stream:
-        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
-            def _filter_chunk(b: bytes) -> bytes:
-                if b and b'"reasoning":' in b:
-                    return b.replace(b'"reasoning":', b'"reasoning_content":')
-                return b
-
+        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder, lease: Optional[Any] = None):
             async def event_generator():
                 try:
-                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=_filter_chunk, keepalive_sec=15.0):
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=None, keepalive_sec=15.0):
                         yield chunk
                 finally:
-                    await resp.aclose()
+                    try:
+                        await resp.aclose()
+                    finally:
+                        if lease is not None:
+                            lease.release()
             return StreamingResponse(
                 event_generator(),
                 media_type="text/event-stream",
@@ -905,7 +863,9 @@ async def chat_completions(request: Request):
                 request_model=req_model_name,
             )
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+            sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+            sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
         except AllCandidatesFailedError as e:
             return _error_response(e)
@@ -920,12 +880,15 @@ async def chat_completions(request: Request):
             category=req_category,
             request_model=req_model_name,
         )
-        resp_data = sr.data
-        if isinstance(resp_data, dict):
-            _normalize_response_data(resp_data, rules={})
-        resp = JSONResponse(content=resp_data)
+        if sr.raw_content is not None:
+            resp = Response(content=sr.raw_content, media_type="application/json")
+        else:
+            resp_data = sr.data
+            resp = JSONResponse(content=resp_data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+        resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
@@ -1042,7 +1005,7 @@ async def anthropic_messages(request: Request):
     anthropic_version = request.headers.get("anthropic-version") or "2023-06-01"
 
     def build_request(cand, api_key, upstream_base_url):
-        out = dict(body)
+        out = _clone_request_payload(body)
         out["model"] = cand["model"]
         provider = cand.get("provider", "")
         rules = cand.get("adapter_rules") or _get_preset_rules(provider)
@@ -1066,13 +1029,17 @@ async def anthropic_messages(request: Request):
         return "POST", url, headers, out
 
     if is_stream:
-        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder):
+        async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder, lease: Optional[Any] = None):
             async def event_generator():
                 try:
                     async for chunk in _stream_with_keepalive(first_chunk, remainder, keepalive_sec=15.0):
                         yield chunk
                 finally:
-                    await resp.aclose()
+                    try:
+                        await resp.aclose()
+                    finally:
+                        if lease is not None:
+                            lease.release()
             return StreamingResponse(
                 event_generator(),
                 media_type="text/event-stream",
@@ -1088,7 +1055,9 @@ async def anthropic_messages(request: Request):
                 request_model=req_model_name,
             )
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+            sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+            sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
         except AllCandidatesFailedError as e:
             return _error_response(e)
@@ -1105,7 +1074,9 @@ async def anthropic_messages(request: Request):
         )
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
+        resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)

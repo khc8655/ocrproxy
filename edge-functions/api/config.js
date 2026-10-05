@@ -25,26 +25,54 @@ import { normaliseForProvider } from '../lib/normalize.js';
 
 function checkAuth(request, env) {
   const adminPass = env?.ADMIN_PASSWORD;
+  if (!adminPass) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'configuration_error',
+          message: 'Server misconfiguration: ADMIN_PASSWORD is not configured in EdgeOne environment variables. Admin config endpoints are blocked in fail-closed mode.',
+          code: 'admin_unconfigured',
+        },
+      }),
+      { status: 503, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+
+  // If caller sent standard inference token PROXY_API_KEY, explicitly reject with 403 Forbidden
   const proxyKey = env?.PROXY_API_KEY;
-  if (!adminPass && !proxyKey) return null;
+  if (proxyKey && token === String(proxyKey).trim() && token !== String(adminPass).trim()) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'forbidden_error',
+          message: 'Forbidden: Inference token PROXY_API_KEY cannot modify or read administrator configuration. ADMIN_PASSWORD is required.',
+          code: 'admin_required',
+        },
+      }),
+      { status: 403, headers: { 'content-type': 'application/json' } }
+    );
+  }
 
-  const got = request.headers.get('authorization') || '';
-  if (adminPass && got === `Bearer ${adminPass}`) return null;
-  if (proxyKey && got === `Bearer ${proxyKey}`) return null;
+  if (token !== String(adminPass).trim()) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: 'authentication_error',
+          message: 'Missing or invalid Authorization header.',
+          code: 'invalid_admin_password',
+        },
+      }),
+      {
+        status: 401,
+        headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
+      }
+    );
+  }
 
-  return new Response(
-    JSON.stringify({
-      error: {
-        type: 'authentication_error',
-        message: 'Missing or invalid Authorization header.',
-        code: 'invalid_api_key',
-      },
-    }),
-    {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-    }
-  );
+  return null;
 }
 
 async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '') {

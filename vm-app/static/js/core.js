@@ -168,21 +168,18 @@ async function persistConfig(msg='配置已保存并立即生效'){
   await prevLock;
 
   try {
-    let r = await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
-    if(!r.ok && r.status === 409){
-      const latest = await fetch('/api/admin/config',{headers:headers()}).then(res=>res.json()).catch(()=>null);
-      if(latest && latest._version !== undefined){
-        state.config._version = latest._version;
-        r = await fetch('/api/admin/config',{method:'POST',headers:headers(),body:JSON.stringify(state.config)});
-      }
-    }
-    if(!r.ok){
-      const err = await r.json().catch(()=>({}));
+    let r = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(state.config)
+    });
+    if (!r.ok) {
       if (r.status === 409) {
-        alert('配置保存冲突：后端配置已被其他窗口或进程更新！\n\n为防止覆盖他人最新修改，系统已自动重新拉取最新线上配置，请在最新配置基础上重新操作。');
+        alert('⚠️ 配置保存冲突拦截！\n\n检测到后端配置已被其他窗口或进程更新。为防止覆盖他人最新提交的内容，本次保存已安全拦截。\n\n系统将自动为您重新拉取最新线上配置。');
         await loadData();
         return;
       }
+      const err = await r.json().catch(() => ({}));
       throw new Error(err.error || '保存配置失败');
     }
     const respData = await r.json().catch(()=>({}));

@@ -1,12 +1,12 @@
 {
   "id": "amd",
   "name": "AMD Radeon Cloud",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
-  "description": "AMD 官方开发者平台，基于高性能推理集群。网关已自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶规整。",
+  "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整",
   "features": {
     "native_thinking": true,
     "multimodal": false,
@@ -17,28 +17,22 @@
     {
       "name": "deepseek-v4-flash",
       "upstream_model": "DeepSeek-V4-Flash",
-      "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (网关已自动注入 reasoning_effort 开启深度思考)"
+      "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (原生深度思考)"
     },
     {
       "name": "qwen3.8-flash-next",
       "upstream_model": "Qwen3.8-Flash-Next",
-      "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶与安全思考级别)"
+      "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶)"
     }
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "effort_remapping",
-      "default_effort": "medium",
-      "supported_levels": ["minimal", "low", "medium", "high", "xhigh", "max"],
-      "model_rules": {
-        "qwen": {
-          "supported_levels": ["low", "medium"],
-          "level_fallback": { "high": "medium", "xhigh": "medium", "max": "medium" },
-          "none_fallback": "low"
-        }
-      },
-      "none_action": "omit",
-      "strip_thinking": true
+      "strategy": "openai_passthrough"
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": false,
+      "rescue_from_text": false
     },
     "messages": {
       "deny_developer_role": true,
@@ -46,25 +40,8 @@
       "merge_system": true,
       "strip_empty": true
     },
-    "anthropic": {
-      "thinking_to_output_config": true,
-      "default_effort": "medium",
-      "strip_thinking": true,
-      "model_rules": {
-        "qwen": {
-          "level_fallback": { "high": "medium", "xhigh": "medium", "max": "medium" }
-        }
-      }
-    },
     "sanitization": {
       "strip_params": ["thinking", "chat_template_kwargs"]
-    },
-    "response": {
-      "reasoning_fields": ["reasoning", "reasoning_content"],
-      "reasoning_tokens_paths": [
-        "completion_tokens_details.reasoning_tokens",
-        "usage.reasoning_tokens"
-      ]
     }
   }
 }

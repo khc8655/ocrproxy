@@ -17,6 +17,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const sharedRoot = join(root, '..', 'shared', 'admin');
 
+// 0. Read dynamic version from root version.json (Single Source of Truth)
+const versionJsonPath = join(root, '..', 'version.json');
+let appVersion = 'latest';
+if (existsSync(versionJsonPath)) {
+  try {
+    const vData = JSON.parse(readFileSync(versionJsonPath, 'utf8'));
+    appVersion = (vData.version || '').replace(/^v/, '') || 'latest';
+  } catch (e) {
+    console.warn('Could not read version.json:', e.message);
+  }
+}
+
 // 1. Sync shared/admin to vm-app/static ONLY (NEVER overwrite agent-edgeone!)
 if (existsSync(sharedRoot)) {
   const sharedHtml = join(sharedRoot, 'admin.html');
@@ -25,10 +37,17 @@ if (existsSync(sharedRoot)) {
 
   const vmStatic = join(root, '..', 'vm-app', 'static');
   if (existsSync(vmStatic)) {
-    if (existsSync(sharedHtml)) cpSync(sharedHtml, join(vmStatic, 'admin.html'));
+    if (existsSync(sharedHtml)) {
+      let vmHtml = readFileSync(sharedHtml, 'utf8');
+      // Auto-inject version into script tags (?v=2026.10.04-02)
+      vmHtml = vmHtml.replace(/(\.js\?v=)[^"']+/g, `$1${appVersion}`);
+      writeFileSync(join(vmStatic, 'admin.html'), vmHtml, 'utf8');
+      // Also update shared/admin/admin.html to keep source in sync
+      writeFileSync(sharedHtml, vmHtml, 'utf8');
+    }
     if (existsSync(sharedCss)) cpSync(sharedCss, join(vmStatic, 'admin.css'));
     if (existsSync(sharedJsDir)) cpSync(sharedJsDir, join(vmStatic, 'js'), { recursive: true });
-    console.log(`Synced shared/admin to vm-app/static: ${vmStatic}`);
+    console.log(`Synced shared/admin to vm-app/static with version ${appVersion}: ${vmStatic}`);
   }
 }
 

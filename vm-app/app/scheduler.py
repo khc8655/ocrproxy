@@ -182,12 +182,75 @@ _client: Optional[httpx.AsyncClient] = None
 _client_lock = asyncio.Lock()
 
 
-@dataclass
+class ConcurrencyLease:
+    """Manages the lifecycle of concurrency permits (per-key semaphore and global semaphore).
+
+    Guarantees that permits are held throughout the entire lifecycle of a request,
+    including long-lived streaming responses, and are released exactly once.
+    """
+    def __init__(self, key_sem: Optional[asyncio.Semaphore] = None, global_sem: Optional[asyncio.Semaphore] = None):
+        self._key_sem = key_sem
+        self._global_sem = global_sem
+        self._released = False
+
+    def release(self):
+        if not self._released:
+            self._released = True
+            if self._global_sem is not None:
+                try:
+                    self._global_sem.release()
+                except Exception:
+                    pass
+            if self._key_sem is not None:
+                try:
+                    self._key_sem.release()
+                except Exception:
+                    pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+
+
 class ScheduleResult:
-    data: Any = None
-    stream_resp: Any = None
-    routed_via: str = ""
-    fallback_attempts: int = 0
+    def __init__(
+        self,
+        data: Any = None,
+        raw_content: Optional[bytes] = None,
+        stream_resp: Any = None,
+        routed_via: str = "",
+        fallback_attempts: int = 0,
+        lease: Optional[ConcurrencyLease] = None,
+    ):
+        self._data = data
+        self.raw_content = raw_content
+        self.stream_resp = stream_resp
+        self.routed_via = routed_via
+        self.fallback_attempts = fallback_attempts
+        self.lease = lease
+
+    @property
+    def data(self):
+        if self._data is None and self.raw_content is not None:
+            try:
+                self._data = json.loads(self.raw_content.decode("utf-8"))
+            except Exception:
+                self._data = {}
+            return self._data
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+
 
 
 @dataclass
@@ -605,7 +668,8 @@ async def schedule(
         "circuit_cooldown_sec": circuit_cooldown,
     }
 
-    start_time = time.time()
+    start_monotonic = time.monotonic()
+    deadline = start_monotonic + total_budget_sec
     errors = []
     attempt_seq = 0
     last_status_code = None
@@ -624,11 +688,16 @@ async def schedule(
                 errors.append(f"max_retries_{max_retries}_reached")
                 break
 
-            # 1. Total budget check
-            elapsed = time.time() - start_time
-            if elapsed >= total_budget_sec:
+            # 1. Total budget check (Monotonic)
+            now_mono = time.monotonic()
+            if now_mono >= deadline:
+                elapsed = now_mono - start_monotonic
                 logger.warning(f"Failover budget exhausted. Elapsed: {elapsed:.2f}s >= budget {total_budget_sec}s")
                 errors.append(f"budget_exhausted_after_{elapsed:.2f}s")
+                break
+            remaining_budget = deadline - now_mono
+            if remaining_budget <= 0.2:
+                errors.append(f"budget_exhausted_after_{now_mono - start_monotonic:.2f}s")
                 break
 
             cand_id = get_candidate_id(cand)
@@ -652,9 +721,6 @@ async def schedule(
                 logger.info(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
                 continue
 
-            provider_name = cand["provider"]
-            key_label = cand["key"]
-
             provider = providers.get(provider_name)
             if not provider:
                 logger.warning(f"Provider {provider_name} not found in config")
@@ -675,7 +741,7 @@ async def schedule(
             attempt_seq += 1
             provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
 
-            # 3. Dynamic candidate timeout calculation
+            # 3. Dynamic candidate timeout calculation bounded strictly by remaining monotonic budget
             cand_p_rules = cand.get("adapter_rules") or (providers.get(provider_name, {}).get("adapter_rules") or {})
             cand_t_rules = cand_p_rules.get("timeout_rules") or {}
             cand_m_map = cand_t_rules.get("models") or {}
@@ -690,47 +756,65 @@ async def schedule(
                 else:
                     cand_timeout_sec = upstream_timeout_sec
 
-            if total_budget_sec < cand_timeout_sec * 1.5:
-                total_budget_sec = cand_timeout_sec * 1.5
-
+            # Hard deadline constraint: candidate timeout never exceeds remaining budget
+            cand_timeout_sec = max(1.0, min(cand_timeout_sec, remaining_budget))
             cand_req_timeout = httpx.Timeout(cand_timeout_sec, connect=min(5.0, cand_timeout_sec))
 
-            # 4. Concurrency Semaphore acquisition per key
+            # 4. Concurrency Semaphore acquisition per key with bounded wait
             sem_id = f"{provider_name}:{key_label}"
             sem = await get_key_semaphore(sem_id, concurrency_limit)
 
             logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id} (timeout={cand_timeout_sec:.0f}s)")
 
             cand_start = time.time()
-            # Acquire the per-key semaphore (queueing here preserves agent-mode
-            # behaviour), then the GLOBAL semaphore with a short bounded wait.
-            # The global cap prevents memory exhaustion during burst ingestion
-            # (e.g. dozens of concurrent OCR base64 payloads).  When it is
-            # saturated we fail FAST with 503 + Retry-After instead of queueing
-            # unboundedly — a queued request keeps its parsed body on the heap,
-            # which defeats the cap's purpose.
-            global_sem = _get_global_semaphore()
-            await sem.acquire()
-            global_sem_acquired = False
+            now_mono = time.monotonic()
+            if now_mono >= deadline:
+                errors.append(f"budget_exhausted_before_acquire")
+                break
+            acquire_timeout = min(deadline - now_mono, 10.0)
+            if acquire_timeout <= 0:
+                errors.append(f"budget_exhausted_before_acquire")
+                break
+
             try:
-                try:
-                    await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
-                    global_sem_acquired = True
-                except asyncio.TimeoutError:
-                    raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
-                # Budget re-check AFTER queueing: time spent waiting on the key
-                # semaphore counts toward the total failover budget — otherwise a
-                # long-queued request would still fire upstream long after its
-                # budget (and usually its client's patience) expired.
-                if time.time() - start_time >= total_budget_sec:
-                    errors.append(f"budget_exhausted_after_{time.time() - start_time:.2f}s (queue wait)")
+                await asyncio.wait_for(sem.acquire(), timeout=acquire_timeout)
+            except asyncio.TimeoutError:
+                err_msg = f"{cand_id} key concurrency semaphore wait timed out after {acquire_timeout:.1f}s"
+                logger.warning(err_msg)
+                errors.append(err_msg)
+                continue
+
+            global_sem = _get_global_semaphore()
+            try:
+                await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
+            except asyncio.TimeoutError:
+                sem.release()
+                raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
+
+            lease = ConcurrencyLease(key_sem=sem, global_sem=global_sem)
+            lease_transferred = False
+
+            try:
+                # Budget re-check AFTER queueing: time spent waiting on semaphores counts
+                if time.monotonic() >= deadline:
+                    errors.append(f"budget_exhausted_after_{time.monotonic() - start_monotonic:.2f}s (queue wait)")
                     break
                 try:
-                    # Build request arguments (method, url, headers, json_body)
-                    method, url, headers, body = build_request(cand, api_key, base_url)
+                    # Build request arguments (method, url, headers, json_body / raw_bytes)
+                    method, url, headers, req_body = build_request(cand, api_key, base_url)
+
+                    if isinstance(req_body, (bytes, bytearray)):
+                        req_content = bytes(req_body)
+                        req_json = None
+                    else:
+                        req_content = None
+                        req_json = req_body
 
                     if is_stream:
-                        req = client.build_request(method, url, headers=headers, json=body)
+                        if req_content is not None:
+                            req = client.build_request(method, url, headers=headers, content=req_content)
+                        else:
+                            req = client.build_request(method, url, headers=headers, json=req_json)
                         req.extensions["timeout"] = {
                             "connect": min(5.0, cand_timeout_sec),
                             "read": cand_timeout_sec,
@@ -739,7 +823,10 @@ async def schedule(
                         }
                         resp = await client.send(req, stream=True)
                     else:
-                        resp = await client.request(method, url, headers=headers, json=body, timeout=cand_req_timeout)
+                        if req_content is not None:
+                            resp = await client.request(method, url, headers=headers, content=req_content, timeout=cand_req_timeout)
+                        else:
+                            resp = await client.request(method, url, headers=headers, json=req_json, timeout=cand_req_timeout)
 
                     status_code = resp.status_code
 
@@ -794,7 +881,11 @@ async def schedule(
                         if is_stream:
                             if handle_stream:
                                 try:
-                                    stream_result = await handle_stream(resp, first_chunk, remainder)
+                                    try:
+                                        stream_result = await handle_stream(resp, first_chunk, remainder, lease=lease)
+                                    except TypeError:
+                                        stream_result = await handle_stream(resp, first_chunk, remainder)
+                                    lease_transferred = True
                                 except Exception:
                                     # handle_stream raised — make sure the
                                     # upstream response is not leaked.
@@ -803,13 +894,15 @@ async def schedule(
                                 return ScheduleResult(
                                     stream_resp=stream_result,
                                     routed_via=routed_via,
-                                    fallback_attempts=attempt_seq - 1
+                                    fallback_attempts=attempt_seq - 1,
+                                    lease=lease,
                                 )
                             # No handle_stream provided: hand back an async
                             # generator that replays the prefetched chunk and
                             # continues the live stream (internal callers always
                             # pass handle_stream for streams).
-                            async def _fallback_gen(first=first_chunk, rem=remainder, r=resp):
+                            lease_transferred = True
+                            async def _fallback_gen(first=first_chunk, rem=remainder, r=resp, l=lease):
                                 try:
                                     if first:
                                         yield first
@@ -817,14 +910,18 @@ async def schedule(
                                         async for chunk in rem:
                                             yield chunk
                                 finally:
-                                    await r.aclose()
+                                    try:
+                                        await r.aclose()
+                                    finally:
+                                        l.release()
                             return ScheduleResult(
                                 stream_resp=_fallback_gen(),
                                 routed_via=routed_via,
-                                fallback_attempts=attempt_seq - 1
+                                fallback_attempts=attempt_seq - 1,
+                                lease=lease,
                             )
                         else:
-                            resp_data = resp.json()
+                            raw_content = resp.content
                             # Always close the upstream response to return the
                             # connection to the pool immediately. For OCR / KB
                             # (large responses) also reclaim heap pages.
@@ -832,9 +929,10 @@ async def schedule(
                             if model_type == "ocr" or category == "kb":
                                 await _reclaim_memory()
                             return ScheduleResult(
-                                data=resp_data,
+                                raw_content=raw_content,
                                 routed_via=routed_via,
-                                fallback_attempts=attempt_seq - 1
+                                fallback_attempts=attempt_seq - 1,
+                                lease=lease,
                             )
 
                     # Failure path (Non-2xx)
@@ -1057,21 +1155,19 @@ async def schedule(
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
                                  cand_model=cand.get("model"))
 
-                finally:
-                    if global_sem_acquired:
-                        global_sem.release()
             finally:
-                sem.release()
+                if not lease_transferred:
+                    lease.release()
 
         # Check if all candidates were cooling down and we can wait within budget
         if not errors and loop_idx == 0:
-            now = time.time()
-            elapsed = now - start_time
+            now_mono = time.monotonic()
+            remaining_mono = deadline - now_mono
             expiries = [_cooldown_until.get(get_candidate_id(c), 0.0) for _, c in ordered_items]
             if expiries:
                 min_expiry = min(expiries)
-                wait_time = min_expiry - now
-                if 0 < wait_time <= min(5.0, total_budget_sec - elapsed):
+                wait_time = min_expiry - time.time()
+                if 0 < wait_time <= min(5.0, remaining_mono):
                     logger.info(f"All candidates cooling down, waiting {wait_time:.2f}s within budget for earliest key...")
                     await asyncio.sleep(wait_time + 0.1)
                     continue

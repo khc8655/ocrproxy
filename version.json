@@ -1,13 +1,12 @@
 {
-  "version": "v2026.10.04-01",
-  "release_date": "2026-10-04",
-  "commit": "bf7bcd3",
-  "title": "Google Vertex AI 协议级中转与程序版本在线管理",
+  "version": "v2026.10.05-01",
+  "release_date": "2026-10-05",
+  "commit": "HEAD",
+  "title": "企业级生产架构四阶段全量升级 (安全护城河、流并发租约、状态机精准对齐与全链路观测)",
   "changelog": [
-    "新增 Web 管理端在线检测程序更新与一键平滑升级功能",
-    "全面适配 Google Vertex AI 官方 OpenAPI 端点与 x-goog-api-key 专属鉴权头",
-    "修复 OpenAPI 路径去重 (规避 /v1 错误拼接 404)",
-    "规范化统一版本号体系 (vYYYY.MM.DD[-NN])",
-    "供应商预设名称纯净化并修复真理源缓存"
+    "Phase 1: P0 安全与数据完整性护城河：消除内联 JS 拼接与 XSS、409 安全阻断、多 Provider 绑定草稿持久化、EdgeOne 鉴权 Fail-Closed 与权限隔离、故障转移写时复制 (COW)",
+    "Phase 2: P1 流生命周期与并发流治理：引入 ConcurrencyLease 全生命周期锁定并发名额、单调硬时限 Monotonic Deadline 与排队超时保护、Web Streams 标准背压与首块预读 (Chunk Peeking) 故障转移",
+    "Phase 3: P2 状态机收敛与精准故障分类：统一 Fault Classifier 引擎与硬欠费/TPM 细粒度对齐、Cooldown 批处理主动避峰与最小等待唤醒、彻底铲除代码潜在 eval 风险并替换为 AST 语法树",
+    "Phase 4: P3 架构演进与生产级观测：统一跨端追踪响应头规范 (X-Proxy-Routed-Via, X-Proxy-Attempts)、双端测试矩阵自动化守门"
   ]
 }

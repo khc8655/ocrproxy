@@ -25,6 +25,7 @@ import {
   shouldFailover,
   bindingId,
   recordFailure,
+  getCooldownsBatch,
 } from '../lib/cooldowns.js';
 import { normaliseMessagesForProvider, createKeepAliveStream } from '../lib/normalize.js';
 
@@ -129,6 +130,7 @@ export async function onRequestPost(context) {
 
     const configuredActiveKey = config.agent_models?.[body.model]?.active_key;
     const candidatePool = orderBindings(allBindings, body.model, strategy, configuredActiveKey);
+    const cooldowns = await getCooldownsBatch(candidatePool, kv);
     const anthropicVersion = request.headers.get('anthropic-version') || '2023-06-01';
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -154,15 +156,44 @@ export async function onRequestPost(context) {
         );
       }
 
-      const binding = candidatePool.find((b) => {
+      let binding = candidatePool.find((b) => {
         if (tried.has(bindingId(b))) return false;
         const provAttempts = providerAttempts.get(b.provider) || 0;
         if (provAttempts >= maxAttemptsPerProv) return false;
         if (downProviders.has(b.provider) && hasMultipleProviders) return false;
+        const cdExpiry = cooldowns.get(bindingId(b)) || 0;
+        if (cdExpiry > Date.now()) return false;
         return true;
       });
 
-      if (!binding) break;
+      if (!binding) {
+        // Check if unattempted candidates are in cooldown and we can wait within budget
+        const unattempted = candidatePool.filter(b => !tried.has(bindingId(b)));
+        const expiries = unattempted
+          .map(b => cooldowns.get(bindingId(b)) || 0)
+          .filter(exp => exp > Date.now());
+
+        if (expiries.length > 0 && attempt === 0) {
+          const minExpiry = Math.min(...expiries);
+          const waitMs = minExpiry - Date.now();
+          const remainingBudgetMs = deadline - Date.now();
+          if (waitMs > 0 && waitMs <= Math.min(3000, remainingBudgetMs)) {
+            await new Promise(r => setTimeout(r, waitMs + 50));
+            const refreshed = await getCooldownsBatch(candidatePool, kv);
+            for (const [k, v] of refreshed) cooldowns.set(k, v);
+            binding = candidatePool.find((b) => {
+              if (tried.has(bindingId(b))) return false;
+              const provAttempts = providerAttempts.get(b.provider) || 0;
+              if (provAttempts >= maxAttemptsPerProv) return false;
+              if (downProviders.has(b.provider) && hasMultipleProviders) return false;
+              const cd = cooldowns.get(bindingId(b)) || 0;
+              return cd <= Date.now();
+            });
+          }
+        }
+        if (!binding) break;
+      }
+
       tried.add(bindingId(binding));
       providerAttempts.set(binding.provider, (providerAttempts.get(binding.provider) || 0) + 1);
 
@@ -326,8 +357,21 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   }
 
   clearTimeout(timer);
-  if (!resp.body) {
-    return { kind: 'empty_stream', status: resp.status, errorText: 'Response has no body' };
+  if (!resp.body || typeof resp.body.getReader !== 'function') {
+    return { kind: 'empty_stream', status: resp.status, errorText: 'Response has no body or is not streamable' };
+  }
+  const reader = resp.body.getReader();
+  let firstChunk = null;
+  try {
+    const { done, value } = await reader.read();
+    if (done || !value || value.length === 0) {
+      try { await reader.cancel(); } catch (_) {}
+      return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without emitting data' };
+    }
+    firstChunk = value;
+  } catch (readErr) {
+    try { await reader.cancel(); } catch (_) {}
+    return { kind: 'empty_stream', status: resp.status, errorText: readErr?.message || String(readErr) };
   }
 
   const responseHeaders = new Headers(resp.headers);
@@ -342,7 +386,7 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
 
   return {
     kind: 'success',
-    response: new Response(createKeepAliveStream(resp.body, 15000), {
+    response: new Response(createKeepAliveStream(reader, 15000, firstChunk), {
       status: resp.status,
       statusText: resp.statusText,
       headers: responseHeaders,
@@ -352,7 +396,9 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
 
 function checkAuth(request, env, config) {
   const need = env?.PROXY_API_KEY || config?.proxy_api_key;
-  if (!need) return null;
+  if (!need) {
+    return anthropicError(503, 'configuration_error', 'Server misconfiguration: PROXY_API_KEY is not configured in EdgeOne environment variables. Requests are blocked in fail-closed mode.');
+  }
   const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
   const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
   if (token !== String(need).trim()) {

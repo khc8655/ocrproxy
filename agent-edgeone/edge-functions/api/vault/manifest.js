@@ -29,12 +29,21 @@ import { getPreset } from '../../lib/presets/index.js';
 
 function checkAuth(request, env) {
   const adminPass = env?.ADMIN_PASSWORD;
+  const vaultToken = env?.VAULT_ACCESS_TOKEN;
   const proxyKey = env?.PROXY_API_KEY;
-  if (!adminPass && !proxyKey) return null;
+  if (!adminPass && !vaultToken && !proxyKey) {
+    return new Response(
+      JSON.stringify({ error: { type: 'configuration_error', message: 'EdgeOne 未配置任何认证密钥，清单接口已拒绝访问（Fail-Closed）。' } }),
+      { status: 503, headers: { 'content-type': 'application/json' } }
+    );
+  }
 
-  const got = request.headers.get('authorization') || '';
-  if (adminPass && got === `Bearer ${adminPass}`) return null;
-  if (proxyKey && got === `Bearer ${proxyKey}`) return null;
+  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
+  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+
+  if (adminPass && token === String(adminPass).trim()) return null;
+  if (vaultToken && token === String(vaultToken).trim()) return null;
+  if (proxyKey && token === String(proxyKey).trim()) return null;
 
   return new Response(
     JSON.stringify({ error: { type: 'authentication_error', message: 'Missing or invalid Authorization header.', code: 'invalid_api_key' } }),

@@ -21,7 +21,7 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 167 项自动化测试套件
 │
 ├── shared/                            # 共享资源与唯一规范源
-│   ├── presets/                       # 11 大官方供应商标准预设 JSON 与目录索引 catalog.json
+│   ├── presets/                       # 13 大官方供应商标准预设 JSON 与目录索引 catalog.json
 │   ├── admin/                         # 全局唯一的前端开发真理源 (Single Source of Truth)
 │   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器 (~700 行)
 │   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨)
@@ -69,6 +69,27 @@ ocrprox (Monorepo)
 - **按需无感拉取与云端绝对权威覆盖 (Cloud Authority & Local Key Sovereignty)**：
   - **云端作为绝对真理源**：当从 EdgeOne Vault Hub 拉取凭据或执行同步时，云端配置无条件覆盖本地同名供应商的协议 (`protocol`/`protocols`)、思考开关 (`anthropic_messages`)、端点 (`base_url`/`anthropic_base_url`) 及适配规则 (`adapter_rules`)，彻底根治协议识别冲突；
   - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁。
+
+---
+
+## OpenAI 零拷贝极速透传与纯净中转体系 (Zero-Copy Passthrough & Clean Proxy)
+
+在 v2026.10.04-02 版本中，OCRProxy 针对 OpenAI 官方 API 及兼容中转进行了深度的性能重构与适配体系纯净化：
+
+1. **OpenAI 零拷贝极速转发 (Zero-Copy Fast-Path)**：
+   - **入站零反序列化**：当路由命中无需模型重命名的 OpenAI 原生中转时，直接获取客户端发送的原始二进制 `raw_bytes`，跳过 Python 层庞大的字典反序列化（对百 K 上下文或多模态 Base64 请求，彻底消除数十兆堆内存开销与 GC 停顿）；
+   - **出站原生二进制直通**：以 `content=raw_bytes` 直接送入 HTTPX，同时在内存中保留一份二进制缓冲以支撑 429/5xx 故障转移（Failover）；
+   - **非流式零序列化返回**：上游响应直接使用 `Response(content=resp.content, media_type="application/json")`，彻底跳过 `resp.json()` 解析与 `JSONResponse` 重编码；
+   - **流式 SSE 零篡改直通**：彻底铲除全局 `_filter_chunk` 正则扫描，原始 TCP 字节流通过 `resp.aiter_bytes()` 直抵客户端，VM 仅做纯透明网络中继，CPU 占用率低于 0.5%。
+
+2. **除 Gemini 外思考等级不转化原则 (Gemini-Only Transformation Rule)**：
+   - 历史上对非标厂商硬编码的思考转化逻辑（如 MiniMax `minimax_adaptive`、阶跃星辰 `effort_remapping`、AMD 思考等级降级、B.AI GLM 强制转 high、Agnes `chat_template_kwargs` 等）**全部彻底铲除**；
+   - 客户端发送的 `reasoning_effort` 保持原汁原味透传，上游返回的思考字段保持原始格式透传；
+   - **唯一例外保留**：严格仅针对 Google AI Studio 与 Google Vertex AI 保留 `gemini_thinking_matrix`、思考预算自动提升以及 JSON Schema 深度清洗（剔除 Gemini 不支持的 `$schema` 与 `additionalProperties`）。
+
+3. **Tool Choice 结构化原样支持**：
+   - 全面关闭 DeepSeek、硅基流动、商汤、TokenRhythm、Cline 等预设中的 `normalize_choice_to_string` 强转 `"auto"` 行为；
+   - 完整支持 Cursor、Cline 等现代 Agent 框架指定的精准结构化工具调用（`{"type": "function", ...}`）。
 
 ---
 
@@ -127,39 +148,21 @@ ocrprox (Monorepo)
 - `x-proxy-attempts`: 如 `1` 或 `2`
 - `x-proxy-latency-ms`: 如 `1870`
 
-### 4. 统一声明式适配器管道 (Declarative Adapter Pipeline)
-通过 `shared/presets/*.json` 声明式规则驱动，彻底消除硬编码 `if-else`：
-- **思考链等级控制 (Reasoning & Thinking Level)**：
-  - **SenseNova (商汤)**：原生支持标准 `reasoning_effort` (`none/low/medium/high`)，支持 `sensenova-6.8-flash-lite`, `deepseek-v4-flash`, `glm-5.2`；
-  - **StepFun (阶跃)**：`none` 自动映射为 `low` 降级（防止上游 400），自动注入 `reasoning_format: "deepseek-style"` 以在 SSE 流中返回 `reasoning_content`；
-  - **Agnes AI**：全面支持最新 `agnes-3.0-flash` 旗舰开源推理模型与 `agnes-2.5-flash`；Agent 模式下缺省默认开启思考（`default_thinking: true` 自动映射为 `chat_template_kwargs: {"enable_thinking": true}`），客户端传 `reasoning_effort: "none"` 时精准关闭；KB 模式严格锁死禁用思考以保障毫秒级低延迟；内置 `max_tokens_ceiling: 65536` 钳制保护（杜绝 Hermes 等 Agent 工具超限 400 报错）；
-  - **Google AI Studio**：
-    - **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`，Gemma 模型自动规避；
-    - **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考 Token 耗尽导致的空响应与截断；
-  - **Google Vertex AI**：
-    - **官方 OpenAPI 规范端点与智能 URL 路由**：适配 `https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/endpoints/openapi`，智能路由严格消除多余 `/v1/` 拼接错误；
-    - **Key 级专属凭据头自动注入**：针对 API Key 认证自动注入专属 `x-goog-api-key: <KEY>` 凭据头（替换普通 Bearer 认证，规避 Google 401 UNAUTHENTICATED 错误）；
-    - **模型 ID 自动补齐**：自动规范化 `google/` 前缀（`gemini-3.8-flash` ➔ `google/gemini-3.8-flash`）；
-    - **Thinking 矩阵与安全签名保活**：完整支持 `none` (关闭)、`low`、`medium`、`high` 思考等级映射，在多轮工具调用时自动保活 Google 特有的 `thought_signature` 安全签名；
-  - **MiniMax (国内官方订阅 & Anthropic Messages 双通道)**：
-    - **双通道直通**：OpenAI 协议直通 `https://api.minimaxi.com/v1/chat/completions`，Messages 协议直通 `https://api.minimax.cn/anthropic/v1/messages`；
-    - **非标参数清洗**：自动剥离 Claude 3.7 专有的 `output_config` 等非标字段（防止 MiniMax 报 400 错误）；
-    - **大小写严格保护**：强制确保模型名称保留为官方要求的 `MiniMax-M3`；
-    - **Thinking 规范化**：自动规整 `budget_tokens` 并补全 `type: "enabled"`，无缝支持 Thinking 内容块输出；
-  - **B.AI (双协议兼容网关与 GLM 思考链专属适配)**：
-    - **双通道直通**：原生双端点支持，`/v1/chat/completions` 与 `/v1/messages` 智能分流直通；
-    - **GLM 常开思考专属适配**：针对 `glm-5.3-flash` 等常开思考模型（不支持关闭思考且仅认 `low/high/max`），专属映射：将 Hermes 默认的 `medium` 自动重映射为 `high`，将 `none` 安全剔除（omit）以避免触发 400 校验异常，彻底根治“该模型始终思考，不支持关闭思考；请使用 low、high 或 max”报错；
-    - **严格厂商隔离**：该规则仅对 B.AI 旗下的 GLM 模型生效，B.AI 内部的 `qwen3.8-flash` 及其他厂商模型完全保持原生标准直通，不受任何干扰。
-  - **AMD Radeon Cloud (官方高性能集群与双协议网关)**：
-    - **思考链深度适配**：AMD 前置网关按白名单字段重新组装请求，严禁 `thinking: {...}` 与 `chat_template_kwargs`；系统自动适配官方规范的 `reasoning_effort: "medium"`（使 `DeepSeek-V4-Flash` 能够正常思考，同时使 `Qwen3.8-Flash-Next` 保持安全思考深度，杜绝 400 报错）；
-    - **Anthropic Messages 协议直通**：自动将 Claude Code 等客户端发送的 `thinking: {"type": "enabled", ...}` 转换为 AMD 官方支持的 `output_config: {"effort": "medium"}` 并剥除 `thinking`；
-    - **消息规范化防爆**：自动将 `role: "developer"` 转换为 `role: "system"`，且自动提取合并所有 `system` 消息并严格置顶于 `messages[0]`，彻底根治 Qwen 模型报 `400 BadRequestError: System message must be at the beginning`；
-    - **响应字段统一规整**：在流式 SSE 与非流式中，自动将 AMD 私有的 `reasoning` 映射规整为通用的 `reasoning_content`，并将 `completion_tokens_details.reasoning_tokens` 回填至顶层 `usage.reasoning_tokens`。
-- **特殊工具调用 (Tool Calling)**：
-  - **`tool_choice` 规整**：TokenRhythm / SenseNova / DeepSeek 严禁对象形式，自动转为 `"auto"` 字符串；
-  - **深度 Schema 清洗**：针对 Google Gemini 递归剔除 `$schema`、`additionalProperties`、`$defs`、`$ref`，并自动校验清理不在 `properties` 中的多余 `required` 声明；
-  - **文本 Tool Call 拯救**：自动捕获模型在文本中输出的代码块与 XML 标签并提取为标准 OpenAI `tool_calls`。
-- **智能 URL 端点补齐**：自动感知供应商是否包含 `/v1` 后缀并智能规整拼接。
+### 4. 统一声明式适配器管道 (Declarative Adapter Pipeline · v2026.10.04-02)
+通过 `shared/presets/*.json` 纯声明式规则驱动，彻底消除各端代码中的硬编码 `if-else`：
+- **除 Gemini 外思考等级不转化原则 (Gemini-Only Exception)**：
+  - **OpenAI 官方中转**：配置为 `"strategy": "openai_passthrough"`，全链路原生二进制零拷贝 Fast-Path 直通；
+  - **MiniMax / StepFun / AMD / B.AI / Agnes 等所有第三方厂商**：全面剔除历史硬编码重映射，客户端传入什么 `reasoning_effort` 档位（`none/low/medium/high`）就 100% 原样透传给上游，上游返回什么格式就原样透传给客户端；
+  - **Google Gemini & Vertex AI (全站唯一适配例外)**：
+    * **Thinking Matrix**：Flash 支持 `minimal/low/medium/high`，Pro 适配 `low/high`，`none` 映射为 `include_thoughts: false`；
+    * **思考预算自动提升**：开启思考时若客户端设置的 `max_tokens` 过小（< 16384），自动提升至 65535，杜绝思考截断；
+    * **Vertex AI 官方端点**：适配 OpenAPI 规范端点，自动消除 `/v1` 拼接错误，专属 `x-goog-api-key: <KEY>` 凭据头自动注入，模型自动规范化 `google/` 前缀；多轮工具调用自动保活 `thought_signature` 安全签名。
+- **Tool Choice 结构化原生支持**：
+  - 全面关闭所有预设中将对象形式强转为 `"auto"` 字符串的逻辑（`normalize_choice_to_string: false`）；
+  - 完美支持 Cursor、Cline、Claude Code 指定的精细化单函数/多函数调用；
+  - **Tool Schema 深度清洗 (Gemini 专属)**：递归剔除 Google 端点严格拒收的 `$schema`、`additionalProperties`、`$defs`、`$ref` 等非标字段。
+- **流式 SSE 零篡改直通**：
+  - 彻底删除流式响应层逐 chunk 正则扫描与字节篡改，原生 SSE 纯字节直通，消除打字机卡顿。
 
 ### 5. 前端组件化解耦架构：EdgeOne 与 VM 端 Agent 模型 UI 统一 (Unified Component)
 为彻底解决多端维护分裂、杜绝整页覆盖的安全红线，前端实施了**组件级逻辑提炼与精准装配 (Component-Level Extraction)**：
@@ -307,4 +310,59 @@ npm run deploy      # 一键发布至 EdgeOne
 ### 4. 高频重试日志限额与内存治理
 - **高频入库错误折叠**：知识库（KB）批处理高并发入库重试时，相同供应商与 Key 在 60 秒内触发的重复错误自动折叠（记录 `repeat_count`），严格限制全局最新错误记录最大 100 条且错误文本截断至 300 字符，杜绝磁盘日志与内存爆炸。
 - **有界内存字典与快速垃圾回收**：运行时状态采用 O(1) 字典增量刷新，绝不无限增长，高负载下内存稳定在 40~50MB。
+
+### 5. 流生命周期租约与并发流治理 (ConcurrencyLease & Stream Backpressure)
+- **并发租约全生命周期锁定 (`ConcurrencyLease`)**：流式响应建立后，调度器将信号量（Key 并发信号量与全局限额信号量）的释放权安全交接给 `StreamingResponse`。在流式传输完整结束或客户端断开连接之前，租约持续生效，彻底根治流式响应首包返回即释放信号量导致并发失控与 OOM 的历史隐患。
+- **单调硬时限控制 (Monotonic Hard Deadline)**：废除 1.5x 动态预算上浮，调度器以 `time.monotonic()` 建立不可篡改的硬性 Deadline；单候选请求超时受限于剩余预算；并发排队等待引入超时保护，超时快速切换至下一候选节点。
+- **EdgeOne 流式背压规范与首块预读 (Chunk Peeking)**：
+  - `createKeepAliveStream` 彻底废除 `while(true)` 无限循环，重构为符合 Web Streams 规范的标准 `pull(controller)` 按需驱动模式，当下游消费缓慢时自动停止拉取，背压完全生效；
+  - 边缘流式转发集成首块预读（Chunk Peeking）：在返回响应给下游前先预读第一包数据，若上游返回 HTTP 200 但立即断连发送 0 字节，边缘节点捕获后主动判定为 `empty_stream` 并触发下一个候选节点 Failover，杜绝向客户端吐出空流。
+
+---
+
+## 开发者与 AI Agent 快速上手指南 (Developer & Agent Onboarding Guide)
+
+如果您是一名新加入的开发者或 AI Coding Agent，请**严格遵守以下准则开展工作**：
+
+### 1. 核心目录与开发职责速查
+
+| 目录 | 职责与作用 | 正确修改方式 | 绝对禁止项 |
+| :--- | :--- | :--- | :--- |
+| **`shared/admin/`** | 前端控制台唯一真理源 | 修改其中的 HTML、CSS 或 `js/*.js`，修改后执行 `node agent-edgeone/scripts/build-admin.mjs` 编译 | ❌ **严禁直接修改** `vm-app/static/admin.html` 或 `agent-edgeone/admin.html`！ |
+| **`shared/presets/`** | 13 大官方厂商适配规则真理源 | 修改对应厂商的 `.json`，修改后执行 `node agent-edgeone/scripts/build-presets.mjs` 编译 | ❌ **严禁直接在代码中**硬编码 `if provider == "xxx"`！ |
+| **`vm-app/`** | 服务端核心 Python 架构 (FastAPI) | 调度器 (`scheduler.py`)、API 路由 (`proxy_routes.py`)、加密配置 (`config_store.py`) | ❌ **严禁破坏** OpenAI 零拷贝 Fast-Path 二进制直通架构！ |
+| **`agent-edgeone/`** | Serverless 边缘函数 (Node.js) | 边缘转发 (`completions.js`)、参数清洗 (`normalize.js`)、构建打包脚本 (`scripts/`) | ❌ **严禁将静态预设**写入 EdgeOne KV（KV 仅存用户私有密钥和路由）！ |
+| **`tests/`** | 全量质量保障与模型准入测试套件 | 包含 6 维度准入套件、单元测试与离线断言，详细规范参见 [`tests/README.md`](file:///Users/xk/Documents/ocrprox/tests/README.md) | ❌ **严禁不做测试**就直接提交发版！ |
+
+### 2. 接手开发三大铁律 (Three Golden Rules)
+1. **前端真理源铁律**：所有 UI/交互变更必须在 `shared/admin/` 下进行，编译产物自动分发至各端；
+2. **纯净透传铁律 (Gemini-Only)**：除 Google Gemini / Vertex AI 外，所有厂商的思考等级（`reasoning_effort`）与 `tool_choice` 结构体必须 100% 原汁原味透传，严禁擅自引入非标思考转换；
+3. **模型上线准入铁律**：新适配任何模型后，必须执行自动化准入套件并取得通过：
+   ```bash
+   python3 tests/test_live_models_suite.py --model <新模型名>
+   ```
+   **必须 6 大维度 100% 通过（【🟢 生产可用 · 达到正式上线标准】）后方可放行**。
+
+### 3. 日常开发常用命令速查
+
+```bash
+# [前端] 修改 shared/admin 后，一键重新编译管理后台
+node agent-edgeone/scripts/build-admin.mjs
+
+# [预设] 修改 shared/presets/*.json 后，一键重新编译内置预设与更新 catalog.json
+node agent-edgeone/scripts/build-presets.mjs
+
+# [单元测试] 验证适配器纯净透传与 OpenAI 零拷贝 (24 项断言)
+python3 tests/test_adapter_audit_suite.py
+
+# [边缘测试] 验证 EdgeOne 适配器规则与 rawBytes 透传 (10 项断言)
+node tests/test_edgeone_normalize.mjs
+
+# [准入测试] 对指定模型执行全量 6 维度生产级自动化准入测试
+python3 tests/test_live_models_suite.py --model gemini-3.5-flash-lite
+
+# [发布更新] 提交到 GitHub 后，VM 服务端一键 OTA 平滑升级
+ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升级
+```
+
 

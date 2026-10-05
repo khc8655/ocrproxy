@@ -5,21 +5,20 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-04T03:17:25.982Z",
+  "updated_at": "2026-10-05T05:39:32.540Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI",
-      "version": "1.2.0",
-      "rule_hash": "aaa5a822991a",
+      "version": "1.3.0",
+      "rule_hash": "fefc72d3505b",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
       "anthropic_base_url": null,
       "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
-      "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+      "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
       "features": {
-        "native_thinking": false,
-        "chat_template_kwargs_thinking": true,
+        "native_thinking": true,
         "tools": true,
         "multimodal": true
       },
@@ -28,13 +27,13 @@ export const CATALOG = {
     {
       "id": "amd",
       "name": "AMD Radeon Cloud",
-      "version": "1.1.0",
-      "rule_hash": "d490d1ecb1e5",
+      "version": "1.2.0",
+      "rule_hash": "147db7965508",
       "protocol": "openai",
       "base_url": "https://developer.amd.com.cn/radeon/api/v1",
       "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
       "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
-      "description": "AMD 官方开发者平台，基于高性能推理集群。网关已自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶规整。",
+      "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整",
       "features": {
         "native_thinking": true,
         "multimodal": false,
@@ -46,13 +45,13 @@ export const CATALOG = {
     {
       "id": "bai",
       "name": "B.AI",
-      "version": "1.3.0",
-      "rule_hash": "fadedcc28148",
+      "version": "1.4.0",
+      "rule_hash": "7a4a9eed8e00",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
       "anthropic_base_url": "https://api.b.ai/v1",
       "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
+      "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道直通透传",
       "features": {
         "native_thinking": true,
         "tools": true,
@@ -63,13 +62,13 @@ export const CATALOG = {
     {
       "id": "cline",
       "name": "Cline",
-      "version": "1.0.0",
-      "rule_hash": "634300ccb435",
+      "version": "1.1.0",
+      "rule_hash": "287adac94c15",
       "protocol": "openai",
       "base_url": "https://api.cline.bot/api/v1",
       "anthropic_base_url": null,
       "doc_url": "https://docs.cline.bot/api/overview",
-      "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+      "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配客户端受限模型别名映射与原生直通。",
       "features": {
         "native_thinking": true,
         "tools": true,
@@ -80,8 +79,8 @@ export const CATALOG = {
     {
       "id": "deepseek",
       "name": "DeepSeek 官方开放平台",
-      "version": "1.1.0",
-      "rule_hash": "193068f4df5b",
+      "version": "1.2.0",
+      "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.deepseek.com/v1",
       "anthropic_base_url": null,
@@ -113,13 +112,13 @@ export const CATALOG = {
     {
       "id": "minimax",
       "name": "MiniMax",
-      "version": "1.1.0",
-      "rule_hash": "15e333efeb77",
+      "version": "1.2.0",
+      "rule_hash": "4a77cea2e56a",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
       "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
-      "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
+      "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通透传",
       "features": {
         "native_thinking": true,
         "multimodal": true,
@@ -131,13 +130,13 @@ export const CATALOG = {
     {
       "id": "openai",
       "name": "OpenAI 官方",
-      "version": "1.1.0",
-      "rule_hash": "3ddc251503f8",
+      "version": "1.2.0",
+      "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.openai.com/v1",
       "anthropic_base_url": null,
       "doc_url": "https://platform.openai.com/docs",
-      "description": "OpenAI 官方 API 或标准兼容中转网关，原生支持 reasoning_effort 思考控制与多模态",
+      "description": "OpenAI 官方 API 或标准兼容中转网关，纯中转零损耗极速透传，原生支持 reasoning_effort 思考控制与多模态",
       "features": {
         "native_thinking": true,
         "tools": true,
@@ -148,8 +147,8 @@ export const CATALOG = {
     {
       "id": "sensenova",
       "name": "商汤日日新 (SenseNova)",
-      "version": "1.1.0",
-      "rule_hash": "193068f4df5b",
+      "version": "1.2.0",
+      "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://token.sensenova.cn/v1",
       "anthropic_base_url": null,
@@ -165,8 +164,8 @@ export const CATALOG = {
     {
       "id": "siliconflow",
       "name": "硅基流动 (SiliconFlow)",
-      "version": "1.1.0",
-      "rule_hash": "193068f4df5b",
+      "version": "1.2.0",
+      "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.siliconflow.cn/v1",
       "anthropic_base_url": null,
@@ -181,13 +180,13 @@ export const CATALOG = {
     {
       "id": "stepfun",
       "name": "阶跃星辰 (StepFun)",
-      "version": "1.1.0",
-      "rule_hash": "f7de5125e5e5",
+      "version": "1.2.0",
+      "rule_hash": "ff735ef0f91a",
       "protocol": "openai",
       "base_url": "https://api.stepfun.com/step_plan",
       "anthropic_base_url": null,
       "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
-      "description": "阶跃星辰大模型平台，支持 step-3.7-flash 等，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
+      "description": "阶跃星辰大模型平台，支持 step-3.7-flash、step-3.5-flash 等，原生 OpenAI 协议直通透传",
       "features": {
         "native_thinking": true,
         "multimodal": true,
@@ -198,13 +197,13 @@ export const CATALOG = {
     {
       "id": "tokenrhythm",
       "name": "TokenRhythm",
-      "version": "1.1.0",
-      "rule_hash": "193068f4df5b",
+      "version": "1.2.0",
+      "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://tokenrhythm.studio/v1",
       "anthropic_base_url": null,
       "doc_url": "https://tokenrhythm.studio/docs/api-integration",
-      "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，自动适配 tool_choice 字符串转换与思考流提取",
+      "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，原生协议直通透传",
       "features": {
         "native_thinking": true,
         "tools": true
@@ -237,14 +236,13 @@ export const PRESETS = [
   {
     "id": "agnes",
     "name": "Agnes AI",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
     "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
-    "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，支持 chat_template_kwargs 思考扩展与 512k 上下文",
+    "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
     "features": {
-      "native_thinking": false,
-      "chat_template_kwargs_thinking": true,
+      "native_thinking": true,
       "tools": true,
       "multimodal": true
     },
@@ -267,14 +265,12 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "chat_template_kwargs",
-        "enable_key": "enable_thinking",
-        "default_thinking": true
+        "strategy": "openai_passthrough"
       },
       "tools": {
         "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -288,12 +284,12 @@ export const PRESETS = [
   {
     "id": "amd",
     "name": "AMD Radeon Cloud",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
-    "description": "AMD 官方开发者平台，基于高性能推理集群。网关已自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶规整。",
+    "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整",
     "features": {
       "native_thinking": true,
       "multimodal": false,
@@ -304,42 +300,22 @@ export const PRESETS = [
       {
         "name": "deepseek-v4-flash",
         "upstream_model": "DeepSeek-V4-Flash",
-        "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (网关已自动注入 reasoning_effort 开启深度思考)"
+        "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (原生深度思考)"
       },
       {
         "name": "qwen3.8-flash-next",
         "upstream_model": "Qwen3.8-Flash-Next",
-        "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶与安全思考级别)"
+        "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶)"
       }
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "effort_remapping",
-        "default_effort": "medium",
-        "supported_levels": [
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max"
-        ],
-        "model_rules": {
-          "qwen": {
-            "supported_levels": [
-              "low",
-              "medium"
-            ],
-            "level_fallback": {
-              "high": "medium",
-              "xhigh": "medium",
-              "max": "medium"
-            },
-            "none_fallback": "low"
-          }
-        },
-        "none_action": "omit",
-        "strip_thinking": true
+        "strategy": "openai_passthrough"
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "strip_json_schema": false,
+        "rescue_from_text": false
       },
       "messages": {
         "deny_developer_role": true,
@@ -347,34 +323,10 @@ export const PRESETS = [
         "merge_system": true,
         "strip_empty": true
       },
-      "anthropic": {
-        "thinking_to_output_config": true,
-        "default_effort": "medium",
-        "strip_thinking": true,
-        "model_rules": {
-          "qwen": {
-            "level_fallback": {
-              "high": "medium",
-              "xhigh": "medium",
-              "max": "medium"
-            }
-          }
-        }
-      },
       "sanitization": {
         "strip_params": [
           "thinking",
           "chat_template_kwargs"
-        ]
-      },
-      "response": {
-        "reasoning_fields": [
-          "reasoning",
-          "reasoning_content"
-        ],
-        "reasoning_tokens_paths": [
-          "completion_tokens_details.reasoning_tokens",
-          "usage.reasoning_tokens"
         ]
       }
     }
@@ -382,12 +334,12 @@ export const PRESETS = [
   {
     "id": "bai",
     "name": "B.AI",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "protocol": "openai",
     "base_url": "https://api.b.ai/v1",
     "anthropic_base_url": "https://api.b.ai/v1",
     "doc_url": "https://docs.b.ai/llmservice/api/#messages-api-anthropic-compatible",
-    "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。网关已专属适配 GLM 系列常开思考模型（自动将 medium 映射为 high，规避 400 校验异常）。",
+    "description": "B.AI 统一大模型服务，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道直通透传",
     "features": {
       "native_thinking": true,
       "tools": true,
@@ -397,7 +349,7 @@ export const PRESETS = [
       {
         "name": "glm-5.3-flash",
         "upstream_model": "glm-5.3-flash",
-        "description": "智谱 GLM 5.3 Flash 原生常开深度思考模型 (网关已自动适配 Hermes / OpenAI 思考档位)"
+        "description": "智谱 GLM 5.3 Flash 原生常开深度思考模型"
       },
       {
         "name": "qwen3.8-flash",
@@ -417,36 +369,12 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "effort_remapping",
-        "supported_levels": [
-          "none",
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "max"
-        ],
-        "model_rules": {
-          "glm": {
-            "supported_levels": [
-              "low",
-              "high",
-              "max"
-            ],
-            "level_fallback": {
-              "medium": "high",
-              "minimal": "low",
-              "none": "low"
-            },
-            "none_action": "omit",
-            "default_effort": "high"
-          }
-        }
+        "strategy": "openai_passthrough"
       },
       "tools": {
         "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "sanitization": {
         "unsupported_params": []
@@ -479,11 +407,11 @@ export const PRESETS = [
   {
     "id": "cline",
     "name": "Cline",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "protocol": "openai",
     "base_url": "https://api.cline.bot/api/v1",
     "doc_url": "https://docs.cline.bot/api/overview",
-    "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配 delta.reasoning 思考流规整、客户端受限模型别名映射及非流式外层数据解包。",
+    "description": "Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5、Muse Spark 等多厂商模型。网关已自动适配客户端受限模型别名映射与原生直通。",
     "features": {
       "native_thinking": true,
       "tools": true,
@@ -542,9 +470,9 @@ export const PRESETS = [
         "cline-free/muse-spark-1.2-contributor": "meta/muse-spark-1.2-contributor"
       },
       "tools": {
-        "normalize_choice_to_string": true,
+        "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -571,7 +499,7 @@ export const PRESETS = [
   {
     "id": "deepseek",
     "name": "DeepSeek 官方开放平台",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.deepseek.com/v1",
     "doc_url": "https://api-docs.deepseek.com",
@@ -603,9 +531,9 @@ export const PRESETS = [
         ]
       },
       "tools": {
-        "normalize_choice_to_string": true,
+        "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -684,12 +612,12 @@ export const PRESETS = [
   {
     "id": "minimax",
     "name": "MiniMax",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
     "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
-    "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
+    "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通透传",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -700,31 +628,24 @@ export const PRESETS = [
       {
         "name": "MiniMax-M3",
         "upstream_model": "MiniMax-M3",
-        "description": "MiniMax-M3 多模态通用旗舰模型（支持超长思考与图片理解，原生兼容 Messages）"
+        "description": "MiniMax-M3 多模态通用旗舰模型（原生兼容 Completions 与 Messages）"
       }
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "minimax_adaptive",
-        "default_type": "adaptive",
-        "enable_reasoning_split": true
-      },
-      "anthropic": {
-        "thinking_to_adaptive": true
+        "strategy": "openai_passthrough"
       },
       "case_sensitive_models": {
         "minimax-m3": "MiniMax-M3"
       },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "strip_json_schema": false,
+        "rescue_from_text": false
+      },
       "sanitization": {
         "strip_params": [
           "output_config"
-        ]
-      },
-      "response": {
-        "reasoning_fields": [
-          "reasoning_split",
-          "reasoning_content",
-          "reasoning"
         ]
       }
     }
@@ -732,11 +653,11 @@ export const PRESETS = [
   {
     "id": "openai",
     "name": "OpenAI 官方",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.openai.com/v1",
     "doc_url": "https://platform.openai.com/docs",
-    "description": "OpenAI 官方 API 或标准兼容中转网关，原生支持 reasoning_effort 思考控制与多模态",
+    "description": "OpenAI 官方 API 或标准兼容中转网关，纯中转零损耗极速透传，原生支持 reasoning_effort 思考控制与多模态",
     "features": {
       "native_thinking": true,
       "tools": true,
@@ -777,7 +698,7 @@ export const PRESETS = [
       "tools": {
         "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -790,7 +711,7 @@ export const PRESETS = [
   {
     "id": "sensenova",
     "name": "商汤日日新 (SenseNova)",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://token.sensenova.cn/v1",
     "doc_url": "https://platform.sensenova.cn/docs",
@@ -828,9 +749,9 @@ export const PRESETS = [
         ]
       },
       "tools": {
-        "normalize_choice_to_string": true,
+        "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -843,7 +764,7 @@ export const PRESETS = [
   {
     "id": "siliconflow",
     "name": "硅基流动 (SiliconFlow)",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.siliconflow.cn/v1",
     "doc_url": "https://docs.siliconflow.cn",
@@ -880,9 +801,9 @@ export const PRESETS = [
         ]
       },
       "tools": {
-        "normalize_choice_to_string": true,
+        "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
@@ -895,11 +816,11 @@ export const PRESETS = [
   {
     "id": "stepfun",
     "name": "阶跃星辰 (StepFun)",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.stepfun.com/step_plan",
     "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
-    "description": "阶跃星辰大模型平台，支持 step-3.7-flash 等，已自动适配 reasoning_effort none->low 降级与 deepseek-style 思考格式注入",
+    "description": "阶跃星辰大模型平台，支持 step-3.7-flash、step-3.5-flash 等，原生 OpenAI 协议直通透传",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -909,7 +830,7 @@ export const PRESETS = [
       {
         "name": "step-3.7-flash",
         "upstream_model": "step-3.7-flash",
-        "description": "阶跃最新闪电高速推理大模型 (支持 low/medium/high 思考)"
+        "description": "阶跃最新闪电高速推理大模型"
       },
       {
         "name": "step-3.5-flash",
@@ -919,45 +840,29 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "effort_remapping",
-        "param_name": "reasoning_effort",
-        "supported_levels": [
-          "low",
-          "medium",
-          "high"
-        ],
-        "none_fallback": "low",
-        "inject_params": {
-          "reasoning_format": "deepseek-style"
-        }
+        "strategy": "openai_passthrough"
       },
       "tools": {
         "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true
       },
       "sanitization": {
         "unsupported_params": []
-      },
-      "response": {
-        "reasoning_fields": [
-          "reasoning",
-          "reasoning_content"
-        ]
       }
     }
   },
   {
     "id": "tokenrhythm",
     "name": "TokenRhythm",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://tokenrhythm.studio/v1",
     "doc_url": "https://tokenrhythm.studio/docs/api-integration",
-    "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，自动适配 tool_choice 字符串转换与思考流提取",
+    "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，原生协议直通透传",
     "features": {
       "native_thinking": true,
       "tools": true
@@ -990,9 +895,9 @@ export const PRESETS = [
         ]
       },
       "tools": {
-        "normalize_choice_to_string": true,
+        "normalize_choice_to_string": false,
         "strip_json_schema": false,
-        "rescue_from_text": true
+        "rescue_from_text": false
       },
       "user_tracking": {
         "passthrough_user": true

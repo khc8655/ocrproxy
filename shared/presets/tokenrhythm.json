@@ -1,11 +1,11 @@
 {
   "id": "tokenrhythm",
   "name": "TokenRhythm",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://tokenrhythm.studio/v1",
   "doc_url": "https://tokenrhythm.studio/docs/api-integration",
-  "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，自动适配 tool_choice 字符串转换与思考流提取",
+  "description": "TokenRhythm 聚合大模型路由网关，支持 deepseek-v4-flash, Claude, GPT 系列，原生协议直通透传",
   "features": {
     "native_thinking": true,
     "tools": true
@@ -33,9 +33,9 @@
       "supported_levels": ["none", "low", "medium", "high"]
     },
     "tools": {
-      "normalize_choice_to_string": true,
+      "normalize_choice_to_string": false,
       "strip_json_schema": false,
-      "rescue_from_text": true
+      "rescue_from_text": false
     },
     "user_tracking": {
       "passthrough_user": true

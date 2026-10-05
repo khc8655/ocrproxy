@@ -1,12 +1,12 @@
 {
   "id": "minimax",
   "name": "MiniMax",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.minimaxi.com/v1",
   "anthropic_base_url": "https://api.minimaxi.com/anthropic",
   "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
-  "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通",
+  "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通透传",
   "features": {
     "native_thinking": true,
     "multimodal": true,
@@ -17,26 +17,23 @@
     {
       "name": "MiniMax-M3",
       "upstream_model": "MiniMax-M3",
-      "description": "MiniMax-M3 多模态通用旗舰模型（支持超长思考与图片理解，原生兼容 Messages）"
+      "description": "MiniMax-M3 多模态通用旗舰模型（原生兼容 Completions 与 Messages）"
     }
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "minimax_adaptive",
-      "default_type": "adaptive",
-      "enable_reasoning_split": true
-    },
-    "anthropic": {
-      "thinking_to_adaptive": true
+      "strategy": "openai_passthrough"
     },
     "case_sensitive_models": {
       "minimax-m3": "MiniMax-M3"
     },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "strip_json_schema": false,
+      "rescue_from_text": false
+    },
     "sanitization": {
       "strip_params": ["output_config"]
-    },
-    "response": {
-      "reasoning_fields": ["reasoning_split", "reasoning_content", "reasoning"]
     }
   }
 }
