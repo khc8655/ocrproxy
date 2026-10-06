@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.05-01",
-  "release_date": "2026-10-05",
+  "version": "v2026.10.06-01",
+  "release_date": "2026-10-06",
   "commit": "HEAD",
-  "title": "企业级生产架构四阶段全量升级 (安全护城河、流并发租约、状态机精准对齐与全链路观测)",
+  "title": "超时参数自适应合并极简体验升级与多 Key 故障转移全景自适应",
   "changelog": [
-    "Phase 1: P0 安全与数据完整性护城河：消除内联 JS 拼接与 XSS、409 安全阻断、多 Provider 绑定草稿持久化、EdgeOne 鉴权 Fail-Closed 与权限隔离、故障转移写时复制 (COW)",
-    "Phase 2: P1 流生命周期与并发流治理：引入 ConcurrencyLease 全生命周期锁定并发名额、单调硬时限 Monotonic Deadline 与排队超时保护、Web Streams 标准背压与首块预读 (Chunk Peeking) 故障转移",
-    "Phase 3: P2 状态机收敛与精准故障分类：统一 Fault Classifier 引擎与硬欠费/TPM 细粒度对齐、Cooldown 批处理主动避峰与最小等待唤醒、彻底铲除代码潜在 eval 风险并替换为 AST 语法树",
-    "Phase 4: P3 架构演进与生产级观测：统一跨端追踪响应头规范 (X-Proxy-Routed-Via, X-Proxy-Attempts)、双端测试矩阵自动化守门"
+    "前端体验减负：彻底合并冗余的'全局请求硬超时预算'输入框，收敛为直观统一的单次超时时限",
+    "调度器自适应推导：总调度死线由网关基于候选池规模和重试策略全自动自适应推导，免除人工心智计算负担",
+    "纯手动直通深度思考免截断：纯手动直通模式超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长推理",
+    "KB 模式多 Key 池子容灾优化：KB 模式 10+ Key 并发池单次超时与轮换策略协同，防死锁且充分保障节点容灾"
   ]
 }

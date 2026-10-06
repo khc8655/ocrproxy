@@ -1,7 +1,7 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.10.05-01';
+const APP_VERSION = 'v2026.10.06-01';
 const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State

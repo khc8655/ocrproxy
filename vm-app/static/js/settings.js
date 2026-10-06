@@ -15,8 +15,9 @@ function renderSettings(){
   set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
 
   // Card 3: Timeouts & Budget
-  set('s_chatTimeout', c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 15);
-  set('s_budget', c.request_total_budget_sec ?? c.schedule_total_budget ?? 45);
+  set('s_chatTimeout', c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 30);
+  const derivedBudget = c.request_total_budget_sec ?? c.schedule_total_budget ?? ((c.upstream_timeout_sec ?? 30) * (c.max_retries ?? 3));
+  set('s_budget', derivedBudget);
   set('s_maxRetries', c.max_retries ?? 3);
   set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 2);
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
@@ -71,6 +72,18 @@ function onRunModeChange(){
   if(kbItem) kbItem.style.display = isAgent ? 'none' : 'block';
   if(agItem) agItem.style.display = isKb ? 'none' : 'block';
   if(kbTimeout) kbTimeout.style.display = isAgent ? 'none' : 'block';
+
+  // Dynamic labels based on run mode
+  const lblChatTimeout = document.getElementById('lbl_chatTimeout');
+  const hintChatTimeout = document.getElementById('hint_chatTimeout');
+  if (lblChatTimeout) {
+    lblChatTimeout.textContent = isKb ? 'KB 对话单次处理超时 (upstream_timeout_sec)' : '智能体单次请求超时 (upstream_timeout_sec)';
+  }
+  if (hintChatTimeout) {
+    hintChatTimeout.textContent = isKb
+      ? 'KB 模式下调用 chat 虚拟模型的超时时限（秒）。总预算将根据候选池自动缩放。'
+      : '向上游发起调用的等待上限（秒）。发生假死或超时立即切换备用 Key；总调度死线由系统自动推导。';
+  }
 }
 
 function onAgentRoutingChange(){
@@ -87,7 +100,7 @@ function updateRoutingSettingsState(){
   if(hintEl) hintEl.style.display = isManual ? 'none' : 'block';
 
   const disabledSettingIds = [
-    's_budget', 's_maxRetries', 's_maxAttemptsPerProvider',
+    's_chatTimeout', 's_maxRetries', 's_maxAttemptsPerProvider',
     's_cooldown429', 's_cooldown5xx', 's_cooldown403',
     's_circuitThreshold', 's_fastFailover'
   ];
@@ -103,16 +116,33 @@ function updateRoutingSettingsState(){
       }
     }
   });
+
+  const chatTimeoutEl = document.getElementById('s_chatTimeout');
+  const hintChatTimeout = document.getElementById('hint_chatTimeout');
+  if (chatTimeoutEl && isManual) {
+    chatTimeoutEl.placeholder = '纯直通已放宽至 300s';
+    if (hintChatTimeout) {
+      hintChatTimeout.textContent = '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
+    }
+  }
 }
 
 function restoreDefaultSettings(){
   if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
-  set('s_chatTimeout', 15);
-  set('s_budget', 45);
+  set('s_chatTimeout', 30);
+  set('s_budget', 90);
   set('s_maxRetries', 3);
   set('s_maxAttemptsPerProvider', 2);
   set('s_kbTimeout', 60);
+  set('s_concurrency', 5);
+  const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
+  set('s_cooldown429', 60);
+  set('s_cooldown5xx', 30);
+  set('s_circuitThreshold', 3);
+  set('s_cooldown403', 600);
+  toast('已填入官方推荐默认参数，请点击「保存设置」生效', 'ok');
+}
   set('s_concurrency', 5);
   const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
   set('s_cooldown429', 60);
@@ -342,11 +372,11 @@ async function saveSettings(silent=false){
   if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value;
 
   // Card 3: Timeouts & Budget
-  c.upstream_timeout_sec = Number(document.getElementById('s_chatTimeout').value) || 15;
+  c.upstream_timeout_sec = Number(document.getElementById('s_chatTimeout').value) || 30;
   c.upstream_timeout_chat = c.upstream_timeout_sec; // backward compatibility
-  c.request_total_budget_sec = Number(document.getElementById('s_budget').value) || 45;
-  c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
   c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
+  c.request_total_budget_sec = Math.min(300, Math.max(60, c.upstream_timeout_sec * c.max_retries));
+  c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
   c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 2;
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
   c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;

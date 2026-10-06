@@ -615,7 +615,15 @@ async def schedule(
     down_providers: Set[str] = set()
 
     if strategy == "manual":
-        total_budget_sec = max(total_budget_sec, upstream_timeout_sec + 5.0)
+        # Pure manual passthrough: do not truncate deep thinking / reasoning models.
+        # Allow up to 300s safe bounded timeout, and let client decide when to disconnect.
+        upstream_timeout_sec = max(upstream_timeout_sec, 300.0)
+        total_budget_sec = upstream_timeout_sec + 5.0
+    else:
+        # Failover mode: if total_budget was not explicitly overridden by caller, scale with candidate pool and max_retries
+        has_explicit_budget = "schedule_total_budget" in config or "request_total_budget_sec" in config
+        if not has_explicit_budget:
+            total_budget_sec = max(total_budget_sec, upstream_timeout_sec * min(max_retries, max(1, len(ordered_items))))
 
     try:
         concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))

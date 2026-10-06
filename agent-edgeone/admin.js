@@ -11,7 +11,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.05-01';
+const BUILD_VERSION = 'v2026.10.06-01';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -393,11 +393,14 @@ function renderSettings() {
 }
 
 async function saveSettings() {
+  const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 25;
+  const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
+  const budget = Math.min(30, upTimeout); // EdgeOne platform limit 30s
   cfg.settings = {
     agent_routing_strategy: document.getElementById('set_routing_strategy').value,
-    request_total_budget_sec: Number(document.getElementById('set_request_total_budget_sec').value) || 25,
-    upstream_timeout_sec: Number(document.getElementById('set_upstream_timeout_sec').value) || 15,
-    schedule_total_budget: Number(document.getElementById('set_schedule_total_budget').value) || 3,
+    upstream_timeout_sec: upTimeout,
+    request_total_budget_sec: budget,
+    schedule_total_budget: retries,
     max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
     fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
     cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
@@ -413,8 +416,9 @@ async function saveSettings() {
 
 function resetSettingsToDefault() {
   document.getElementById('set_routing_strategy').value = 'sticky_failover';
-  document.getElementById('set_request_total_budget_sec').value = 25;
-  document.getElementById('set_upstream_timeout_sec').value = 15;
+  document.getElementById('set_upstream_timeout_sec').value = 25;
+  const hiddenBudget = document.getElementById('set_request_total_budget_sec');
+  if (hiddenBudget) hiddenBudget.value = 25;
   document.getElementById('set_schedule_total_budget').value = 3;
   document.getElementById('set_max_attempts_per_provider').value = 2;
   document.getElementById('set_fast_failover_provider_down').checked = true;

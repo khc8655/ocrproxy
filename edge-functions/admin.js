@@ -1190,7 +1190,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.05-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.06-01</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1230,7 +1230,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.05-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.06-01</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1326,21 +1326,15 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               <div class="text-secondary text-sm mt-1">控制多个候选 Key 之间的主备切换与负载均衡方式</div>
             </div>
             <div class="form-group">
-              <label class="form-label">全局请求硬超时预算 (request_total_budget_sec)</label>
+              <label class="form-label">上游请求等待超时 (upstream_timeout_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_request_total_budget_sec" class="form-control" min="10" max="120" step="1" value="25" style="width:140px;">
-                <span class="text-secondary">秒 (EdgeOne 建议 25s 以规避平台 30s 强杀；VM 建议 45~60s)</span>
+                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="120" step="1" value="25" style="width:140px;">
+                <span class="text-secondary">秒 (EdgeOne 建议 20~25s，总调度死线由边缘调度器全自动推导)</span>
               </div>
-              <div class="text-secondary text-sm mt-1">单次客户端请求的最大总时钟，超时立即主动返回 504，彻底杜绝 4 分钟死锁</div>
+              <div class="text-secondary text-sm mt-1">向上游发起调用的等待上限。故障转移模式下超时立即切换备用 Key；纯手动直通模式下由客户端自身控制。</div>
             </div>
-            <div class="form-group">
-              <label class="form-label">单 Key 上游超时时间 (upstream_timeout_sec)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="60" step="1" value="15" style="width:140px;">
-                <span class="text-secondary">秒 (默认 15s)</span>
-              </div>
-              <div class="text-secondary text-sm mt-1">向上游单一 Key 发起请求的等待上限，超时后无缝切换下一候选 Key</div>
-            </div>
+            <!-- request_total_budget_sec auto-derived; hidden input preserved -->
+            <input type="hidden" id="set_request_total_budget_sec" value="25">
             <div class="form-group">
               <label class="form-label">单请求最大重试次数 (schedule_total_budget)</label>
               <div style="display:flex;align-items:center;gap:12px;">
@@ -2905,7 +2899,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.05-01';
+const BUILD_VERSION = 'v2026.10.06-01';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3287,11 +3281,14 @@ function renderSettings() {
 }
 
 async function saveSettings() {
+  const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 25;
+  const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
+  const budget = Math.min(30, upTimeout); // EdgeOne platform limit 30s
   cfg.settings = {
     agent_routing_strategy: document.getElementById('set_routing_strategy').value,
-    request_total_budget_sec: Number(document.getElementById('set_request_total_budget_sec').value) || 25,
-    upstream_timeout_sec: Number(document.getElementById('set_upstream_timeout_sec').value) || 15,
-    schedule_total_budget: Number(document.getElementById('set_schedule_total_budget').value) || 3,
+    upstream_timeout_sec: upTimeout,
+    request_total_budget_sec: budget,
+    schedule_total_budget: retries,
     max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
     fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
     cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
@@ -3307,8 +3304,9 @@ async function saveSettings() {
 
 function resetSettingsToDefault() {
   document.getElementById('set_routing_strategy').value = 'sticky_failover';
-  document.getElementById('set_request_total_budget_sec').value = 25;
-  document.getElementById('set_upstream_timeout_sec').value = 15;
+  document.getElementById('set_upstream_timeout_sec').value = 25;
+  const hiddenBudget = document.getElementById('set_request_total_budget_sec');
+  if (hiddenBudget) hiddenBudget.value = 25;
   document.getElementById('set_schedule_total_budget').value = 3;
   document.getElementById('set_max_attempts_per_provider').value = 2;
   document.getElementById('set_fast_failover_provider_down').checked = true;

@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.05-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.06-01</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -269,15 +269,12 @@
           </div>
           <div class="settings-grid">
             <div class="setting-item">
-              <label class="form-label" for="s_chatTimeout">单次上游等待超时 (upstream_timeout_sec)</label>
-              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 15" min="5" max="180">
-              <span class="hint">向上游单一 Key 发起请求的等待上限（秒），超时后立即切换下一候选 Key（默认 15s）</span>
+              <label class="form-label" for="s_chatTimeout" id="lbl_chatTimeout">上游请求等待超时 (upstream_timeout_sec)</label>
+              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 30" min="5" max="300">
+              <span class="hint" id="hint_chatTimeout">向上游发起请求的超时等待上限（秒）。故障转移模式下超时立即切换备用 Key；总预算由系统自适应推导。</span>
             </div>
-            <div class="setting-item">
-              <label class="form-label" for="s_budget">全局请求硬超时预算 (request_total_budget_sec)</label>
-              <input type="number" id="s_budget" class="form-control" placeholder="默认 45" min="10" max="300">
-              <span class="hint">单次客户端请求在多候选 Key 之间轮换尝试的最长总时钟（秒，默认 45s）</span>
-            </div>
+            <!-- request_total_budget_sec auto-derived by gateway scheduler; hidden input preserved for backward compatibility -->
+            <input type="hidden" id="s_budget" value="">
             <div class="setting-item">
               <label class="form-label" for="s_maxRetries">单请求最大重试候选数 (max_retries)</label>
               <input type="number" id="s_maxRetries" class="form-control" placeholder="默认 3" min="1" max="10">
@@ -772,12 +769,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.05-01"></script>
-  <script src="/static/js/vault.js?v=2026.10.05-01"></script>
-  <script src="/static/js/providers.js?v=2026.10.05-01"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.05-01"></script>
-  <script src="/static/js/models.js?v=2026.10.05-01"></script>
-  <script src="/static/js/settings.js?v=2026.10.05-01"></script>
-  <script src="/static/js/app.js?v=2026.10.05-01"></script>
+  <script src="/static/js/core.js?v=2026.10.06-01"></script>
+  <script src="/static/js/vault.js?v=2026.10.06-01"></script>
+  <script src="/static/js/providers.js?v=2026.10.06-01"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.06-01"></script>
+  <script src="/static/js/models.js?v=2026.10.06-01"></script>
+  <script src="/static/js/settings.js?v=2026.10.06-01"></script>
+  <script src="/static/js/app.js?v=2026.10.06-01"></script>
 </body>
 </html>

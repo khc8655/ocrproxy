@@ -1273,8 +1273,8 @@ def _load_local_version_info() -> dict:
             except Exception:
                 pass
     return {
-        "version": "v2026.10.05-01",
-        "release_date": "2026-10-05",
+        "version": "v2026.10.06-01",
+        "release_date": "2026-10-06",
         "title": "OCRProxy VM Gateway",
         "changelog": []
     }
@@ -1289,7 +1289,7 @@ async def get_system_version_endpoint(request: Request):
     info = _load_local_version_info()
     return JSONResponse(content={
         "ok": True,
-        "current_version": info.get("version", "v2026.10.05-01"),
+        "current_version": info.get("version", "v2026.10.06-01"),
         "release_date": info.get("release_date", ""),
         "commit": info.get("commit", ""),
         "title": info.get("title", ""),
@@ -1304,7 +1304,7 @@ async def check_system_update_endpoint(request: Request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     local_info = _load_local_version_info()
-    curr_v = local_info.get("version", "v2026.10.05-01")
+    curr_v = local_info.get("version", "v2026.10.06-01")
 
     remote_url = "https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json"
     remote_data = None
