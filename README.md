@@ -127,20 +127,21 @@ ocrprox (Monorepo)
 - **`latency_based` (最低延迟优先)**：基于近期实测延迟智能路由至响应最快的优质 Key。
 
 ### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget)
+- **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`30s`**，支持针对长思考模型（o1/o3/DeepSeek-R1）灵活配置（如 120s），单个节点超时立即故障转移。
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
-  - **EdgeOne 边缘版**：默认 **`25s`**（在 EdgeOne 平台 30s 强杀前 5s 提前拦截，主动向客户端返回规范的 504 Gateway Timeout 与完整调用链路轨迹，彻底根治 4 分钟卡死）；
-  - **VM 服务端版**：默认 **`60s`**（充分容纳 KB 大文档入库推理与多 Key 故障转移切换）。
-- **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`15s`**，单个 Key 超时立即切换。
-- **`schedule_total_budget` (单请求重试上限)**：默认 **`5 次`**。
-- **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`6 次`**（满足商汤、硅基等单厂商配置 5~8 个不同账号 Key 的深度轮询调度）。
+  - **动态自适应调度**：基于 `upstream_timeout_sec × max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
+  - **EdgeOne 边缘版**：默认 **`25s`**（在 EdgeOne 平台 30s 强杀前 5s 提前拦截，主动向客户端返回规范的 504 Gateway Timeout）。
+- **`max_retries` / `schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
+- **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**。
 - **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。
 - **429 欠费与额度耗尽 30 分钟智能冷冻 (Quota Quarantine)**：
   - 自动识别商汤 `Allocated quota exceeded`、OpenCode `Consumer daily free usage limit exceeded` 等致命账号级错误；
   - 触发后立即打入 **30 分钟（1800s）长效冷冻**，调度层物理跳过，杜绝废 Key 吃掉重试预算；控制台列表直接标注红色 `[欠费]` 徽章；
   - 成功调用（HTTP 200）即刻自动清除冷冻与欠费标记。
-- **控制台极简原生数字排序 (Lightweight Numeric Ordering)**：
-  - 彻底移除复杂或难按的 `↑` / `↓` 箭头；
-  - 序号列采用原生超轻量数字输入框（支持任意数字输入自动安全截断归位），纯本地数组秒级位移，后端零依赖。
+- **控制台极简纯键盘数字录入与即时保存体验**：
+  - 彻底去除全端数字输入框原生的上下微调小箭头（Spin Buttons），还原极简纯净的纯键盘输入；
+  - 表单支持输入框按 `Enter` 回车键或 `Ctrl/Cmd + S` 快捷键即时触发配置保存；
+  - 面板底部配备常驻保存操作栏，统一收敛为单一明确的「💾 保存设置并生效」操作。
 
 ### 3. 链路追踪与透明诊断响应头
 每次请求均在 HTTP 响应头中注入实时链路信息：
