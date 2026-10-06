@@ -1,7 +1,7 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.10.04-01';
+const APP_VERSION = 'v2026.10.05-01';
 const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State
@@ -9,6 +9,7 @@ const state = {
   key: sessionStorage.getItem('admin_key') || '', 
   config: null, 
   stats: null, 
+  serverVersion: null,
   tab: 'dashboard', 
   modelTab: 'agents', 
   changed: false,
@@ -149,6 +150,18 @@ async function loadData(){
     }
 
     fetchVaultManifest(true); // background silent fetch
+    if (!IS_EDGEONE && !state.serverVersion) {
+      fetch('/api/admin/system/version', { headers: headers() })
+        .then(r => r.ok ? r.json() : null)
+        .then(vData => {
+          if (vData && vData.current_version) {
+            state.serverVersion = vData.current_version;
+            const vb = document.getElementById('topVersionBadge');
+            if (vb) vb.textContent = vData.current_version;
+          }
+        })
+        .catch(() => {});
+    }
     updateAccess();
     render();
   } catch(e){
@@ -210,7 +223,7 @@ function render(){
   // Top header badges
   const vBadge = document.getElementById('topVersionBadge');
   if (vBadge) {
-    vBadge.textContent = APP_VERSION;
+    vBadge.textContent = state.serverVersion || APP_VERSION;
   }
   const badge = document.getElementById('topModeBadge');
   if (badge) {
