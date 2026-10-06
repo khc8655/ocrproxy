@@ -161,14 +161,6 @@ function restoreDefaultSettings(){
   set('s_cooldown403', 600);
   toast('已填入官方推荐默认参数，请点击「保存设置」生效', 'ok');
 }
-  set('s_concurrency', 5);
-  const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
-  set('s_cooldown429', 60);
-  set('s_cooldown5xx', 30);
-  set('s_circuitThreshold', 3);
-  set('s_cooldown403', 600);
-  toast('已填入官方推荐默认参数，请点击「保存设置」生效', 'ok');
-}
 
 function generateRandomKey() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
