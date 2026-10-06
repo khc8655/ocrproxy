@@ -575,6 +575,16 @@ nav#topNav button.active {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 textarea.form-control {
   height: auto;
   min-height: 80px;
@@ -1400,6 +1410,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               <div class="text-secondary text-sm mt-1">Key 无效或欠费被拒时的主动隔离时间</div>
             </div>
           </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--color-border);">
+          <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
+          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">💾 保存设置并生效</button>
         </div>
       </div>
     </div>
@@ -3278,6 +3293,20 @@ function renderSettings() {
 
   const elCd403 = document.getElementById('set_cooldown_403_sec');
   if (elCd403) elCd403.value = s.cooldown_403_sec || 600;
+
+  const panel = document.getElementById('panel-settings');
+  if (panel && !panel._keyBound) {
+    panel._keyBound = true;
+    panel.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveSettings();
+      } else if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+        e.preventDefault();
+        saveSettings();
+      }
+    });
+  }
 }
 
 async function saveSettings() {

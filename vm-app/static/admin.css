@@ -141,6 +141,16 @@
     .form-control { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 14px; outline: none; background: var(--bg); transition: border-color .15s, box-shadow .15s; }
     .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(22,100,255,0.12); }
     .form-control::placeholder { color: var(--text-tertiary); }
+    /* 彻底去除所有数字输入框原生上下小箭头，确保纯键盘打字体验 */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
     select.form-control { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
     .checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; user-select: none; }
     .checkbox input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }

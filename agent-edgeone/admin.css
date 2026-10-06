@@ -559,6 +559,16 @@ nav#topNav button.active {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 textarea.form-control {
   height: auto;
   min-height: 80px;

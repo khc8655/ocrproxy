@@ -556,15 +556,15 @@ def _model_not_found_response(model_name: str) -> JSONResponse:
 def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     """Scale the failover budget with candidate count, ensuring at least 3 attempts.
 
-    Hard cap at 180s: without it agent mode computes 120s × 3 = 360s, which
-    exceeds typical client-side timeouts. An explicitly configured schedule_total_budget wins."""
+    Supports long-thinking / reasoning models (e.g. 120s timeout with failover retries).
+    An explicitly configured schedule_total_budget wins."""
     try:
         explicit = float(config.get("schedule_total_budget", 0))
     except (ValueError, TypeError):
         explicit = 0.0
     if explicit > 0:
         return explicit
-    return min(180.0, timeout * min(3, max(candidate_count, 1)))
+    return min(600.0, timeout * min(3, max(candidate_count, 1)))
 
 
 async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES, return_raw_bytes: bool = False):

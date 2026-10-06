@@ -59,6 +59,24 @@ function renderSettings(){
 
   onRunModeChange();
   updateRoutingSettingsState();
+  initSettingsKeyListeners();
+}
+
+let _settingsListenersBound = false;
+function initSettingsKeyListeners(){
+  if (_settingsListenersBound) return;
+  _settingsListenersBound = true;
+  const panel = document.getElementById('panel-settings');
+  if (!panel) return;
+  panel.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveSettings();
+    } else if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+      e.preventDefault();
+      saveSettings();
+    }
+  });
 }
 
 function onRunModeChange(){
@@ -375,7 +393,8 @@ async function saveSettings(silent=false){
   c.upstream_timeout_sec = Number(document.getElementById('s_chatTimeout').value) || 30;
   c.upstream_timeout_chat = c.upstream_timeout_sec; // backward compatibility
   c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
-  c.request_total_budget_sec = Math.min(300, Math.max(60, c.upstream_timeout_sec * c.max_retries));
+  // 动态预算自适应：支持深度长思考（如 120s × 3 = 360s），按实际超时与重试次数计算，放宽硬编码上限至 600s
+  c.request_total_budget_sec = Math.min(600, Math.max(60, c.upstream_timeout_sec * c.max_retries));
   c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
   c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 2;
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
@@ -414,22 +433,5 @@ async function saveSettings(silent=false){
   }
 
   await persistConfig(silent ? null : '系统参数已保存并立即生效');
-}
-
-
-async function saveSettingsAndVerify(){
-  await saveSettings(true);
-  const models = Object.keys(state.config.agent_models || {});
-  if(!models.length){
-    toast('配置已保存。当前未配置任何 Agent 模型进行测试', 'info');
-    return;
-  }
-  const testModel = models[0];
-  switchTab('models');
-  switchModelTab('agents');
-  toast(`配置已保存！正在对首选模型 [${testModel}] 进行端到端生产连通性实测...`, 'info');
-  setTimeout(() => {
-    runLiveTest(testModel);
-  }, 350);
 }
 
