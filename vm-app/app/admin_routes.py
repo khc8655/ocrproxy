@@ -1791,46 +1791,75 @@ async def vault_sync_endpoint(request: Request):
             remote_providers = manifest.get("providers") or {}
 
             cfg = await get_config()
-            local_providers = cfg.get("providers") or {}
+            local_providers = cfg.setdefault("providers", {})
             updated = 0
+            created = 0
 
-            for p_id, p_cfg in local_providers.items():
-                if p_id in remote_providers:
-                    r_p = remote_providers[p_id]
-                    if r_p.get("name"):
-                        p_cfg["name"] = r_p["name"]
-                    if r_p.get("base_url"):
-                        p_cfg["base_url"] = r_p["base_url"]
-                    if r_p.get("protocol"):
-                        p_cfg["protocol"] = r_p["protocol"]
+            # 全量遍历中枢所有提供商，无论本地是否存在、无论是否有预设文件，均直接落库
+            for p_id, r_p in remote_providers.items():
+                if not isinstance(r_p, dict):
+                    continue
+                is_new = p_id not in local_providers
+                p_cfg = local_providers.setdefault(p_id, {})
 
-                    # Synchronize protocols and anthropic_messages
-                    if r_p.get("protocols") and isinstance(r_p["protocols"], list):
-                        p_cfg["protocols"] = r_p["protocols"]
-                    elif r_p.get("protocol") == "openai":
-                        p_cfg["protocols"] = ["chat"]
-                    elif r_p.get("protocol") == "messages":
-                        p_cfg["protocols"] = ["messages"]
+                # 1. 基础元数据落库（云端权威覆盖）
+                p_cfg["name"] = r_p.get("name") or p_id
+                if r_p.get("base_url"):
+                    p_cfg["base_url"] = r_p["base_url"]
+                
+                proto = r_p.get("protocol") or p_cfg.get("protocol") or "openai"
+                p_cfg["protocol"] = proto
 
-                    p_cfg["anthropic_messages"] = bool(r_p.get("anthropic_messages") or (p_cfg.get("protocols") and "messages" in p_cfg["protocols"]))
+                raw_protos = r_p.get("protocols")
+                if not raw_protos or not isinstance(raw_protos, list):
+                    raw_protos = ["messages"] if proto == "messages" else ["chat"]
+                p_cfg["protocols"] = raw_protos
+                p_cfg["anthropic_messages"] = bool(r_p.get("anthropic_messages") or ("messages" in raw_protos))
 
-                    if r_p.get("anthropic_base_url"):
-                        p_cfg["anthropic_base_url"] = r_p["anthropic_base_url"]
-                    elif "anthropic_base_url" in p_cfg and not p_cfg["anthropic_messages"]:
-                        del p_cfg["anthropic_base_url"]
+                if r_p.get("anthropic_base_url"):
+                    p_cfg["anthropic_base_url"] = r_p["anthropic_base_url"]
+                elif "anthropic_base_url" in p_cfg and not p_cfg["anthropic_messages"]:
+                    del p_cfg["anthropic_base_url"]
 
-                    if r_p.get("adapter_rules") is not None:
-                        p_cfg["adapter_rules"] = r_p["adapter_rules"]
-                    if r_p.get("models"):
-                        p_cfg["cached_models"] = r_p["models"]
+                if r_p.get("adapter_rules") is not None:
+                    p_cfg["adapter_rules"] = r_p["adapter_rules"]
+                if r_p.get("models"):
+                    p_cfg["cached_models"] = r_p["models"]
+
+                # 2. 自动拉取并合并中枢该提供商的所有密钥字典
+                remote_key_labels = r_p.get("keys") or []
+                local_keys = p_cfg.setdefault("keys", {})
+                missing_labels = [kl for kl in remote_key_labels if isinstance(kl, str) and (kl not in local_keys or not local_keys[kl])]
+
+                for kl in missing_labels:
+                    try:
+                        fk_res = await client.post(
+                            f"{edgeone_url}/api/vault/fetch",
+                            headers=headers,
+                            json={"provider": p_id, "key_label": kl}
+                        )
+                        if fk_res.is_success:
+                            fk_data = fk_res.json()
+                            if fk_data.get("ok"):
+                                r_keys = (fk_data.get("provider_config") or {}).get("keys") or {}
+                                if kl in r_keys and r_keys[kl]:
+                                    local_keys[kl] = r_keys[kl]
+                    except Exception as fe:
+                        logger.warning(f"Failed to fetch key {kl} for provider {p_id} during sync: {fe}")
+
+                if is_new:
+                    created += 1
+                else:
                     updated += 1
 
-            if updated > 0:
+            if created > 0 or updated > 0:
                 await save_config(cfg)
 
+            msg = f"同步完成：已自动新增 {created} 个中枢供应商，更新 {updated} 个供应商的最新端点与密钥"
             return JSONResponse(content={
                 "ok": True,
-                "message": f"手动同步完成，已更新 {updated} 个供应商的最新规则",
+                "message": msg,
+                "created_count": created,
                 "updated_count": updated
             })
     except httpx.ConnectError as ce:

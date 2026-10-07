@@ -3,6 +3,7 @@ Stateless Failover Scheduler
 Handles key rotation, failover budget, concurrency limiters, cooldown, and circuit breaker.
 Ported from EdgeOne cloud-functions version; stats now recorded in-memory.
 """
+import os
 import time
 import logging
 import asyncio
@@ -502,6 +503,97 @@ async def _peek_first_chunk(resp: httpx.Response):
     return b"", None, None  # stream ended with zero bytes
 
 
+_lazy_fetch_failed_until: Dict[str, float] = {}
+
+
+async def _lazy_fetch_vault_credential(config: dict, provider_name: str, key_label: str) -> Optional[dict]:
+    """
+    Attempt to lazy-fetch missing provider or key configuration from EdgeOne Vault in real-time.
+    Returns provider_config dict if successful, or None.
+    """
+    cache_key = f"{provider_name}:{key_label}"
+    now = time.time()
+    if now < _lazy_fetch_failed_until.get(cache_key, 0.0):
+        return None
+
+    v_cfg = config.get("edgeone_vault") or {}
+    vault_url = (
+        v_cfg.get("edgeone_url")
+        or v_cfg.get("url")
+        or os.environ.get("EDGEONE_VAULT_URL")
+        or ""
+    ).strip().rstrip("/")
+    token = (
+        v_cfg.get("token")
+        or os.environ.get("EDGEONE_VAULT_TOKEN")
+        or ""
+    ).strip()
+
+    if not vault_url:
+        return None
+
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
+            res = await client.post(
+                f"{vault_url}/api/vault/fetch",
+                headers=headers,
+                json={"provider": provider_name, "key_label": key_label}
+            )
+            if res.is_success:
+                data = res.json()
+                if data.get("ok"):
+                    prov_cfg = data.get("provider_config") or {}
+                    logger.info("Successfully lazy-fetched provider %s (key %s) from EdgeOne Vault", provider_name, key_label)
+                    return prov_cfg
+    except Exception as e:
+        logger.warning("Failed to lazy-fetch %s from EdgeOne Vault (%s): %s", cache_key, vault_url, e)
+
+    _lazy_fetch_failed_until[cache_key] = now + 30.0
+    return None
+
+
+async def _async_persist_lazy_provider(provider_name: str, prov_cfg: dict):
+    """
+    Asynchronously write lazy-fetched provider metadata and keys to local encrypted config.
+    """
+    try:
+        from .config_store import get_config, save_config
+        cfg = await get_config()
+        p_dict = cfg.setdefault("providers", {})
+        target = p_dict.setdefault(provider_name, {})
+        target["name"] = prov_cfg.get("name") or provider_name
+        proto = prov_cfg.get("protocol") or "openai"
+        target["protocol"] = proto
+        raw_protos = prov_cfg.get("protocols")
+        if not raw_protos or not isinstance(raw_protos, list):
+            raw_protos = ["messages"] if proto == "messages" else ["chat"]
+        target["protocols"] = raw_protos
+        target["anthropic_messages"] = bool(prov_cfg.get("anthropic_messages") or ("messages" in raw_protos))
+        if prov_cfg.get("base_url"):
+            target["base_url"] = prov_cfg["base_url"]
+        if prov_cfg.get("anthropic_base_url"):
+            target["anthropic_base_url"] = prov_cfg["anthropic_base_url"]
+        if prov_cfg.get("adapter_rules") is not None:
+            target["adapter_rules"] = prov_cfg["adapter_rules"]
+        if prov_cfg.get("models") or prov_cfg.get("cached_models"):
+            target["cached_models"] = prov_cfg.get("models") or prov_cfg.get("cached_models")
+
+        t_keys = target.setdefault("keys", {})
+        r_keys = prov_cfg.get("keys") or {}
+        for kl, kv in r_keys.items():
+            if kl and kv:
+                t_keys[kl] = kv
+
+        await save_config(cfg)
+        logger.info("Persisted lazy-fetched provider %s and keys to encrypted storage", provider_name)
+    except Exception as e:
+        logger.warning("Failed to persist lazy-fetched provider %s to disk: %s", provider_name, e)
+
+
 async def schedule(
     config: dict,
     model_type: str,
@@ -737,13 +829,37 @@ async def schedule(
                         "keys": {"public": "public"}
                     }
                 else:
-                    logger.warning(f"Provider {provider_name} not found in config")
-                    continue
+                    fetched_p = await _lazy_fetch_vault_credential(config, provider_name, key_label)
+                    if fetched_p:
+                        providers[provider_name] = {
+                            "name": fetched_p.get("name") or provider_name,
+                            "base_url": fetched_p.get("base_url", ""),
+                            "protocol": fetched_p.get("protocol", "openai"),
+                            "protocols": fetched_p.get("protocols", ["chat"]),
+                            "anthropic_messages": bool(fetched_p.get("anthropic_messages")),
+                            "anthropic_base_url": fetched_p.get("anthropic_base_url"),
+                            "adapter_rules": fetched_p.get("adapter_rules") or {},
+                            "keys": dict(fetched_p.get("keys") or {})
+                        }
+                        provider = providers[provider_name]
+                        asyncio.create_task(_async_persist_lazy_provider(provider_name, fetched_p))
+                    else:
+                        logger.warning(f"Provider {provider_name} not found in config")
+                        continue
 
             api_key_raw = provider.get("keys", {}).get(key_label)
             if not api_key_raw and provider_name in ("opencode-free", "opencode_free"):
                 # 优先从 opencode 提供商获取共享 Key
                 api_key_raw = providers.get("opencode", {}).get("keys", {}).get(key_label)
+            if not api_key_raw and not (provider_name in ("opencode-free", "opencode_free") or key_label in ("public", "__public__")):
+                fetched_p = await _lazy_fetch_vault_credential(config, provider_name, key_label)
+                if fetched_p:
+                    r_keys = fetched_p.get("keys") or {}
+                    if key_label in r_keys and r_keys[key_label]:
+                        provider.setdefault("keys", {})[key_label] = r_keys[key_label]
+                        api_key_raw = r_keys[key_label]
+                        asyncio.create_task(_async_persist_lazy_provider(provider_name, fetched_p))
+
             if not api_key_raw:
                 if provider_name in ("opencode-free", "opencode_free") or key_label in ("public", "__public__"):
                     api_key_raw = "public"

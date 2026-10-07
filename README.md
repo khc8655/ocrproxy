@@ -68,7 +68,10 @@ ocrprox (Monorepo)
   - 中枢 401（Token 与 EdgeOne PROXY_API_KEY 不匹配）、502（网络不可达）、504（请求超时）均向 Web 端输出透明友好的排查指引，杜绝任何静默吞错。
 - **按需无感拉取与云端绝对权威覆盖 (Cloud Authority & Local Key Sovereignty)**：
   - **云端作为绝对真理源**：当从 EdgeOne Vault Hub 拉取凭据或执行同步时，云端配置无条件覆盖本地同名供应商的协议 (`protocol`/`protocols`)、思考开关 (`anthropic_messages`)、端点 (`base_url`/`anthropic_base_url`) 及适配规则 (`adapter_rules`)，彻底根治协议识别冲突；
-  - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁。
+  - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁；
+- **免代码发版·中枢全量穿透写入与运行时自愈机制 (Data-Driven Zero-Release Sync)**：
+  - **全量免发版穿透写入 (`POST /api/admin/vault/sync`)**：无论是标准 OpenAI 还是自定义提供商，无需编写任何适配预设文件（`presets/*.json`）或提交 GitHub 发版，一键将中枢上所有新增提供商、端点与 Key 字典全量落库写入 VM 本地加密存储 (`proxy_config.enc`)；
+  - **运行时动态自愈 (Lazy Vault Fallback)**：在调度候选节点执行上游请求时，若本地尚未配置该厂商或缺少对应 Key，调度器自动向 EdgeOne 中枢热拉取补全，并在后台异步加密持久化，确保请求零感知平滑通过。
 
 ---
 

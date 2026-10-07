@@ -188,9 +188,6 @@
               <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               <span>保存设置并生效</span>
             </button>
-            <button class="btn btn-success btn-sm" onclick="saveSettingsAndVerify()" style="display:flex;align-items:center;gap:6px;font-weight:600;">
-              <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 保存并实测验证
-            </button>
           </div>
         </div>
 
@@ -436,6 +433,14 @@
           <div id="vault_diag_box" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
         </div>
 
+        <!-- Settings Bottom Sticky Action Bar -->
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
+          <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">
+            <svg class="khc-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>保存设置并生效</span>
+          </button>
+        </div>
 
       </div>
     </div>
@@ -590,6 +595,7 @@
           </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
+        <div id="a_selectedBindingsSummary" style="margin-top:8px;display:none;"></div>
       </div>
 
       <!-- Step 3: 模型快捷标签与探测 -->

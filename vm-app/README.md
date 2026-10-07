@@ -278,6 +278,13 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 - **embedding / rerank 独立超时**：`upstream_timeout_embedding`（默认 60s）、`upstream_timeout_rerank`（默认 30s），并按候选数扩展预算 —— 修复了此前沿用全局 12s 超时导致一次超时就耗尽 15s 预算、其余 Key 永远轮不到的问题。
 - **配置热更新即时生效**：管理面板修改 `max_concurrency_per_key` 或增删 Key 后立即生效（无需重启）；配置变化时自动清理已删除 Key 的冷却/熔断/延迟状态。`POST /v1/reload` 会额外清空全部运行时状态。
 
+### EdgeOne 凭据中枢穿透写入与运行时自愈机制
+
+OCRProxy 实现了免代码发版、即配即用的资产中枢联动能力：
+- **标准协议零适配器**：所有遵循标准 OpenAI Chat Completions 或 Anthropic Messages 协议的模型提供商，无需编写任何适配预设文件（`presets/*.json`），原生享受零反序列化 Fast-Path 透传。
+- **中枢全量穿透同步 (`POST /api/admin/vault/sync`)**：一键将 EdgeOne 中枢上新增的所有模型提供商（包含 Base URL、协议、适配规则、全部 API Keys）全量落库写入 VM 本地加密存储（`proxy_config.enc`），彻底免除修改代码与发版流程。
+- **运行时动态自愈 (Lazy Vault Fallback)**：在调度候选节点执行上游请求时，若发现本地尚未配置该厂商或缺少对应 Key，调度器自动向 EdgeOne 中枢热拉取凭据补全，并在后台异步加密持久化，确保请求零感知平滑通过。
+
 ### 内存管理机制
 
 本服务针对 2 核 / 1.6 GB 低配 VM 优化，采用多层内存安全策略：
