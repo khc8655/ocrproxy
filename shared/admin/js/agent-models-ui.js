@@ -1110,7 +1110,7 @@
     const { cfg, stats: fullStats } = getCtx();
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
-    const activeKey = runtimeActiveKey || cfg.agent_models?.[modelName]?.active_key || (list[0] ? list[0].key : '');
+    const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
     const isActive = (binding.key === activeKey);
 
     const setActiveBtn = isActive

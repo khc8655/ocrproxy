@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.07-01",
+  "version": "v2026.10.07-02",
   "release_date": "2026-10-07",
   "commit": "HEAD",
-  "title": "OpenCode 双轨供应商体系：标准纯透传与 Free 专区特调门禁解除",
+  "title": "Agent 探活主力 Key 隔离与全链路探活行为正交化",
   "changelog": [
-    "双轨供应商分离：全面拆分为 opencode (标准纯净透传) 与 opencode-free (免费专区特调)，职责严格正交",
-    "OpenCode Zen 免费模型门禁全自动解除：自动注入规范 session_id (12 hex + 14 base62) 与 CLI 客户端特征头，补全 bash/read 智能体桩工具，流式自适应透传",
-    "共享 Key 与免 Key 匿名兜底：opencode-free 自动共享 opencode 凭据库，且支持 Bearer public 匿名兜底；当个人 Key 遭遇 403/429 时全自动无缝回退兜底",
-    "UI 交互极简体验：新增模型弹窗支持 opencode-free 专属模型推荐胶囊池，点击即填；支持免 Key 一键挂载免费模型"
+    "探活行为彻底隔离：后台单个 Key「测」与模型「探活全部」仅更新节点延迟与健康徽章，严格禁止修改主力 Key (active_keys)",
+    "探活指标防污染：手动探活不再计入生产业务请求量与成功率统计，保持真实指标客观纯净",
+    "KB 模式无缝审计：确认 KB 知识库模式为平权并发池架构，无主力 Key 概念，天然免疫此类问题",
+    "配置权威对齐：调度器在配置重载及初始化时强对齐用户显式配置的主力 Key"
   ]
 }

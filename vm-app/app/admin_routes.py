@@ -1064,16 +1064,16 @@ async def test_candidate_endpoint(request: Request):
 
             if 200 <= resp.status_code < 300:
                 if category == "agent":
-                    stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label)
+                    stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, is_probe=True, set_active=False)
                 else:
-                    stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model)
+                    stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model, is_probe=True)
                 return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
             if category == "agent":
-                stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}")
+                stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}", is_probe=True, set_active=False)
             else:
-                stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model, error_msg=f"Manual test failed: {err_text}")
+                stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model, error_msg=f"Manual test failed: {err_text}", is_probe=True)
             return JSONResponse(content={
                 "success": False,
                 "status": resp.status_code,
@@ -1082,16 +1082,16 @@ async def test_candidate_endpoint(request: Request):
             })
     except httpx.ReadTimeout:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test timeout (30s)")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test timeout (30s)", is_probe=True, set_active=False)
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test connect error")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test connect error", is_probe=True, set_active=False)
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
         lat_sec = time.time() - start_t
-        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg=f"Manual test error: {str(e)}")
+        stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg=f"Manual test error: {str(e)}", is_probe=True, set_active=False)
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={"success": False, "error": "测试失败"})
 
@@ -1168,11 +1168,13 @@ async def test_agent_model_endpoint(request: Request):
             ok = 200 <= resp.status_code < 300
             if ok:
                 stats.record_agent(name, resp.status_code, lat_sec,
-                                   provider=b.get("provider"), key=b.get("key"))
+                                   provider=b.get("provider"), key=b.get("key"),
+                                   is_probe=True, set_active=False)
             else:
                 stats.record_agent(name, resp.status_code, lat_sec,
                                    provider=b.get("provider"), key=b.get("key"),
-                                   error_msg=f"Probe failed: HTTP {resp.status_code}")
+                                   error_msg=f"Probe failed: HTTP {resp.status_code}",
+                                   is_probe=True, set_active=False)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": ok,
                     "status": resp.status_code, "latency_ms": latency_ms,
                     "error": None if ok else resp.text[:200]}
@@ -1180,7 +1182,8 @@ async def test_agent_model_endpoint(request: Request):
             lat_sec = time.time() - start
             stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
-                               error_msg="Probe timeout (20s)")
+                               error_msg="Probe timeout (20s)",
+                               is_probe=True, set_active=False)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
                     "error": "上游超时 (20s)"}
@@ -1188,7 +1191,8 @@ async def test_agent_model_endpoint(request: Request):
             lat_sec = time.time() - start
             stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
-                               error_msg="Probe connect error")
+                               error_msg="Probe connect error",
+                               is_probe=True, set_active=False)
             logger.warning("Probe connect error: %s", e)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),
@@ -1197,7 +1201,8 @@ async def test_agent_model_endpoint(request: Request):
             lat_sec = time.time() - start
             stats.record_agent(name, 500, lat_sec,
                                provider=b.get("provider"), key=b.get("key"),
-                               error_msg=f"Probe error: {str(e)}")
+                               error_msg=f"Probe error: {str(e)}",
+                               is_probe=True, set_active=False)
             logger.error("Probe unexpected error: %s", e, exc_info=True)
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": int((time.time() - start) * 1000),

@@ -461,6 +461,11 @@ def _prune_runtime_state(config: dict):
     for m in list(_sticky_agent_active_keys.keys()):
         if m not in valid_agent_models:
             del _sticky_agent_active_keys[m]
+    for m, m_cfg in (config.get("agent_models") or {}).items():
+        if isinstance(m_cfg, dict) and m_cfg.get("active_key"):
+            cfg_ak = m_cfg["active_key"]
+            _sticky_agent_active_keys[m] = cfg_ak
+            stats.set_agent_active_key(m, cfg_ak)
     _last_config_version = get_config_version()
 
 

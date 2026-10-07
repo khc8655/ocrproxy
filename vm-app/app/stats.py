@@ -118,58 +118,80 @@ def record_agent(
     key: Optional[str] = None,
     is_fallback: bool = False,
     error_msg: Optional[str] = None,
-    is_quota: bool = False
+    is_quota: bool = False,
+    set_active: bool = True,
+    is_probe: bool = False
 ):
     """Record an Agent request result."""
     with _lock:
         code = int(status_code)
         lat = float(latency) or 0.0
 
-        # 1. Update Agent Global Total
-        ag = _stats["agent"]
-        ag["count"] += 1
-        if is_fallback:
-            ag["fallback_count"] += 1
+        # 1. Update Agent Global Total (only for real traffic, not manual probe)
+        if not is_probe:
+            ag = _stats["agent"]
+            ag["count"] += 1
+            if is_fallback:
+                ag["fallback_count"] += 1
 
-        if code == 200:
-            ag["success"] += 1
-        elif code == 429:
-            ag["429"] += 1
-        elif code == 403:
-            ag["403"] += 1
-        elif 400 <= code < 500:
-            ag["4xx"] += 1
-        else:
-            ag["5xx"] += 1
+            if code == 200:
+                ag["success"] += 1
+            elif code == 429:
+                ag["429"] += 1
+            elif code == 403:
+                ag["403"] += 1
+            elif 400 <= code < 500:
+                ag["4xx"] += 1
+            else:
+                ag["5xx"] += 1
 
-        # 2. Update Specific Model Metric
-        if model_name not in ag["models"]:
-            ag["models"][model_name] = _empty_agent_model_stats()
+            # 2. Update Specific Model Metric
+            if model_name not in ag["models"]:
+                ag["models"][model_name] = _empty_agent_model_stats()
 
-        m_stats = ag["models"][model_name]
-        m_stats["count"] += 1
-        if is_fallback:
-            m_stats["fallback_count"] += 1
+            m_stats = ag["models"][model_name]
+            m_stats["count"] += 1
+            if is_fallback:
+                m_stats["fallback_count"] += 1
 
-        if code == 200:
-            m_stats["success"] += 1
-            if key:
-                if "active_keys" not in ag:
-                    ag["active_keys"] = {}
-                ag["active_keys"][model_name] = key
-        elif code == 429:
-            m_stats["429"] += 1
-        elif code == 403:
-            m_stats["403"] += 1
-        elif 400 <= code < 500:
-            m_stats["4xx"] += 1
-        else:
-            m_stats["5xx"] += 1
+            if code == 200:
+                m_stats["success"] += 1
+                if key and set_active:
+                    if "active_keys" not in ag:
+                        ag["active_keys"] = {}
+                    ag["active_keys"][model_name] = key
+            elif code == 429:
+                m_stats["429"] += 1
+            elif code == 403:
+                m_stats["403"] += 1
+            elif 400 <= code < 500:
+                m_stats["4xx"] += 1
+            else:
+                m_stats["5xx"] += 1
+
+            now_ms = int(time.time() * 1000)
+            if code != 200 and error_msg:
+                m_stats["last_error"] = error_msg
+                m_stats["last_error_time"] = now_ms
+
+                _stats["error_logs"].insert(0, {
+                    "timestamp": now_ms,
+                    "category": "agent",
+                    "type": "agent",
+                    "model_name": model_name,
+                    "provider": provider or "unknown",
+                    "key": key or "unknown",
+                    "status": code,
+                    "error": error_msg
+                })
+                if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
+                    _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
 
         now_ms = int(time.time() * 1000)
         lat_ms = int(round(lat * 1000)) if lat > 0 else 0
 
         # 3. Update Candidate Node Status (Isolated for Agent)
+        # Always update candidate status whether probe or real traffic
         if provider and key:
             node_key = f"agent:{model_name}:{provider}:{key}"
             _stats["candidates_status"][node_key] = {
@@ -190,24 +212,6 @@ def record_agent(
                 "is_quota": is_quota
             }
 
-        # 4. Error Logs with Agent Category
-        if code != 200 and error_msg:
-            m_stats["last_error"] = error_msg
-            m_stats["last_error_time"] = now_ms
-
-            _stats["error_logs"].insert(0, {
-                "timestamp": now_ms,
-                "category": "agent",
-                "type": "agent",
-                "model_name": model_name,
-                "provider": provider or "unknown",
-                "key": key or "unknown",
-                "status": code,
-                "error": error_msg
-            })
-            if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
-                _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
-
 
 def record_kb(
     kb_type: str,
@@ -218,38 +222,67 @@ def record_kb(
     model: Optional[str] = None,
     is_fallback: bool = False,
     error_msg: Optional[str] = None,
-    is_quota: bool = False
+    is_quota: bool = False,
+    is_probe: bool = False
 ):
     """Record a KB Ingestion request result."""
     with _lock:
         code = int(status_code)
         lat = float(latency) or 0.0
 
-        if kb_type not in _stats["kb"]:
-            _stats["kb"][kb_type] = _empty_metric_stats()
+        if not is_probe:
+            if kb_type not in _stats["kb"]:
+                _stats["kb"][kb_type] = _empty_metric_stats()
 
-        t_stats = _stats["kb"][kb_type]
-        t_stats["count"] += 1
-        if is_fallback:
-            t_stats["fallback_count"] += 1
+            t_stats = _stats["kb"][kb_type]
+            t_stats["count"] += 1
+            if is_fallback:
+                t_stats["fallback_count"] += 1
 
-        if code == 200:
-            t_stats["success"] += 1
-        elif code == 429:
-            t_stats["429"] += 1
-        elif code == 403:
-            t_stats["403"] += 1
-        elif 400 <= code < 500:
-            t_stats["4xx"] += 1
-        else:
-            t_stats["5xx"] += 1
+            if code == 200:
+                t_stats["success"] += 1
+            elif code == 429:
+                t_stats["429"] += 1
+            elif code == 403:
+                t_stats["403"] += 1
+            elif 400 <= code < 500:
+                t_stats["4xx"] += 1
+            else:
+                t_stats["5xx"] += 1
+
+            # Update legacy top-level dict for backwards compatibility
+            if kb_type in _stats:
+                _stats[kb_type] = dict(t_stats)
+
+            now_ms = int(time.time() * 1000)
+            if code != 200 and error_msg:
+                if _stats["error_logs"]:
+                    last_log = _stats["error_logs"][0]
+                    if (last_log.get("provider") == provider and
+                        last_log.get("key") == key and
+                        last_log.get("status") == code and
+                        last_log.get("model_name") == (model or kb_type) and
+                        (now_ms - last_log.get("timestamp", 0) < 60000)):
+                        last_log["repeat_count"] = last_log.get("repeat_count", 1) + 1
+                        last_log["timestamp"] = now_ms
+                        return
+
+                _stats["error_logs"].insert(0, {
+                    "timestamp": now_ms,
+                    "category": "kb",
+                    "type": kb_type,
+                    "model_name": model or kb_type,
+                    "provider": provider or "unknown",
+                    "key": key or "unknown",
+                    "status": code,
+                    "error": error_msg[:300],  # Bound error text length
+                    "repeat_count": 1
+                })
+                if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
+                    _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
 
         now_ms = int(time.time() * 1000)
         lat_ms = int(round(lat * 1000)) if lat > 0 else 0
-
-        # Update legacy top-level dict for backwards compatibility
-        if kb_type in _stats:
-            _stats[kb_type] = dict(t_stats)
 
         # Update Candidate Node Status (Isolated for KB with model dimension)
         if provider and key:
@@ -268,33 +301,6 @@ def record_kb(
             _stats["candidates_status"][f"kb:{kb_type}:{provider}:{key}"] = status_entry
             _stats["candidates_status"][f"{provider}:{key}:{kb_type}"] = status_entry
 
-        # Error Logs with KB Category (Deduplicate consecutive identical errors during ingestion to control log size)
-        if code != 200 and error_msg:
-            if _stats["error_logs"]:
-                last_log = _stats["error_logs"][0]
-                if (last_log.get("provider") == provider and
-                    last_log.get("key") == key and
-                    last_log.get("status") == code and
-                    last_log.get("model_name") == (model or kb_type) and
-                    (now_ms - last_log.get("timestamp", 0) < 60000)):
-                    last_log["repeat_count"] = last_log.get("repeat_count", 1) + 1
-                    last_log["timestamp"] = now_ms
-                    return
-
-            _stats["error_logs"].insert(0, {
-                "timestamp": now_ms,
-                "category": "kb",
-                "type": kb_type,
-                "model_name": model or kb_type,
-                "provider": provider or "unknown",
-                "key": key or "unknown",
-                "status": code,
-                "error": error_msg[:300],  # Bound error text length
-                "repeat_count": 1
-            })
-            if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
-                _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
-
 
 def record(
     type_name: str,
@@ -307,7 +313,9 @@ def record(
     request_model: Optional[str] = None,
     is_fallback: bool = False,
     cand_model: Optional[str] = None,
-    is_quota: bool = False
+    is_quota: bool = False,
+    is_probe: bool = False,
+    set_active: bool = True
 ):
     """Unified record router for legacy & direct calls."""
     if category == "agent" or (type_name not in ("chat", "embedding", "reranker", "ocr") and type_name != "kb"):
@@ -320,7 +328,9 @@ def record(
             key=key,
             is_fallback=is_fallback,
             error_msg=error_msg,
-            is_quota=is_quota
+            is_quota=is_quota,
+            set_active=set_active,
+            is_probe=is_probe
         )
     else:
         kb_type = type_name if type_name in ("chat", "embedding", "reranker", "ocr") else "chat"
@@ -333,7 +343,8 @@ def record(
             model=cand_model or request_model,
             is_fallback=is_fallback,
             error_msg=error_msg,
-            is_quota=is_quota
+            is_quota=is_quota,
+            is_probe=is_probe
         )
 
 
