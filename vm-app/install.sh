@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.07-02"
+SCRIPT_VERSION="v2026.10.07-03"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -283,9 +283,9 @@ setup_cli_and_sudoers() {
             expected_rule="${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /usr/bin/systemctl status ${SERVICE_NAME}, /usr/bin/systemctl stop ${SERVICE_NAME}, /usr/bin/systemctl start ${SERVICE_NAME}, /usr/bin/systemctl reload ${SERVICE_NAME}, /usr/bin/systemctl daemon-reload, /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl stop ${SERVICE_NAME}, /bin/systemctl start ${SERVICE_NAME}, /bin/systemctl reload ${SERVICE_NAME}, /bin/systemctl daemon-reload
 "
         fi
-        # 允许服务专属运行账户 ocrproxy 免密执行重启与升级 (使 Web 管理后台一键平滑升级与重启生效)
-        expected_rule="${expected_rule}${SERVICE_NAME} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}, /usr/local/bin/ocrproxy upgrade, /usr/local/bin/ocrproxy restart"
-        if [[ ! -f "$sudoers_file" ]] || ! grep -q "${SERVICE_NAME}" "$sudoers_file" 2>/dev/null; then
+        # 允许服务专属运行账户 ocrproxy 免密执行重启与升级 (包含 systemd-run 逃逸沙箱执行平滑升级)
+        expected_rule="${expected_rule}${SERVICE_NAME} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}, /usr/local/bin/ocrproxy upgrade, /usr/local/bin/ocrproxy restart, /usr/bin/systemd-run, /bin/systemd-run"
+        if [[ ! -f "$sudoers_file" ]] || ! grep -q "systemd-run" "$sudoers_file" 2>/dev/null; then
             info "配置免密服务运维白名单 (/etc/sudoers.d/ocrproxy)..."
             echo "$expected_rule" | run_sudo tee "$sudoers_file" >/dev/null 2>&1 || true
             run_sudo chmod 440 "$sudoers_file" 2>/dev/null || true
@@ -523,6 +523,11 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     if grep -q "NoNewPrivileges=true" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
         info "调整服务沙箱安全属性 (启用子进程 sudo 白名单免密支持)..."
         run_sudo sed -i 's/NoNewPrivileges=true/NoNewPrivileges=false/' "/etc/systemd/system/${SERVICE_NAME}.service"
+        need_reload=true
+    fi
+    if grep -q "ReadWritePaths=${INSTALL_DIR}/config" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
+        info "放宽服务目录沙箱读写路径至整个安装目录..."
+        run_sudo sed -i "s|ReadWritePaths=${INSTALL_DIR}/config|ReadWritePaths=${INSTALL_DIR}|" "/etc/systemd/system/${SERVICE_NAME}.service"
         need_reload=true
     fi
     if systemd-detect-virt --container >/dev/null 2>&1; then

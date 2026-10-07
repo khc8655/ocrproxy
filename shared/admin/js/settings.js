@@ -237,7 +237,7 @@ async function checkSystemUpdate(manual=true){
               <span class="badge badge-warning" style="font-weight:700;">🚀 发现新程序版本: ${esc(data.latest_version)}</span>
               <span style="font-size:12px;color:var(--text-secondary);margin-left:8px;">当前运行版本: ${esc(data.current_version)} (发布日期: ${esc(data.release_date)})</span>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="upgradeSystem()" style="font-weight:600;">一键在线平滑升级</button>
+            <button class="btn btn-primary btn-sm" onclick="upgradeSystem('${esc(data.latest_version)}', '${esc(data.current_version)}')" style="font-weight:600;">一键在线平滑升级</button>
           </div>
           ${data.title ? `<div style="font-weight:600;margin-top:8px;font-size:13px;color:var(--text);">${esc(data.title)}</div>` : ''}
           ${Array.isArray(data.changelog) && data.changelog.length ? `
@@ -273,9 +273,11 @@ async function checkSystemUpdate(manual=true){
   }
 }
 
-async function upgradeSystem(){
+async function upgradeSystem(targetVer, currVer){
   if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在后台自动完成重载生效')) return;
   
+  const oldVer = currVer || document.getElementById('topVersionBadge')?.textContent?.trim() || '';
+
   const infoBox = document.getElementById('appUpdateInfoBox');
   if (infoBox) {
     infoBox.innerHTML = `
@@ -283,7 +285,7 @@ async function upgradeSystem(){
         <div style="font-weight:600;color:var(--primary);font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
           <span class="spinner"></span> 正在下载最新制品并就地平滑升级...
         </div>
-        <div id="upgradeStatusText" style="font-size:12px;color:var(--text-secondary);margin-top:6px;">正在连接 GitHub 拉取更新，服务重载期间会自动重新连接，请稍候...</div>
+        <div id="upgradeStatusText" style="font-size:12px;color:var(--text-secondary);margin-top:6px;">正在拉取更新制品并派发独立守护单元，请稍候...</div>
       </div>
     `;
   }
@@ -297,44 +299,44 @@ async function upgradeSystem(){
     const res = await r.json();
     toast(res.message || '程序升级已在后台执行，正在平滑更新...', 'ok');
 
-    // 简单轻量的服务探活：直接轮询 /health 接口直至服务恢复
     const statusTextEl = document.getElementById('upgradeStatusText');
-    if (statusTextEl) statusTextEl.textContent = '正在等待服务完成重启，已自动开启连通性探测...';
+    if (statusTextEl) statusTextEl.textContent = '升级任务已启动，正在持续校验新版本就绪状态...';
 
-    // 先等待 2 秒让后台任务拉起升级
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // 等待 2.5 秒让后台 systemd-run 单元拉起下载与部署
+    await new Promise(resolve => setTimeout(resolve, 2500));
 
     let attempts = 0;
-    const maxAttempts = 30; // 最多探测 45 秒 (每 1.5 秒一次)
+    const maxAttempts = 35; // 最多探测 50 秒 (每 1.5 秒一次)
     const checkTimer = setInterval(async () => {
       attempts++;
       try {
-        const hr = await fetch('/health', { cache: 'no-store' });
-        if (hr.ok) {
+        const verRes = await fetch('/api/admin/system/version', { headers: headers(), cache: 'no-store' }).then(res => res.json()).catch(() => null);
+        const runningVer = verRes?.current_version || '';
+
+        // 核心判定规则：只有检测到运行态版本确实发生跳变（与旧版本不同，或匹配目标版本），才断定升级成功！
+        if (runningVer && (runningVer !== oldVer || (targetVer && runningVer === targetVer))) {
           clearInterval(checkTimer);
-          // 获取最新版本信息并更新界面
-          const verRes = await fetch('/api/admin/system/version', { headers: headers() }).then(res => res.json()).catch(() => null);
-          const newVer = verRes?.current_version || '';
           const badge = document.getElementById('topVersionBadge');
-          if (badge && newVer) badge.textContent = newVer;
+          if (badge) badge.textContent = runningVer;
 
           if (infoBox) {
             infoBox.innerHTML = `
               <div style="background:var(--bg-subtle);border:1px solid var(--success);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
-                <div style="font-weight:600;color:var(--success);font-size:14px;">🎉 系统在线升级成功！</div>
-                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前运行版本已刷新为: <strong style="color:var(--primary);">${esc(newVer)}</strong></div>
+                <div style="font-weight:600;color:var(--success);font-size:14px;">🎉 系统在线平滑升级成功！</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前运行版本已刷新为: <strong style="color:var(--primary);">${esc(runningVer)}</strong></div>
               </div>
             `;
           }
-          toast('🎉 系统已成功平滑升级至最新版本！', 'ok');
+          toast('🎉 系统已成功平滑升级至 ' + runningVer + '！', 'ok');
+          setTimeout(() => location.reload(), 1500);
           return;
         }
       } catch (_) {
-        // 重启中，网络暂时不可达属于正常现象
+        // 重启切换瞬间，网络暂时不可达属于正常现象
       }
 
       if (statusTextEl) {
-        statusTextEl.textContent = `服务正在应用更新并重载 (${attempts}/${maxAttempts})，请稍候...`;
+        statusTextEl.textContent = `服务正在应用更新与平滑重载 (${attempts}/${maxAttempts})，请稍候...`;
       }
 
       if (attempts >= maxAttempts) {
@@ -342,12 +344,12 @@ async function upgradeSystem(){
         if (infoBox) {
           infoBox.innerHTML = `
             <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
-              <div style="font-weight:600;color:var(--warning);font-size:14px;">⚠️ 升级任务已提交，探测连接超时</div>
-              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">服务可能在安装依赖或重新拉起中，您可手动刷新页面或在终端执行 <code>ocrproxy status</code> 查看。</div>
-              <button class="btn btn-secondary btn-sm" onclick="location.reload()" style="margin-top:8px;">刷新页面</button>
+              <div style="font-weight:600;color:var(--warning);font-size:14px;">⚠️ 升级探测超时，当前版本未变</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">版本仍为 ${esc(oldVer)}。可能权限受限或下载超时，建议在服务器执行 <code>ocrproxy upgrade</code> 或检查 journalctl 日志。</div>
             </div>
           `;
         }
+        toast('升级超时，当前版本未发生变更', 'err');
       }
     }, 1500);
 

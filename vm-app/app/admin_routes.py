@@ -1362,8 +1362,9 @@ async def upgrade_system_endpoint(request: Request):
     async def _do_upgrade():
         await asyncio.sleep(0.5)
         success = False
-        # 1. 尝试调用全局注册的 ocrproxy upgrade (带 sudo 保护)
+        # 1. 尝试调用 systemd-run 逃逸当前沙箱独立执行升级，若不可用则回退本地执行
         for cmd in [
+            ["sudo", "-n", "systemd-run", "--unit=ocrproxy-ota-upgrade", "/usr/local/bin/ocrproxy", "upgrade"],
             ["sudo", "-n", "/usr/local/bin/ocrproxy", "upgrade"],
             ["/usr/local/bin/ocrproxy", "upgrade"],
             ["sudo", "-n", "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
