@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.07-03"
+SCRIPT_VERSION="v2026.10.07-04"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -532,14 +532,10 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
         run_sudo sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
         need_reload=true
     fi
-    if grep -q "NoNewPrivileges=true" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
-        info "调整服务沙箱安全属性 (启用子进程 sudo 白名单免密支持)..."
-        run_sudo sed -i 's/NoNewPrivileges=true/NoNewPrivileges=false/' "/etc/systemd/system/${SERVICE_NAME}.service"
-        need_reload=true
-    fi
-    if grep -q "ReadWritePaths=${INSTALL_DIR}/config" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
-        info "放宽服务目录沙箱读写路径至整个安装目录..."
-        run_sudo sed -i "s|ReadWritePaths=${INSTALL_DIR}/config|ReadWritePaths=${INSTALL_DIR}|" "/etc/systemd/system/${SERVICE_NAME}.service"
+    # 彻底清除所有可能强制开启 NoNewPrivs 标志的 systemd 指令，确保非 root 运行账户能够正常通过 sudo 执行免密运维与 OTA 平滑升级
+    if grep -qE "Protect(System|Home|Kernel|Control)|Restrict|LockPersonality|NoNewPrivileges" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
+        info "清理导致 NoNewPrivs 冲突的 systemd 沙箱隔离指令..."
+        run_sudo sed -i -E '/(ProtectSystem|ProtectHome|ProtectKernel|ProtectControl|RestrictAddressFamilies|RestrictNamespaces|RestrictRealtime|RestrictSUIDSGID|LockPersonality|NoNewPrivileges|ReadWritePaths)/d' "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null || true
         need_reload=true
     fi
     if systemd-detect-virt --container >/dev/null 2>&1; then
@@ -814,19 +810,9 @@ fi
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
 
 # 容器与沙箱环境自适应 (允许以非特权用户运行的服务通过 sudo 白名单调用管理命令)
-SANDBOX_OPTS="NoNewPrivileges=false
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictNamespaces=true
-LockPersonality=true
-RestrictRealtime=true
-RestrictSUIDSGID=true"
+# 注意：严禁配置 ProtectSystem=strict, Restrict* 等指令，因为 systemd 会对非 root 用户服务强制施加 PR_SET_NO_NEW_PRIVS，
+# 导致服务子进程无法执行 sudo 提权进而阻断 Web OTA 在线平滑升级！此处仅保留安全的 PrivateTmp 即可。
+SANDBOX_OPTS="PrivateTmp=true"
 
 if systemd-detect-virt --container >/dev/null 2>&1; then
     SANDBOX_OPTS="# 容器环境自适应 (LXC/Docker/WSL 跳过命名空间沙箱以规避 226/NAMESPACE)"

@@ -1364,6 +1364,7 @@ async def upgrade_system_endpoint(request: Request):
         success = False
         # 1. 尝试调用 systemd-run 逃逸当前沙箱独立执行升级，若不可用则回退本地执行
         for cmd in [
+            ["sudo", "-n", "/usr/bin/systemd-run", "--unit=ocrproxy-ota-upgrade", "/usr/local/bin/ocrproxy", "upgrade"],
             ["sudo", "-n", "systemd-run", "--unit=ocrproxy-ota-upgrade", "/usr/local/bin/ocrproxy", "upgrade"],
             ["sudo", "-n", "/usr/local/bin/ocrproxy", "upgrade"],
             ["/usr/local/bin/ocrproxy", "upgrade"],

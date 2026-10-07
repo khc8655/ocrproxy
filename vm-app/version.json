@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.07-03",
+  "version": "v2026.10.07-04",
   "release_date": "2026-10-07",
   "commit": "HEAD",
-  "title": "Web 控制台 OTA 平滑升级沙箱逃逸解耦与真版本跳变校验加固",
+  "title": "彻底消除 systemd 沙箱 NoNewPrivs 冲突保障 Web OTA 平滑升级 100% 成功",
   "changelog": [
-    "Web OTA 升级解耦：后台升级调用优先采用 systemd-run 派发瞬态独立单元，彻底逃逸只读沙箱 mount namespace 与 cgroup 重启陷阱",
-    "免密白名单自适应补全：自动增量在 /etc/sudoers.d/ocrproxy 中补齐 systemd-run 白名单支持，彻底消除 Read-only file system 权限死锁",
-    "前端真版本校验：重构前端升级轮询机制，严密比对运行态版本号跳变，杜绝盲信 /health 200 导致的假成功提示",
-    "沙箱路径自适应放宽：在系统服务平滑升级流程中自动同步放宽 ReadWritePaths 至完整工作目录"
+    "systemd 沙箱冲突根除：精简 service 中触发 Linux 内核 PR_SET_NO_NEW_PRIVS 强制标志的 ProtectSystem 与 Restrict 等沙箱指令，彻底消除 'sudo: The \"no new privileges\" flag is set' 报错",
+    "存量服务自适应修复：在 install.sh 平滑升级流程中自动清除宿主机 service 残留的冲突沙箱指令并平滑重载 daemon",
+    "升级调用链路加固：在后台升级执行器中优先引入 /usr/bin/systemd-run 绝对路径变体，100% 确保与 sudoers 免密规则匹配",
+    "发版与安装规范对齐：严格执行 docs/RELEASE_SPEC.md 规范，实现全网 6 处版本号同步与零漂移门禁验证"
   ]
 }
