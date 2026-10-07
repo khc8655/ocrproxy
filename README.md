@@ -240,6 +240,20 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 | **`ocrproxy restart`** | 优雅平滑重启服务 | **免密重启**（已配置极窄 sudoers 白名单） |
 | **`ocrproxy uninstall`** | 安全卸载服务（支持交互确认并归档备份配置） | 支持 `--keep-config` 保留密钥数据 |
 
+#### 常用运维指令速查表 (Cheat Sheet)
+> 完整运维手册、Caddy/Nginx 配置与常见排错指南请参阅 👉 [《OCRProxy 常用运维指令与管理手册》](docs/OPERATIONS_GUIDE.md)。
+
+| 运维场景 | 一行执行指令 | 场景说明 |
+| :--- | :--- | :--- |
+| **切换为反代模式** | `sudo sed -i 's/^APP_HOST=.*/APP_HOST=127.0.0.1/' /opt/ocrproxy/.env && ocrproxy restart` | 仅监听 127.0.0.1，阻断外网裸连，配合 Caddy/Nginx |
+| **切换为直通模式** | `sudo sed -i 's/^APP_HOST=.*/APP_HOST=::/' /opt/ocrproxy/.env && ocrproxy restart` | 恢复公网 IPv4/IPv6 全网直通，支持 IP 直接访问 |
+| **一键平滑升级** | `ocrproxy upgrade` | 1 秒从 GitHub 就地拉取更新，配置密钥 100% 保留 |
+| **查看当前密码** | `grep ADMIN_PASSWORD /opt/ocrproxy/.env` | 快速查看 Web 管理控制台登录密码 |
+| **查看接入 Key** | `grep PROXY_API_KEY /opt/ocrproxy/.env` | 快速提取客户端 OpenAI 调用密钥 |
+| **修改监听端口** | `sudo sed -i 's/^APP_PORT=.*/APP_PORT=9090/' /opt/ocrproxy/.env && ocrproxy restart` | 将服务端口调整为 9090 (可自定义) |
+| **查看实时日志** | `ocrproxy log` | 实时跟踪服务请求与排错 (按 Ctrl+C 退出) |
+| **服务状态与健康** | `ocrproxy status` | 检查进程存活、内存占用及监听端口 |
+
 #### Web 管理端在线检测与 OTA 一键升级 (Web OTA Upgrade)
 除了命令行 `ocrproxy upgrade` 外，VM 管理后台（「⚙️ 系统设置」 -> 「4. 故障避让与系统运维」）提供了原生 **「程序版本在线检测与 OTA 升级」** 能力：
 - **实时比对**：自动或手动静默对比本地版本与 GitHub 官方最新发行版本（遵循 `vYYYY.MM.DD[-NN]` 命名规范）；
