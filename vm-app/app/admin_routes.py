@@ -1273,7 +1273,7 @@ def _load_local_version_info() -> dict:
             except Exception:
                 pass
     return {
-        "version": "v2026.10.06-01",
+        "version": "v2026.10.07-01",
         "release_date": "2026-10-06",
         "title": "OCRProxy VM Gateway",
         "changelog": []
@@ -1289,7 +1289,7 @@ async def get_system_version_endpoint(request: Request):
     info = _load_local_version_info()
     return JSONResponse(content={
         "ok": True,
-        "current_version": info.get("version", "v2026.10.06-01"),
+        "current_version": info.get("version", "v2026.10.07-01"),
         "release_date": info.get("release_date", ""),
         "commit": info.get("commit", ""),
         "title": info.get("title", ""),
@@ -1304,7 +1304,7 @@ async def check_system_update_endpoint(request: Request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     local_info = _load_local_version_info()
-    curr_v = local_info.get("version", "v2026.10.06-01")
+    curr_v = local_info.get("version", "v2026.10.07-01")
 
     remote_url = "https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json"
     remote_data = None
@@ -1487,11 +1487,15 @@ async def probe_models_endpoint(request: Request):
         except Exception as e:
             logger.warning("Failed to query vault for provider %s: %s", provider, e)
 
-    if not base_url:
-        return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的 Base URL 配置"})
+    if provider in ("opencode-free", "opencode_free") and not base_url:
+        p_opencode = cfg.get("providers", {}).get("opencode", {})
+        base_url = p_local.get("base_url") or p_opencode.get("base_url") or "https://opencode.ai/zen/v1"
 
     if not candidate_keys:
-        return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的可用 API Key（请先配置或勾选有效凭据）"})
+        if provider.lower() in ("opencode", "opencode-free", "opencode_free"):
+            candidate_keys.append(("免Key公共凭据", "public"))
+        else:
+            return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的可用 API Key（请先配置或勾选有效凭据）"})
 
     # 3. 针对 Google 或通用 OpenAI 进行探测并执行 Fallback 轮询
     is_google = provider.lower() == "google" or "generativelanguage.googleapis.com" in base_url.lower()
@@ -1568,6 +1572,10 @@ async def probe_models_endpoint(request: Request):
                             models.append(m_str)
 
                     models = sorted(list(set(models)))
+                    if provider.lower() in ("opencode-free", "opencode_free"):
+                        free_models = [m for m in models if m.endswith("-free")]
+                        other_models = [m for m in models if not m.endswith("-free")]
+                        models = free_models + other_models
                     if models:
                         return JSONResponse(content={
                             "ok": True,

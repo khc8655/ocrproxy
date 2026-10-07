@@ -93,6 +93,30 @@ ocrprox (Monorepo)
 
 ---
 
+## OpenCode 双轨供应商体系 (OpenCode Dual-Provider System)
+
+为彻底解决 OpenCode Zen 免费模型防薅羊毛严格门禁（`403 FreeTierError`）与付费/标准直通需求之间的冲突，OCRProxy 在 `v2026.10.07-01` 正式推出 **OpenCode 双轨供应商体系**：
+
+### 1. 轨道 A：`opencode` (标准版 · 纯直通)
+- **定位**：面向 OpenCode 官方付费模型或通用标准 API 访问；
+- **传输策略**：**100% 原样纯净透传**。绝不注入额外 Header，绝不修改请求体，绝不篡改 tools；
+- **凭据要求**：严格使用用户配置的真实 API Key；
+- **适用场景**：GLM-4、Claude 等付费配额调用。
+
+### 2. 轨道 B：`opencode-free` (免费专区 · 门禁自动穿透 + 免Key兜底)
+- **定位**：面向 OpenCode Zen 上动态变动的全部 `*-free` 免费模型（如 `ling-3.1-flash-free`、`deepseek-v4-flash-free`、`space-bunny-free`、`mimo-v2.6-flash-free`、`nemotron-3.5-lightning-free` 等）；
+- **全自动门禁穿透流水线**：
+  1. **规范会话指纹**：自动生成符合上游正则 `^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$` 的会话 ID，注入 `x-opencode-client: cli` 与 CLI User-Agent；
+  2. **智能体形态补全**：若客户端为纯文本请求（未传 tools），自动注入 `bash` 与 `read` 最小工具桩，并声明 `tool_choice: "none"`，完美满足上游防薅羊毛检测且不影响模型正常输出；
+  3. **强制流式自适应**：上游强制要求 `stream: true`。若客户端发起非流式请求，服务端以流式读取并在内存中即时聚合并还原为标准 OpenAI ChatCompletion JSON 响应；
+- **共享 Key 库与 `Bearer public` 自动降级兜底**：
+  - **自动共享 Key 库**：在后台无缝共享读取 `opencode` 中已经录入的大号、小号等凭据；
+  - **匿名免 Key 兜底**：支持免填 Key（直接使用 `Bearer public`）；当用户的个人 Key 遇到 403 或 429（账号免费配额超限）时，调度器全自动秒级降级为 `Bearer public` 兜底重试，保证模型调用零中断！
+- **极简 UI 交互**：
+  - 新增 Agent 模型弹窗选择 `opencode-free` 时，系统自动呈现专属免费模型推荐胶囊池，鼠标点选即可秒级填入，免除打字与记忆负担。
+
+---
+
 ## 模型提供商解耦架构与云端动态分发 (Decoupled Provider Architecture & CDN Distribution)
 
 为解决模型厂商适配频繁变动导致主程序必须重新编译与部署的痛点，OCRProxy 实现了**提供商适配与网关核心主程序完全分离**的声明式架构：
@@ -201,7 +225,8 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 > ```bash
 > # 指定端口、密码与模式 (-m agent | kb | full)
 > curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- -p 8787 -w YourAdminPassword123 -m agent -y
-> ```
+> **⚡ 依赖智能检测与秒级跳过 (Zero-Overhead Dependency Check)**：
+> 脚本具备自适应依赖探查能力。若宿主机已具备满足要求的 Python 3.9+、venv 与基础工具链，将**完全跳过系统级 `apt-get` 流程**；若虚拟环境已满足依赖要求，将**直接跳过重复 pip 安装**。极大缩短首次安装与日常升级耗时，避免无谓网络开销与权限打扰。
 
 #### 系统已注册全局运维命令 (`ocrproxy` CLI)
 
@@ -232,7 +257,7 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 在安装向导中按需选择端口、密码、模式及反代策略：
 ```
 ------------------------------------------------------------
-  OCRProxy 一键部署与管理中心 (v2026.10.04)
+  OCRProxy 一键部署与管理中心 (v2026.10.07-01)
 ------------------------------------------------------------
 请输入服务监听端口 (默认: 8787): 8787
 请设置 Web 管理后台密码 (建议 8 位以上，回车自动生成 16 位强随机密码): 
@@ -362,8 +387,20 @@ node tests/test_edgeone_normalize.mjs
 # [准入测试] 对指定模型执行全量 6 维度生产级自动化准入测试
 python3 tests/test_live_models_suite.py --model gemini-3.5-flash-lite
 
+# [发版审计] 运行全平台发版硬性门禁测试套件
+python3 tests/test_phase3_phase4_audit.py
+
 # [发布更新] 提交到 GitHub 后，VM 服务端一键 OTA 平滑升级
 ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升级
 ```
+
+---
+
+## 迭代发版与质量红线
+
+所有版本发布、特性迭代与安装脚本修改必须严格遵守官方 [《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)，核心执行：
+1. **版本矩阵全网联动**：同步递增 `version.json`, `install.sh`, `admin.html` 静态缓存等 6 处版本号；
+2. **安装脚本零代码漂移**：根目录 `install.sh` 与 `vm-app/install.sh` 保持 100% 同步，且自带系统/Python 依赖智能检测跳过机制；
+3. **自动化测试 100% 守门**：发版前必须执行 `python3 tests/test_phase3_phase4_audit.py` 并全量 PASS。
 
 

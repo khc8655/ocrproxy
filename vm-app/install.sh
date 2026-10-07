@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.06-01"
+SCRIPT_VERSION="v2026.10.07-01"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -216,6 +216,7 @@ prepare_source_code() {
         mkdir -p "$target_extract_dir/source"
         cp -r "$script_dir/vm-app" "$target_extract_dir/source/"
         cp -r "$script_dir/shared" "$target_extract_dir/source/"
+        cp "$script_dir/version.json" "$target_extract_dir/source/" 2>/dev/null || true
         return 0
     fi
 
@@ -253,6 +254,7 @@ prepare_source_code() {
     mkdir -p "$target_extract_dir/source"
     cp -r "$target_extract_dir/extracted/vm-app" "$target_extract_dir/source/"
     cp -r "$target_extract_dir/extracted/shared" "$target_extract_dir/source/"
+    cp "$target_extract_dir/extracted/version.json" "$target_extract_dir/source/" 2>/dev/null || true
     ok "源码下载与校验解压完成"
 }
 
@@ -482,6 +484,7 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     run_sudo cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
     run_sudo cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
     run_sudo cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
+    run_sudo cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
     run_sudo chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
     if [[ ! -e "/opt/shared" ]]; then
         run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
@@ -499,11 +502,15 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     # 统一确保运行用户权限
     run_sudo chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 
-    # 更新 Python 依赖
-    info "正在增量检查并更新 Python 虚拟环境依赖..."
-    pypi_index=$(detect_pypi_index)
-    run_sudo "${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${pypi_index}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
-    ok "Python 依赖更新完成"
+    # 更新 Python 依赖 (智能检测跳过)
+    if "${INSTALL_DIR}/venv/bin/python" -c "import fastapi, uvicorn, httpx, pydantic, pydantic_settings, cryptography, dotenv" &>/dev/null; then
+        ok "现有 Python 虚拟环境依赖已满足最新要求，跳过重复 pip 下载安装"
+    else
+        info "检测到依赖更新或缺失，正在增量安装 Python 依赖..."
+        pypi_index=$(detect_pypi_index)
+        PYTHONWARNINGS="ignore" PIP_DISABLE_PIP_VERSION_CHECK=1 run_sudo "${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${pypi_index}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
+        ok "Python 依赖更新完成"
+    fi
 
     # 检查并确保 systemd service 使用 run_server.py
     optimize_network_routing
@@ -511,6 +518,11 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     if ! grep -q "run_server.py" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
         info "升级 systemd 服务以支持真双栈套接字监听..."
         run_sudo sed -i 's|ExecStart=.*uvicorn app.main:app.*|ExecStart=/opt/ocrproxy/venv/bin/python /opt/ocrproxy/run_server.py|' "/etc/systemd/system/${SERVICE_NAME}.service"
+        need_reload=true
+    fi
+    if grep -q "NoNewPrivileges=true" "/etc/systemd/system/${SERVICE_NAME}.service" 2>/dev/null; then
+        info "调整服务沙箱安全属性 (启用子进程 sudo 白名单免密支持)..."
+        run_sudo sed -i 's/NoNewPrivileges=true/NoNewPrivileges=false/' "/etc/systemd/system/${SERVICE_NAME}.service"
         need_reload=true
     fi
     if systemd-detect-virt --container >/dev/null 2>&1; then
@@ -574,30 +586,47 @@ fi
 echo -e "${CYAN}${BOLD}▶ 未检测到旧版本，进入【全新一键安装】流程${NC}"
 echo ""
 
-# 1. 检查基础环境依赖 (仅在缺失时按需请求 sudo 安装系统包)
+# 1. 检查基础环境依赖 (智能检测：若系统已满足 Python 3.9+、venv 与基础工具链，直接跳过 apt 安装流程)
 info "Step 1/7: 检查系统环境与基础依赖..."
+
+need_apt=false
+missing_packages=()
+
 if ! command -v curl &>/dev/null; then
-    info "未检测到 curl，正在通过 sudo 安装基础包..."
-    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq curl
+    need_apt=true
+    missing_packages+=("curl")
 fi
 
-if ! command -v python3 &>/dev/null; then
-    info "未检测到 python3，正在通过 sudo 安装 Python 环境..."
-    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq python3 python3-venv python3-pip
-    if ! command -v python3 &>/dev/null; then
-        error "自动安装 Python 失败，请手动在系统中安装 Python 3.10+。"
+if ! command -v tar &>/dev/null; then
+    need_apt=true
+    missing_packages+=("tar")
+fi
+
+has_valid_python=false
+if command -v python3 &>/dev/null; then
+    # 验证版本 >= 3.9 且具备 venv 与 ensurepip 构建能力
+    if python3 -c 'import sys, venv, ensurepip; exit(0 if sys.version_info >= (3, 9) else 1)' &>/dev/null; then
+        has_valid_python=true
+        PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        ok "检测到系统已预装完备的 Python 环境 (${PY_VERSION}，内置 venv+ensurepip)"
     fi
 fi
 
-PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-info "检测到 Python 版本: ${PY_VERSION}"
-
-# 检查 venv 和 pip (Debian/Ubuntu 拆分了 python3-venv 和 python3-pip)
-if ! python3 -c "import ensurepip" &>/dev/null || ! command -v pip3 &>/dev/null; then
-    info "安装 python3-venv 与 python3-pip (需要 sudo 权限)..."
-    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq "python${PY_VERSION}-venv" python3-pip python3-venv 2>/dev/null || run_sudo apt-get install -y -qq python3-venv python3-pip
+if [[ "$has_valid_python" != "true" ]]; then
+    need_apt=true
+    missing_packages+=("python3" "python3-venv" "python3-pip")
 fi
-ok "系统基础依赖检查就绪"
+
+if [[ "$need_apt" == "true" ]]; then
+    info "检测到缺少基础系统依赖 (${missing_packages[*]}), 正在调用 apt-get 按需补全..."
+    run_sudo apt-get update -qq && run_sudo apt-get install -y -qq "${missing_packages[@]}"
+    if ! command -v python3 &>/dev/null; then
+        error "自动安装 Python 失败，请手动在系统中安装 Python 3.10+。"
+    fi
+    PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+else
+    ok "系统级基础依赖已满足 (Python 3.x, venv, curl, tar)，跳过系统包管理器安装流程"
+fi
 
 # 应用出站网络优化
 optimize_network_routing
@@ -669,14 +698,14 @@ elif [[ "$USE_REVERSE_PROXY" == "false" ]]; then
 elif [[ "$NON_INTERACTIVE" == "true" ]]; then
     FINAL_HOST="::"
 else
-    echo -e "请选择是否启用反向代理 (如 Caddy / Nginx 等):"
-    echo -e "  1: 启用反代 (安全推荐：服务仅监听 127.0.0.1 本地端口，外部流量由 Caddy/Nginx 代理)"
-    echo -e "  2: 不使用反代 (服务监听 IPv4/IPv6 全网，直接通过 IP:端口 访问) [默认]"
-    safe_read "请输入选项 [1/2] (默认 2): " INPUT_PROXY_CHOICE
-    if [[ "$INPUT_PROXY_CHOICE" == "1" ]]; then
-        FINAL_HOST="127.0.0.1"
-    else
+    echo -e "请选择网络监听模式与反向代理策略:"
+    echo -e "  1: 启用反代 (安全推荐：服务仅监听 127.0.0.1 本地端口，外部流量由 Caddy/Nginx 代理) [推荐]"
+    echo -e "  2: 不使用反代 (服务监听 IPv4/IPv6 全网，直接通过 http://IP:端口 访问)"
+    safe_read "请输入选项 [1/2] (默认 1 [推荐]): " INPUT_PROXY_CHOICE
+    if [[ "$INPUT_PROXY_CHOICE" == "2" || "$INPUT_PROXY_CHOICE" == "direct" ]]; then
         FINAL_HOST="::"
+    else
+        FINAL_HOST="127.0.0.1"
     fi
 fi
 info "已设定网络监听地址: ${BOLD}${FINAL_HOST}${NC} $([[ "$FINAL_HOST" == "127.0.0.1" ]] && echo '(仅本地反代模式)' || echo '(全网直通模式)')"
@@ -714,17 +743,25 @@ cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
 cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
+cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
 run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
 ok "应用核心文件已部署到 ${INSTALL_DIR}"
 
-# 5. 创建虚拟环境并安装依赖
-info "Step 5/7: 创建 Python 虚拟环境并安装依赖包..."
-python3 -m venv "${INSTALL_DIR}/venv"
-PYPI_INDEX=$(detect_pypi_index)
-info "选用 PyPI 镜像源: ${PYPI_INDEX} (已启用 --isolated 隔离模式，自动规避宿主机不可达内网源)..."
-"${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${PYPI_INDEX}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
-ok "Python 虚拟环境依赖安装完成"
+# 5. 创建虚拟环境并安装依赖 (智能检测跳过)
+info "Step 5/7: 创建 Python 虚拟环境并配置依赖包..."
+if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
+    python3 -m venv "${INSTALL_DIR}/venv"
+fi
+
+if "${INSTALL_DIR}/venv/bin/python" -c "import fastapi, uvicorn, httpx, pydantic, pydantic_settings, cryptography, dotenv" &>/dev/null; then
+    ok "Python 虚拟环境依赖已就绪且完整，跳过重复 pip 安装"
+else
+    PYPI_INDEX=$(detect_pypi_index)
+    info "选用 PyPI 镜像源: ${PYPI_INDEX} (已启用 --isolated 隔离模式，自动规避宿主机不可达内网源)..."
+    PYTHONWARNINGS="ignore" PIP_DISABLE_PIP_VERSION_CHECK=1 "${INSTALL_DIR}/venv/bin/pip" install --isolated -i "${PYPI_INDEX}" --no-cache-dir -r "${INSTALL_DIR}/requirements.txt" -q
+    ok "Python 虚拟环境依赖安装完成"
+fi
 
 # 6. 初始化密钥、.env 与加密配置
 info "Step 6/7: 初始化 Fernet 密钥与服务配置..."
@@ -759,12 +796,12 @@ fi
 # 从 .env 读取生成的密钥
 PROXY_KEY=$(grep -oP '^PROXY_API_KEY=\K.+' "${INSTALL_DIR}/.env" || echo "sk-ocrproxy-generated")
 
-# 容器环境自适应
-SANDBOX_OPTS="NoNewPrivileges=true
+# 容器与沙箱环境自适应 (允许以非特权用户运行的服务通过 sudo 白名单调用管理命令)
+SANDBOX_OPTS="NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}/config
+ReadWritePaths=${INSTALL_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

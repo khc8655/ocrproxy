@@ -223,6 +223,40 @@
         "require_location": true
       },
       "recommended_models_count": 1
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode (标准版)",
+      "version": "1.0.0",
+      "rule_hash": "a1b2c3d4e5f6",
+      "protocol": "openai",
+      "base_url": "https://opencode.ai/zen/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://opencode.ai/docs",
+      "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 2
+    },
+    {
+      "id": "opencode-free",
+      "name": "OpenCode Free (免费专区)",
+      "version": "1.0.0",
+      "rule_hash": "f6e5d4c3b2a1",
+      "protocol": "openai",
+      "base_url": "https://opencode.ai/zen/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://opencode.ai/docs/free",
+      "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 5
     }
   ]
 }

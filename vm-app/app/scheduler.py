@@ -731,13 +731,25 @@ async def schedule(
 
             provider = providers.get(provider_name)
             if not provider:
-                logger.warning(f"Provider {provider_name} not found in config")
-                continue
+                if provider_name in ("opencode-free", "opencode_free"):
+                    provider = providers.get("opencode") or {
+                        "base_url": "https://opencode.ai/zen/v1",
+                        "keys": {"public": "public"}
+                    }
+                else:
+                    logger.warning(f"Provider {provider_name} not found in config")
+                    continue
 
             api_key_raw = provider.get("keys", {}).get(key_label)
+            if not api_key_raw and provider_name in ("opencode-free", "opencode_free"):
+                # 优先从 opencode 提供商获取共享 Key
+                api_key_raw = providers.get("opencode", {}).get("keys", {}).get(key_label)
             if not api_key_raw:
-                logger.warning(f"Key {key_label} not found for provider {provider_name}")
-                continue
+                if provider_name in ("opencode-free", "opencode_free") or key_label in ("public", "__public__"):
+                    api_key_raw = "public"
+                else:
+                    logger.warning(f"Key {key_label} not found for provider {provider_name}")
+                    continue
 
             if isinstance(api_key_raw, dict):
                 api_key = str(api_key_raw.get("key", ""))
@@ -837,6 +849,41 @@ async def schedule(
                             resp = await client.request(method, url, headers=headers, json=req_json, timeout=cand_req_timeout)
 
                     status_code = resp.status_code
+
+                    # Auto-fallback to Bearer public for opencode-free if user key hit 401/403/429
+                    _is_opencode_free = bool(
+                        provider_name in ("opencode-free", "opencode_free")
+                        or cand_p_rules.get("opencode_free_bypass")
+                    )
+                    if not (200 <= status_code < 300) and _is_opencode_free and api_key != "public" and status_code in (401, 403, 429):
+                        logger.info(
+                            f"[{provider_name}] Key {key_label} received HTTP {status_code}, auto-falling back to Bearer public..."
+                        )
+                        fb_headers = dict(headers)
+                        fb_headers["Authorization"] = "Bearer public"
+                        try:
+                            if is_stream:
+                                if req_content is not None:
+                                    fb_req = client.build_request(method, url, headers=fb_headers, content=req_content)
+                                else:
+                                    fb_req = client.build_request(method, url, headers=fb_headers, json=req_json)
+                                fb_req.extensions["timeout"] = req.extensions["timeout"]
+                                fb_resp = await client.send(fb_req, stream=True)
+                            else:
+                                if req_content is not None:
+                                    fb_resp = await client.request(method, url, headers=fb_headers, content=req_content, timeout=cand_req_timeout)
+                                else:
+                                    fb_resp = await client.request(method, url, headers=fb_headers, json=req_json, timeout=cand_req_timeout)
+
+                            if 200 <= fb_resp.status_code < 300:
+                                await resp.aclose()
+                                resp = fb_resp
+                                status_code = resp.status_code
+                                key_label = f"{key_label}->public"
+                            else:
+                                await fb_resp.aclose()
+                        except Exception as fb_err:
+                            logger.warning(f"Fallback to Bearer public error: {fb_err}")
 
                     # Success path (2xx)
                     if 200 <= status_code < 300:

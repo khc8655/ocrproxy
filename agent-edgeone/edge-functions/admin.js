@@ -1190,7 +1190,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.06-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.07-01</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1230,7 +1230,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.06-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.07-01</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -2112,10 +2112,16 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
   function onAgentProviderSelectChange(val) {
     const aProv = document.getElementById('a_provider');
+    const oldVal = aProv ? aProv.value : '';
     if (aProv) aProv.value = val || '';
     const keyArea = document.getElementById('a_keyArea');
     const quickBox = document.getElementById('a_quickModels');
     const protoInfoEl = document.getElementById('a_model_proto_info');
+
+    const isNewModel = !document.getElementById('a_oldName')?.value;
+    if (isNewModel && oldVal && oldVal !== val) {
+      modalBindings = [];
+    }
 
     if (!val) {
       if (keyArea) keyArea.style.display = 'none';
@@ -2184,8 +2190,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
 
     const isNewModel = !document.getElementById('a_oldName')?.value;
-    if (isNewModel && modalBindings.length === 0 && allKeyLabels.length > 0) {
-      modalBindings.push({ provider: prov, key: allKeyLabels[0] });
+    if (isNewModel) {
+      modalBindings = modalBindings.filter(b => b.provider === prov);
+      if (modalBindings.length === 0 && allKeyLabels.length > 0) {
+        modalBindings.push({ provider: prov, key: allKeyLabels[0] });
+      }
     }
 
     if (allKeyLabels.length === 0) {
@@ -2307,6 +2316,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         modalBindings = modalBindings.filter(b => !(b.provider === p && b.key === k));
       }
     });
+
+    if (!oldName) {
+      modalBindings = modalBindings.filter(b => b.provider === provider);
+    }
 
     const bindings = modalBindings.filter(b => b.provider && b.key);
     if (!bindings.length) { _toast('请至少勾选绑定一个 Key', 'err'); return; }
@@ -2899,7 +2912,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.06-01';
+const BUILD_VERSION = 'v2026.10.07-01';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

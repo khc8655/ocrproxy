@@ -35,6 +35,9 @@ import json
 import asyncio
 import logging
 import urllib.parse
+import secrets
+import string
+import time
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
@@ -48,6 +51,107 @@ from .scheduler import (
     reset_runtime_state,
     _reclaim_memory,
 )
+
+def _gen_opencode_session_id() -> str:
+    """Generate a canonical session ID matching OpenCode CLI regex ^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$."""
+    hex_part = secrets.token_hex(6)
+    b62_chars = string.ascii_letters + string.digits
+    b62_part = "".join(secrets.choice(b62_chars) for _ in range(14))
+    return f"ses_{hex_part}{b62_part}"
+
+
+def _is_opencode_free(provider: str, rules: dict) -> bool:
+    """Check if the candidate belongs to OpenCode Free tier."""
+    p = (provider or "").lower().strip()
+    if p in ("opencode-free", "opencode_free"):
+        return True
+    if isinstance(rules, dict) and rules.get("opencode_free_bypass"):
+        return True
+    return False
+
+
+def _aggregate_sse_to_chat_completion(sse_bytes: bytes, model_name: str = "") -> dict:
+    """Aggregate raw SSE chunk bytes into a standard OpenAI ChatCompletion response dict."""
+    text = sse_bytes.decode("utf-8", errors="replace")
+    content_chunks = []
+    reasoning_chunks = []
+    finish_reason = "stop"
+    response_id = ""
+    created = int(time.time())
+    model = model_name or "opencode-free"
+    system_fingerprint = None
+    usage = None
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("data:"):
+            continue
+        payload = line[5:].strip()
+        if payload == "[DONE]":
+            break
+        try:
+            chunk = json.loads(payload)
+            if not response_id and chunk.get("id"):
+                response_id = chunk["id"]
+            if chunk.get("model"):
+                model = chunk["model"]
+            if chunk.get("created"):
+                created = chunk["created"]
+            if chunk.get("system_fingerprint"):
+                system_fingerprint = chunk["system_fingerprint"]
+            if chunk.get("usage"):
+                usage = chunk["usage"]
+
+            choices = chunk.get("choices")
+            if choices and isinstance(choices, list):
+                c0 = choices[0]
+                delta = c0.get("delta") or {}
+                if delta.get("content"):
+                    content_chunks.append(delta["content"])
+                if delta.get("reasoning_content"):
+                    reasoning_chunks.append(delta["reasoning_content"])
+                elif delta.get("reasoning"):
+                    reasoning_chunks.append(delta["reasoning"])
+                if c0.get("finish_reason"):
+                    finish_reason = c0["finish_reason"]
+        except Exception:
+            continue
+
+    full_content = "".join(content_chunks)
+    full_reasoning = "".join(reasoning_chunks)
+
+    message = {
+        "role": "assistant",
+        "content": full_content,
+    }
+    if full_reasoning:
+        message["reasoning_content"] = full_reasoning
+
+    result = {
+        "id": response_id or f"chatcmpl-free-{secrets.token_hex(8)}",
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": finish_reason or "stop",
+            }
+        ],
+    }
+    if system_fingerprint:
+        result["system_fingerprint"] = system_fingerprint
+    if usage:
+        result["usage"] = usage
+    else:
+        comp_tokens = max(1, len(full_content) // 3)
+        result["usage"] = {
+            "prompt_tokens": 0,
+            "completion_tokens": comp_tokens,
+            "total_tokens": comp_tokens,
+        }
+    return result
 from .auth import verify_proxy_auth
 from .upstream import join_upstream, build_messages_upstream
 
@@ -393,6 +497,46 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
         mt = out.get("max_tokens")
         if not isinstance(mt, int) or mt <= 0:
             out["max_tokens"] = 4096
+
+    # 8. OpenCode Free Tier Bypass Rules (Stub Tools & Stream Enforcement)
+    if rules.get("opencode_free_bypass"):
+        tools = out.get("tools")
+        if not tools:
+            out["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "description": "Execute a bash command in the terminal",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {"type": "string", "description": "The command to execute"}
+                            },
+                            "required": ["command"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Read file contents",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "filePath": {"type": "string", "description": "Path to file"}
+                            },
+                            "required": ["filePath"]
+                        }
+                    }
+                }
+            ]
+            if not out.get("tool_choice"):
+                out["tool_choice"] = "none"
+        # Upstream requires stream: true for free models to bypass 403 FreeTierError
+        out["stream"] = True
+
 
 
 def _normalize_response_data(data: dict, rules: dict) -> None:
@@ -746,12 +890,21 @@ async def chat_completions(request: Request):
             if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
                 continue
             p_id = b["provider"]
-            p_info = providers_map.get(p_id, {})
+            p_info = providers_map.get(p_id)
+            if not p_info and p_id in ("opencode-free", "opencode_free"):
+                p_info = providers_map.get("opencode") or {
+                    "base_url": "https://opencode.ai/zen/v1",
+                    "keys": {"public": "public"}
+                }
+            p_info = p_info or {}
+            preset_r = dict(_get_preset_rules(p_info.get("preset_id", p_id)))
+            if p_id in ("opencode-free", "opencode_free"):
+                preset_r["opencode_free_bypass"] = True
             candidates_list.append({
                 "provider": p_id,
                 "key": b["key"],
                 "model": b.get("upstream_model") or default_upstream,
-                "adapter_rules": p_info.get("adapter_rules") or _get_preset_rules(p_info.get("preset_id", p_id)),
+                "adapter_rules": p_info.get("adapter_rules") or preset_r,
             })
 
         if not candidates_list:
@@ -804,10 +957,19 @@ async def chat_completions(request: Request):
         headers = {
             "Content-Type": "application/json",
         }
+        is_free = _is_opencode_free(provider, rules)
         if provider.lower() == "vertex" or "aiplatform.googleapis.com" in upstream_base_url.lower():
             headers["x-goog-api-key"] = str(api_key)
+        elif is_free and (not api_key or str(api_key).strip().lower() in ("public", "__public__")):
+            headers["Authorization"] = "Bearer public"
         else:
             headers["Authorization"] = f"Bearer {api_key}"
+
+        if is_free:
+            headers["x-opencode-session"] = _gen_opencode_session_id()
+            headers["x-opencode-client"] = "cli"
+            headers["User-Agent"] = "opencode/1.18.31 (darwin arm64; node22.11.0)"
+            headers["Accept"] = "application/json, text/event-stream"
 
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
@@ -819,6 +981,7 @@ async def chat_completions(request: Request):
         is_passthrough = (
             cand["model"] == model_name
             and not kb_force_no_reasoning
+            and not is_free
             and (
                 provider.lower() == "openai"
                 or (
@@ -881,7 +1044,13 @@ async def chat_completions(request: Request):
             request_model=req_model_name,
         )
         if sr.raw_content is not None:
-            resp = Response(content=sr.raw_content, media_type="application/json")
+            content_bytes = sr.raw_content
+            # Auto-aggregate SSE streams to ChatCompletion JSON if upstream was forced to stream: true
+            if content_bytes.lstrip().startswith(b"data:") or b"\ndata:" in content_bytes:
+                aggregated = _aggregate_sse_to_chat_completion(content_bytes, model_name=req_model_name)
+                resp = JSONResponse(content=aggregated)
+            else:
+                resp = Response(content=content_bytes, media_type="application/json")
         else:
             resp_data = sr.data
             resp = JSONResponse(content=resp_data)
