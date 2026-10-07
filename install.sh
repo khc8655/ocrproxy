@@ -292,9 +292,8 @@ setup_cli_and_sudoers() {
         fi
     fi
 
-    # 2. 安装/更新全局快捷管理命令 /usr/local/bin/ocrproxy
-    info "注册系统管理命令 /usr/local/bin/ocrproxy..."
-    cat << 'EOF_CLI' | run_sudo tee /usr/local/bin/ocrproxy >/dev/null
+    local cli_tmp="/tmp/ocrproxy_cli_$$.tmp"
+    cat << 'EOF_CLI' | run_sudo tee "$cli_tmp" >/dev/null
 #!/bin/bash
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -380,7 +379,8 @@ case "$1" in
         ;;
 esac
 EOF_CLI
-    run_sudo chmod +x /usr/local/bin/ocrproxy 2>/dev/null || true
+    run_sudo chmod +x "$cli_tmp" 2>/dev/null || true
+    run_sudo mv -f "$cli_tmp" /usr/local/bin/ocrproxy 2>/dev/null || true
     ok "全局命令 ocrproxy 注册就绪"
 }
 
