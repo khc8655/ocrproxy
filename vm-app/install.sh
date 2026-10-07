@@ -313,6 +313,18 @@ restart_cmd() {
 case "$1" in
     upgrade|update)
         shift
+        # 若在被 systemd 沙箱隔离的只读环境或受限挂载中被调用，自动通过 systemd-run 逃逸沙箱执行
+        if [[ -z "$OCRPROXY_RUNNING_IN_OTA_UNIT" ]] && command -v systemd-run &>/dev/null; then
+            if ! touch "/opt/ocrproxy/.sandbox_write_test" 2>/dev/null; then
+                if [[ $EUID -eq 0 ]]; then
+                    exec systemd-run --unit=ocrproxy-ota-upgrade --remain-after-exit=no env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
+                elif command -v sudo &>/dev/null; then
+                    exec sudo -n systemd-run --unit=ocrproxy-ota-upgrade --remain-after-exit=no env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
+                fi
+            else
+                rm -f "/opt/ocrproxy/.sandbox_write_test"
+            fi
+        fi
         TOKEN_ARG=()
         CURL_AUTH=()
         SAVED_TOKEN=$(sudo grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || grep -oP '^GITHUB_TOKEN=\K.+' /opt/ocrproxy/.env 2>/dev/null || true)
