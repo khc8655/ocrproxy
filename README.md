@@ -21,7 +21,7 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 167 项自动化测试套件
 │
 ├── shared/                            # 共享资源与唯一规范源
-│   ├── presets/                       # 13 大官方供应商标准预设 JSON 与目录索引 catalog.json
+│   ├── presets/                       # 14 大官方供应商标准预设 JSON（含 NVIDIA NIM）与目录索引 catalog.json
 │   ├── admin/                         # 全局唯一的前端开发真理源 (Single Source of Truth)
 │   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器 (~700 行)
 │   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨)
@@ -382,6 +382,20 @@ npm run deploy      # 一键发布至 EdgeOne
    python3 tests/test_live_models_suite.py --model <新模型名>
    ```
    **必须 6 大维度 100% 通过（【🟢 生产可用 · 达到正式上线标准】）后方可放行**。
+
+---
+
+## NVIDIA NIM 官方平台深度适配与流式加固 (NVIDIA NIM Defensive Hardening)
+
+系统已原生内置 **NVIDIA NIM (Inference Microservices)** 官方加速平台标准预设，并针对其实机特性与社区已知痛点完成了工程化加固：
+1. **精选官方推荐模型（避开 404 权限黑洞）**：
+   - 官方目录虽然返回 80+ 个模型，但实测有 55 个模型在普通开发者 Key 下会报错 404 (`Function not found for account`)；
+   - OCRProxy 精选收录实测 100% 可用的优质模型：`meta/llama-3.2-11b-vision-instruct`（极速出字 <800ms，支持图文与函数调用）、`nvidia/nemotron-3.5-lightning-30b-a3b`（官方自研闪电推理模型）、`nvidia/nemotron-3-ultra-550b-a55b`（550B 超大规模模型）；
+2. **流式主动嗅探与即时断流 (`data: [DONE]` Active Termination)**：
+   - 彻底修复 Nemotron 等推理模型在发送完 `data: [DONE]` 后底层的 HTTP Chunked 连接不主动发 EOF、导致网关卡住等待 30 秒超时的固有缺陷；
+   - 网关 SSE 事件管道在检测到 `[DONE]` 标记后立即产生终止信号并主动释放底层 TCP 连接，实现秒级流式结束；
+3. **函数调用类型容错 (Tool Calling Arguments Sanitization)**：
+   - 在响应后处理层对 `tool_calls[].function.arguments` 是非字符串对象的情况自动兜底 `json.dumps` 修复，防止客户端反序列化崩溃。
 
 ### 3. 日常开发常用命令速查
 

@@ -482,6 +482,16 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
     }, intervalMs);
   };
 
+  const isSseDone = (chunk) => {
+    if (!chunk) return false;
+    try {
+      const text = typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
+      return text.includes('data: [DONE]') || text.includes('data:[DONE]');
+    } catch (e) {
+      return false;
+    }
+  };
+
   return new ReadableStream({
     start(controller) {
       resetTimer(controller);
@@ -492,6 +502,14 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
         unconsumedInitial = null;
         resetTimer(controller);
         controller.enqueue(chunk);
+        if (isSseDone(chunk)) {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+          try { reader.cancel(); } catch (e) {}
+          controller.close();
+        }
         return;
       }
 
@@ -506,6 +524,14 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
         } else if (value) {
           resetTimer(controller);
           controller.enqueue(value);
+          if (isSseDone(value)) {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+            try { reader.cancel(); } catch (e) {}
+            controller.close();
+          }
         }
       } catch (err) {
         if (timer) {

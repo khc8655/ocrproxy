@@ -591,6 +591,38 @@ def _disable_thinking_for_kb(out: dict, provider: str) -> None:
     _apply_request_adapter_rules(out, rules, is_agent_mode=False, is_anthropic=False)
 
 
+def _is_sse_done_chunk(b: Optional[bytes]) -> bool:
+    if not b:
+        return False
+    return b"data: [DONE]" in b or b"data:[DONE]" in b
+
+
+def _normalize_tool_calls(data: Any) -> Any:
+    """Defensive schema sanitizer for OpenAI function calls: ensure arguments is JSON string."""
+    if not isinstance(data, dict):
+        return data
+    try:
+        choices = data.get("choices")
+        if isinstance(choices, list):
+            for ch in choices:
+                if not isinstance(ch, dict):
+                    continue
+                msg = ch.get("message") or ch.get("delta")
+                if isinstance(msg, dict):
+                    tcs = msg.get("tool_calls")
+                    if isinstance(tcs, list):
+                        for tc in tcs:
+                            if isinstance(tc, dict):
+                                fn = tc.get("function")
+                                if isinstance(fn, dict):
+                                    raw_args = fn.get("arguments")
+                                    if isinstance(raw_args, (dict, list)):
+                                        fn["arguments"] = json.dumps(raw_args, ensure_ascii=False)
+    except Exception:
+        pass
+    return data
+
+
 async def _stream_with_keepalive(
     first_chunk: bytes,
     remainder,
@@ -600,9 +632,12 @@ async def _stream_with_keepalive(
     """Yield chunks from a streaming response, emitting SSE keep-alive comments
     (': keep-alive\n\n') every `keepalive_sec` if upstream is idle (e.g. during deep thinking).
     Uses asyncio.wait on the pending task so timeouts do NOT cancel the generator.
+    Actively terminates and releases upstream connection upon encountering 'data: [DONE]'.
     """
     if first_chunk:
         yield filter_fn(first_chunk) if filter_fn else first_chunk
+        if _is_sse_done_chunk(first_chunk):
+            return
 
     if remainder is None:
         return
@@ -618,7 +653,10 @@ async def _stream_with_keepalive(
                 try:
                     chunk = pending_task.result()
                     pending_task = None
-                    yield filter_fn(chunk) if filter_fn else chunk
+                    out = filter_fn(chunk) if filter_fn else chunk
+                    yield out
+                    if _is_sse_done_chunk(chunk):
+                        break
                 except StopAsyncIteration:
                     break
             else:
@@ -1048,11 +1086,23 @@ async def chat_completions(request: Request):
             # Auto-aggregate SSE streams to ChatCompletion JSON if upstream was forced to stream: true
             if content_bytes.lstrip().startswith(b"data:") or b"\ndata:" in content_bytes:
                 aggregated = _aggregate_sse_to_chat_completion(content_bytes, model_name=req_model_name)
-                resp = JSONResponse(content=aggregated)
+                resp = JSONResponse(content=_normalize_tool_calls(aggregated))
             else:
-                resp = Response(content=content_bytes, media_type="application/json")
+                if b'"tool_calls"' in content_bytes:
+                    try:
+                        parsed = json.loads(content_bytes.decode("utf-8"))
+                        if isinstance(parsed, dict):
+                            resp = JSONResponse(content=_normalize_tool_calls(parsed))
+                        else:
+                            resp = Response(content=content_bytes, media_type="application/json")
+                    except Exception:
+                        resp = Response(content=content_bytes, media_type="application/json")
+                else:
+                    resp = Response(content=content_bytes, media_type="application/json")
         else:
             resp_data = sr.data
+            if isinstance(resp_data, dict):
+                resp_data = _normalize_tool_calls(resp_data)
             resp = JSONResponse(content=resp_data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)

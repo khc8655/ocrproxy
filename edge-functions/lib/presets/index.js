@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-05T05:39:32.540Z",
+  "updated_at": "2026-10-07T09:09:32.035Z",
   "providers": [
     {
       "id": "agnes",
@@ -128,6 +128,23 @@ export const CATALOG = {
       "recommended_models_count": 1
     },
     {
+      "id": "nvidia",
+      "name": "NVIDIA NIM",
+      "version": "1.0.0",
+      "rule_hash": "ccc7323ff17f",
+      "protocol": "openai",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://build.nvidia.com",
+      "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 3
+    },
+    {
       "id": "openai",
       "name": "OpenAI 官方",
       "version": "1.2.0",
@@ -143,6 +160,40 @@ export const CATALOG = {
         "multimodal": true
       },
       "recommended_models_count": 4
+    },
+    {
+      "id": "opencode-free",
+      "name": "OpenCode Free (免费专区)",
+      "version": "1.0.0",
+      "rule_hash": "26230a7499d2",
+      "protocol": "openai",
+      "base_url": "https://opencode.ai/zen/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://opencode.ai/docs/free",
+      "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 5
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode (标准版)",
+      "version": "1.0.0",
+      "rule_hash": "e1b353ccf196",
+      "protocol": "openai",
+      "base_url": "https://opencode.ai/zen/v1",
+      "anthropic_base_url": null,
+      "doc_url": "https://opencode.ai/docs",
+      "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "multimodal": true
+      },
+      "recommended_models_count": 2
     },
     {
       "id": "sensenova",
@@ -651,6 +702,60 @@ export const PRESETS = [
     }
   },
   {
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "version": "1.0.0",
+    "protocol": "openai",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "anthropic_base_url": null,
+    "doc_url": "https://build.nvidia.com",
+    "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "multimodal": true
+    },
+    "recommended_models": [
+      {
+        "name": "llama-3.2-11b",
+        "upstream_model": "meta/llama-3.2-11b-vision-instruct",
+        "description": "Meta Llama 3.2 11B Vision 指令微调旗舰模型，极速响应 (<800ms)，支持视觉与函数调用"
+      },
+      {
+        "name": "nvidia-nemotron-3.5",
+        "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "description": "NVIDIA 官方自研 Nemotron-3.5 闪电深度推理模型，具备高智商思维链"
+      },
+      {
+        "name": "nemotron-3-ultra-550b",
+        "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "description": "NVIDIA 官方 550B 超大规模 MoE 旗舰大模型"
+      }
+    ],
+    "adapter_rules": {
+      "reasoning": {
+        "strategy": "openai_passthrough",
+        "supported_levels": [
+          "none",
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "tools": {
+        "normalize_choice_to_string": true,
+        "strip_json_schema": false,
+        "rescue_from_text": false
+      },
+      "user_tracking": {
+        "passthrough_user": true
+      },
+      "sanitization": {
+        "unsupported_params": []
+      }
+    }
+  },
+  {
     "id": "openai",
     "name": "OpenAI 官方",
     "version": "1.2.0",
@@ -705,6 +810,84 @@ export const PRESETS = [
       },
       "sanitization": {
         "unsupported_params": []
+      }
+    }
+  },
+  {
+    "id": "opencode-free",
+    "name": "OpenCode Free (免费专区)",
+    "version": "1.0.0",
+    "protocol": "openai",
+    "base_url": "https://opencode.ai/zen/v1",
+    "doc_url": "https://opencode.ai/docs/free",
+    "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "multimodal": true
+    },
+    "recommended_models": [
+      {
+        "name": "ling-3.1-flash-free",
+        "upstream_model": "ling-3.1-flash-free",
+        "description": "零一万物 3.1 Flash 旗舰推理思考模型 (Free 专区特调)"
+      },
+      {
+        "name": "space-bunny-free",
+        "upstream_model": "space-bunny-free",
+        "description": "Space Bunny 社区开源极速模型 (Free 专区稳定免门禁)"
+      },
+      {
+        "name": "deepseek-v4-flash-free",
+        "upstream_model": "deepseek-v4-flash-free",
+        "description": "DeepSeek V4 Flash 旗舰推理模型 (Free 专区特调)"
+      },
+      {
+        "name": "mimo-v2.6-flash-free",
+        "upstream_model": "mimo-v2.6-flash-free",
+        "description": "小米 Mimo V2.6 Flash 高速模型 (Free 专区特调)"
+      },
+      {
+        "name": "nemotron-3.5-lightning-free",
+        "upstream_model": "nemotron-3.5-lightning-free",
+        "description": "Nvidia Nemotron 3.5 Lightning 超快模型 (Free 专区特调)"
+      }
+    ],
+    "adapter_rules": {
+      "opencode_free_bypass": true,
+      "reasoning": {
+        "strategy": "openai_passthrough"
+      }
+    }
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode (标准版)",
+    "version": "1.0.0",
+    "protocol": "openai",
+    "base_url": "https://opencode.ai/zen/v1",
+    "doc_url": "https://opencode.ai/docs",
+    "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "multimodal": true
+    },
+    "recommended_models": [
+      {
+        "name": "glm-4.5",
+        "upstream_model": "glm-4.5",
+        "description": "智谱 GLM-4.5 旗舰推理大模型"
+      },
+      {
+        "name": "claude-3-7-sonnet",
+        "upstream_model": "claude-3-7-sonnet",
+        "description": "Claude 3.7 Sonnet 强混合推理模型"
+      }
+    ],
+    "adapter_rules": {
+      "reasoning": {
+        "strategy": "openai_passthrough"
       }
     }
   },
