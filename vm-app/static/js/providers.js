@@ -130,18 +130,24 @@ function renderProviders(){
 
     for (const name of list) {
       const prov = p[name];
+      const isVaultManaged = (prov.origin === 'vault') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
       const keys = Object.keys(prov.keys || {});
       const keyChips = keys.map(k => {
         const val = prov.keys[k];
         const gcpBadge = (typeof val === 'object' && val !== null && (val.project_id || val.location))
           ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
           : '';
+        const actions = isVaultManaged
+          ? `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;">中枢只读</span>`
+          : `
+            <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
+            <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
+          `;
         return `
           <span class="key-chip">
             <b>${esc(k)}</b>
             ${gcpBadge}
-            <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
-            <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
+            ${actions}
           </span>
         `;
       }).join('');
@@ -159,25 +165,37 @@ function renderProviders(){
       }
       const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
+      const vaultBadge = isVaultManaged 
+        ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商由 EdgeOne 凭据中枢统管，本地持久化只读保存">🔒 中枢托管·只读</span>`
+        : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">💻 本地自建</span>`;
       const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
       const updateBtn = hasUpdate
         ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级规则至 v${esc(hasUpdate.remote_version)}</button>`
         : '';
 
+      const actionButtons = isVaultManaged
+        ? `
+          <button class="btn btn-sm btn-ghost" style="color:var(--text-secondary);cursor:default;" title="由中枢统管，不可在本地篡改或删除">🔒 仅限中枢维护</button>
+          <button class="btn btn-sm" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 中枢拉取最新规则与凭据">${icon('refresh')} 同步中枢</button>
+        `
+        : `
+          <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
+          <button class="btn btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(name)}')">删除</button>
+        `;
+
       html += `<div class="provider-row" id="provider-card-${esc(name)}">
         <div>
           <div class="provider-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="font-size:14px;font-weight:700;">${esc(name)}</span>
-            <span style="display:inline-flex;gap:4px;">${protoBadges} ${verBadge}</span>
+            <span style="display:inline-flex;gap:4px;">${protoBadges} ${verBadge} ${vaultBadge}</span>
             <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span>
           </div>
           <div class="key-list" style="margin-top:6px;">${keyChips || '<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
         </div>
         <div class="flex gap-2" style="align-items:center;">
           ${updateBtn}
-          <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
-          <button class="btn btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(name)}')">删除</button>
+          ${actionButtons}
         </div>
       </div>`;
     }

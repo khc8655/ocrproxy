@@ -73,36 +73,63 @@ function findVaultProvider(provId){
 }
 
 function getAllAvailableProviders(){
-  const localNames = new Set(Object.keys(state.config?.providers||{}));
+  const localProviders = state.config?.providers || {};
   const remoteProviders = getVaultProviderList();
+  const remoteIds = new Set(remoteProviders.map(p => (p.id || '').toLowerCase()));
   const list = [];
-  localNames.forEach(name => {
+
+  // 1. 中枢供应商优先且完整展示 (无论本地是否已拉取，均归属中枢托管)
+  remoteProviders.forEach(rp => {
+    const pId = rp.id;
+    const hasLocal = !!localProviders[pId];
+    const protos = rp.protocols || (hasLocal ? getProviderProtocols(pId) : ['chat']);
+    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    list.push({
+      id: pId,
+      label: rp.name || pId,
+      protoStr: protoStr,
+      isVault: true,
+      isCached: hasLocal,
+      protocols: protos
+    });
+  });
+
+  // 2. 本地自建供应商 (严格仅展示本地手动添加且非中枢托管的项)
+  Object.keys(localProviders).forEach(name => {
+    const low = name.toLowerCase();
+    const isVaultItem = remoteIds.has(low) || (localProviders[name] && localProviders[name].origin === 'vault');
+    if (isVaultItem) {
+      if (!remoteIds.has(low)) {
+        remoteIds.add(low);
+        const protos = getProviderProtocols(name);
+        const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+        list.push({
+          id: name,
+          label: localProviders[name]?.name || name,
+          protoStr: protoStr,
+          isVault: true,
+          isCached: true,
+          protocols: protos
+        });
+      }
+      return;
+    }
+
+    // 纯本地手动维护条目
     const protos = getProviderProtocols(name);
     const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
-    const preset = PRESET_DEFINITIONS[name.toLowerCase()];
-    const vaultProv = findVaultProvider(name);
-    const label = preset?.name || vaultProv?.name || name;
+    const preset = (typeof PRESET_DEFINITIONS !== 'undefined' && PRESET_DEFINITIONS[low]) || null;
+    const label = localProviders[name]?.name || preset?.name || name;
     list.push({
       id: name,
       label: label,
       protoStr: protoStr,
       isVault: false,
+      isCached: true,
       protocols: protos
     });
   });
-  remoteProviders.forEach(rp => {
-    if(!localNames.has(rp.id)){
-      const protos = rp.protocols || ['chat'];
-      const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
-      list.push({
-        id: rp.id,
-        label: rp.name || rp.id,
-        protoStr: protoStr,
-        isVault: true,
-        protocols: protos
-      });
-    }
-  });
+
   return list;
 }
 
@@ -118,12 +145,15 @@ function toggleKeyCapsule(el){
 async function ensureKeysImported(bindings){
   const toFetch = [];
   for(const b of bindings){
-    const hasLocal = state.config.providers &&
-      state.config.providers[b.provider] &&
-      state.config.providers[b.provider].keys &&
-      state.config.providers[b.provider].keys[b.key];
+    if(b.key === 'public' || b.key === '__public__') continue;
+    let lookupProv = b.provider;
+    if(lookupProv === 'opencode-free' || lookupProv === 'opencode_free'){
+      lookupProv = 'opencode';
+    }
+    const hasLocal = (state.config?.providers?.[b.provider]?.keys?.[b.key]) ||
+                     (state.config?.providers?.[lookupProv]?.keys?.[b.key]);
     if(!hasLocal){
-      toFetch.push(b);
+      toFetch.push({ ...b, fetchProv: lookupProv });
     }
   }
   if(toFetch.length === 0) return true;
@@ -131,10 +161,11 @@ async function ensureKeysImported(bindings){
   toast(`正在从中枢拉取 ${toFetch.length} 个密钥凭据...`, 'ok');
   for(const item of toFetch){
     try {
+      const fetchProv = item.fetchProv || item.provider;
       const res = await fetch('/api/admin/vault/fetch-key', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ provider: item.provider, key_label: item.key })
+        body: JSON.stringify({ provider: fetchProv, key_label: item.key })
       });
       const d = await res.json().catch(() => ({}));
       if(!res.ok || !d.ok) {

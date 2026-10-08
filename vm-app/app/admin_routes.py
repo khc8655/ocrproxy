@@ -117,6 +117,8 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
                 if isinstance(incoming_keys, dict):
                     for k_name, k_secret in incoming_keys.items():
                         if k_name and k_secret:
+                            if isinstance(k_secret, str) and ("●" in k_secret or k_secret == "********" or k_secret.startswith("***")):
+                                continue
                             merged_keys[k_name] = k_secret
 
     # 2. Merge candidates (Always preserve user candidates across modes)
@@ -222,7 +224,22 @@ async def get_config_endpoint(request: Request):
 
     try:
         config = await get_config()
-        resp_data = dict(config)
+        resp_data = copy.deepcopy(dict(config))
+        # 零明文脱敏：对下发给浏览器的所有 Provider keys 实施脱敏掩码，确保绝不泄露上游密钥密文
+        providers = resp_data.get("providers", {})
+        if isinstance(providers, dict):
+            for p_name, p_data in providers.items():
+                if isinstance(p_data, dict) and "keys" in p_data and isinstance(p_data["keys"], dict):
+                    masked_keys = {}
+                    for k_lbl, k_val in p_data["keys"].items():
+                        if k_lbl in ("public", "__public__") or k_val == "public":
+                            masked_keys[k_lbl] = "public"
+                        elif isinstance(k_val, dict):
+                            masked_keys[k_lbl] = {"type": "service_account", "project_id": k_val.get("project_id", "masked"), "private_key": "●●●●●●●●"}
+                        else:
+                            masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
+                    p_data["keys"] = masked_keys
+
         run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "agent"
         run_mode = run_mode.lower().strip()
         if run_mode not in ("agent", "kb"):
@@ -1684,6 +1701,18 @@ async def vault_fetch_key_endpoint(request: Request):
     if not provider or not key_label:
         return JSONResponse(status_code=400, content={"error": "Missing provider or key_label"})
 
+    # 1. 免密公共凭据兜底：直接本地持久化就绪，免打扰中枢
+    if key_label in ("public", "__public__") or (provider in ("opencode-free", "opencode_free") and key_label == "public"):
+        cfg = await get_config()
+        providers = cfg.setdefault("providers", {})
+        local_p = providers.setdefault(provider, {})
+        local_p["name"] = local_p.get("name") or provider
+        local_p["origin"] = "vault"
+        local_keys = local_p.setdefault("keys", {})
+        local_keys[key_label] = "public"
+        await save_config(cfg)
+        return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label, "imported": True})
+
     edgeone_url, token = await _get_vault_credentials(body)
     if not edgeone_url:
         return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
@@ -1691,12 +1720,15 @@ async def vault_fetch_key_endpoint(request: Request):
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
+    # 2. 向上映射中枢供应商标识（例如 opencode-free 映射到父级真实提供商 opencode）
+    vault_lookup_provider = "opencode" if provider in ("opencode-free", "opencode_free") else provider
+
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             res = await client.post(
                 f"{edgeone_url}/api/vault/fetch",
                 headers=headers,
-                json={"provider": provider, "key_label": key_label}
+                json={"provider": vault_lookup_provider, "key_label": key_label}
             )
             if res.status_code == 401:
                 return JSONResponse(status_code=401, content={
@@ -1717,6 +1749,7 @@ async def vault_fetch_key_endpoint(request: Request):
             cfg = await get_config()
             providers = cfg.setdefault("providers", {})
             local_p = providers.setdefault(provider, {})
+            local_p["origin"] = "vault"
 
             # 1. Overwrite identity & protocols strictly from cloud
             local_p["name"] = prov_cfg.get("name") or provider
@@ -1808,6 +1841,7 @@ async def vault_sync_endpoint(request: Request):
                     continue
                 is_new = p_id not in local_providers
                 p_cfg = local_providers.setdefault(p_id, {})
+                p_cfg["origin"] = "vault"
 
                 # 1. 基础元数据落库（云端权威覆盖）
                 p_cfg["name"] = r_p.get("name") or p_id
