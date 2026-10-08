@@ -126,6 +126,20 @@ if (!htmlBundled.includes('renderAgentModels') || !htmlBundled.includes('saveAge
   process.exit(1);
 }
 
+// === 红线护栏: 前后端能力与 UI 一致性强断言 ===
+if (htmlBundled.includes('EdgeOne 建议 20~25s') || htmlBundled.includes('20~25s')) {
+  console.error('FATAL BUILD ERROR: Obsolete "EdgeOne 建议 20~25s" text detected in admin HTML! Red Line 2 violated.');
+  process.exit(1);
+}
+if (!/id="set_upstream_timeout_sec"[^>]*max="300"/i.test(htmlBundled)) {
+  console.error('FATAL BUILD ERROR: set_upstream_timeout_sec must have max="300"! Red Line 2 violated.');
+  process.exit(1);
+}
+if (/Math\.min\(\s*30\s*,\s*upTimeout\s*\)/.test(bundledJs)) {
+  console.error('FATAL BUILD ERROR: Obsolete Math.min(30, upTimeout) budget truncation detected in admin.js! Red Line 2 violated.');
+  process.exit(1);
+}
+
 // 5. Emit edge functions
 const safe = htmlBundled.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 

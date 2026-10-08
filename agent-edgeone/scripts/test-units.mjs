@@ -310,11 +310,11 @@ test('buildModelsList: returns object= list with one entry per model', () => {
 
 console.log('\n== normalize.js ==');
 
-// normaliseForProvider — stepfun
-test('normalize: stepfun reason "none" → "low"', () => {
+// normaliseForProvider — stepfun (Gemini-Only Transformation Rule: passthrough untouched)
+test('normalize: stepfun preserves reasoning_effort without tampering', () => {
   const body = { reasoning_effort: 'none' };
   normaliseForProvider(body, 'stepfun');
-  eq(body.reasoning_effort, 'low');
+  eq(body.reasoning_effort, 'none');
 });
 
 test('normalize: stepfun reason "low" stays "low"', () => {
@@ -323,10 +323,10 @@ test('normalize: stepfun reason "low" stays "low"', () => {
   eq(body.reasoning_effort, 'low');
 });
 
-test('normalize: stepfun injects reasoning_format=deepseek-style', () => {
+test('normalize: stepfun does not inject forced reasoning_format', () => {
   const body = {};
   normaliseForProvider(body, 'stepfun');
-  eq(body.reasoning_format, 'deepseek-style');
+  eq(body.reasoning_format, undefined);
 });
 
 test('normalize: stepfun respects existing reasoning_format', () => {
@@ -335,11 +335,12 @@ test('normalize: stepfun respects existing reasoning_format', () => {
   eq(body.reasoning_format, 'native');
 });
 
-// normaliseForProvider — tokenrhythm
-test('normalize: tokenrhythm object tool_choice → "auto"', () => {
-  const body = { tool_choice: { type: 'function', function: { name: 'foo' } } };
+// normaliseForProvider — tokenrhythm (Tool Choice Structural Native Support)
+test('normalize: tokenrhythm preserves object tool_choice for modern agents', () => {
+  const obj = { type: 'function', function: { name: 'foo' } };
+  const body = { tool_choice: obj };
   normaliseForProvider(body, 'tokenrhythm');
-  eq(body.tool_choice, 'auto');
+  deepEq(body.tool_choice, obj);
 });
 
 test('normalize: tokenrhythm string tool_choice stays string', () => {
@@ -494,26 +495,26 @@ test('normalize: vertex preserves existing google/ prefix on model', () => {
   deepEq(body.extra_body?.google?.thinking_config, { include_thoughts: false });
 });
 
-// normaliseForProvider — Agnes AI
-test('normalize: agnes reasoning "high" → chat_template_kwargs.enable_thinking: true', () => {
+// normaliseForProvider — Agnes AI (Gemini-Only Transformation Rule)
+test('normalize: agnes reasoning_effort preserved untouched', () => {
   const body = { model: 'agnes-2.5-flash', reasoning_effort: 'high' };
   normaliseForProvider(body, 'agnes');
-  eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { enable_thinking: true });
+  eq(body.reasoning_effort, 'high');
+  eq(body.chat_template_kwargs, undefined);
 });
 
-test('normalize: agnes reasoning "none" → chat_template_kwargs.enable_thinking: false', () => {
+test('normalize: agnes reasoning "none" preserved untouched', () => {
   const body = { model: 'agnes-2.5-flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'agnes');
-  eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { enable_thinking: false });
+  eq(body.reasoning_effort, 'none');
+  eq(body.chat_template_kwargs, undefined);
 });
 
-test('normalize: agnes default (no reasoning_effort) → chat_template_kwargs.enable_thinking: true', () => {
+test('normalize: agnes default (no reasoning_effort) untouched', () => {
   const body = { model: 'agnes-3.0-flash' };
   normaliseForProvider(body, 'agnes');
   eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { enable_thinking: true });
+  eq(body.chat_template_kwargs, undefined);
 });
 
 test('normalize: agnes max_tokens ceiling clamps excessive max_tokens', () => {
@@ -526,29 +527,28 @@ test('normalize: agnes max_tokens ceiling clamps excessive max_tokens', () => {
 test('normalize: agnes in KB mode strictly disables thinking', () => {
   const body = { model: 'agnes-3.0-flash', reasoning_effort: 'high' };
   normaliseForProvider(body, 'agnes', { isAgentMode: false });
-  eq(body.reasoning_effort, undefined);
-  deepEq(body.chat_template_kwargs, { enable_thinking: false });
+  eq(body.reasoning_effort, 'none');
 });
 
-// normaliseForProvider — AMD
-test('normalize: amd default (no reasoning_effort) → defaults to reasoning_effort: "medium"', () => {
+// normaliseForProvider — AMD (Gemini-Only Transformation Rule)
+test('normalize: amd default (no reasoning_effort) stays untouched', () => {
   const body = { model: 'DeepSeek-V4-Flash' };
   normaliseForProvider(body, 'amd');
-  eq(body.reasoning_effort, 'medium');
+  eq(body.reasoning_effort, undefined);
   eq(body.chat_template_kwargs, undefined);
   eq(body.thinking, undefined);
 });
 
-test('normalize: amd qwen with "high" reasoning_effort → safely downgraded to "medium"', () => {
+test('normalize: amd qwen with "high" reasoning_effort preserved untouched', () => {
   const body = { model: 'Qwen3.8-Flash-Next', reasoning_effort: 'high' };
   normaliseForProvider(body, 'amd');
-  eq(body.reasoning_effort, 'medium');
+  eq(body.reasoning_effort, 'high');
 });
 
-test('normalize: amd deepseek with "none" reasoning_effort → removed (thinking off by default)', () => {
+test('normalize: amd deepseek with "none" reasoning_effort preserved untouched', () => {
   const body = { model: 'DeepSeek-V4-Flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'amd');
-  eq(body.reasoning_effort, undefined);
+  eq(body.reasoning_effort, 'none');
   eq(body.chat_template_kwargs, undefined);
 });
 
@@ -570,23 +570,23 @@ test('normalize: amd sanitizes messages (developer -> system, multiple systems m
   eq(body.messages[2].role, 'assistant');
 });
 
-// normaliseForProvider — B.AI
-test('normalize: bai glm-5.3-flash with "medium" reasoning_effort → remapped to "high"', () => {
+// normaliseForProvider — B.AI (Gemini-Only Transformation Rule)
+test('normalize: bai glm-5.3-flash with "medium" reasoning_effort preserved untouched', () => {
   const body = { model: 'glm-5.3-flash', reasoning_effort: 'medium' };
   normaliseForProvider(body, 'B.AI');
-  eq(body.reasoning_effort, 'high');
+  eq(body.reasoning_effort, 'medium');
 });
 
-test('normalize: bai glm-5.3-flash with "none" reasoning_effort → omitted (avoid 400 rejection)', () => {
+test('normalize: bai glm-5.3-flash with "none" reasoning_effort preserved untouched', () => {
   const body = { model: 'glm-5.3-flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'B.AI');
-  eq(body.reasoning_effort, undefined);
+  eq(body.reasoning_effort, 'none');
 });
 
-test('normalize: bai glm-5.3-flash default (no reasoning_effort) → defaults to "high"', () => {
+test('normalize: bai glm-5.3-flash default (no reasoning_effort) stays untouched', () => {
   const body = { model: 'glm-5.3-flash' };
   normaliseForProvider(body, 'B.AI');
-  eq(body.reasoning_effort, 'high');
+  eq(body.reasoning_effort, undefined);
 });
 
 test('normalize: bai qwen3.8-flash with "medium" reasoning_effort → preserved untouched', () => {
@@ -601,37 +601,32 @@ test('normalize: bai qwen3.8-flash with "none" reasoning_effort → preserved un
   eq(body.reasoning_effort, 'none');
 });
 
-// normaliseForProvider — SenseNova
-test('normalize: sensenova object tool_choice → "auto"', () => {
-  const body = { model: 'sensenova-6.8-flash-lite', tool_choice: { type: 'function', function: { name: 'calc' } } };
+// normaliseForProvider — SenseNova (Tool Choice Structural Native Support)
+test('normalize: sensenova preserves object tool_choice for modern agents', () => {
+  const obj = { type: 'function', function: { name: 'calc' } };
+  const body = { model: 'sensenova-6.8-flash-lite', tool_choice: obj };
   normaliseForProvider(body, 'sensenova');
-  eq(body.tool_choice, 'auto');
+  deepEq(body.tool_choice, obj);
 });
 
-// normaliseForProvider — MiniMax
-test('normalize: minimax with reasoning_effort "medium" enables reasoning_split and adaptive thinking', () => {
+// normaliseForProvider — MiniMax (Gemini-Only Transformation Rule)
+test('normalize: minimax with reasoning_effort "medium" preserved untouched', () => {
   const body = { model: 'minimax-m3', reasoning_effort: 'medium' };
   normaliseForProvider(body, 'minimax');
   eq(body.model, 'MiniMax-M3');
-  eq(body.reasoning_split, true);
-  deepEq(body.thinking, { type: 'adaptive' });
-  eq(body.reasoning_effort, undefined);
+  eq(body.reasoning_effort, 'medium');
 });
 
-test('normalize: minimax standard chat defaults to reasoning_split=true for clean agent reasoning_content', () => {
+test('normalize: minimax standard chat preserves clean agent parameters', () => {
   const body = { model: 'MiniMax-M3', messages: [{ role: 'user', content: 'hello' }] };
   normaliseForProvider(body, 'minimax');
   eq(body.model, 'MiniMax-M3');
-  eq(body.reasoning_split, true);
-  deepEq(body.thinking, { type: 'adaptive' });
 });
 
-test('normalize: minimax with reasoning_effort "none" explicitly disables thinking', () => {
+test('normalize: minimax with reasoning_effort "none" preserved untouched', () => {
   const body = { model: 'MiniMax-M3', reasoning_effort: 'none' };
   normaliseForProvider(body, 'minimax');
-  deepEq(body.thinking, { type: 'disabled' });
-  eq(body.reasoning_split, undefined);
-  eq(body.reasoning_effort, undefined);
+  eq(body.reasoning_effort, 'none');
 });
 
 test('normalize: minimax strips output_config', () => {
@@ -849,10 +844,12 @@ test('classifyFailure: returns 2s for read timeout', () => {
   eq(classifyFailure(0, 'read_timeout'), COOLDOWN_DURATIONS.READ_TIMEOUT);
 });
 
-test('shouldFailover: 2xx and 400 do NOT failover', () => {
+test('shouldFailover: 2xx, 400, 404, 422 do NOT failover', () => {
   eq(shouldFailover(200, 'http'), false);
   eq(shouldFailover(201, 'http'), false);
   eq(shouldFailover(400, 'http'), false);
+  eq(shouldFailover(404, 'http'), false);
+  eq(shouldFailover(422, 'http'), false);
 });
 
 test('classifyFailure & shouldFailover: 400 with quota/balance/credit failure triggers QUOTA_403 and failover', () => {
@@ -860,13 +857,12 @@ test('classifyFailure & shouldFailover: 400 with quota/balance/credit failure tr
   eq(shouldFailover(400, 'http', 'credit insufficient balance: balance=0'), true);
 });
 
-test('shouldFailover: 429, 5xx, 401, 403, 404 DO failover', () => {
+test('shouldFailover: 429, 5xx, 401, 403 DO failover', () => {
   eq(shouldFailover(429, 'http'), true);
   eq(shouldFailover(500, 'http'), true);
   eq(shouldFailover(502, 'http'), true);
   eq(shouldFailover(401, 'http'), true);
   eq(shouldFailover(403, 'http'), true);
-  eq(shouldFailover(404, 'http'), true);
 });
 
 test('shouldFailover: empty_stream and read_timeout always failover', () => {
@@ -1506,9 +1502,9 @@ test('buildChatUrl: correctly preserves Vertex openapi endpoint path', () => {
 // ============================================================================
 console.log('\n== Schema v2 Settings ==');
 
-test('DEFAULT_SETTINGS: contains all 10 standard fields', () => {
-  eq(DEFAULT_SETTINGS.request_total_budget_sec, 25);
-  eq(DEFAULT_SETTINGS.upstream_timeout_sec, 8);
+test('DEFAULT_SETTINGS: contains all 10 standard fields with 300s budget', () => {
+  eq(DEFAULT_SETTINGS.request_total_budget_sec, 300);
+  eq(DEFAULT_SETTINGS.upstream_timeout_sec, 120);
   eq(DEFAULT_SETTINGS.schedule_total_budget, 3);
   eq(DEFAULT_SETTINGS.max_attempts_per_provider, 3);
   eq(DEFAULT_SETTINGS.fast_failover_provider_down, true);
@@ -1834,10 +1830,17 @@ test('bundled admin ui: has zero un-inlined external css or js assets', () => {
   eq(hasExternalJs, false);
 });
 
-test('bundled admin ui: contains independent topVersionBadge with v2026.10.08-01', () => {
+test('bundled admin ui: contains independent topVersionBadge with v2026.10.08-02', () => {
   const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
   truthy(content.includes('id="topVersionBadge"'));
-  truthy(content.includes('v2026.10.08-01'));
+  truthy(content.includes('v2026.10.08-02'));
+});
+
+test('bundled admin ui: adheres to Red Line 2 (max=300, no 20~25s obsolete text, no Math.min(30))', () => {
+  const content = readFileSync(new URL('../edge-functions/admin.js', import.meta.url), 'utf8');
+  eq(content.includes('EdgeOne 建议 20~25s'), false);
+  truthy(/id="set_upstream_timeout_sec"[^>]*max="300"/.test(content));
+  eq(/Math\.min\(\s*30\s*,\s*upTimeout\s*\)/.test(content), false);
 });
 
 test('edge-functions api/admin/stats: responds with empty stats when authorized and 401 when unauthorized', async () => {

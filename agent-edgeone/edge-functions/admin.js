@@ -1200,7 +1200,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.08-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.08-02</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1240,7 +1240,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.08-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.08-02</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1338,10 +1338,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">上游请求等待超时 (upstream_timeout_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="120" step="1" value="25" style="width:140px;">
-                <span class="text-secondary">秒 (EdgeOne 建议 20~25s，总调度死线由边缘调度器全自动推导)</span>
+                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="300" step="5" value="120" style="width:140px;">
+                <span class="text-secondary">秒 (支持 5~300s，长思考模型推荐 120~300s，前置 SSE 心跳自动保活)</span>
               </div>
-              <div class="text-secondary text-sm mt-1">向上游发起调用的等待上限。故障转移模式下超时立即切换备用 Key；纯手动直通模式下由客户端自身控制。</div>
+              <div class="text-secondary text-sm mt-1">向上游发起调用的等待上限（秒）。故障转移模式下超时立即切换备用 Key；总调度死线由系统智能自适应推导。</div>
             </div>
             <!-- request_total_budget_sec auto-derived; hidden input preserved -->
             <input type="hidden" id="set_request_total_budget_sec" value="25">
@@ -3010,7 +3010,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.08-01';
+const BUILD_VERSION = 'v2026.10.08-02';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3364,10 +3364,10 @@ function renderSettings() {
   if (elStrat) elStrat.value = s.agent_routing_strategy || cfg.agent_routing_strategy || 'sticky_failover';
 
   const elBudget = document.getElementById('set_request_total_budget_sec');
-  if (elBudget) elBudget.value = s.request_total_budget_sec || 25;
+  if (elBudget) elBudget.value = s.request_total_budget_sec || 300;
 
   const elUpstream = document.getElementById('set_upstream_timeout_sec');
-  if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 15;
+  if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 120;
 
   const elRetries = document.getElementById('set_schedule_total_budget');
   if (elRetries) elRetries.value = s.schedule_total_budget || 3;
@@ -3392,9 +3392,10 @@ function renderSettings() {
 }
 
 async function saveSettings() {
-  const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 25;
+  const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 120;
   const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
-  const budget = Math.min(30, upTimeout); // EdgeOne platform limit 30s
+  // Dynamic adaptive budget based on retry count; up to 600s total deadline
+  const budget = Math.min(600, Math.max(upTimeout, upTimeout * retries));
   cfg.settings = {
     agent_routing_strategy: document.getElementById('set_routing_strategy').value,
     upstream_timeout_sec: upTimeout,
@@ -3415,9 +3416,9 @@ async function saveSettings() {
 
 function resetSettingsToDefault() {
   document.getElementById('set_routing_strategy').value = 'sticky_failover';
-  document.getElementById('set_upstream_timeout_sec').value = 25;
+  document.getElementById('set_upstream_timeout_sec').value = 120;
   const hiddenBudget = document.getElementById('set_request_total_budget_sec');
-  if (hiddenBudget) hiddenBudget.value = 25;
+  if (hiddenBudget) hiddenBudget.value = 300;
   document.getElementById('set_schedule_total_budget').value = 3;
   document.getElementById('set_max_attempts_per_provider').value = 2;
   document.getElementById('set_fast_failover_provider_down').checked = true;

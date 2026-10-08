@@ -1,13 +1,13 @@
 {
-  "version": "v2026.10.08-01",
+  "version": "v2026.10.08-02",
   "release_date": "2026-10-08",
   "commit": "HEAD",
-  "title": "EdgeOne 两阶段流式竞速预握手与 300s 长思考超时破除",
+  "title": "EdgeOne Web 控制台超时配置前后端一致性与三大红线闭环",
   "changelog": [
-    "破除 EdgeOne 25 秒超时断连：出站 fetch 显式配置 readTimeout: 300s（5 分钟），全面放宽默认预算与超时常数至 300 秒，完美支持 DeepSeek-R1、Claude 3.7 及超长文档 Prefill 深度思考",
-    "两阶段流式竞速预握手：1500ms 竞速窗口极速识别空流与报错以保留 Failover；长思考大模型自适应 1.5 秒提前提交 HTTP 200 OK 建立长连接",
-    "前置标准 SSE 注释心跳保活：增强型 createKeepAliveStream 支持首包前 5 秒定期下发 ': keep-alive\\n\\n' 注释帧，持续刷新边缘网关空闲定时器，彻底根除 504 Gateway Timeout",
-    "100% 保持全球 Anycast 边缘多 IP 特性：纯边缘运行时流管道实现，零固定机房 IP 依赖，由全球 3200+ 分布式节点独立出站公网",
-    "发版与安装规范对齐：严格执行 docs/RELEASE_SPEC.md 规范，实现全网版本矩阵同步与零漂移门禁验证"
+    "Web 控制台双轨前后端强一致性对齐：彻底修复 EdgeOne 控制台 upstream_timeout_sec 上限（max=300）与引导文案，废除陈旧的 20~25s 限制说明与 Math.min(30) 历史截断",
+    "三大不可逾越红线写入官方规范：在 docs/RELEASE_SPEC.md 确立双轨 Web UI 源码对齐、表单能力与底层内核严格一致、CI 编译静态强断言三大红线",
+    "自动化防回归护栏上线：在 build-admin.mjs 与 test_phase3_phase4_audit.py 设立编译卡点与静态扫描门禁，任何文案脱节或预算截断直接阻断构建发版",
+    "破除 EdgeOne 25 秒超时断连：出站 fetch 显式配置 readTimeout: 300s（5 分钟），全面放宽默认预算与超时常数至 300 秒，完美支持 DeepSeek-R1、Claude 3.7 深度思考",
+    "两阶段流式竞速预握手与 SSE 注释保活：1500ms 极速探测 + 首包前每 5 秒注入 ': keep-alive\\n\\n'，彻底解除边缘网关空闲超时断开"
   ]
 }
