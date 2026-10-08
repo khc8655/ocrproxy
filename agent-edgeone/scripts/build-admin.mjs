@@ -101,6 +101,13 @@ if (modularScriptRegex.test(htmlBundled)) {
   htmlBundled = htmlBundled.replace('</body>', `<script>\n${bundledJs}\n</script>\n</body>`);
 }
 
+// 4.1 Auto-inject dynamic version into bundled HTML and JS constants
+if (appVersion && appVersion !== 'latest') {
+  htmlBundled = htmlBundled.replace(/(id="topVersionBadge"[^>]*>)[^<]+(<\/span>)/g, `$1v${appVersion}$2`);
+  htmlBundled = htmlBundled.replace(/(id="statVersion"[^>]*>)[^<]+(<\/div>)/g, `$1v${appVersion}$2`);
+  htmlBundled = htmlBundled.replace(/(const BUILD_VERSION\s*=\s*['"])[^'"]+(['"];)/g, `$1v${appVersion}$2`);
+}
+
 // === 防线 2: 编译严格强断言 (Fail-Fast Gatekeeper) ===
 if (!htmlBundled.includes('<style>') || !htmlBundled.includes(css.slice(0, 40))) {
   console.error('FATAL BUILD ERROR: CSS was not properly inlined into bundled HTML!');
