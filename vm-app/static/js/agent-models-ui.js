@@ -280,7 +280,7 @@
       const opIdx = list.findIndex(p => p.id === 'opencode');
       list.splice(opIdx + 1, 0, {
         id: 'opencode-free',
-        label: 'OpenCode Free (免费专区)',
+        label: 'OpenCode Free',
         isVault: false,
         protoStr: 'OpenAI',
         protocols: ['chat']
@@ -465,21 +465,27 @@
 
     if (optLocal) {
       if (localList.length > 0) {
-        optLocal.innerHTML = localList.map(p => `<option value="${_esc(p.id)}">${_esc(p.label)} (${_esc(p.protoStr)})</option>`).join('');
+        optLocal.innerHTML = localList.map(p => {
+          const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
+          return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
+        }).join('');
       } else {
         optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
       }
     } else {
       sel.innerHTML = providers.length
-        ? providers.map(p => `<option value="${_esc(p.id)}">${_esc(p.label)}</option>`).join('')
+        ? providers.map(p => {
+            const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
+            return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
+          }).join('')
         : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
     }
 
     if (optVault) {
       optVault.innerHTML = vaultList.length
         ? vaultList.map(p => {
-            const statusTag = p.isCached ? ' [已就绪·只读]' : ' [按需拉取]';
-            return `<option value="${_esc(p.id)}">${_esc(p.label)} (${_esc(p.protoStr)})${statusTag}</option>`;
+            const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
+            return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
           }).join('')
         : '<option disabled>暂无中枢托管供应商</option>';
     }

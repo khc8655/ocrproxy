@@ -1,6 +1,6 @@
 {
   "id": "stepfun",
-  "name": "阶跃星辰 (StepFun)",
+  "name": "阶跃星辰",
   "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.stepfun.com/step_plan",

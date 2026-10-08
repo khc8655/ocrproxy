@@ -113,7 +113,10 @@ function populateCandidateProviderSelect(selectedId){
 
   if (optLocal) {
     if (localList.length > 0) {
-      optLocal.innerHTML = localList.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`).join('');
+      optLocal.innerHTML = localList.map(p => {
+        const protoSuffix = p.protoStr ? ` · ${esc(p.protoStr)}` : '';
+        return `<option value="${esc(p.id)}">${esc(p.label)}${protoSuffix}</option>`;
+      }).join('');
     } else if (vaultList.length > 0) {
       optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
     } else {
@@ -122,7 +125,10 @@ function populateCandidateProviderSelect(selectedId){
   }
   if (optVault) {
     optVault.innerHTML = vaultList.length
-      ? vaultList.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.protoStr)})</option>`).join('')
+      ? vaultList.map(p => {
+          const protoSuffix = p.protoStr ? ` · ${esc(p.protoStr)}` : '';
+          return `<option value="${esc(p.id)}">${esc(p.label)}${protoSuffix}</option>`;
+        }).join('')
       : '<option disabled>暂无中枢托管供应商</option>';
   }
 

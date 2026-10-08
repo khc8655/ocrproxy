@@ -1,6 +1,6 @@
 {
   "id": "sensenova",
-  "name": "商汤日日新 (SenseNova)",
+  "name": "商汤日日新",
   "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://token.sensenova.cn/v1",

@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-08T16:43:55.146Z",
+  "updated_at": "2026-10-08T22:06:41.891Z",
   "providers": [
     {
       "id": "agnes",
@@ -163,7 +163,7 @@ export const CATALOG = {
     },
     {
       "id": "opencode-free",
-      "name": "OpenCode Free (免费专区)",
+      "name": "OpenCode Free",
       "version": "1.0.0",
       "rule_hash": "26230a7499d2",
       "protocol": "openai",
@@ -180,7 +180,7 @@ export const CATALOG = {
     },
     {
       "id": "opencode",
-      "name": "OpenCode (标准版)",
+      "name": "OpenCode",
       "version": "1.0.0",
       "rule_hash": "e1b353ccf196",
       "protocol": "openai",
@@ -197,7 +197,7 @@ export const CATALOG = {
     },
     {
       "id": "sensenova",
-      "name": "商汤日日新 (SenseNova)",
+      "name": "商汤日日新",
       "version": "1.2.0",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
@@ -214,7 +214,7 @@ export const CATALOG = {
     },
     {
       "id": "siliconflow",
-      "name": "硅基流动 (SiliconFlow)",
+      "name": "硅基流动",
       "version": "1.2.0",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
@@ -230,7 +230,7 @@ export const CATALOG = {
     },
     {
       "id": "stepfun",
-      "name": "阶跃星辰 (StepFun)",
+      "name": "阶跃星辰",
       "version": "1.2.0",
       "rule_hash": "ff735ef0f91a",
       "protocol": "openai",
@@ -815,7 +815,7 @@ export const PRESETS = [
   },
   {
     "id": "opencode-free",
-    "name": "OpenCode Free (免费专区)",
+    "name": "OpenCode Free",
     "version": "1.0.0",
     "protocol": "openai",
     "base_url": "https://opencode.ai/zen/v1",
@@ -862,7 +862,7 @@ export const PRESETS = [
   },
   {
     "id": "opencode",
-    "name": "OpenCode (标准版)",
+    "name": "OpenCode",
     "version": "1.0.0",
     "protocol": "openai",
     "base_url": "https://opencode.ai/zen/v1",
@@ -893,7 +893,7 @@ export const PRESETS = [
   },
   {
     "id": "sensenova",
-    "name": "商汤日日新 (SenseNova)",
+    "name": "商汤日日新",
     "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://token.sensenova.cn/v1",
@@ -946,7 +946,7 @@ export const PRESETS = [
   },
   {
     "id": "siliconflow",
-    "name": "硅基流动 (SiliconFlow)",
+    "name": "硅基流动",
     "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.siliconflow.cn/v1",
@@ -998,7 +998,7 @@ export const PRESETS = [
   },
   {
     "id": "stepfun",
-    "name": "阶跃星辰 (StepFun)",
+    "name": "阶跃星辰",
     "version": "1.2.0",
     "protocol": "openai",
     "base_url": "https://api.stepfun.com/step_plan",

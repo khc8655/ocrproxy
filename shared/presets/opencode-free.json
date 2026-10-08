@@ -1,6 +1,6 @@
 {
   "id": "opencode-free",
-  "name": "OpenCode Free (免费专区)",
+  "name": "OpenCode Free",
   "version": "1.0.0",
   "protocol": "openai",
   "base_url": "https://opencode.ai/zen/v1",

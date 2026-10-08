@@ -3,8 +3,11 @@
  */
 const PROTOCOLS = {
   chat: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' },
-  messages: { label: 'Anthropic Messages', short: 'Anthropic', badgeClass: 'badge-warning', title: 'Anthropic 协议' },
-  responses: { label: 'OpenAI Responses', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' }
+  openai: { label: 'OpenAI Chat', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' },
+  messages: { label: 'Anthropic Messages', short: 'Message', badgeClass: 'badge-warning', title: 'Anthropic 协议' },
+  anthropic: { label: 'Anthropic Messages', short: 'Message', badgeClass: 'badge-warning', title: 'Anthropic 协议' },
+  responses: { label: 'OpenAI Responses', short: 'OpenAI', badgeClass: 'badge-success', title: 'OpenAI 协议' },
+  google_openai: { label: 'Google OpenAI', short: 'OpenAI', badgeClass: 'badge-success', title: 'Google OpenAI 协议' }
 };
 
 function getProtocolBadge(proto){

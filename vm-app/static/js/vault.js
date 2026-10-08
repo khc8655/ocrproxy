@@ -72,6 +72,22 @@ function findVaultProvider(provId){
   return list.find(p => p.id === provId || (p.id && p.id.toLowerCase() === low)) || null;
 }
 
+function cleanProviderLabel(label) {
+  if (!label) return '';
+  return String(label)
+    .replace(/\s*\([^)]*\)/g, '')
+    .trim();
+}
+
+function formatProtocolsDisplay(protos) {
+  if (!Array.isArray(protos) || protos.length === 0) return 'OpenAI';
+  const hasOpenAI = protos.some(pr => pr === 'chat' || pr === 'openai' || pr === 'responses' || pr === 'google_openai');
+  const hasMessage = protos.some(pr => pr === 'messages' || pr === 'anthropic');
+  if (hasOpenAI && hasMessage) return 'OpenAI / Message';
+  if (hasMessage) return 'Message';
+  return 'OpenAI';
+}
+
 function getAllAvailableProviders(){
   const localProviders = state.config?.providers || {};
   const remoteProviders = getVaultProviderList();
@@ -83,10 +99,10 @@ function getAllAvailableProviders(){
     const pId = rp.id;
     const hasLocal = !!localProviders[pId];
     const protos = rp.protocols || (hasLocal ? getProviderProtocols(pId) : ['chat']);
-    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    const protoStr = formatProtocolsDisplay(protos);
     list.push({
       id: pId,
-      label: rp.name || pId,
+      label: cleanProviderLabel(rp.name || pId),
       protoStr: protoStr,
       isVault: true,
       isCached: hasLocal,
@@ -102,10 +118,10 @@ function getAllAvailableProviders(){
       if (!remoteIds.has(low)) {
         remoteIds.add(low);
         const protos = getProviderProtocols(name);
-        const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+        const protoStr = formatProtocolsDisplay(protos);
         list.push({
           id: name,
-          label: localProviders[name]?.name || name,
+          label: cleanProviderLabel(localProviders[name]?.name || name),
           protoStr: protoStr,
           isVault: true,
           isCached: true,
@@ -117,9 +133,9 @@ function getAllAvailableProviders(){
 
     // 纯本地手动维护条目
     const protos = getProviderProtocols(name);
-    const protoStr = protos.map(pr => (PROTOCOLS[pr] ? PROTOCOLS[pr].short : pr)).join('+');
+    const protoStr = formatProtocolsDisplay(protos);
     const preset = (typeof PRESET_DEFINITIONS !== 'undefined' && PRESET_DEFINITIONS[low]) || null;
-    const label = localProviders[name]?.name || preset?.name || name;
+    const label = cleanProviderLabel(localProviders[name]?.name || preset?.name || name);
     list.push({
       id: name,
       label: label,
