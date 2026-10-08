@@ -497,6 +497,13 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     run_sudo cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
     run_sudo cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
     run_sudo cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
+    if [[ -d "${INSTALL_DIR}/vm-app" ]]; then
+        run_sudo cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+        run_sudo cp -r "$TMP_DIR/source/vm-app/app" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+        run_sudo cp -r "$TMP_DIR/source/vm-app/static" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+        run_sudo cp -r "$TMP_DIR/source/vm-app/scripts" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+        run_sudo cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+    fi
     run_sudo chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
     if [[ ! -e "/opt/shared" ]]; then
         run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
@@ -757,6 +764,9 @@ cp "$TMP_DIR/source/vm-app/requirements.txt" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/vm-app/run_server.py" "${INSTALL_DIR}/"
 cp -r "$TMP_DIR/source/shared" "${INSTALL_DIR}/"
 cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/" 2>/dev/null || true
+if [[ -d "${INSTALL_DIR}/vm-app" ]]; then
+    run_sudo cp "$TMP_DIR/source/version.json" "${INSTALL_DIR}/vm-app/" 2>/dev/null || true
+fi
 run_sudo ln -sfn "${INSTALL_DIR}/shared" "/opt/shared" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
 ok "应用核心文件已部署到 ${INSTALL_DIR}"

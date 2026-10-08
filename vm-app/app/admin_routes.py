@@ -1281,19 +1281,26 @@ def _parse_version_tuple(v_str: str) -> tuple:
 
 
 def _load_local_version_info() -> dict:
-    """Read local version.json from project root or /opt/ocrproxy."""
+    """Read local version.json from project root or /opt/ocrproxy, picking the latest version."""
     search_paths = [
         Path(__file__).resolve().parent.parent / "version.json",
         Path(__file__).resolve().parent.parent.parent / "version.json",
         Path("/opt/ocrproxy/version.json"),
     ]
+    candidates = []
     for p in search_paths:
         if p.is_file():
             try:
                 with open(p, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if isinstance(data, dict) and "version" in data:
+                        candidates.append(data)
             except Exception:
                 pass
+    if candidates:
+        # Sort by version tuple descending to always reflect the highest/latest installed version
+        candidates.sort(key=lambda d: _parse_version_tuple(d.get("version")), reverse=True)
+        return candidates[0]
     return {
         "version": "v2026.10.07-01",
         "release_date": "2026-10-06",
