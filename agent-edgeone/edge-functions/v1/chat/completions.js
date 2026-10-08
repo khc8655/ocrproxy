@@ -46,7 +46,7 @@ import {
 } from '../../lib/cooldowns.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000; // 25s upstream timeout to allow failover within EdgeOne 30s limit
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000; // 300s (5min) full EdgeOne fetch limit for deep reasoning models
 const MAX_RETRIES = 3;
 
 export async function onRequestPost(context) {
@@ -108,8 +108,8 @@ export async function onRequestPost(context) {
   }
 
   const settings = config.settings || {};
-  const totalBudgetSec = Number(settings.request_total_budget_sec || 25);
-  const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 15);
+  const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
+  const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
   const maxRetries = Number(settings.schedule_total_budget || 3);
   const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
   const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
@@ -228,7 +228,7 @@ export async function onRequestPost(context) {
     const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
       || binding.adapterRules?.timeout_rules?.default_timeout_sec
       || upstreamTimeoutSec;
-    const effectiveTimeoutSec = Math.min(60, Number(modelTimeoutSec) || upstreamTimeoutSec);
+    const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
     const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
 
     const result = await forwardUpstream(
@@ -390,9 +390,9 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       body: JSON.stringify(body),
       eo: {
         timeoutSetting: {
-          connectTimeout: 8_000,
-          readTimeout: timeoutMs,
-          writeTimeout: 15_000,
+          connectTimeout: 10_000,
+          readTimeout: Math.min(300_000, timeoutMs),
+          writeTimeout: 30_000,
         },
       },
     });
@@ -410,25 +410,56 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
         return { kind: 'empty_stream', status: upstreamResp.status, response: null };
       }
       const reader = upstreamResp.body.getReader();
-      let firstChunk = null;
+
+      // Fast Race Peek Window (1500ms):
+      // If the upstream produces the first chunk or fails within 1.5s, peek detects empty stream or fast errors
+      // and triggers key failover or normal streaming.
+      // If 1.5s passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
+      // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
+      // completely bypassing EdgeOne's 25s idle gateway timeout while allowing up to 300s upstream inference!
+      const PEEK_WINDOW_MS = 1500;
+      let readPromise = reader.read();
+      let peekTimer = null;
+      const timeoutPromise = new Promise((resolve) => {
+        peekTimer = setTimeout(() => resolve({ isTimeout: true }), PEEK_WINDOW_MS);
+      });
+
+      let peekResult;
       try {
-        const { done, value } = await reader.read();
-        if (done || !value || value.length === 0) {
-          console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} stream closed without emitting data`);
-          try { await reader.cancel(); } catch (_) {}
-          return { kind: 'empty_stream', status: upstreamResp.status, errorText: 'Stream closed without emitting data', response: null };
-        }
-        firstChunk = value;
-      } catch (readErr) {
-        console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} peek first chunk error: ${readErr?.message || readErr}`);
+        peekResult = await Promise.race([readPromise, timeoutPromise]);
+      } catch (peekErr) {
+        if (peekTimer) clearTimeout(peekTimer);
+        console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} peek first chunk error: ${peekErr?.message || peekErr}`);
         try { await reader.cancel(); } catch (_) {}
-        return { kind: 'empty_stream', status: upstreamResp.status, errorText: readErr?.message || String(readErr), response: null };
+        return { kind: 'empty_stream', status: upstreamResp.status, errorText: peekErr?.message || String(peekErr), response: null };
+      }
+
+      if (peekTimer) clearTimeout(peekTimer);
+
+      if (peekResult && peekResult.isTimeout) {
+        // Deep thinking / slow prefill model: commit 200 OK immediately and mount keep-alive pipeline
+        return {
+          kind: 'success',
+          status: upstreamResp.status,
+          response: new Response(createKeepAliveStream(reader, 5000, null, readPromise), {
+            status: upstreamResp.status,
+            headers: buildOutHeaders(upstreamResp),
+          }),
+        };
+      }
+
+      // Fast response branch (within 1500ms)
+      const { done, value } = peekResult;
+      if (done || !value || value.length === 0) {
+        console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} stream closed without emitting data`);
+        try { await reader.cancel(); } catch (_) {}
+        return { kind: 'empty_stream', status: upstreamResp.status, errorText: 'Stream closed without emitting data', response: null };
       }
 
       return {
         kind: 'success',
         status: upstreamResp.status,
-        response: new Response(createKeepAliveStream(reader, 15000, firstChunk), {
+        response: new Response(createKeepAliveStream(reader, 5000, value, null), {
           status: upstreamResp.status,
           headers: buildOutHeaders(upstreamResp),
         }),

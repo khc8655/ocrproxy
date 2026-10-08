@@ -453,11 +453,12 @@ export function rescueToolCallsFromText(content) {
 
 /**
  * Wraps an upstream ReadableStream or reader with pull-based backpressure and keep-alive SSE comments.
- * If no chunk is emitted for `intervalMs` (default 15s), an SSE comment ": keep-alive\n\n" is enqueued
+ * If no chunk is emitted for `intervalMs` (default 5000ms), an SSE comment ": keep-alive\n\n" is enqueued
  * to maintain the connection with downstream clients / edge gateways without buffering leaks.
- * Supports optional `initialChunk` from upstream chunk peeking.
+ * Supports optional `initialChunk` from upstream chunk peeking or `pendingFirstChunkPromise`
+ * when peeking was still in progress after the initial fast race window.
  */
-export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialChunk = null) {
+export function createKeepAliveStream(bodyOrReader, intervalMs = 5000, initialChunk = null, pendingFirstChunkPromise = null) {
   if (!bodyOrReader) return null;
   const reader = typeof bodyOrReader.getReader === 'function' ? bodyOrReader.getReader() : bodyOrReader;
   if (!reader || typeof reader.read !== 'function') {
@@ -467,6 +468,7 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
   const encoder = new TextEncoder();
   let timer = null;
   let unconsumedInitial = initialChunk;
+  let pendingPromise = pendingFirstChunkPromise;
 
   const resetTimer = (controller) => {
     if (timer) clearInterval(timer);
@@ -513,6 +515,53 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
         return;
       }
 
+      if (pendingPromise) {
+        const p = pendingPromise;
+        pendingPromise = null;
+        try {
+          const { done, value } = await p;
+          if (done) {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+            controller.close();
+            return;
+          }
+          if (value) {
+            resetTimer(controller);
+            controller.enqueue(value);
+            if (isSseDone(value)) {
+              if (timer) {
+                clearInterval(timer);
+                timer = null;
+              }
+              try { reader.cancel(); } catch (e) {}
+              controller.close();
+              return;
+            }
+          }
+        } catch (err) {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+          try {
+            const errPayload = JSON.stringify({
+              error: {
+                type: 'upstream_error',
+                message: `Stream read error: ${err?.message || String(err)}`,
+                code: 'stream_exception',
+              },
+            });
+            controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`));
+          } catch (_) {}
+          controller.close();
+          return;
+        }
+        return;
+      }
+
       try {
         const { done, value } = await reader.read();
         if (done) {
@@ -538,7 +587,17 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 15000, initialC
           clearInterval(timer);
           timer = null;
         }
-        controller.error(err);
+        try {
+          const errPayload = JSON.stringify({
+            error: {
+              type: 'upstream_error',
+              message: `Stream read error: ${err?.message || String(err)}`,
+              code: 'stream_exception',
+            },
+          });
+          controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`));
+        } catch (_) {}
+        controller.close();
       }
     },
     cancel(reason) {

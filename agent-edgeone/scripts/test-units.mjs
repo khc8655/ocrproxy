@@ -731,6 +731,67 @@ test('createKeepAliveStream: emits keep-alive comments on inactivity', async () 
   truthy(fullText.includes('data: chunk1\n\n'));
 });
 
+test('createKeepAliveStream: emits keep-alive during pendingFirstChunkPromise before upstream produces first token', async () => {
+  let push;
+  const upstream = new ReadableStream({
+    start(controller) {
+      push = controller;
+    }
+  });
+  const upstreamReader = upstream.getReader();
+  const pendingPromise = upstreamReader.read();
+
+  // Model thinking delay: push chunk after 80ms
+  setTimeout(() => {
+    push.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
+    push.close();
+  }, 80);
+
+  const keepAliveStream = createKeepAliveStream(upstreamReader, 25, null, pendingPromise); // 25ms interval
+  const reader = keepAliveStream.getReader();
+  const decoder = new TextDecoder();
+
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(decoder.decode(value));
+  }
+  const fullText = chunks.join('');
+  truthy(fullText.includes(': keep-alive\n\n'));
+  truthy(fullText.includes('Hello'));
+  // Ensure keep-alive comments were received BEFORE the real token
+  const firstKeepAliveIdx = fullText.indexOf(': keep-alive\n\n');
+  const tokenIdx = fullText.indexOf('Hello');
+  truthy(firstKeepAliveIdx >= 0 && firstKeepAliveIdx < tokenIdx);
+});
+
+test('createKeepAliveStream: emits error event and closes gracefully when upstream throws during thinking', async () => {
+  const upstream = new ReadableStream({
+    start(controller) {
+      setTimeout(() => {
+        controller.error(new Error('Upstream timeout after thinking'));
+      }, 50);
+    }
+  });
+  const upstreamReader = upstream.getReader();
+  const pendingPromise = upstreamReader.read();
+
+  const keepAliveStream = createKeepAliveStream(upstreamReader, 20, null, pendingPromise);
+  const reader = keepAliveStream.getReader();
+  const decoder = new TextDecoder();
+
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(decoder.decode(value));
+  }
+  const fullText = chunks.join('');
+  truthy(fullText.includes('event: error'));
+  truthy(fullText.includes('Upstream timeout after thinking'));
+});
+
 console.log('\n== cooldowns.js ==');
 
 // ---- Mock KV store -----------------------------------------------------

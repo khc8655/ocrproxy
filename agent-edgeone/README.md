@@ -15,7 +15,13 @@
 - **`round_robin` (轮询负载均衡)**：按请求原子轮询各可用 Key，均匀打散并发压力；
 - **`priority_fallback` (优先级优先)**：按配置顺序优先使用高优先级 Key。
 
-### 2. OpenAI 零拷贝极速透传与纯净适配体系 (v2026.10.04-02)
+### 2. OpenAI & Anthropic 零拷贝极速透传与长思考 300s 超时破除 (v2026.10.08)
+- **两阶段流式竞速预握手 (Two-Phase Race Peek + Pre-Keepalive Pipeline)**：
+  * **快速竞速窗口 (1500ms)**：当上游在 1.5 秒内极速返回首个 chunk 或快速报错（400/401/429/空流）时，保持原汁原味快速错误侦测与 Key Failover 机制；
+  * **长思考自适应长连接握手 (> 1500ms)**：若上游大模型正在进行长时间思考（如 DeepSeek-R1、Claude 3.7 Thinking、超长文档 Prefill），1.5 秒立即向客户端返回 `HTTP 200 OK`，握手时间（TTFB）严格压在 1.5 秒；
+  * **前置标准 SSE 注释心跳 (`: keep-alive\n\n`)**：每 5 秒在管道中向客户端注入一次 RFC 8895 标准注释行，持续刷新 EdgeOne 入口网关的空闲检测定时器，彻底破除 25 秒断开限制；
+  * **官方 300 秒 Fetch 超时全额支持**：出站 fetch 显式配置 `readTimeout: 300,000ms`（5 分钟），模型生成第一个 token 以及后续 token 时无缝通过管道流入客户端；
+  * **100% 保持全球 Anycast 边缘多 IP 特性**：完全由 EdgeOne 全球 3200+ 分布式节点直接发起公网请求，无需挂靠任何固定服务器机房 IP。
 - **非流式响应零序列化 (`rawBytes` 直通)**：
   * 上游响应直接以底层原始字节 `rawBytes` 透传给客户端，彻底消除在边缘节点反序列化 `resp.json()` 与二次 `JSON.stringify()` 的 CPU 与内存开销；
 - **流式 SSE 纯字节透传**：
@@ -25,9 +31,6 @@
   * **唯一例外保留**：严格仅针对 Google AI Studio 与 Vertex AI 保持 Thinking Config 思考等级矩阵映射以及 Tool Schema `$schema` 深度清洗；
 - **Tool Choice 结构化原生支持**：
   * 全面禁用 `normalize_choice_to_string`，完美支持现代 Agent（Cursor, Cline, Claude Code）传入特定对象级函数调用规范；
-- **Web Streams 标准背压与首块预读 (Chunk Peeking)**：
-  * `createKeepAliveStream` 重构为基于标准 `pull(controller)` 模式，消除无限循环强推导致的内存排队积压，下游消费缓慢时自动向网络上游传递背压；
-  * 支持首包探测（Chunk Peeking）：流式转发在下发下游前预读首包数据，若上游返回 200 但立即断连发送 0 字节，边缘节点主动捕获并触发下一候选节点 Failover，杜绝向客户端吐出空流；
 - **CORS 浏览器预检**：
   * 支持 `/v1/chat/completions` 与 `/v1/messages` 的 `OPTIONS` 204 无鉴权预检请求，网页端应用（如 Web 版 NextChat、LibreChat 等）无缝直连。
 
@@ -42,7 +45,7 @@
 
 ### 4. 管理后台 UI (单文件 Web App & 极简高密设计)
 - **单文件编译交付**：源码位于 `shared/admin/`，通过 `npm run build:admin` 自动化内联编译输出至 `admin.html`，零外部打包依赖；
-- **首页网关直通条**：直观呈现版本号 (`v2026.10.04-02`)、已纳管供应商数、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
+- **首页网关直通条**：直观呈现版本号、已纳管供应商数、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
 - **Key 列表紧凑流式芯片 (Chip Grid)**：高密度流式芯片布局，清晰区分中枢 Key 与本地 Key；
 - **配置数据无损互通**：与 VM 版配置 Schema 100% 互通。
 
@@ -66,7 +69,7 @@
 在项目环境变量中配置：
 * `PROXY_API_KEY`: 客户端调用 `/v1/*` 接口所需的 Bearer Token；
 * `ADMIN_PASSWORD`: Web 管理后台登录密码；
-* `UPSTREAM_TIMEOUT_MS`: 上游读取超时时间（推荐 `25000`）。
+* `UPSTREAM_TIMEOUT_MS`: 上游读取超时时间（默认为 `300000`，即 5 分钟，支持深度思考大模型）。
 
 ---
 

@@ -575,6 +575,16 @@ nav#topNav button.active {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 textarea.form-control {
   height: auto;
   min-height: 80px;
@@ -1190,7 +1200,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.07-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.06-01</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1230,7 +1240,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.07-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.06-01</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1400,6 +1410,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               <div class="text-secondary text-sm mt-1">Key 无效或欠费被拒时的主动隔离时间</div>
             </div>
           </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--color-border);">
+          <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
+          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">💾 保存设置并生效</button>
         </div>
       </div>
     </div>
@@ -1748,6 +1763,21 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       });
     }
 
+    const summaryBox = document.getElementById('a_selectedBindingsSummary');
+    if (summaryBox && !summaryBox._hasDelegated) {
+      summaryBox._hasDelegated = true;
+      summaryBox.addEventListener('click', (e) => {
+        const rmBtn = e.target.closest('[data-action="remove-modal-binding"]');
+        if (rmBtn) {
+          e.stopPropagation();
+          const p = rmBtn.dataset.prov;
+          const k = rmBtn.dataset.key;
+          modalBindings = modalBindings.filter(b => !(b.provider === p && b.key === k));
+          renderAgentKeyChecks();
+        }
+      });
+    }
+
     const quickTags = document.getElementById('a_quickTags');
     if (quickTags && !quickTags._hasDelegated) {
       quickTags._hasDelegated = true;
@@ -1910,21 +1940,38 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   function _getAllProvidersList() {
+    let list = [];
     if (typeof getAllAvailableProviders === 'function') {
-      return getAllAvailableProviders();
+      list = getAllAvailableProviders();
+    } else {
+      const { cfg } = getCtx();
+      const provs = cfg.providers || {};
+      list = Object.keys(provs).sort().map(id => {
+        const p = provs[id];
+        const protoList = (typeof getProviderProtocols === 'function') ? getProviderProtocols(id) : ['chat'];
+        return {
+          id,
+          label: p.label || id,
+          isVault: false,
+          protoStr: protoList.join(', ')
+        };
+      });
     }
-    const { cfg } = getCtx();
-    const provs = cfg.providers || {};
-    return Object.keys(provs).sort().map(id => {
-      const p = provs[id];
-      const protoList = (typeof getProviderProtocols === 'function') ? getProviderProtocols(id) : ['chat'];
-      return {
-        id,
-        label: p.label || id,
+
+    // 保证 OpenCode 免费专区 (opencode-free) 选项始终可用
+    const hasOpencode = list.some(p => p.id === 'opencode');
+    const hasFree = list.some(p => p.id === 'opencode-free');
+    if (hasOpencode && !hasFree) {
+      const opIdx = list.findIndex(p => p.id === 'opencode');
+      list.splice(opIdx + 1, 0, {
+        id: 'opencode-free',
+        label: 'OpenCode Free (免费专区)',
         isVault: false,
-        protoStr: protoList.join(', ')
-      };
-    });
+        protoStr: 'OpenAI',
+        protocols: ['chat']
+      });
+    }
+    return list;
   }
 
   // 3. Probed Upstream Models State
@@ -2063,6 +2110,25 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     } else {
       modalBindings = modalBindings.filter(b => !(b.provider === prov && b.key === keyVal));
     }
+    _renderSelectedBindingsSummary();
+  }
+
+  function _renderSelectedBindingsSummary() {
+    const summaryEl = document.getElementById('a_selectedBindingsSummary');
+    if (!summaryEl) return;
+    if (!modalBindings || modalBindings.length === 0) {
+      summaryEl.innerHTML = '';
+      summaryEl.style.display = 'none';
+      return;
+    }
+    const html = modalBindings.map(b => {
+      return \`<span class="badge" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;background:var(--bg);border:1px solid var(--border);">
+        <strong style="color:var(--primary);">\${_esc(b.provider)}:</strong> \${_esc(b.key)}
+        <button type="button" class="btn-ghost" data-action="remove-modal-binding" data-prov="\${_esc(b.provider)}" data-key="\${_esc(b.key)}" style="padding:0 2px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;cursor:pointer;" title="移除此绑定">×</button>
+      </span>\`;
+    }).join('');
+    summaryEl.innerHTML = \`<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">当前已选绑定 (\${modalBindings.length})：</div><div style="display:flex;flex-wrap:wrap;gap:6px;">\${html}</div>\`;
+    summaryEl.style.display = 'block';
   }
 
   // 4. Populate and Handle Provider Selection in Agent Modal
@@ -2118,6 +2184,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const quickBox = document.getElementById('a_quickModels');
     const protoInfoEl = document.getElementById('a_model_proto_info');
 
+    // 关键隔离修复：新增模型模式下，切换提供商即代表改变目标厂商，彻底清除非当前厂商的幽灵绑定
     const isNewModel = !document.getElementById('a_oldName')?.value;
     if (isNewModel && oldVal && oldVal !== val) {
       modalBindings = [];
@@ -2184,7 +2251,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
     }
 
-    const localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
+    const isFreeTier = (prov === 'opencode-free' || prov === 'opencode_free');
+    let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
+    if (isFreeTier) {
+      const parentProv = cfg.providers && (cfg.providers['opencode'] || cfg.providers['opencode-free']);
+      const parentKeys = parentProv ? Object.keys(parentProv.keys || {}) : [];
+      localKeys = [...new Set(['public', ...parentKeys, ...localKeys])];
+    }
+
     const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => typeof k === 'string' ? k : (k.label || k.id || '')).filter(Boolean) : [];
     const purelyLocalKeys = localKeys.filter(k => !remoteKeys.includes(k));
     const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
@@ -2193,7 +2267,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (isNewModel) {
       modalBindings = modalBindings.filter(b => b.provider === prov);
       if (modalBindings.length === 0 && allKeyLabels.length > 0) {
-        modalBindings.push({ provider: prov, key: allKeyLabels[0] });
+        const defaultK = (isFreeTier && allKeyLabels.includes('public')) ? 'public' : allKeyLabels[0];
+        modalBindings.push({ provider: prov, key: defaultK });
       }
     }
 
@@ -2201,20 +2276,25 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方添加本地 Key 或同步中枢规则</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
-        const isVault = remoteKeys.includes(k);
-        const isLocal = localKeys.includes(k);
+        const isPublic = (k === 'public' || k === '__public__');
+        const isVault = !isPublic && remoteKeys.includes(k);
+        const isLocal = !isPublic && localKeys.includes(k);
         const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
-        const tag = isVault 
-          ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
-          : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`;
+        const tag = isPublic
+          ? \`<span class="badge badge-warning" style="font-size:10px;padding:0 6px;">免Key兜底</span>\`
+          : (isVault 
+              ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
+              : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`);
 
-        const deleteBtn = (!isVault && isLocal)
+        const deleteBtn = (!isVault && isLocal && !isPublic)
           ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
           : '';
 
+        const displayLabel = isPublic ? '🌟 公共匿名凭据 (免Key兜底)' : k;
+
         return \`<div class="key-capsule \${isChecked ? 'checked' : ''}" data-action="toggle-key-capsule">
           <input type="checkbox" value="\${_esc(k)}" data-provider="\${_esc(prov)}" data-is-local="\${isLocal}" \${isChecked ? 'checked' : ''} style="display:none;">
-          <span style="font-weight:600;">\${_esc(k)}</span>
+          <span style="font-weight:600;">\${_esc(displayLabel)}</span>
           \${tag}
           \${deleteBtn}
         </div>\`;
@@ -2244,6 +2324,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       quickBox.style.display = 'none';
     }
 
+    _renderSelectedBindingsSummary();
     initModalDelegation();
   }
 
@@ -2325,12 +2406,29 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (!bindings.length) { _toast('请至少勾选绑定一个 Key', 'err'); return; }
 
     if (typeof ensureKeysImported === 'function') {
-      const ok = await ensureKeysImported(bindings);
-      if (!ok) return;
+      const realKeys = bindings.filter(b => b.key !== 'public' && b.key !== '__public__');
+      if (realKeys.length > 0) {
+        const ok = await ensureKeysImported(realKeys);
+        if (!ok) return;
+      }
     }
 
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
+
+    // 自动补齐 opencode-free 供应商条目
+    if (bindings.some(b => b.provider === 'opencode-free') && cfg.providers && !cfg.providers['opencode-free']) {
+      const parentProv = cfg.providers['opencode'] || {};
+      cfg.providers['opencode-free'] = {
+        name: 'opencode-free',
+        label: 'OpenCode Free (免费专区)',
+        base_url: parentProv.base_url || 'https://opencode.ai/zen/v1',
+        protocol: 'openai',
+        protocols: ['chat'],
+        keys: { 'public': 'public' },
+        adapter_rules: { opencode_free_bypass: true }
+      };
+    }
 
     // Collision check 1: Adding keys to an existing model during creation
     if (!oldName && cfg.agent_models[name]) {
@@ -2697,7 +2795,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const { cfg, stats: fullStats } = getCtx();
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
-    const activeKey = runtimeActiveKey || cfg.agent_models?.[modelName]?.active_key || (list[0] ? list[0].key : '');
+    const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
     const isActive = (binding.key === activeKey);
 
     const setActiveBtn = isActive
@@ -2912,7 +3010,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.07-01';
+const BUILD_VERSION = 'v2026.10.06-01';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

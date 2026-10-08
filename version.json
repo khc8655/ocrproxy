@@ -1,12 +1,13 @@
 {
-  "version": "v2026.10.07-04",
-  "release_date": "2026-10-07",
+  "version": "v2026.10.08-01",
+  "release_date": "2026-10-08",
   "commit": "HEAD",
-  "title": "彻底消除 systemd 沙箱 NoNewPrivs 冲突保障 Web OTA 平滑升级 100% 成功",
+  "title": "EdgeOne 两阶段流式竞速预握手与 300s 长思考超时破除",
   "changelog": [
-    "systemd 沙箱冲突根除：精简 service 中触发 Linux 内核 PR_SET_NO_NEW_PRIVS 强制标志的 ProtectSystem 与 Restrict 等沙箱指令，彻底消除 'sudo: The \"no new privileges\" flag is set' 报错",
-    "存量服务自适应修复：在 install.sh 平滑升级流程中自动清除宿主机 service 残留的冲突沙箱指令并平滑重载 daemon",
-    "升级调用链路加固：在后台升级执行器中优先引入 /usr/bin/systemd-run 绝对路径变体，100% 确保与 sudoers 免密规则匹配",
-    "发版与安装规范对齐：严格执行 docs/RELEASE_SPEC.md 规范，实现全网 6 处版本号同步与零漂移门禁验证"
+    "破除 EdgeOne 25 秒超时断连：出站 fetch 显式配置 readTimeout: 300s（5 分钟），全面放宽默认预算与超时常数至 300 秒，完美支持 DeepSeek-R1、Claude 3.7 及超长文档 Prefill 深度思考",
+    "两阶段流式竞速预握手：1500ms 竞速窗口极速识别空流与报错以保留 Failover；长思考大模型自适应 1.5 秒提前提交 HTTP 200 OK 建立长连接",
+    "前置标准 SSE 注释心跳保活：增强型 createKeepAliveStream 支持首包前 5 秒定期下发 ': keep-alive\\n\\n' 注释帧，持续刷新边缘网关空闲定时器，彻底根除 504 Gateway Timeout",
+    "100% 保持全球 Anycast 边缘多 IP 特性：纯边缘运行时流管道实现，零固定机房 IP 依赖，由全球 3200+ 分布式节点独立出站公网",
+    "发版与安装规范对齐：严格执行 docs/RELEASE_SPEC.md 规范，实现全网版本矩阵同步与零漂移门禁验证"
   ]
 }

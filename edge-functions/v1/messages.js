@@ -30,7 +30,7 @@ import {
 import { normaliseMessagesForProvider, createKeepAliveStream } from '../lib/normalize.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 25_000;
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000;
 
 export async function onRequestPost(context) {
   if (context?.request?.method === 'OPTIONS') {
@@ -88,8 +88,8 @@ export async function onRequestPost(context) {
     }
 
     const settings = config.settings || {};
-    const totalBudgetSec = Number(settings.request_total_budget_sec || 25);
-    const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 15);
+    const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
+    const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
     const maxRetries = Number(settings.schedule_total_budget || 3);
     const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
     const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
@@ -217,7 +217,7 @@ export async function onRequestPost(context) {
       const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
         || binding.adapterRules?.timeout_rules?.default_timeout_sec
         || upstreamTimeoutSec;
-      const effectiveTimeoutSec = Math.min(60, Number(modelTimeoutSec) || upstreamTimeoutSec);
+      const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
       const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
       const customHeaders = binding.adapterRules?.inject_headers || binding.adapterRules?.adapter_rules?.inject_headers;
 
@@ -325,9 +325,9 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
       signal: controller.signal,
       eo: {
         timeoutSetting: {
-          connectTimeout: 8_000,
-          readTimeout: timeoutMs,
-          writeTimeout: 15_000,
+          connectTimeout: 10_000,
+          readTimeout: Math.min(300_000, timeoutMs),
+          writeTimeout: 30_000,
         },
       },
     });
@@ -361,18 +361,29 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
     return { kind: 'empty_stream', status: resp.status, errorText: 'Response has no body or is not streamable' };
   }
   const reader = resp.body.getReader();
-  let firstChunk = null;
+
+  // Fast Race Peek Window (1500ms):
+  // If upstream produces first chunk within 1.5s, peek detects empty stream or fast errors and fails over.
+  // If 1.5s passes without first chunk (deep reasoning / long thinking models like Claude 3.7 Thinking / DeepSeek),
+  // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
+  // completely bypassing EdgeOne's 25s idle gateway timeout while allowing up to 300s upstream inference!
+  const PEEK_WINDOW_MS = 1500;
+  let readPromise = reader.read();
+  let peekTimer = null;
+  const timeoutPromise = new Promise((resolve) => {
+    peekTimer = setTimeout(() => resolve({ isTimeout: true }), PEEK_WINDOW_MS);
+  });
+
+  let peekResult;
   try {
-    const { done, value } = await reader.read();
-    if (done || !value || value.length === 0) {
-      try { await reader.cancel(); } catch (_) {}
-      return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without emitting data' };
-    }
-    firstChunk = value;
-  } catch (readErr) {
+    peekResult = await Promise.race([readPromise, timeoutPromise]);
+  } catch (peekErr) {
+    if (peekTimer) clearTimeout(peekTimer);
     try { await reader.cancel(); } catch (_) {}
-    return { kind: 'empty_stream', status: resp.status, errorText: readErr?.message || String(readErr) };
+    return { kind: 'empty_stream', status: resp.status, errorText: peekErr?.message || String(peekErr) };
   }
+
+  if (peekTimer) clearTimeout(peekTimer);
 
   const responseHeaders = new Headers(resp.headers);
   responseHeaders.set('content-type', 'text/event-stream; charset=utf-8');
@@ -384,9 +395,27 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   responseHeaders.set('access-control-allow-methods', 'GET, POST, OPTIONS');
   responseHeaders.set('access-control-allow-headers', '*');
 
+  if (peekResult && peekResult.isTimeout) {
+    // Deep thinking / slow prefill model: commit 200 OK immediately and mount keep-alive pipeline
+    return {
+      kind: 'success',
+      response: new Response(createKeepAliveStream(reader, 5000, null, readPromise), {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: responseHeaders,
+      }),
+    };
+  }
+
+  const { done, value } = peekResult;
+  if (done || !value || value.length === 0) {
+    try { await reader.cancel(); } catch (_) {}
+    return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without emitting data' };
+  }
+
   return {
     kind: 'success',
-    response: new Response(createKeepAliveStream(reader, 15000, firstChunk), {
+    response: new Response(createKeepAliveStream(reader, 5000, value, null), {
       status: resp.status,
       statusText: resp.statusText,
       headers: responseHeaders,
