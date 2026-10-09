@@ -50,6 +50,7 @@ from .scheduler import (
     GlobalOverloadError,
     reset_runtime_state,
     _reclaim_memory,
+    StreamInterruptedError,
 )
 
 def _resolve_dynamic_placeholder(val: str) -> str:
@@ -587,11 +588,21 @@ def _normalize_tool_calls(data: Any) -> Any:
     return data
 
 
+def _sse_stream_error(message: str, error_format: str = "openai") -> bytes:
+    msg = f"Upstream stream interrupted: {message}"[:500]
+    if error_format == "anthropic":
+        payload = {"type": "error", "error": {"type": "api_error", "message": msg}}
+        return b"event: error\ndata: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+    payload = {"error": {"message": msg, "type": "upstream_stream_interrupted", "code": "stream_interrupted"}}
+    return b"data: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+
+
 async def _stream_with_keepalive(
     first_chunk: bytes,
     remainder,
     filter_fn: Optional[Callable[[bytes], bytes]] = None,
     keepalive_sec: float = 15.0,
+    error_format: str = "openai",
 ):
     """Yield chunks from a streaming response, emitting SSE keep-alive comments
     (': keep-alive\n\n') every `keepalive_sec` if upstream is idle (e.g. during deep thinking).
@@ -622,6 +633,11 @@ async def _stream_with_keepalive(
                     if _is_sse_done_chunk(chunk):
                         break
                 except StopAsyncIteration:
+                    break
+                except StreamInterruptedError as e:
+                    # Upstream broke mid-stream: end with an explicit SSE error
+                    # event instead of silently truncating the answer.
+                    yield _sse_stream_error(str(e), error_format)
                     break
             else:
                 # Timed out waiting for next chunk; keep pending_task alive!
@@ -1207,7 +1223,7 @@ async def anthropic_messages(request: Request):
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder, lease: Optional[Any] = None):
             async def event_generator():
                 try:
-                    async for chunk in _stream_with_keepalive(first_chunk, remainder, keepalive_sec=15.0):
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, keepalive_sec=15.0, error_format="anthropic"):
                         yield chunk
                 finally:
                     try:
