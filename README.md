@@ -206,6 +206,10 @@ ocrprox (Monorepo)
 - **`stream_idle_timeout_sec` (流式空闲超时 · v2026.10.09-08)**：默认 **`300s`**。流式请求的**首字节**仍受单 Key 超时约束（超时即 failover），流建立后上游静默（长思考、大段工具参数生成）在该时长内不会被截断。
 - **`cooldown_404_sec` (404 候选冷却 · v2026.10.09-08)**：默认 **`600s`**。某候选返回 404（模型下架/路径不符）时继续 failover 到其它候选并冷却该候选；仅当存在备选候选时生效。
 - **`kb_global_max_concurrency` (KB 全局并发阀 · v2026.10.09-08)**：默认 **`30`**，仅作用于 KB 类请求（KB chat / embedding / rerank / OCR），防大 base64 OOM；Agent 长流不占此阀，只受 `max_concurrency_per_key` 约束。uvicorn 连接上限可用环境变量 `UVICORN_LIMIT_CONCURRENCY`（默认 512）调整。
+- **饱和 Key 智能秒切 (Saturated Key Fast Switch · v2026.10.09-09)**：并发槽已满的 Key 自动稳定排至候选末尾；当后续存在空闲候选时至多等待 1s 即刻尝试下一候选（首选 Key 满载无需白等 10s），仅当全部候选均满载时才等满 10s。
+- **429 严格遵循 Retry-After (v2026.10.09-09)**：支持解析 HTTP 响应头中的 delta-seconds 与 RFC 1123 HTTP-date 格式。Agent 模式多候选时按 Retry-After 冷却该节点（上限 60s，单候选不冷冻）；KB 模式取 `max(cooldown_tpm_sec, Retry-After ≤ 300s)`。
+- **中途断流 SSE 终结事件 (Mid-Stream Break Terminal Event · v2026.10.09-09)**：流式传输在发出首字节后若遭遇上游连接中断（无法再 failover），向客户端补发标准终止 SSE 错误事件（OpenAI 格式 `data: {"error":...}`，Anthropic 格式 `event: error`），按 502 记入统计并惩罚延迟权重，杜绝客户端收到被静默截断的内容。
+- **KB/OCR 内存回收异步合并节流 (Coalesced Memory Reclaim · v2026.10.09-09)**：`gc.collect() + malloc_trim(0)` 改造为后台合并任务（并发最多 1 个、间隔 ≥2s、请求路径 0 毫秒阻塞），彻底消除入库高并发时的 GIL 争用卡顿。
 - **`max_retries` / `schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
 - **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**。
 - **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。
