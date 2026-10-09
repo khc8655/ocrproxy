@@ -709,34 +709,24 @@ export function sanitizeJsonString(raw) {
   return s;
 }
 
+export {
+  timingSafeEqual,
+  extractAuthToken,
+  checkClientAuth,
+  checkAdminAuth,
+  checkVaultAuth,
+  validateUpstreamUrl,
+} from './security.js';
+
+import { checkClientAuth } from './security.js';
+
 /**
- * Check Bearer auth against PROXY_API_KEY.
+ * Check Bearer auth against PROXY_API_KEY (or ADMIN_PASSWORD).
  * Returns null if ok, or a Response object if unauthorized.
+ * Enforces Fail-Closed mode.
  */
 export function checkAuth(request, env, config) {
-  const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
-  const proxyKey = (env?.PROXY_API_KEY || config?.proxy_api_key) ? String(env?.PROXY_API_KEY || config?.proxy_api_key).trim() : '';
-  if (!adminPass && !proxyKey) return null;
-
-  const rawAuth = request?.headers?.get('authorization') || request?.headers?.get('x-api-key') || '';
-  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
-
-  if (adminPass && token === adminPass) return null;
-  if (proxyKey && token === proxyKey) return null;
-
-  return new Response(
-    JSON.stringify({
-      error: {
-        type: 'authentication_error',
-        message: 'Missing or invalid Authorization header.',
-        code: 'invalid_api_key',
-      },
-    }),
-    {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-    }
-  );
+  return checkClientAuth(request, env, config);
 }
 
 export function requireAuth(context) {

@@ -21,7 +21,7 @@
   },
   "headers": [
     {
-      "source": "/(api|v1)(/.*)?",
+      "source": "/v1(/.*)?",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
         { "key": "Pragma", "value": "no-cache" },
@@ -29,6 +29,14 @@
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "*" }
+      ]
+    },
+    {
+      "source": "/api(/.*)?",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
+        { "key": "Pragma", "value": "no-cache" },
+        { "key": "X-Accel-Buffering", "value": "no" }
       ]
     },
     {

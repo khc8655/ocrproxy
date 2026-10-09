@@ -19,50 +19,26 @@ import {
   kvNotBoundResponse,
   CONFIG_KV_KEY,
   CONFIG_KV_TTL_SEC,
+  checkAdminAuth,
+  validateUpstreamUrl,
 } from '../lib/config.js';
 import { normaliseForProvider } from '../lib/normalize.js';
 
-
 function checkAuth(request, env) {
-  const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
-  const proxyKey = env?.PROXY_API_KEY ? String(env.PROXY_API_KEY).trim() : '';
-
-  if (!adminPass && !proxyKey) {
-    return new Response(
-      JSON.stringify({
-        error: {
-          type: 'configuration_error',
-          message: 'Server misconfiguration: Neither ADMIN_PASSWORD nor PROXY_API_KEY is configured in EdgeOne environment variables. Admin config endpoints are blocked in fail-closed mode.',
-          code: 'admin_unconfigured',
-        },
-      }),
-      { status: 503, headers: { 'content-type': 'application/json' } }
-    );
-  }
-
-  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
-  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
-
-  // Allow login/admin access using either ADMIN_PASSWORD or PROXY_API_KEY
-  if (adminPass && token === adminPass) return null;
-  if (proxyKey && token === proxyKey) return null;
-
-  return new Response(
-    JSON.stringify({
-      error: {
-        type: 'authentication_error',
-        message: 'Missing or invalid Authorization header.',
-        code: 'invalid_credentials',
-      },
-    }),
-    {
-      status: 401,
-      headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-    }
-  );
+  return checkAdminAuth(request, env);
 }
 
 async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '') {
+  const urlCheck = validateUpstreamUrl(baseUrl);
+  if (!urlCheck.ok) {
+    return {
+      ok: false,
+      status: 400,
+      latency_ms: 0,
+      error: urlCheck.error,
+    };
+  }
+
   const start = Date.now();
   let resp = null;
   let lastErr = null;

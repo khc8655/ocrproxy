@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-08T22:06:41.891Z",
+  "updated_at": "2026-10-09T06:34:30.966Z",
   "providers": [
     {
       "id": "agnes",
@@ -161,7 +161,6 @@ export const CATALOG = {
       },
       "recommended_models_count": 4
     },
-
     {
       "id": "opencode",
       "name": "OpenCode",
@@ -797,7 +796,6 @@ export const PRESETS = [
       }
     }
   },
-
   {
     "id": "opencode",
     "name": "OpenCode",

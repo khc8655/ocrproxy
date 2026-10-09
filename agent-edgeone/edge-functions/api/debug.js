@@ -14,28 +14,10 @@
  *   variable correctly.  This endpoint makes that visible.
  */
 
-import { scanKvBindings, resolveKvBinding } from '../lib/config.js';
+import { scanKvBindings, resolveKvBinding, checkAdminAuth } from '../lib/config.js';
 
 function checkAuth(request, env) {
-  const need = env?.PROXY_API_KEY;
-  if (!need) return null; // no auth configured — allow
-  const got = request.headers.get('authorization') || '';
-  if (got !== `Bearer ${need}`) {
-    return new Response(
-      JSON.stringify({
-        error: {
-          type: 'authentication_error',
-          message: 'Missing or invalid Authorization header.',
-          code: 'invalid_api_key',
-        },
-      }),
-      {
-        status: 401,
-        headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' },
-      }
-    );
-  }
-  return null;
+  return checkAdminAuth(request, env);
 }
 
 export async function onRequestGet(context) {
@@ -50,16 +32,11 @@ export async function onRequestGet(context) {
       {
         timestamp: new Date().toISOString(),
         detected: scan.detected,
-        // `kvLike` lists property names that duck-typed as KV handles.
-        // If `detected` is null but any scope has `kvLike` entries, then
-        // the binding exists but our candidate list didn't include it.
         hint: scan.detected
           ? `KV binding detected as "${scan.detected.name}" on scope "${scan.detected.scope}".`
-          : 'No KV binding detected. Check `scopes.<name>.kvLike` — if any of those arrays is non-empty, that scope exposes a KV handle under one of those names. Consider adding it to KV_BINDING_CANDIDATES in lib/config.js, or rename your binding to one of the candidates.',
+          : 'No KV binding detected. Check `scopes.<name>.kvLike`.',
         scopes: scan.scopes,
         request_url: context.request.url,
-        request_search: new URL(context.request.url, 'http://localhost').search,
-        env_keys: env ? Object.keys(env) : [],
       },
       null,
       2

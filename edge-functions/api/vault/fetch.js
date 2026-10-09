@@ -20,41 +20,12 @@ import {
   loadConfig,
   ConfigError,
   resolveKvBinding,
+  checkVaultAuth,
 } from '../../lib/config.js';
 import { getPreset } from '../../lib/presets/index.js';
 
 function checkAuth(request, env) {
-  const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
-  const vaultToken = env?.VAULT_ACCESS_TOKEN ? String(env.VAULT_ACCESS_TOKEN).trim() : '';
-  const proxyKey = env?.PROXY_API_KEY ? String(env.PROXY_API_KEY).trim() : '';
-
-  if (!adminPass && !vaultToken && !proxyKey) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: 'EdgeOne 未配置 ADMIN_PASSWORD、VAULT_ACCESS_TOKEN 或 PROXY_API_KEY，金库接口已拒绝访问（Fail-Closed）。',
-      }),
-      { status: 503, headers: { 'content-type': 'application/json' } }
-    );
-  }
-
-  const rawAuth = request.headers.get('authorization') || request.headers.get('x-api-key') || '';
-  const token = rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
-
-  if (adminPass && token === adminPass) return null;
-  if (vaultToken && token === vaultToken) return null;
-  if (proxyKey && token === proxyKey) return null;
-
-  return new Response(
-    JSON.stringify({
-      error: {
-        type: 'authentication_error',
-        message: 'Missing or invalid Authorization header for Vault access.',
-        code: 'invalid_vault_token',
-      },
-    }),
-    { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } }
-  );
+  return checkVaultAuth(request, env);
 }
 
 export async function onRequestPost(context) {

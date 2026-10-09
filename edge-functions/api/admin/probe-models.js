@@ -6,22 +6,11 @@
  *   Returns: { ok: bool, models: string[], count: number, error: string|null, used_key_label?: string }
  */
 
-import { loadConfig, resolveKvBinding } from '../../lib/config.js';
+import { loadConfig, resolveKvBinding, checkAdminAuth, validateUpstreamUrl } from '../../lib/config.js';
 import { getPreset } from '../../lib/presets/index.js';
 
 function checkAuth(request, env) {
-  const adminPass = env?.ADMIN_PASSWORD;
-  const proxyKey = env?.PROXY_API_KEY;
-  if (!adminPass && !proxyKey) return null;
-
-  const got = request.headers.get('authorization') || '';
-  if (adminPass && got === `Bearer ${adminPass}`) return null;
-  if (proxyKey && got === `Bearer ${proxyKey}`) return null;
-
-  return new Response(
-    JSON.stringify({ error: { type: 'authentication_error', message: 'Missing or invalid Authorization header.', code: 'invalid_api_key' } }),
-    { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } }
-  );
+  return checkAdminAuth(request, env);
 }
 
 export async function onRequestPost(context) {
@@ -114,6 +103,15 @@ export async function onRequestPost(context) {
   if (!base_url) {
     return new Response(
       JSON.stringify({ ok: false, error: 'base_url 不能为空且未找到对应供应商配置' }),
+      { status: 400, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  // SSRF Protection
+  const urlCheck = validateUpstreamUrl(base_url);
+  if (!urlCheck.ok) {
+    return new Response(
+      JSON.stringify({ ok: false, error: `base_url ${urlCheck.error}` }),
       { status: 400, headers: { 'content-type': 'application/json' } }
     );
   }

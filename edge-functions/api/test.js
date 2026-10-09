@@ -7,19 +7,16 @@
  *   Returns: { ok, upstream, status, latency_ms, body_preview }
  */
 
-import { loadConfig, ConfigError, resolveKvBinding } from '../lib/config.js';
+import {
+  loadConfig,
+  ConfigError,
+  resolveKvBinding,
+  checkAdminAuth,
+  validateUpstreamUrl,
+} from '../lib/config.js';
 
 function checkAuth(request, env) {
-  const need = env?.PROXY_API_KEY;
-  if (!need) return null;
-  const got = request.headers.get('authorization') || '';
-  if (got !== `Bearer ${need}`) {
-    return new Response(
-      JSON.stringify({ error: { type: 'authentication_error', message: 'Missing or invalid Authorization header.', code: 'invalid_api_key' } }),
-      { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } }
-    );
-  }
-  return null;
+  return checkAdminAuth(request, env);
 }
 
 export async function onRequestPost(context) {

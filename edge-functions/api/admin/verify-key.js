@@ -6,17 +6,10 @@
  *   Returns: { valid: bool, protocols: { chat: {...}, messages: {...} }, error: string|null }
  */
 
+import { checkAdminAuth, validateUpstreamUrl } from '../../lib/config.js';
+
 function checkAuth(request, env) {
-  const need = env?.PROXY_API_KEY;
-  if (!need) return null;
-  const got = request.headers.get('authorization') || '';
-  if (got !== `Bearer ${need}`) {
-    return new Response(
-      JSON.stringify({ error: { type: 'authentication_error', message: 'Missing or invalid Authorization header.', code: 'invalid_api_key' } }),
-      { status: 401, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer' } }
-    );
-  }
-  return null;
+  return checkAdminAuth(request, env);
 }
 
 function joinUpstream(base, path) {
@@ -71,9 +64,28 @@ export async function onRequestPost(context) {
     );
   }
 
+  // SSRF Protection
+  const baseUrlCheck = validateUpstreamUrl(baseUrl);
+  if (!baseUrlCheck.ok) {
+    return new Response(
+      JSON.stringify({ valid: false, error: `base_url ${baseUrlCheck.error}` }),
+      { status: 400, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
   const protocols = Array.isArray(body.protocols) && body.protocols.length > 0 ? body.protocols : ['chat'];
   const provider = String(body.provider || '').trim();
   const anthropicBaseUrl = body.anthropic_base_url ? String(body.anthropic_base_url).trim() : '';
+
+  if (anthropicBaseUrl) {
+    const anthropicCheck = validateUpstreamUrl(anthropicBaseUrl);
+    if (!anthropicCheck.ok) {
+      return new Response(
+        JSON.stringify({ valid: false, error: `anthropic_base_url ${anthropicCheck.error}` }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      );
+    }
+  }
 
   const results = {};
   let overallValid = true;

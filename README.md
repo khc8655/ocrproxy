@@ -55,7 +55,7 @@ ocrprox (Monorepo)
 系统确立了“**本地存储为主权基石，中枢托管为增效辅助**”的双轨架构，既能统一享受 EdgeOne 中枢集中下发的厂商与密钥，又完全保留了各 VM 节点的本地自主控制权：
 
 ### 1. 职责与双轨机制
-- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中维护官方适配提供商与其拥有的 API Keys，支持脱敏清单分发与动态探测；中枢鉴权校验边缘函数环境变量 `PROXY_API_KEY`；
+- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中维护官方适配提供商与其拥有的 API Keys，支持脱敏清单分发与动态探测；中枢鉴权校验专用环境变量 `VAULT_ACCESS_TOKEN`（或超级管理员密码 `ADMIN_PASSWORD`），严格实行三权分立，客户端代理密钥 `PROXY_API_KEY` 严禁提取金库；
 - **VM 本地凭据自主管理 (Local Credential Sovereignty)**：
   - 完整保留「供应商与 Key 凭证库」管理面板（支持 A-Z 字母索引导航轨与分组标线）；
   - 支持随时在卡片上自主新增、编辑与删除本地专属 Key，变更直接持久化至 `proxy_config.enc`，绝不依赖或受制于中枢；
@@ -65,7 +65,7 @@ ocrprox (Monorepo)
   - 可视化填入中枢 URL 与 Token（密码可一键显隐），配置直接加密保存于 `proxy_config.enc`，**严禁修改或污染 `.env` 文件**；
   - 提供一键「测试中枢连通性」，实时诊断连通状态、网络延迟、供应商总数与 Google Key 列表；
 - **全链路透明错误处理 (Zero Silent Errors)**：
-  - 中枢 401（Token 与 EdgeOne PROXY_API_KEY 不匹配）、502（网络不可达）、504（请求超时）均向 Web 端输出透明友好的排查指引，杜绝任何静默吞错。
+  - 中枢 401（Token 与 EdgeOne VAULT_ACCESS_TOKEN 不匹配）、502（网络不可达）、504（请求超时）均向 Web 端输出透明友好的排查指引，杜绝任何静默吞错。
 - **按需无感拉取与云端绝对权威覆盖 (Cloud Authority & Local Key Sovereignty)**：
   - **云端作为绝对真理源**：当从 EdgeOne Vault Hub 拉取凭据或执行同步时，云端配置无条件覆盖本地同名供应商的协议 (`protocol`/`protocols`)、思考开关 (`anthropic_messages`)、端点 (`base_url`/`anthropic_base_url`) 及适配规则 (`adapter_rules`)，彻底根治协议识别冲突；
   - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁；
