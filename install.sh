@@ -842,6 +842,8 @@ Group=${RUN_AS_USER}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${INSTALL_DIR}/.env
 Environment=MALLOC_ARENA_MAX=2
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStart=${INSTALL_DIR}/venv/bin/python ${INSTALL_DIR}/run_server.py
 Restart=always
 RestartSec=5
