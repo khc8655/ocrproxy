@@ -141,12 +141,27 @@ ocrprox (Monorepo)
 - **安全服务端代理路由**：客户端发起请求时，VM 后端核心调度器直接在安全本地持久化文件中寻址真实密钥与上游通信，全流程实现密文闭环。
 
 ### 4. 单真理源统一 UI 架构 (Single-Source of Truth UI Architecture · v2026.10.09-06)
-- **唯一样式与视图中心 (`shared/admin/`)**：彻底打破 EdgeOne 与 VM 各自维护两套 HTML/CSS/JS 的割裂状态。所有前端组件与视图逻辑以 `shared/admin/` 为唯一真理源，`build-admin.mjs` 自动同步编译下发至 `vm-app/static/` 与 `edge-functions/`；
+- **唯一样式与视图中心 (`shared/admin/`)**：彻底打破 EdgeOne 与 VM 各自维护两套 HTML/CSS/JS 的割裂状态。所有前端组件与视图逻辑以 `shared/admin/` 为唯一真理源，`build-admin.mjs` 自动同步编译下发至 `vm-app/static/` 与 `edge-functions/`；详见 [单真理源设计规范说明](file:///Users/xk/Documents/ocrprox/shared/docs/ui-single-source-design.md) 与 [核心架构铁律十](file:///Users/xk/Documents/ocrprox/ARCHITECTURE_STANDARDS.md)；
 - **首页接入网关与模型展示卡片 100% 对齐**：两端统一使用清晰大方的三行横向卡片：
   1. Base URL（网关地址）与一键复制；
   2. 客户端凭据 (Client Key) 与一键复制；
   3. 可用模型胶囊标签（点击模型名即刻复制）+「复制全部模型名」与「管理全部模型」；
-- **探活与连通性健壮性**：消除 ES6 TDZ（暂存死区）异常，补齐旋转动画 `.spinner` 样式，在 `finally` 块中加入强制复原兜底，确保测试按钮永不消失。
+- **探活与连通性健壮性**：消除 ES6 TDZ（暂存死区）异常，补齐旋转动画 `.spinner` 样式，在 `finally` 块中加入强制复原兜底，确保测试按钮永不消失；
+- **改动定位速查（严禁全局搜索查半天代码）**：
+  * **骨架与卡片布局** ➔ [`shared/admin/admin.html`](file:///Users/xk/Documents/ocrprox/shared/admin/admin.html)
+  * **样式、动画与设计 Token** ➔ [`shared/admin/admin.css`](file:///Users/xk/Documents/ocrprox/shared/admin/admin.css)
+  * **网关渲染、复制助手与全局状态** ➔ [`shared/admin/js/core.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/core.js)
+  * **模型卡片、Key 胶囊与连通性探活** ➔ [`shared/admin/js/agent-models-ui.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/agent-models-ui.js)
+  * **供应商管理与中枢规则同步** ➔ [`shared/admin/js/providers.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/providers.js)
+  * **系统设置与运行模式切换** ➔ [`shared/admin/js/settings.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/settings.js)
+  * **生命周期入口与事件分发** ➔ [`shared/admin/js/app.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/app.js)
+- **修改后的标准构建流水线**：
+  ```bash
+  # 1. 一键编译同步 (自动注入版本号与内联边缘函数)
+  node agent-edgeone/scripts/build-admin.mjs
+  # 2. 全量自动化回归门禁测试
+  node agent-edgeone/scripts/test-units.mjs && python3 tests/test_secret_preservation.py && python3 tests/test_phase3_phase4_audit.py
+  ```
 
 ---
 

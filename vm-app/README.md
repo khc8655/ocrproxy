@@ -54,8 +54,8 @@
 - **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
 - **配置导入与导出**：支持一键导出带时间戳的完整配置 JSON 备份；导入支持“完全覆盖”与“增量合并”双模式，导入前自动生成 `.bak` 快照并严格校验 Schema
 - **角色权限隔离**：`/api/admin/*` 管理端严格限制为 `ADMIN_PASSWORD`，普通 `PROXY_API_KEY` 无法访问管理接口，防止凭证泄露与越权
-- **安全加固**：systemd 沙箱隔离、SSRF 防护（DNS Rebinding 校验与 302 重定向拦截）、常量时间密钥比较
 - **Web 管理面板**：可视化配置供应商、Key、路由优先级，实时统计监控
+- **单真理源前端架构 (SSOT)**：管理面板静态资源统一由 `shared/admin/` 单一真理源编译下发至 `vm-app/static/`。严禁直接修改 `static/` 目录中的文件；所有界面改动在 `shared/admin/` 完成后执行 `node agent-edgeone/scripts/build-admin.mjs` 同步。详见 [单真理源设计规范说明](file:///Users/xk/Documents/ocrprox/shared/docs/ui-single-source-design.md)。
 
 ## 快速部署
 

@@ -39,6 +39,7 @@ shared/
 │   └── cline.json                 # Cline 原生适配规则
 │
 └── docs/                          # 📖 跨端统一规范与设计文档
+    ├── ui-single-source-design.md # 🎨 单真理源 UI 架构设计规范与全流程指南
     ├── config-schema.md           # 统一加密配置 Schema 规范
     ├── hermes-gemini-vertex-adaptation.md # Google Vertex AI 协议深度适配备忘录
     └── mcp_vault_credentials_api.md       # Vault 中枢凭据分发接口协议规范
@@ -49,21 +50,22 @@ shared/
 ## 二、 前端模块化开发与编译工作流 (`shared/admin/`)
 
 ### 1. 架构设计哲学
-为了彻底解决单文件 HTML 膨胀至数千行、难以维护且容易改坏历史功能的痛点，前端采用**模块化物理拆分 + 自动化单体打包**方案：
-- **开发态 (Development)**：在 `shared/admin/` 中按职责拆分为独立的 HTML、CSS 和 7 个 JS 业务脚本，代码清晰、易读、无冲突；
-- **构建态 (Build)**：通过 Node.js 构建脚本将 HTML、CSS 和 JS 无损打包为自包含的单文件 HTML，内嵌版本号与构建时间戳；
-- **运行态 (Production)**：各端直接托管单文件 HTML，零外部网络打包依赖，静态渲染性能极高。
+为了彻底解决单文件 HTML 膨胀、两端代码维护割裂、修改小功能要梳理全工程的痛点，前端确立**唯一开发真理源 (SSOT) + 模块化物理拆分 + 自动化单体打包**：
+- **开发态 (Development)**：在 `shared/admin/` 中按职责划分为独立的 HTML、CSS 和 7 个 JS 业务脚本，清晰易维护；
+- **构建态 (Build)**：通过 `node agent-edgeone/scripts/build-admin.mjs` 统一编译，同步至 VM 并为 EdgeOne 生成自包含单体 HTML；
+- **运行态 (Production)**：公共组件通过环境探针（`isVm`）自适应分流，两端底层存储与接口互不干扰。
 
 ### 2. 编译与同步命令
-当修改了 `shared/admin/` 下的任何 HTML、CSS 或 JS 文件后，在项目根目录下执行：
+当修改了 `shared/admin/` 下的任何文件后，在项目根目录下执行：
 
 ```bash
 node agent-edgeone/scripts/build-admin.mjs
 ```
 
 构建脚本会自动完成：
-1. **VM 服务端分发**：将 `shared/admin/` 资源同步至 `vm-app/static/`，并自动读取 `version.json` 为所有 `<script src="/static/js/*.js?v=...">` 注入最新版本号，实现浏览器免强刷缓存更新；
-2. **EdgeOne 边缘函数内联**：按照依赖拓扑将 CSS 与 JS 深度内联拼接为自包含单体 HTML，写入 `agent-edgeone/edge-functions/` 与静态产物，实现边缘节点零外链极速响应。
+1. **VM 服务端分发**：将 `shared/admin/` 资源同步至 `vm-app/static/`，并自动读取 `version.json` 为所有 `<script src="/static/js/*.js?v=...">` 注入最新版本号；
+2. **EdgeOne 边缘函数内联**：按照依赖拓扑将 CSS 与 JS 深度内联拼接为自包含单体 HTML，写入 `agent-edgeone/edge-functions/` 与 `edge-functions/`；
+3. **Fail-Fast 编译强断言**：严禁残留未内联外部标签，确保 `renderAgentModels` 等核心生命周期函数完备。
 
 ---
 
@@ -87,20 +89,21 @@ node agent-edgeone/scripts/build-admin.mjs
 node agent-edgeone/scripts/build-presets.mjs
 ```
 
-该脚本将：
-1. 校验所有 JSON 文件的语法合法性；
-2. 计算每个预设文件的 SHA256 哈希值，更新 `shared/presets/catalog.json` 索引；
-3. 将所有 JSON 预设编译为静态 JavaScript 常量，自动写入：
-   - `agent-edgeone/edge-functions/lib/presets/index.js`
-   - `edge-functions/lib/presets/index.js`
-4. 提交到 GitHub 后，各 VM 节点将自动通过 jsDelivr CDN (`cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/`) 享受秒级按需拉取。
-
 ---
 
-## 四、 常见开发任务速查指引
+## 四、 前端改动定位速查指引 (开发者必读，严禁全局盲目查代码)
 
-| 任务 | 正确操作步骤 | 严禁行为 |
+| 需求场景 | 唯一定位修改文件 | 核心职责说明 |
 | :--- | :--- | :--- |
-| **修改管理后台某个按钮样式或文案** | 1. 修改 `shared/admin/admin.html` 或 `admin.css`<br>2. 运行 `node agent-edgeone/scripts/build-admin.mjs` | ❌ 直接在 `vm-app/static/admin.html` 中改动 |
-| **新增一个模型提供商预设 (如 Groq)** | 1. 在 `shared/presets/` 下新增 `groq.json`<br>2. 运行 `node agent-edgeone/scripts/build-presets.mjs`<br>3. 运行 `npm test` 校验通过 | ❌ 直接在 EdgeOne 的 JS 代码里写死厂商判断 |
-| **调整前端 Key 胶囊逻辑** | 1. 修改 `shared/admin/js/agent-models-ui.js`<br>2. 运行 `node agent-edgeone/scripts/build-admin.mjs` | ❌ 直接修改已打包的内联 `<script>` 代码 |
+| **修改布局骨架、首页三行网关卡片、弹窗容器** | [`shared/admin/admin.html`](file:///Users/xk/Documents/ocrprox/shared/admin/admin.html) | 纯 HTML 语义骨架；网关卡片三行横向结构；弹窗默认物理隐藏 |
+| **修改样式、微动画、颜色、按钮尺寸** | [`shared/admin/admin.css`](file:///Users/xk/Documents/ocrprox/shared/admin/admin.css) | 设计系统样式真理源；`.btn-xs`、`.spinner` 旋转动画 |
+| **修改网关卡片渲染、复制助手、错误日志** | [`shared/admin/js/core.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/core.js) | `renderDashboardGateway()`, `copyText()`, `copyModelName()`, `copyAllAvailableModels()` |
+| **修改 Agent 模型列表、Key 胶囊、探活测速** | [`shared/admin/js/agent-models-ui.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/agent-models-ui.js) | `renderAgentModels()`, `testAgentKey()` (包含 `finally` 兜底恢复), `openAgentModal()` |
+| **修改供应商管理面板、中枢规则同步** | [`shared/admin/js/providers.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/providers.js) | `renderProviders()`, `syncFromEdgeOneVault()`, A-Z 字母轨导航 |
+| **修改系统参数、超时时长、运行模式切换** | [`shared/admin/js/settings.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/settings.js) | `renderSettings()`, `saveSettings()`, `switchRunMode()` |
+| **修改页面加载生命周期、顶层事件委托** | [`shared/admin/js/app.js`](file:///Users/xk/Documents/ocrprox/shared/admin/js/app.js) | `DOMContentLoaded`, 统一事件分发委托 |
+
+### 修改后的三步强制流水线：
+1. **代码修改**：在上述对应文件中完成；
+2. **执行构建**：`node agent-edgeone/scripts/build-admin.mjs`；
+3. **自动化测试**：`node agent-edgeone/scripts/test-units.mjs && python3 tests/test_secret_preservation.py && python3 tests/test_phase3_phase4_audit.py`。

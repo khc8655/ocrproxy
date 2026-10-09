@@ -97,11 +97,10 @@ node agent-edgeone/scripts/test-units.mjs
 
 > **红线背景**：历史迭代曾发生底层已升级支持 300s 深度思考长超时，但 EdgeOne 控制台界面漏改、提示文案仍写 20~25s、JS 保存时被 `Math.min(30)` 截断的严重缺陷。为杜绝此类问题，确立以下不可逾越的红线：
 
-### 🛑 红线 1：双轨 Web UI 源码 100% 对齐红线 (Dual-Track UI Parity)
-- 项目包含两套前端源码：
-  - VM 部署版：`shared/admin/admin.html`（同步至 `vm-app/static/admin.html`）
-  - EdgeOne 独立版：`agent-edgeone/admin.html` 与 `agent-edgeone/admin.js`（打包编译至 `edge-functions/`）
-- **严禁只修改 VM 漏改 EdgeOne，或只改 EdgeOne 漏改 VM**。凡涉及功能特性、超时阈值、调度策略、配置参数的增删改，必须在双端源码中同步修改并重新执行打包构建。
+### 🛑 红线 1：双端 Web UI 唯一真理源开发红线 (Single-Source UI SSOT)
+- 严禁直接手动修改 `vm-app/static/` 或 `agent-edgeone/admin.*` 编译产物；
+- 所有前端改动必须且只能在 `shared/admin/` 源码中完成，统一由 `node agent-edgeone/scripts/build-admin.mjs` 构建脚本编译分发至各端；
+- **首页三行网关卡片、按钮样式、Key 胶囊必须两端 100% 对齐**，凡涉及功能特性、超时阈值、调度策略、配置参数的增删改，必须在 `shared/admin/` 中完成并重新执行打包构建。
 
 ### 🛑 红线 2：前端表单与底层内核能力严格一致红线 (UI-Engine Capability Alignment)
 - **严禁前端表单限制落后于后端实际能力**：底层已支持 300s 出站长连接与 SSE 保活，前端输入框必须设定 `min="5" max="300"`，严禁前端卡在旧上限（如 120s 或 25s）；
@@ -109,7 +108,9 @@ node agent-edgeone/scripts/test-units.mjs
 - **严禁残留误导文案**：所有提示与 Label 文案必须与系统当前版本能力严格相符，彻底清除任何陈旧的误导性建议（如“EdgeOne 建议 20~25s”）。
 
 ### 🛑 红线 3：自动化 CI 门禁与编译静态断言强卡点 (Automated Guardrails)
-- 在 `agent-edgeone/scripts/build-admin.mjs` 中设置编译卡点：检测到旧文案残留、`max < 300` 或 `Math.min(30)` 必须立即 `process.exit(1)` 抛出致命错误，阻断打包；
+- 在 `agent-edgeone/scripts/build-admin.mjs` 中设置编译卡点：检测到旧文案残留、`max < 300`、`Math.min(30)` 或核心运行时函数缺失必须立即 `process.exit(1)` 抛出致命错误，阻断打包；
+- 异步操作按钮（如 Key 探活「测」按钮）必须包含 `try-finally` 强制复原兜底，严禁让按钮在任何情况下消失或变成空白方框；
+- 全局共享变量严禁触发 ES6 TDZ（暂存死区），统一使用全局 `window` 声明提升；
 - 在 `tests/test_phase3_phase4_audit.py` 中设置测试门禁：静态扫描双端 HTML 与 JS，任何参数或文案脱节直接判为测试失败，禁止发版合入。
 
 ---
@@ -121,18 +122,22 @@ node agent-edgeone/scripts/test-units.mjs
 - [ ] **Step 1: 代码自测与语法检查**
   - Python 语法检查：`python3 -m py_compile vm-app/app/*.py`
   - JS 单元测试：`node agent-edgeone/scripts/test-units.mjs`
-- [ ] **Step 2: 双轨前端与底层能力对齐走查 (红线核对)**
-  - 核对 `shared/admin/admin.html` 与 `agent-edgeone/admin.html` 参数与文案是否 100% 对齐；
-  - 运行前端打包构建：`npm run build:admin` 或 `node agent-edgeone/scripts/build-admin.mjs`，确保 `edge-functions/` 产物全量更新。
+  - 凭据安全与反脱敏测试：`python3 tests/test_secret_preservation.py`
+- [ ] **Step 2: 单真理源 UI 构建与能力对齐走查 (红线核对)**
+  - 前端修改必须在 `shared/admin/` 完成，运行打包构建：`node agent-edgeone/scripts/build-admin.mjs`；
+  - 确保 `vm-app/static/` 与 `edge-functions/` 产物全量同步更新；
+  - 检查构建输出，确保零未内联标签、核心函数完备；
+  - 检查 Key 测按钮具有 `finally` 兜底，CSS 包含 `.spinner` 旋转动画。
 - [ ] **Step 3: 版本矩阵统一提升 (当前版次递增)**
-  - 同步递增 `version.json`, `vm-app/version.json`, `install.sh`, `vm-app/install.sh`, `vm-app/static/admin.html`, `shared/admin/admin.html`, `agent-edgeone/admin.html`。
+  - 同步递增 `version.json`, `vm-app/version.json`, `install.sh`, `vm-app/install.sh`, `shared/admin/admin.html`；
+  - 重新执行 `node agent-edgeone/scripts/build-admin.mjs`，确保动态版本号注入各端。
 - [ ] **Step 4: 安装脚本依赖与资产完整性核对**
   - 核对是否有新增依赖写入 `requirements.txt`；
   - 核对依赖智能跳过逻辑依然生效。
 - [ ] **Step 5: 运行自动化测试硬门禁**
-  - `python3 tests/test_phase3_phase4_audit.py`，确保所有断言（包括双轨 UI 对齐门禁）ALL TESTS PASSED。
+  - 运行 `python3 tests/test_phase3_phase4_audit.py`，确保所有断言（包括双轨 UI 对齐门禁）ALL TESTS PASSED。
 - [ ] **Step 6: 真实环境验证与截图存证**
   - 提交代码触发 GitHub Actions / EdgeOne 自动部署；
   - 生产/测试环境执行部署或升级，验证 API 200 OK 正常出字；
-  - 访问管理控制台页面，确认版本号徽章更新、输入框属性及文案无误；
+  - 访问管理控制台页面，确认版本号徽章更新、三行网关卡片渲染正常、测按钮正常工作；
   - 更新 `README.md` 与 `walkthrough.md` 详细记录变更。

@@ -2,7 +2,7 @@
 
 > 部署于 **腾讯云 EdgeOne Makers (Pages / Edge Functions)** 的无服务器大模型中转代理。  
 > 依托 EdgeOne 全球 3200+ 边缘节点实现零冷启动、弹性伸缩、IP 轮询池与全球 Anycast 极速网络加速。  
-> 当前版本：**`v2026.10.04-02`**
+> 当前版本：**`v2026.10.09-06`**
 
 ---
 
@@ -43,11 +43,11 @@
   * 存储运行时动态状态：如 Key 连续失败计数与熔断冷却标记（`cd_*`, `fails_*`）；
   * **保护机制**：Git 提交绝对不会自动覆写 KV，防止用户的生产私有密钥和路由被误冲毁。
 
-### 4. 管理后台 UI (单文件 Web App & 极简高密设计)
-- **单文件编译交付**：源码位于 `shared/admin/`，通过 `npm run build:admin` 自动化内联编译输出至 `admin.html`，零外部打包依赖；
-- **首页网关直通条**：直观呈现版本号、已纳管供应商数、Base URL、Client Key 及可用模型芯片，支持一键点击复制；
-- **Key 列表紧凑流式芯片 (Chip Grid)**：高密度流式芯片布局，清晰区分中枢 Key 与本地 Key；
-- **配置数据无损互通**：与 VM 版配置 Schema 100% 互通。
+### 4. 单真理源管理后台 UI (SSOT · v2026.10.09-06)
+- **唯一真理源开发与自动构建**：前端源码以 `shared/admin/` 为唯一样式与视图中心，通过 `node scripts/build-admin.mjs` 自动化内联编译输出至单文件边缘函数，杜绝维护两套 UI 代码；
+- **首页三行网关卡片与 VM 100% 对齐**：Base URL（含一键复制）、Client Key（含一键复制）与可用模型胶囊（点击模型名即刻复制全部与单个）完全一致；
+- **探活与连通性健壮性防护**：消除 ES6 TDZ（暂存死区）异常，补齐旋转动画 `.spinner` 样式，在 `finally` 块中加入强制复原兜底，确保测试按钮永不消失；
+- 详见 [单真理源设计规范说明](file:///Users/xk/Documents/ocrprox/shared/docs/ui-single-source-design.md) 与 [核心架构铁律十](file:///Users/xk/Documents/ocrprox/ARCHITECTURE_STANDARDS.md)。
 
 ---
 
