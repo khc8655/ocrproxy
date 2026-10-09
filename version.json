@@ -1,11 +1,12 @@
 {
-  "version": "v2026.10.09-12",
+  "version": "v2026.10.09-13",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "KB 模式客户端 Key 展示修复与中枢同步按钮交互收敛 (v2026.10.09-12)",
+  "title": "修复 systemd-run 语法参数与国内 OTA 极速下载链路 (v2026.10.09-13)",
   "changelog": [
-    "仪表盘客户端 Key 修复：admin_routes 配置读取接口增加 PROXY_API_KEY 环境变量兜底，彻底消除仪表盘客户端凭据显示为 <CLIENT_KEY> 占位符的问题",
-    "KB 模式 Key 胶囊交互解耦：Candidate 候选节点弹窗 Key 胶囊切换与 Agent 弹窗状态深度解耦，修复点选 Key 时受到 Agent 内部 DOM 状态干扰的问题",
-    "界面入口精简与去重：收敛中枢同步入口至弹窗与系统设置内部，移除 KB 模式顶部与下方卡片重复的挂载按钮，移除 Agent 模式主界面重复的同步按钮，消除视觉堆叠"
+    "修复 systemd-run 非法参数：彻底移除 --remain-after-exit=no 语法错误并引入 --collect 自动回收机制，消除命令行执行 ocrproxy upgrade 时的崩溃报错",
+    "交互式终端直连优化：在交互式 TTY 终端执行 ocrproxy upgrade 时自动直通前台运行，提供完整的实时下载与部署进度输出",
+    "国内下载加速链路重构：优化 prepare_source_code 源码下载候选机制，默认优先轮询国内高速镜像源 (ghfast/gh-proxy/mirror) 并缩短连接超时，杜绝国内服务器在官方 GitHub 上重试等待 75 秒超限导致的 Web OTA 探测超时",
+    "后台升级指令增强：优化 Web 端 OTA 触发逻辑，新增向 systemd 单元传递环境变量与国内镜像降级兜底"
   ]
 }

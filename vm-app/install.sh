@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.09-12"
+SCRIPT_VERSION="v2026.10.09-13"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -230,16 +230,24 @@ prepare_source_code() {
     if [[ -n "$GITHUB_TOKEN" ]]; then
         auth_header=(-H "Authorization: token ${GITHUB_TOKEN}")
         candidates+=("https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}")
+        candidates+=("${TARBALL_URL}")
+        candidates+=("https://ghfast.top/${TARBALL_URL}")
     elif [[ -n "$GH_TOKEN" ]]; then
         auth_header=(-H "Authorization: token ${GH_TOKEN}")
         candidates+=("https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}")
+        candidates+=("${TARBALL_URL}")
+        candidates+=("https://ghfast.top/${TARBALL_URL}")
+    else
+        # 生产环境默认无 Token，优先轮询国内高速镜像源实现秒级下载
+        candidates+=("https://ghfast.top/${TARBALL_URL}")
+        candidates+=("https://gh-proxy.com/${TARBALL_URL}")
+        candidates+=("https://mirror.ghproxy.com/${TARBALL_URL}")
+        candidates+=("${TARBALL_URL}")
     fi
-    candidates+=("${TARBALL_URL}")
-    candidates+=("https://ghfast.top/${TARBALL_URL}")
 
     local dl_ok=false
     for dl_url in "${candidates[@]}"; do
-        if curl -fSL --location-trusted "${auth_header[@]}" --connect-timeout 15 --retry 5 --retry-delay 2 --retry-all-errors "${dl_url}" -o "$tar_file" 2>/dev/null; then
+        if curl -fSL --location-trusted "${auth_header[@]}" --connect-timeout 5 --max-time 35 --retry 1 "${dl_url}" -o "$tar_file" 2>/dev/null; then
             dl_ok=true
             break
         fi
@@ -313,13 +321,13 @@ restart_cmd() {
 case "$1" in
     upgrade|update)
         shift
-        # 若在被 systemd 沙箱隔离的只读环境或受限挂载中被调用，自动通过 systemd-run 逃逸沙箱执行
-        if [[ -z "$OCRPROXY_RUNNING_IN_OTA_UNIT" ]] && command -v systemd-run &>/dev/null; then
+        # 若在被 systemd 沙箱隔离的只读环境或受限挂载中被后台无头调用（非交互式终端），自动通过 systemd-run 逃逸沙箱执行
+        if [[ -z "$OCRPROXY_RUNNING_IN_OTA_UNIT" ]] && ! [ -t 0 ] && command -v systemd-run &>/dev/null; then
             if ! touch "/opt/ocrproxy/.sandbox_write_test" 2>/dev/null; then
                 if [[ $EUID -eq 0 ]]; then
-                    exec systemd-run --unit=ocrproxy-ota-upgrade --remain-after-exit=no env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
+                    exec systemd-run --unit=ocrproxy-ota-upgrade --collect env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
                 elif command -v sudo &>/dev/null; then
-                    exec sudo -n systemd-run --unit=ocrproxy-ota-upgrade --remain-after-exit=no env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
+                    exec sudo -n systemd-run --unit=ocrproxy-ota-upgrade --collect env OCRPROXY_RUNNING_IN_OTA_UNIT=1 /usr/local/bin/ocrproxy upgrade "$@"
                 fi
             else
                 rm -f "/opt/ocrproxy/.sandbox_write_test"
@@ -336,13 +344,13 @@ case "$1" in
         echo "  正在从 GitHub (${GITHUB_REPO}/${GITHUB_BRANCH}) 升级 OCRProxy..."
         echo "================================================="
         TARGET_REF="${GITHUB_BRANCH}"
-        LATEST_SHA=$(curl -s "${CURL_AUTH[@]}" "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | sed -n 's/.*"sha": "\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)
+        LATEST_SHA=$(curl -s "${CURL_AUTH[@]}" --connect-timeout 3 "https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}" 2>/dev/null | sed -n 's/.*"sha": "\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)
         if [[ -n "$LATEST_SHA" ]]; then
             TARGET_REF="$LATEST_SHA"
         fi
-        if ! curl -fsSL "${CURL_AUTH[@]}" --connect-timeout 8 "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"; then
-            echo "直连 GitHub 超时，自动切换至国内加速镜像 (ghfast) 升级..."
-            curl -fsSL "${CURL_AUTH[@]}" "https://ghfast.top/https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
+        if ! curl -fsSL "${CURL_AUTH[@]}" --connect-timeout 4 "https://ghfast.top/https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"; then
+            echo "国内加速镜像连接失败，回退至官方 GitHub 升级..."
+            curl -fsSL "${CURL_AUTH[@]}" --connect-timeout 10 "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
         fi
         ;;
     status)

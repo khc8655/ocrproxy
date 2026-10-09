@@ -492,6 +492,12 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.09-13` (2026-10-09)
+- **修复 systemd-run 非法参数**：彻底移除 `install.sh` 生成 CLI 中的 `--remain-after-exit=no` 非法参数并引入 `--collect` 机制，根治在服务器执行 `ocrproxy upgrade` 时报 `systemd-run: option '--remain-after-exit' doesn't allow an argument` 导致升级中断退出的缺陷；
+- **交互式终端直连优化**：在交互式终端 (TTY) 下执行 `ocrproxy upgrade` 时直接前台运行并实时回显下载与部署进度，不再误转入后台单元；
+- **国内极速下载链路重构**：`prepare_source_code` 在默认无 Token 场景下优先轮询国内高速镜像源 (`ghfast.top` / `gh-proxy.com` / `mirror.ghproxy.com`) 并将连接超时缩短至 5 秒，彻底解决国内服务器在官方 GitHub 累计等待 75 秒超限导致的 Web 后台 OTA 升级探测超时；
+- **后台 OTA 升级指令增强**：向升级单元自动透传 `OCRPROXY_RUNNING_IN_OTA_UNIT=1` 环境变量，并增加国内镜像直接拉取兜底。
+
 ### `v2026.10.09-12` (2026-10-09)
 - **客户端 Key 占位符根治**：`vm-app/app/admin_routes.py` 的 `get_config_endpoint` 增加 `PROXY_API_KEY` 环境变量自动兜底，确保在 KB 模式及任何默认未持久化场景下，首页仪表盘「接入网关与可用模型」均能正确展示真实的客户端 API Key，杜绝 `<CLIENT_KEY>` 占位符残留；
 - **KB 模式 Key 胶囊交互解耦**：`shared/admin/js/models.js` 实现独立的 `toggleCandidateKeyCapsule(el)` 切换函数，彻底解耦 Candidate 弹窗与 Agent 弹窗内部闭包状态 (`modalBindings` / `a_selectedBindingsSummary`)，消除跨弹窗状态污染；
