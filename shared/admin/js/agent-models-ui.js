@@ -272,20 +272,6 @@
         };
       });
     }
-
-    // 保证 OpenCode 免费专区 (opencode-free) 选项始终可用
-    const hasOpencode = list.some(p => p.id === 'opencode');
-    const hasFree = list.some(p => p.id === 'opencode-free');
-    if (hasOpencode && !hasFree) {
-      const opIdx = list.findIndex(p => p.id === 'opencode');
-      list.splice(opIdx + 1, 0, {
-        id: 'opencode-free',
-        label: 'OpenCode Free',
-        isVault: false,
-        protoStr: 'OpenAI',
-        protocols: ['chat']
-      });
-    }
     return list;
   }
 
@@ -555,7 +541,7 @@
     }
 
     const { cfg } = getCtx();
-    const localProv = cfg.providers && cfg.providers[prov];
+    const localProv = cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
     const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
 
     const provProtos = localProv
@@ -573,14 +559,7 @@
       protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
     }
 
-    const isFreeTier = (prov === 'opencode-free' || prov === 'opencode_free');
     let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
-    if (isFreeTier) {
-      const parentProv = cfg.providers && (cfg.providers['opencode'] || cfg.providers['opencode-free']);
-      const parentKeys = parentProv ? Object.keys(parentProv.keys || {}) : [];
-      localKeys = [...new Set(['public', ...parentKeys, ...localKeys])];
-    }
-
     const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => typeof k === 'string' ? k : (k.label || k.id || '')).filter(Boolean) : [];
     const purelyLocalKeys = localKeys.filter(k => !remoteKeys.includes(k));
     const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
@@ -589,8 +568,7 @@
     if (isNewModel) {
       modalBindings = modalBindings.filter(b => b.provider === prov);
       if (modalBindings.length === 0 && allKeyLabels.length > 0) {
-        const defaultK = (isFreeTier && allKeyLabels.includes('public')) ? 'public' : allKeyLabels[0];
-        modalBindings.push({ provider: prov, key: defaultK });
+        modalBindings.push({ provider: prov, key: allKeyLabels[0] });
       }
     }
 
@@ -608,7 +586,8 @@
               ? `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>`
               : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>`);
 
-        const deleteBtn = (!isVault && isLocal && !isPublic)
+        const isRealLocalKey = localProv && localProv.keys && (k in localProv.keys);
+        const deleteBtn = (!isVault && (isLocal || isRealLocalKey))
           ? `<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="${_esc(prov)}" data-key="${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>`
           : '';
 
@@ -737,20 +716,6 @@
 
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
-
-    // 自动补齐 opencode-free 供应商条目
-    if (bindings.some(b => b.provider === 'opencode-free') && cfg.providers && !cfg.providers['opencode-free']) {
-      const parentProv = cfg.providers['opencode'] || {};
-      cfg.providers['opencode-free'] = {
-        name: 'opencode-free',
-        label: 'OpenCode Free (免费专区)',
-        base_url: parentProv.base_url || 'https://opencode.ai/zen/v1',
-        protocol: 'openai',
-        protocols: ['chat'],
-        keys: { 'public': 'public' },
-        adapter_rules: { opencode_free_bypass: true }
-      };
-    }
 
     // Collision check 1: Adding keys to an existing model during creation
     if (!oldName && cfg.agent_models[name]) {
@@ -1234,8 +1199,19 @@
       return;
     }
     const { cfg } = getCtx();
-    if (cfg && cfg.providers && cfg.providers[provId]) {
-      delete cfg.providers[provId];
+    if (cfg && cfg.providers) {
+      const targetKey = Object.keys(cfg.providers).find(k => k.toLowerCase() === provId.toLowerCase()) || provId;
+      if (cfg.providers[targetKey]) {
+        delete cfg.providers[targetKey];
+      }
+      if (cfg.providers[provId]) {
+        delete cfg.providers[provId];
+      }
+      if (cfg.agent_models) {
+        Object.values(cfg.agent_models).forEach(m => {
+          m.keys = (m.keys || []).filter(x => x.provider.toLowerCase() !== provId.toLowerCase());
+        });
+      }
       await _persist(`本地供应商 [${provId}] 已删除并立即生效`);
       _toast(`供应商 [${provId}] 已删除`, 'ok');
       populateAgentProviderSelect('');

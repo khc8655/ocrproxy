@@ -541,8 +541,19 @@ if (typeof window.deleteLocalProviderFromModal !== 'function') {
     if (!confirm(`确定要彻底删除本地自建供应商 [${provId}] 吗？`)) {
       return;
     }
-    if (state.config && state.config.providers && state.config.providers[provId]) {
-      delete state.config.providers[provId];
+    if (state.config && state.config.providers) {
+      const targetKey = Object.keys(state.config.providers).find(k => k.toLowerCase() === provId.toLowerCase()) || provId;
+      if (state.config.providers[targetKey]) {
+        delete state.config.providers[targetKey];
+      }
+      if (state.config.providers[provId]) {
+        delete state.config.providers[provId];
+      }
+      if (state.config.agent_models) {
+        Object.values(state.config.agent_models).forEach(m => {
+          m.keys = (m.keys || []).filter(x => x.provider.toLowerCase() !== provId.toLowerCase());
+        });
+      }
       await persistConfig(`本地供应商 [${provId}] 已删除并立即生效`);
       toast(`供应商 [${provId}] 已删除`, 'ok');
       if (typeof populateAgentProviderSelect === 'function') populateAgentProviderSelect('');

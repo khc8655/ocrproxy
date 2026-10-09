@@ -1200,7 +1200,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.09-04</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.09-05</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1240,7 +1240,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.09-04</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.09-05</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1957,20 +1957,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         };
       });
     }
-
-    // 保证 OpenCode 免费专区 (opencode-free) 选项始终可用
-    const hasOpencode = list.some(p => p.id === 'opencode');
-    const hasFree = list.some(p => p.id === 'opencode-free');
-    if (hasOpencode && !hasFree) {
-      const opIdx = list.findIndex(p => p.id === 'opencode');
-      list.splice(opIdx + 1, 0, {
-        id: 'opencode-free',
-        label: 'OpenCode Free',
-        isVault: false,
-        protoStr: 'OpenAI',
-        protocols: ['chat']
-      });
-    }
     return list;
   }
 
@@ -2240,7 +2226,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
 
     const { cfg } = getCtx();
-    const localProv = cfg.providers && cfg.providers[prov];
+    const localProv = cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
     const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
 
     const provProtos = localProv
@@ -2258,14 +2244,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
     }
 
-    const isFreeTier = (prov === 'opencode-free' || prov === 'opencode_free');
     let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
-    if (isFreeTier) {
-      const parentProv = cfg.providers && (cfg.providers['opencode'] || cfg.providers['opencode-free']);
-      const parentKeys = parentProv ? Object.keys(parentProv.keys || {}) : [];
-      localKeys = [...new Set(['public', ...parentKeys, ...localKeys])];
-    }
-
     const remoteKeys = remoteProv ? (remoteProv.keys || []).map(k => typeof k === 'string' ? k : (k.label || k.id || '')).filter(Boolean) : [];
     const purelyLocalKeys = localKeys.filter(k => !remoteKeys.includes(k));
     const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
@@ -2274,8 +2253,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (isNewModel) {
       modalBindings = modalBindings.filter(b => b.provider === prov);
       if (modalBindings.length === 0 && allKeyLabels.length > 0) {
-        const defaultK = (isFreeTier && allKeyLabels.includes('public')) ? 'public' : allKeyLabels[0];
-        modalBindings.push({ provider: prov, key: defaultK });
+        modalBindings.push({ provider: prov, key: allKeyLabels[0] });
       }
     }
 
@@ -2293,7 +2271,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
               : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`);
 
-        const deleteBtn = (!isVault && isLocal && !isPublic)
+        const isRealLocalKey = localProv && localProv.keys && (k in localProv.keys);
+        const deleteBtn = (!isVault && (isLocal || isRealLocalKey))
           ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
           : '';
 
@@ -2422,20 +2401,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
-
-    // 自动补齐 opencode-free 供应商条目
-    if (bindings.some(b => b.provider === 'opencode-free') && cfg.providers && !cfg.providers['opencode-free']) {
-      const parentProv = cfg.providers['opencode'] || {};
-      cfg.providers['opencode-free'] = {
-        name: 'opencode-free',
-        label: 'OpenCode Free (免费专区)',
-        base_url: parentProv.base_url || 'https://opencode.ai/zen/v1',
-        protocol: 'openai',
-        protocols: ['chat'],
-        keys: { 'public': 'public' },
-        adapter_rules: { opencode_free_bypass: true }
-      };
-    }
 
     // Collision check 1: Adding keys to an existing model during creation
     if (!oldName && cfg.agent_models[name]) {
@@ -2919,8 +2884,19 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       return;
     }
     const { cfg } = getCtx();
-    if (cfg && cfg.providers && cfg.providers[provId]) {
-      delete cfg.providers[provId];
+    if (cfg && cfg.providers) {
+      const targetKey = Object.keys(cfg.providers).find(k => k.toLowerCase() === provId.toLowerCase()) || provId;
+      if (cfg.providers[targetKey]) {
+        delete cfg.providers[targetKey];
+      }
+      if (cfg.providers[provId]) {
+        delete cfg.providers[provId];
+      }
+      if (cfg.agent_models) {
+        Object.values(cfg.agent_models).forEach(m => {
+          m.keys = (m.keys || []).filter(x => x.provider.toLowerCase() !== provId.toLowerCase());
+        });
+      }
       await _persist(\`本地供应商 [\${provId}] 已删除并立即生效\`);
       _toast(\`供应商 [\${provId}] 已删除\`, 'ok');
       populateAgentProviderSelect('');
@@ -3017,7 +2993,7 @@ let activeTab = 'dashboard';
 let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.09-04';
+const BUILD_VERSION = 'v2026.10.09-05';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

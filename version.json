@@ -1,11 +1,12 @@
 {
-  "version": "v2026.10.09-04",
+  "version": "v2026.10.09-05",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "前端启动竞态消除与全局协议助手下沉 (消除 getModelProtocols is not defined 虚假报错)",
+  "title": "彻底拔除 OpenCode Free 幽灵供应商伪造注入与死循环复活，回归中枢第一原则",
   "changelog": [
-    "拔除 core.js 中单体残留的同步立即执行 init() 函数：首屏初始化与配置拉取全量收敛至 app.js DOMContentLoaded 统一启动器，彻底杜绝其它模块未完成解析前的竞态调用",
-    "全局协议与模型助手下沉至 core.js（getModelProtocols, getProviderProtocols, renderProtocolBadges）：提供全局自包含的协议解析与徽章渲染，彻底消除跨脚本依赖未定义报错",
-    "防御性调用加固：在 renderDashboardGateway 及热门模型芯片处增加 typeof 校验与安全回退，即使发生极端网络丢包也能平滑自愈"
+    "彻底拔除 _getAllProvidersList 中强制注入 opencode-free 并伪造为本地供应商的硬编码逻辑，恪守「只有手动配置才算本地」铁律",
+    "消除 Key 胶囊区域 cross-provider 污染：不再跨供应商拉取 opencode Key 混入本地，保障各厂商 Key 隔离",
+    "放开本地存储 Key 的删除图标显示：确保任何存在于本地配置中的 Key 芯片均带有删除 × 图标",
+    "强化 deleteLocalProviderFromModal 彻底删除与容错：支持大小写不敏感匹配、级联清理模型绑定残留，杜绝删后复活"
   ]
 }
