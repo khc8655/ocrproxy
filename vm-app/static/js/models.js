@@ -1,15 +1,17 @@
 /**
  * OCRProxy Admin - Knowledge Base (KB) Virtual Models & Candidate Routing
  */
-function getModelProtocols(modelName){
-  const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
-  if (!m || !m.keys || !m.keys.length) return ['chat'];
-  const set = new Set();
-  for (const b of m.keys) {
-    const provProtos = getProviderProtocols(b.provider);
-    provProtos.forEach(pr => set.add(pr));
+if (typeof getModelProtocols === 'undefined') {
+  function getModelProtocols(modelName){
+    const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
+    if (!m || !m.keys || !m.keys.length) return ['chat'];
+    const set = new Set();
+    for (const b of m.keys) {
+      const provProtos = (typeof getProviderProtocols === 'function') ? getProviderProtocols(b.provider) : ['chat'];
+      provProtos.forEach(pr => set.add(pr));
+    }
+    return set.size ? Array.from(set) : ['chat'];
   }
-  return set.size ? Array.from(set) : ['chat'];
 }
 
 function renderKbModels(){

@@ -86,12 +86,69 @@ function fmtTime(ms) {
   }
 }
 
-// Init
-(function init(){
-  renderNav();
-  if(state.key) fetch('/api/admin/config',{headers:headers()}).then(r=>{ if(r.ok){ showApp(); loadData(); } else showLogin(); }).catch(showLogin);
-  else showLogin();
-})();
+// Protocol and Model Helpers (Globally available to prevent script-ordering race conditions)
+function getProtocolBadge(proto){
+  const p = String(proto || '').toLowerCase();
+  if (p.includes('anthropic') || p.includes('messages')) {
+    return `<span class="badge" style="background:rgba(217,119,6,0.15);color:#d97706;border:1px solid rgba(217,119,6,0.3);font-size:10px;padding:1px 5px;border-radius:4px;display:inline-flex;align-items:center;gap:3px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</span>`;
+  }
+  return `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;border-radius:4px;display:inline-flex;align-items:center;gap:3px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>OpenAI</span>`;
+}
+
+function getProviderProtocols(name, provObj){
+  try {
+    if (state.vaultManifest && Array.isArray(state.vaultManifest.providers)) {
+      const vp = state.vaultManifest.providers.find(p => p.id === name || p.name === name);
+      if (vp) {
+        if (Array.isArray(vp.protocols) && vp.protocols.length > 0) return vp.protocols;
+        if (vp.protocol === 'openai' && !vp.anthropic_messages && !vp.anthropic_base_url) return ['chat'];
+        if (vp.protocol === 'anthropic' && !vp.anthropic_messages && !vp.base_url) return ['messages'];
+      }
+    }
+    const p = provObj || (state.config && state.config.providers && state.config.providers[name]) || {};
+    if (p.protocol === 'openai' && !p.anthropic_messages && !p.anthropic_base_url) return ['chat'];
+    if (Array.isArray(p.protocols) && p.protocols.length > 0) return p.protocols;
+    const protos = ['chat'];
+    const lower = (name || '').toLowerCase();
+    const clean = lower.replace(/[^a-z0-9]/g, '');
+    const preset = (typeof PRESET_DEFINITIONS !== 'undefined') ? (PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower]) : null;
+    if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
+      protos.push('messages');
+    }
+    return protos;
+  } catch (_) {
+    return ['chat'];
+  }
+}
+
+function renderProtocolBadges(protoList, isShort = true){
+  try {
+    const list = (Array.isArray(protoList) && protoList.length > 0) ? protoList : ['chat'];
+    const hasAnthropic = list.some(pr => String(pr).toLowerCase().includes('anthropic') || String(pr).toLowerCase().includes('messages'));
+    const hasOpenAI = list.some(pr => !String(pr).toLowerCase().includes('anthropic') && !String(pr).toLowerCase().includes('messages'));
+    const badges = [];
+    if (hasOpenAI || !hasAnthropic) badges.push(getProtocolBadge('openai'));
+    if (hasAnthropic) badges.push(getProtocolBadge('anthropic'));
+    return badges.join(' ');
+  } catch (_) {
+    return getProtocolBadge('openai');
+  }
+}
+
+function getModelProtocols(modelName){
+  try {
+    const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
+    if (!m || !m.keys || !m.keys.length) return ['chat'];
+    const set = new Set();
+    for (const b of m.keys) {
+      const provProtos = getProviderProtocols(b.provider);
+      (provProtos || ['chat']).forEach(pr => set.add(pr));
+    }
+    return set.size ? Array.from(set) : ['chat'];
+  } catch (_) {
+    return ['chat'];
+  }
+}
 
 function showLogin(){ document.getElementById('loginOverlay').style.display='flex'; document.getElementById('app').style.display='none'; }
 function showApp(){ document.getElementById('loginOverlay').style.display='none'; document.getElementById('app').style.display='block'; }

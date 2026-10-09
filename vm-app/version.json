@@ -1,12 +1,11 @@
 {
-  "version": "v2026.10.09-03",
+  "version": "v2026.10.09-04",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "Fail-Safe Secret Guard: 密钥反脱敏保真护栏与零掩码防污染",
+  "title": "前端启动竞态消除与全局协议助手下沉 (消除 getModelProtocols is not defined 虚假报错)",
   "changelog": [
-    "后端保存强制反脱敏保真（Secret Preservation Guard）：在 POST /api/admin/config 拦截所有 Provider Keys，自动将前端持有的脱敏掩码（●●●●●●●●）无损还原为现存磁盘真实有效密文，杜绝真实凭证被掩码覆盖",
-    "底层加密存储终极内核守卫（Kernel Invariant Guard）：在 config_store.py save_to_disk 中增加断言与自愈逻辑，物理层面绝对禁止任何掩码字符写入加密配置文件",
-    "规则合并防污染：在 _merge_configs 中自动过滤并剥离掩码占位符，防止新规则合并混入假凭证",
-    "全流程自动化防御测试套件：新增 tests/test_secret_preservation.py 覆盖脱敏还原、混存新增、Vertex 私钥保真及 HTTP 请求头 ASCII 兼容性校验"
+    "拔除 core.js 中单体残留的同步立即执行 init() 函数：首屏初始化与配置拉取全量收敛至 app.js DOMContentLoaded 统一启动器，彻底杜绝其它模块未完成解析前的竞态调用",
+    "全局协议与模型助手下沉至 core.js（getModelProtocols, getProviderProtocols, renderProtocolBadges）：提供全局自包含的协议解析与徽章渲染，彻底消除跨脚本依赖未定义报错",
+    "防御性调用加固：在 renderDashboardGateway 及热门模型芯片处增加 typeof 校验与安全回退，即使发生极端网络丢包也能平滑自愈"
   ]
 }
