@@ -1,13 +1,12 @@
 {
-  "version": "v2026.10.09-08",
+  "version": "v2026.10.09-09",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "中转稳定性 P0 修复：超时优先级、流式空闲超时、陈旧连接无罚重试、404 不再中止 failover、Agent 流不占 KB 全局并发槽",
+  "title": "中转稳定性 P1 修复：饱和 Key 秒切、429 遵循 Retry-After、中途断流显式报错并计入统计、KB 内存回收节流",
   "changelog": [
-    "超时优先级修正：各端点专用超时（OCR/KB chat/embedding/rerank/agent chat）优先于全局 upstream_timeout_sec；请求预算至少容纳一次完整尝试",
-    "流式空闲超时：首字节仍受单 Key 超时约束（失败可 failover），流建立后上游静默容忍度由 stream_idle_timeout_sec 控制（默认 300s），长思考不再被截断",
-    "连接池：keepalive_expiry 30s→10s，max_keepalive 20→80；复用到已被上游关闭的连接（RemoteProtocolError/ReadError/WriteError，2s 内）在同一候选上无罚重试一次",
-    "404/422 不再中止整个 failover：多厂商模型中一家下架不影响其它候选；404 候选冷却 cooldown_404_sec（默认 600s，仅当存在备选时）",
-    "全局并发阀只作用于 KB 类请求（kb_global_max_concurrency，默认 30），Agent 长流仅受单 Key 并发约束；uvicorn limit_concurrency 150→512（UVICORN_LIMIT_CONCURRENCY 可覆盖）"
+    "饱和 Key 不再阻塞：并发槽已满的 Key 自动排到候选末尾；后面还有空闲候选时最多等 1s，否则才等满 10s",
+    "429 遵循 Retry-After：Agent 模式在有备选时按 Retry-After 冷却该候选（上限 60s，单候选不冷却）；KB 模式取 max(cooldown_tpm_sec, Retry-After≤300s)",
+    "中途断流：首字节后上游断开时，向客户端补发终止 SSE 错误事件（OpenAI 格式 / Anthropic event: error），并按 502 记入统计、降低该候选的延迟排序权重",
+    "KB/OCR 内存回收节流：gc.collect()+malloc_trim 改为后台合并执行（同时最多 1 个、间隔≥2s、请求不再等待），突发入库时不再阻塞其它流"
   ]
 }

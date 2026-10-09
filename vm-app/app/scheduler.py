@@ -83,12 +83,35 @@ def _reclaim_memory_sync():
             pass
 
 
+# gc.collect() holds the GIL for its whole run (tens of ms on a big heap), so
+# running it after EVERY KB/OCR response — and awaiting it on the request path —
+# stalled all other streams during ingestion bursts.  Reclamation is now
+# coalesced: at most one run in flight, at most one run per interval, and the
+# request never waits for it.  A burst still gets one trailing run, so RSS is
+# returned to the OS shortly after the burst ends.
+_RECLAIM_MIN_INTERVAL_SEC = 2.0
+_reclaim_task: Optional[asyncio.Task] = None
+_last_reclaim_mono: float = 0.0
+
+
+async def _reclaim_runner():
+    global _last_reclaim_mono
+    wait = _last_reclaim_mono + _RECLAIM_MIN_INTERVAL_SEC - time.monotonic()
+    if wait > 0:
+        await asyncio.sleep(wait)
+    try:
+        await asyncio.to_thread(_reclaim_memory_sync)
+    finally:
+        _last_reclaim_mono = time.monotonic()
+
+
 async def _reclaim_memory():
-    """Run gc.collect() then malloc_trim(0) to return freed heap to the OS.
-    Called after large-payload requests (OCR, large chat responses) rather
-    than on a blind counter, so the cost is paid only when it matters.
-    Offloaded to a thread to avoid blocking the async event loop."""
-    await asyncio.to_thread(_reclaim_memory_sync)
+    """Request a (coalesced, throttled) gc.collect() + malloc_trim(0).
+    Returns immediately; the actual work runs in the background."""
+    global _reclaim_task
+    if _reclaim_task is not None and not _reclaim_task.done():
+        return
+    _reclaim_task = asyncio.create_task(_reclaim_runner())
 
 
 class AllCandidatesFailedError(Exception):
@@ -325,6 +348,17 @@ def evaluate_candidate_failure(
                 mark_provider_down=False,
                 circuit_breaker_triggered=False,
             )
+        # 429 with an explicit Retry-After: honour it (capped at 60 s) when there
+        # is another candidate to use meanwhile, so the next requests stop
+        # hammering a key the provider just told us to back off from.
+        retry_after = config_params.get("retry_after_sec")
+        if status_code == 429 and retry_after and config_params.get("has_alternatives", True):
+            return FailureEvaluation(
+                cooldown_sec=min(float(retry_after), 60.0),
+                is_quota=False,
+                mark_provider_down=False,
+                circuit_breaker_triggered=False,
+            )
         # Transient 429 TPM, 5xx, or network timeouts: 0s cooldown (do not lock out from future retries)
         return FailureEvaluation(
             cooldown_sec=0.0,
@@ -335,8 +369,9 @@ def evaluate_candidate_failure(
 
     # 3. KB Mode (High-concurrency batch ingestion protection)
     if status_code == 429:
+        retry_after = config_params.get("retry_after_sec")
         return FailureEvaluation(
-            cooldown_sec=cooldown_tpm_sec,
+            cooldown_sec=max(cooldown_tpm_sec, min(float(retry_after), 300.0)) if retry_after else cooldown_tpm_sec,
             is_quota=False,
             mark_provider_down=False,
             circuit_breaker_triggered=False,
@@ -457,6 +492,51 @@ async def _send_with_stale_retry(do_send: Callable[[], Any], cand_id: str):
         logger.info("Stale pooled connection for %s (%s: %s) — retrying once on a fresh connection",
                     cand_id, type(e).__name__, e)
         return await do_send()
+
+
+def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+    """Parse a Retry-After header (delta-seconds or HTTP-date) to seconds."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(value)
+        return max(0.0, dt.timestamp() - time.time())
+    except Exception:
+        return None
+
+
+class StreamInterruptedError(Exception):
+    """Upstream stream broke after the first byte was already sent to the
+    client (failover is no longer possible).  proxy_routes turns this into a
+    terminal SSE error event so the client sees an error instead of a silently
+    truncated answer."""
+    def __init__(self, message: str, bytes_sent: int = 0):
+        super().__init__(message)
+        self.bytes_sent = bytes_sent
+
+
+async def _guard_stream(remainder, first_len: int, on_error: Callable[[Exception, int], None]):
+    """Pass chunks through; on an upstream error after the first byte, report
+    it (stats/latency) and raise StreamInterruptedError."""
+    sent = first_len
+    try:
+        async for chunk in remainder:
+            sent += len(chunk)
+            yield chunk
+    except (asyncio.CancelledError, GeneratorExit):
+        raise
+    except Exception as e:
+        try:
+            on_error(e, sent)
+        except Exception:
+            logger.debug("stream error callback failed", exc_info=True)
+        raise StreamInterruptedError(f"{type(e).__name__}: {e}", bytes_sent=sent) from e
 
 
 async def close_client():
@@ -737,6 +817,20 @@ async def schedule(
         deduped_items.append((orig_idx, cand))
     ordered_items = deduped_items
 
+    # Prefer candidates whose key still has a free concurrency slot: a
+    # saturated key used to block the request for up to 10 s before the next
+    # candidate was even tried.  Stable partition keeps the strategy's order
+    # among free (and among saturated) candidates.  Manual/sticky single-item
+    # lists are unaffected.
+    if len(ordered_items) > 1:
+        def _saturated(item):
+            c = item[1]
+            sem_ = _semaphores.get(f"{c.get('provider', '')}:{c.get('key', '')}")
+            return sem_ is not None and sem_.locked()
+        _free = [it for it in ordered_items if not _saturated(it)]
+        if _free and len(_free) < len(ordered_items):
+            ordered_items = _free + [it for it in ordered_items if _saturated(it)]
+
     providers = config.get("providers", {})
 
     # Load settings from config with safe fallback and clamping
@@ -981,7 +1075,15 @@ async def schedule(
             if now_mono >= deadline:
                 errors.append(f"budget_exhausted_before_acquire")
                 break
-            acquire_timeout = min(deadline - now_mono, 10.0)
+            # Wait the full 10 s for a slot only when no later candidate has a
+            # free one right now; otherwise give up after 1 s and move on.
+            _later = ordered_items[[i for i, it in enumerate(ordered_items) if it[0] == orig_idx][0] + 1:]
+            _later_free = any(
+                not (_semaphores.get(f"{c.get('provider', '')}:{c.get('key', '')}") or asyncio.Semaphore(1)).locked()
+                and time.time() >= _cooldown_until.get(get_candidate_id(c), 0.0)
+                for _, c in _later
+            )
+            acquire_timeout = min(deadline - now_mono, 1.0 if _later_free else 10.0)
             if acquire_timeout <= 0:
                 errors.append(f"budget_exhausted_before_acquire")
                 break
@@ -1104,6 +1206,17 @@ async def schedule(
                                      provider=provider_name, key=key_label,
                                      category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
                                      cand_model=cand_model_name, is_quota=False)
+
+                        if is_stream and remainder is not None:
+                            def _on_stream_error(exc, sent, _cid=cand_id, _prov=provider_name, _key=key_label,
+                                                 _cm=cand_model_name, _t0=cand_start):
+                                lat = time.time() - _t0
+                                msg = f"{_cid} stream interrupted after {sent} bytes: {type(exc).__name__}: {exc}"
+                                logger.warning(msg)
+                                _record_latency(_cid, max(lat, 5.0))
+                                stats.record(model_type, 502, lat, provider=_prov, key=_key, error_msg=msg,
+                                             category=category, request_model=req_model_name, cand_model=_cm)
+                            remainder = _guard_stream(remainder, len(first_chunk), _on_stream_error)
 
                         # Update sticky active key for Agent mode
                         if category == "agent":
@@ -1277,6 +1390,7 @@ async def schedule(
                         cf = 0
                         _consecutive_failures[cand_id] = 0
 
+                    _retry_after = _parse_retry_after(resp.headers.get("retry-after")) if status_code == 429 else None
                     eval_res = evaluate_candidate_failure(
                         status_code=status_code,
                         is_quota=_is_quota,
@@ -1286,7 +1400,10 @@ async def schedule(
                         # Only park a 404'd candidate when there is an alternative;
                         # parking the sole candidate would turn one 404 into a
                         # 10-minute "all candidates cooling down" outage.
-                        config_params={**cooldown_cfg, "cooldown_404_sec": cooldown_404_sec if len(ordered_items) > 1 else 0.0},
+                        config_params={**cooldown_cfg,
+                                       "cooldown_404_sec": cooldown_404_sec if len(ordered_items) > 1 else 0.0,
+                                       "retry_after_sec": _retry_after,
+                                       "has_alternatives": len(ordered_items) > 1},
                     )
 
                     if eval_res.cooldown_sec > 0:
