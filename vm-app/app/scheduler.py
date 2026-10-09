@@ -32,15 +32,27 @@ logger = logging.getLogger("scheduler")
 # _GLOBAL_QUEUE_TIMEOUT_SEC fail fast with 503 + Retry-After instead of
 # queueing unboundedly (a queued request keeps its parsed body on the heap,
 # which defeats the cap's purpose).
+#
+# Scope (v2026.10.09-08): the cap applies ONLY to the KB category (chat in KB
+# mode, embedding, rerank, OCR).  Agent-mode requests are mostly long-lived
+# SSE streams that hold almost no heap; counting them against a 30-slot cap
+# turned the 31st concurrent Cursor/Cline stream into an instant 503 (with no
+# failover).  Agent traffic stays bounded by the per-key semaphore.
+# Override with config key `kb_global_max_concurrency`.
 _GLOBAL_MAX_CONCURRENCY = 30
 _GLOBAL_QUEUE_TIMEOUT_SEC = 2.0
 _global_semaphore: Optional[asyncio.Semaphore] = None
+_global_semaphore_limit: int = _GLOBAL_MAX_CONCURRENCY
 
 
-def _get_global_semaphore() -> asyncio.Semaphore:
-    global _global_semaphore
-    if _global_semaphore is None:
-        _global_semaphore = asyncio.Semaphore(_GLOBAL_MAX_CONCURRENCY)
+def _get_global_semaphore(limit: int = _GLOBAL_MAX_CONCURRENCY) -> asyncio.Semaphore:
+    """Return the KB global semaphore, recreating it when the configured limit
+    changes (same trade-off as per-key semaphores: in-flight requests keep the
+    old object, so the cap may briefly over-subscribe after a config change)."""
+    global _global_semaphore, _global_semaphore_limit
+    if _global_semaphore is None or _global_semaphore_limit != limit:
+        _global_semaphore = asyncio.Semaphore(limit)
+        _global_semaphore_limit = limit
     return _global_semaphore
 
 # ── Memory reclamation helper ────────────────────────────────────────
@@ -100,7 +112,7 @@ class GlobalOverloadError(Exception):
     def __init__(self, retry_after: float = _GLOBAL_QUEUE_TIMEOUT_SEC):
         super().__init__(
             f"The proxy is at its global concurrency limit "
-            f"({_GLOBAL_MAX_CONCURRENCY} in-flight upstream requests). "
+            f"({_global_semaphore_limit} in-flight upstream requests). "
             f"Retry after {retry_after:.0f}s."
         )
         self.retry_after = retry_after
@@ -292,6 +304,17 @@ def evaluate_candidate_failure(
             circuit_breaker_triggered=False,
         )
 
+    # 1b. 404 from this candidate (model delisted / wrong path for this
+    # provider): park this candidate (provider:key:model) so later requests skip
+    # it, for both Agent and KB modes.
+    if status_code == 404:
+        return FailureEvaluation(
+            cooldown_sec=config_params.get("cooldown_404_sec", 600.0),
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+
     # 2. Agent Mode: Only hard quota or auth failure causes long cooldown. Transient errors do NOT freeze the key.
     if is_agent:
         if status_code in (401, 403):
@@ -399,11 +422,41 @@ async def get_client() -> httpx.AsyncClient:
                 timeout=httpx.Timeout(300.0, connect=5.0),
                 limits=httpx.Limits(
                     max_connections=80,
-                    max_keepalive_connections=20,
-                    keepalive_expiry=30.0,
+                    # Keep every pooled connection warm: closing idle ones above
+                    # 20 forced a fresh TCP+TLS handshake (200-600 ms cross-border)
+                    # on the next burst.
+                    max_keepalive_connections=80,
+                    # Many upstreams / CDNs drop idle keep-alive sockets after
+                    # 5-15 s.  Re-using one of those yields RemoteProtocolError,
+                    # which used to be booked as a 5xx against a healthy key.
+                    keepalive_expiry=10.0,
                 ),
+                # NOTE: do not pass a custom `transport=` here — httpx then
+                # ignores HTTP(S)_PROXY env vars, which some VMs rely on to
+                # reach upstreams.
             )
         return _client
+
+
+# Errors raised when a pooled keep-alive socket was already closed by the
+# upstream (or an idle-timeout middlebox).  When they surface within a couple
+# of seconds of sending, the request almost certainly never reached the model,
+# so one immediate retry on the SAME candidate is safe and must not be counted
+# against the key.
+_STALE_CONN_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
+_STALE_RETRY_WINDOW_SEC = 2.0
+
+
+async def _send_with_stale_retry(do_send: Callable[[], Any], cand_id: str):
+    t0 = time.monotonic()
+    try:
+        return await do_send()
+    except _STALE_CONN_ERRORS as e:
+        if time.monotonic() - t0 > _STALE_RETRY_WINDOW_SEC:
+            raise
+        logger.info("Stale pooled connection for %s (%s: %s) — retrying once on a fresh connection",
+                    cand_id, type(e).__name__, e)
+        return await do_send()
 
 
 async def close_client():
@@ -686,7 +739,11 @@ async def schedule(
 
     # Load settings from config with safe fallback and clamping
     try:
-        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout_sec", config.get("upstream_timeout", 15))))
+        # Per-request timeout (set by each endpoint in proxy_routes: OCR, KB chat,
+        # embedding, rerank, agent chat) takes precedence over the global
+        # `upstream_timeout_sec`.  The previous order let the global default
+        # (30 s) silently override e.g. the 60 s OCR timeout.
+        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout", config.get("upstream_timeout_sec", 15))))
     except (ValueError, TypeError):
         upstream_timeout_sec = 15.0
 
@@ -694,6 +751,9 @@ async def schedule(
         total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 60))))
     except (ValueError, TypeError):
         total_budget_sec = 60.0
+    # A request budget shorter than a single attempt's timeout would cut the
+    # first (and only) attempt short — always allow at least one full attempt.
+    total_budget_sec = max(total_budget_sec, upstream_timeout_sec)
 
     # Max candidate retries per request
     try:
@@ -726,6 +786,25 @@ async def schedule(
         concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))
     except (ValueError, TypeError):
         concurrency_limit = 5
+
+    try:
+        kb_global_limit = max(1, int(config.get("kb_global_max_concurrency", _GLOBAL_MAX_CONCURRENCY)))
+    except (ValueError, TypeError):
+        kb_global_limit = _GLOBAL_MAX_CONCURRENCY
+
+    # Once a stream has produced its first byte, upstream silence of up to
+    # this many seconds is tolerated (long thinking, large tool-call argument
+    # generation).  The first byte itself is still bounded by the per-key
+    # timeout so a dead key fails over quickly.
+    try:
+        stream_idle_timeout_sec = max(1.0, float(config.get("stream_idle_timeout_sec", 300.0)))
+    except (ValueError, TypeError):
+        stream_idle_timeout_sec = 300.0
+
+    try:
+        cooldown_404_sec = max(0.0, float(config.get("cooldown_404_sec", 600.0)))
+    except (ValueError, TypeError):
+        cooldown_404_sec = 600.0
 
     # 429 TPM Rate Limit Cooldown (default 15s)
     try:
@@ -913,12 +992,14 @@ async def schedule(
                 errors.append(err_msg)
                 continue
 
-            global_sem = _get_global_semaphore()
-            try:
-                await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
-            except asyncio.TimeoutError:
-                sem.release()
-                raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
+            global_sem = None
+            if category != "agent":
+                global_sem = _get_global_semaphore(kb_global_limit)
+                try:
+                    await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
+                except asyncio.TimeoutError:
+                    sem.release()
+                    raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
 
             lease = ConcurrencyLease(key_sem=sem, global_sem=global_sem)
             lease_transferred = False
@@ -939,23 +1020,36 @@ async def schedule(
                         req_content = None
                         req_json = req_body
 
+                    first_byte_deadline = time.monotonic() + cand_timeout_sec
                     if is_stream:
-                        if req_content is not None:
-                            req = client.build_request(method, url, headers=headers, content=req_content)
-                        else:
-                            req = client.build_request(method, url, headers=headers, json=req_json)
-                        req.extensions["timeout"] = {
-                            "connect": min(5.0, cand_timeout_sec),
-                            "read": cand_timeout_sec,
-                            "write": cand_timeout_sec,
-                            "pool": 5.0,
-                        }
-                        resp = await client.send(req, stream=True)
+                        def _do_stream_send():
+                            if req_content is not None:
+                                req = client.build_request(method, url, headers=headers, content=req_content)
+                            else:
+                                req = client.build_request(method, url, headers=headers, json=req_json)
+                            # The read timeout applies to EVERY chunk for the whole
+                            # life of the stream, so it is the idle timeout; the
+                            # first byte is bounded separately below.
+                            req.extensions["timeout"] = {
+                                "connect": min(5.0, cand_timeout_sec),
+                                "read": max(stream_idle_timeout_sec, cand_timeout_sec),
+                                "write": cand_timeout_sec,
+                                "pool": 5.0,
+                            }
+                            return client.send(req, stream=True)
+                        try:
+                            resp = await asyncio.wait_for(
+                                _send_with_stale_retry(_do_stream_send, cand_id),
+                                timeout=cand_timeout_sec,
+                            )
+                        except asyncio.TimeoutError:
+                            raise httpx.ReadTimeout(f"no response headers within {cand_timeout_sec:.0f}s")
                     else:
                         if req_content is not None:
-                            resp = await client.request(method, url, headers=headers, content=req_content, timeout=cand_req_timeout)
+                            _do_send = lambda: client.request(method, url, headers=headers, content=req_content, timeout=cand_req_timeout)
                         else:
-                            resp = await client.request(method, url, headers=headers, json=req_json, timeout=cand_req_timeout)
+                            _do_send = lambda: client.request(method, url, headers=headers, json=req_json, timeout=cand_req_timeout)
+                        resp = await _send_with_stale_retry(_do_send, cand_id)
 
                     status_code = resp.status_code
 
@@ -970,7 +1064,14 @@ async def schedule(
                         remainder = None
                         cand_model_name = cand.get("model")
                         if is_stream:
-                            first_chunk, remainder, peek_err = await _peek_first_chunk(resp)
+                            try:
+                                first_chunk, remainder, peek_err = await asyncio.wait_for(
+                                    _peek_first_chunk(resp),
+                                    timeout=max(0.5, first_byte_deadline - time.monotonic()),
+                                )
+                            except asyncio.TimeoutError:
+                                await resp.aclose()
+                                raise httpx.ReadTimeout(f"no first byte within {cand_timeout_sec:.0f}s")
                             if not first_chunk:
                                 await resp.aclose()
                                 reason = peek_err or "stream closed without sending any data"
@@ -1066,7 +1167,11 @@ async def schedule(
 
                     # Failure path (Non-2xx)
                     if is_stream:
-                        await resp.aread()
+                        try:
+                            await asyncio.wait_for(resp.aread(), timeout=max(1.0, cand_timeout_sec))
+                        except asyncio.TimeoutError:
+                            await resp.aclose()
+                            raise httpx.ReadTimeout(f"error body not received within {cand_timeout_sec:.0f}s")
 
                     raw_bytes = resp.content
                     try:
@@ -1117,7 +1222,12 @@ async def schedule(
 
                     # 1. Non-retriable errors: abort immediately without failover
                     # 400 (Client parameter error), 404 (Model not found / route invalid), 422 (Validation error)
-                    if (status_code == 400 and not _400_is_key_issue) or status_code in (404, 422):
+                    # 404 / 422 are NOT aborted any more: with several providers
+                    # behind one model, one provider delisting the model (404) or
+                    # rejecting a provider-specific field (422) must not stop the
+                    # others from being tried.  If every candidate fails, the last
+                    # upstream status (e.g. 404) is still returned to the client.
+                    if status_code == 400 and not _400_is_key_issue:
                         logger.warning(
                             f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {err_body_text[:120]}"
                         )
@@ -1171,7 +1281,10 @@ async def schedule(
                         is_key_issue_400=_400_is_key_issue,
                         category=category,
                         consecutive_5xx_count=cf,
-                        config_params=cooldown_cfg,
+                        # Only park a 404'd candidate when there is an alternative;
+                        # parking the sole candidate would turn one 404 into a
+                        # 10-minute "all candidates cooling down" outage.
+                        config_params={**cooldown_cfg, "cooldown_404_sec": cooldown_404_sec if len(ordered_items) > 1 else 0.0},
                     )
 
                     if eval_res.cooldown_sec > 0:
