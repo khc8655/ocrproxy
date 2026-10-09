@@ -156,9 +156,11 @@ function renderNav(){
   document.getElementById('topNav').innerHTML = tabs.map(t=>`<button class="${state.tab===t.id?'active':''}" onclick="switchTab('${t.id}')">${t.label}</button>`).join('');
 }
 function switchTab(id){
+  if(id === 'agents') id = 'models';
   state.tab=id;
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('panel-'+id).classList.add('active');
+  const panel = document.getElementById('panel-'+id);
+  if(panel) panel.classList.add('active');
   renderNav();
   render();
 }
