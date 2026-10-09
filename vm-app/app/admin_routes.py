@@ -253,6 +253,8 @@ async def get_config_endpoint(request: Request):
         resp_data["_run_mode"] = run_mode
         resp_data["run_mode"] = run_mode
         resp_data["_version"] = config.get("_version", 1)
+        if not resp_data.get("proxy_api_key"):
+            resp_data["proxy_api_key"] = os.environ.get("PROXY_API_KEY", "")
         return JSONResponse(content=resp_data)
     except Exception as e:
         logger.error("Failed to get config: %s", e, exc_info=True)

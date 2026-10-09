@@ -271,7 +271,7 @@ function renderCandidateKeyChecks(){
         ? `<button type="button" class="btn-ghost" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key" onclick="removeLocalKeyFromModal('${esc(prov)}', '${esc(k)}', event)">×</button>`
         : '';
 
-      return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleKeyCapsule(this)">
+      return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleCandidateKeyCapsule(this)">
         <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
         <span style="font-weight:600;">${esc(k)}</span>
         ${tag}
@@ -279,6 +279,13 @@ function renderCandidateKeyChecks(){
       </div>`;
     }).join('');
   }
+}
+
+function toggleCandidateKeyCapsule(el){
+  const inp = el.querySelector('input[type="checkbox"]');
+  if(!inp) return;
+  inp.checked = !inp.checked;
+  el.classList.toggle('checked', inp.checked);
 }
 
 async function removeLocalKeyFromModal(prov, label, event){

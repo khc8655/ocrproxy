@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.09-11</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.09-12</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -128,7 +128,6 @@
             <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 同步中枢规则</button>
             <button class="btn btn-primary btn-sm" onclick="openAgentModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增 Agent 模型</button>
           </div>
         </div>
@@ -161,9 +160,8 @@
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div class="section-title">知识库虚拟模型管理</div>
-            <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr)</div>
+            <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openCandidateModal('chat')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 挂载节点</button>
         </div>
         <div id="kbModelsBox"></div>
       </div>
@@ -770,12 +768,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.09-11"></script>
-  <script src="/static/js/vault.js?v=2026.10.09-11"></script>
-  <script src="/static/js/providers.js?v=2026.10.09-11"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.09-11"></script>
-  <script src="/static/js/models.js?v=2026.10.09-11"></script>
-  <script src="/static/js/settings.js?v=2026.10.09-11"></script>
-  <script src="/static/js/app.js?v=2026.10.09-11"></script>
+  <script src="/static/js/core.js?v=2026.10.09-12"></script>
+  <script src="/static/js/vault.js?v=2026.10.09-12"></script>
+  <script src="/static/js/providers.js?v=2026.10.09-12"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.09-12"></script>
+  <script src="/static/js/models.js?v=2026.10.09-12"></script>
+  <script src="/static/js/settings.js?v=2026.10.09-12"></script>
+  <script src="/static/js/app.js?v=2026.10.09-12"></script>
 </body>
 </html>

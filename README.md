@@ -488,4 +488,14 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 2. **[《OCRProxy 官方安全架构规范与红线标准》](docs/SECURITY_SPEC.md)**：确立物理级三权分立鉴权矩阵、Fail-Closed 默认拒绝、SSRF 深度防御、恒定时间比对、反脱敏保真与代码库零秘钥铁律；
 3. **[《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)**：执行版本号 6 处全网联动、安装脚本 100% 零漂移、以及包含安全测试在内的全量自动化测试 100% 守门发版 Checklist。
 
+---
+
+## 最新版本更新记录 (Release Notes)
+
+### `v2026.10.09-12` (2026-10-09)
+- **客户端 Key 占位符根治**：`vm-app/app/admin_routes.py` 的 `get_config_endpoint` 增加 `PROXY_API_KEY` 环境变量自动兜底，确保在 KB 模式及任何默认未持久化场景下，首页仪表盘「接入网关与可用模型」均能正确展示真实的客户端 API Key，杜绝 `<CLIENT_KEY>` 占位符残留；
+- **KB 模式 Key 胶囊交互解耦**：`shared/admin/js/models.js` 实现独立的 `toggleCandidateKeyCapsule(el)` 切换函数，彻底解耦 Candidate 弹窗与 Agent 弹窗内部闭包状态 (`modalBindings` / `a_selectedBindingsSummary`)，消除跨弹窗状态污染；
+- **操作按钮精简与全局去重**：收敛「同步中枢规则」入口至弹窗内部（「① 选择提供商」右上角）与「系统设置」面板中，移除 Agent 模式与 KB 模式主界面标题栏多余/重复的外部同步按钮，移除 KB 模式顶部与下方卡片重复的 `[+ 挂载节点]` 按钮，消除界面元素堆叠。
+
+
 
