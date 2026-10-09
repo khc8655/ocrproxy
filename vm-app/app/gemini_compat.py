@@ -7,7 +7,8 @@ so other providers and the OpenAI zero-copy fast-path are untouched.
 1. Thinking level   reasoning_effort -> extra_body.google.thinking_config
                     (3.x: thinking_level from the preset's model_matrix;
                     2.5: thinking_budget 1K/8K/24K, Google's documented mapping).
-2. Thought display  request asks Google to wrap thoughts in <thought>...</thought>
+2. Thought display  presets with reasoning.thought_tag_marker (Vertex) ask Google
+                    to wrap thoughts in <thought>...</thought>
                     (extra_body.google.thought_tag_marker); the response is split
                     so the thoughts go to `reasoning_content` and the answer
                     stays in `content` (non-streaming and streaming).
@@ -91,7 +92,8 @@ def apply_thinking(out: dict, rr: dict, m_name: str) -> None:
             thinking_on = True
         google["thinking_config"] = tc
 
-    if thinking_on:
+    if thinking_on and rr.get("thought_tag_marker"):
+        # Opt-in per preset (documented for Vertex; AI Studio unverified).
         google.setdefault("thought_tag_marker", THOUGHT_TAG)
         if rr.get("headroom_elevation", True):
             for f in ("max_tokens", "max_completion_tokens"):

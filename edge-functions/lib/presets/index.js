@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T11:14:03.416Z",
+  "updated_at": "2026-10-09T11:16:41.955Z",
   "providers": [
     {
       "id": "agnes",
@@ -250,7 +250,7 @@ export const CATALOG = {
       "id": "vertex",
       "name": "Google Vertex AI",
       "version": "1.1.0",
-      "rule_hash": "413417d86322",
+      "rule_hash": "1128b7ad5ca0",
       "protocol": "vertex_openai",
       "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
       "anthropic_base_url": null,
@@ -1096,7 +1096,8 @@ export const PRESETS = [
             "medium",
             "high"
           ]
-        }
+        },
+        "thought_tag_marker": true
       },
       "tools": {
         "normalize_choice_to_string": false,

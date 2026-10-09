@@ -41,7 +41,8 @@
           "medium",
           "high"
         ]
-      }
+      },
+      "thought_tag_marker": true
     },
     "tools": {
       "normalize_choice_to_string": false,
