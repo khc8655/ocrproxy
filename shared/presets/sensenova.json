@@ -1,7 +1,7 @@
 {
   "id": "sensenova",
   "name": "商汤日日新",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "protocol": "openai",
   "base_url": "https://token.sensenova.cn/v1",
   "doc_url": "https://platform.sensenova.cn/docs",
@@ -9,7 +9,8 @@
   "features": {
     "native_thinking": true,
     "multimodal": true,
-    "tools": true
+    "tools": true,
+    "anthropic_messages": true
   },
   "recommended_models": [
     {
@@ -24,14 +25,20 @@
     },
     {
       "name": "glm-5.2",
-      "upstream_model": "GLM-5.2",
+      "upstream_model": "glm-5.2",
       "description": "智谱/商汤最新 GLM-5.2 旗舰推理大模型"
     }
   ],
   "adapter_rules": {
     "reasoning": {
       "strategy": "openai_passthrough",
-      "supported_levels": ["none", "low", "medium", "high"]
+      "supported_levels": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "max"
+      ]
     },
     "tools": {
       "normalize_choice_to_string": false,
@@ -44,5 +51,6 @@
     "sanitization": {
       "unsupported_params": []
     }
-  }
+  },
+  "anthropic_base_url": "https://token.sensenova.cn/v1"
 }

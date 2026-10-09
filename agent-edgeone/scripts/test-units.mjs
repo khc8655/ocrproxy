@@ -1450,7 +1450,7 @@ test('getPreset: finds google preset with recommended models', () => {
   truthy(p.recommended_models.length >= 2);
   const modelNames = p.recommended_models.map(m => m.name);
   truthy(modelNames.includes('gemini-3.5-flash'));
-  truthy(modelNames.includes('gemini-3.5-pro'));
+  truthy(modelNames.includes('gemini-3.1-pro'));
 });
 
 test('getPreset: finds sensenova with GLM-5.2', () => {

@@ -5,22 +5,23 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T10:32:20.126Z",
+  "updated_at": "2026-10-09T11:16:41.955Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "rule_hash": "fefc72d3505b",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
-      "anthropic_base_url": null,
-      "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+      "anthropic_base_url": "https://apihub.agnes-ai.com/v1",
+      "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",
       "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
       "features": {
         "native_thinking": true,
         "tools": true,
-        "multimodal": true
+        "multimodal": true,
+        "anthropic_messages": true
       },
       "recommended_models_count": 3
     },
@@ -95,37 +96,37 @@ export const CATALOG = {
     {
       "id": "google",
       "name": "Google AI Studio",
-      "version": "1.1.0",
-      "rule_hash": "19fbf45af855",
+      "version": "1.2.0",
+      "rule_hash": "f87bea8c1551",
       "protocol": "google_openai",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
       "anthropic_base_url": null,
-      "doc_url": null,
+      "doc_url": "https://ai.google.dev/gemini-api/docs/openai",
       "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
       "features": {
         "native_thinking": true,
         "multimodal": true,
         "tools": true
       },
-      "recommended_models_count": 4
+      "recommended_models_count": 5
     },
     {
       "id": "minimax",
       "name": "MiniMax",
-      "version": "1.2.0",
-      "rule_hash": "4a77cea2e56a",
+      "version": "1.3.0",
+      "rule_hash": "dc0aae66c67c",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
-      "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
-      "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通透传",
+      "doc_url": "https://platform.minimax.cn/docs/api-reference/text-chat-openai",
+      "description": "MiniMax 开放平台（国内），MiniMax-M3 / M3.1-Flash-Preview，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
       "features": {
         "native_thinking": true,
         "multimodal": true,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 1
+      "recommended_models_count": 2
     },
     {
       "id": "nvidia",
@@ -181,17 +182,18 @@ export const CATALOG = {
     {
       "id": "sensenova",
       "name": "商汤日日新",
-      "version": "1.2.0",
-      "rule_hash": "61ae3a7b32fb",
+      "version": "1.3.0",
+      "rule_hash": "0cf60ddb3bd5",
       "protocol": "openai",
       "base_url": "https://token.sensenova.cn/v1",
-      "anthropic_base_url": null,
+      "anthropic_base_url": "https://token.sensenova.cn/v1",
       "doc_url": "https://platform.sensenova.cn/docs",
       "description": "商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型",
       "features": {
         "native_thinking": true,
         "multimodal": true,
-        "tools": true
+        "tools": true,
+        "anthropic_messages": true
       },
       "recommended_models_count": 3
     },
@@ -247,8 +249,8 @@ export const CATALOG = {
     {
       "id": "vertex",
       "name": "Google Vertex AI",
-      "version": "1.0.0",
-      "rule_hash": "0a224da56c14",
+      "version": "1.1.0",
+      "rule_hash": "1128b7ad5ca0",
       "protocol": "vertex_openai",
       "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
       "anthropic_base_url": null,
@@ -270,15 +272,16 @@ export const PRESETS = [
   {
     "id": "agnes",
     "name": "Agnes AI",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
-    "doc_url": "https://www.agnes-ai.com/en/docs/agnes-30-flash",
+    "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",
     "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
     "features": {
       "native_thinking": true,
       "tools": true,
-      "multimodal": true
+      "multimodal": true,
+      "anthropic_messages": true
     },
     "recommended_models": [
       {
@@ -313,7 +316,8 @@ export const PRESETS = [
         "unsupported_params": [],
         "max_tokens_ceiling": 65536
       }
-    }
+    },
+    "anthropic_base_url": "https://apihub.agnes-ai.com/v1"
   },
   {
     "id": "amd",
@@ -580,7 +584,7 @@ export const PRESETS = [
   {
     "id": "google",
     "name": "Google AI Studio",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "protocol": "google_openai",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
     "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
@@ -591,24 +595,29 @@ export const PRESETS = [
     },
     "recommended_models": [
       {
-        "name": "gemini-3.5-flash",
-        "upstream_model": "gemini-3.5-flash",
-        "description": "最新高性价比推理模型 (支持 low/medium/high 思考等级)"
+        "name": "gemini-3.8-flash",
+        "upstream_model": "gemini-3.8-flash",
+        "description": "最新 Flash（thinking_level minimal/low/medium/high）"
       },
       {
-        "name": "gemini-3.5-pro",
-        "upstream_model": "gemini-3.5-pro",
-        "description": "最新旗舰强推理模型 (支持 low/high 思考等级)"
+        "name": "gemini-3.5-flash",
+        "upstream_model": "gemini-3.5-flash",
+        "description": "高性价比 Flash"
+      },
+      {
+        "name": "gemini-3.1-pro",
+        "upstream_model": "gemini-3.1-pro",
+        "description": "旗舰 Pro（thinking_level low/medium/high，不可关闭思考）"
       },
       {
         "name": "gemini-2.5-flash",
         "upstream_model": "gemini-2.5-flash",
-        "description": "经典多模态快速模型"
+        "description": "经典 Flash（thinking_budget，可关闭思考）"
       },
       {
         "name": "gemini-2.5-pro",
         "upstream_model": "gemini-2.5-pro",
-        "description": "经典多模态深度思考模型"
+        "description": "经典 Pro（thinking_budget）"
       }
     ],
     "adapter_rules": {
@@ -625,6 +634,7 @@ export const PRESETS = [
           ],
           "pro": [
             "low",
+            "medium",
             "high"
           ]
         }
@@ -641,17 +651,18 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       }
-    }
+    },
+    "doc_url": "https://ai.google.dev/gemini-api/docs/openai"
   },
   {
     "id": "minimax",
     "name": "MiniMax",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
-    "doc_url": "https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic",
-    "description": "MiniMax 开放平台（国内官方订阅），支持 MiniMax-M3 系列，原生支持 OpenAI Completions 与 Anthropic Messages 双协议直通透传",
+    "doc_url": "https://platform.minimax.cn/docs/api-reference/text-chat-openai",
+    "description": "MiniMax 开放平台（国内），MiniMax-M3 / M3.1-Flash-Preview，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -662,15 +673,28 @@ export const PRESETS = [
       {
         "name": "MiniMax-M3",
         "upstream_model": "MiniMax-M3",
-        "description": "MiniMax-M3 多模态通用旗舰模型（原生兼容 Completions 与 Messages）"
+        "description": "多模态旗舰（文本/图片/视频），OpenAI 端默认 adaptive 思考"
+      },
+      {
+        "name": "MiniMax-M3.1-Flash-Preview",
+        "upstream_model": "MiniMax-M3.1-Flash-Preview",
+        "description": "1M 上下文、强制思考、reasoning_effort low~max（目前仅 M Plan / MiniMax Code 可用）"
       }
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "openai_passthrough"
+        "strategy": "openai_passthrough",
+        "supported_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
       },
       "case_sensitive_models": {
-        "minimax-m3": "MiniMax-M3"
+        "minimax-m3": "MiniMax-M3",
+        "minimax-m3.1-flash-preview": "MiniMax-M3.1-Flash-Preview"
       },
       "tools": {
         "normalize_choice_to_string": false,
@@ -830,7 +854,7 @@ export const PRESETS = [
   {
     "id": "sensenova",
     "name": "商汤日日新",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "protocol": "openai",
     "base_url": "https://token.sensenova.cn/v1",
     "doc_url": "https://platform.sensenova.cn/docs",
@@ -838,7 +862,8 @@ export const PRESETS = [
     "features": {
       "native_thinking": true,
       "multimodal": true,
-      "tools": true
+      "tools": true,
+      "anthropic_messages": true
     },
     "recommended_models": [
       {
@@ -853,7 +878,7 @@ export const PRESETS = [
       },
       {
         "name": "glm-5.2",
-        "upstream_model": "GLM-5.2",
+        "upstream_model": "glm-5.2",
         "description": "智谱/商汤最新 GLM-5.2 旗舰推理大模型"
       }
     ],
@@ -864,7 +889,8 @@ export const PRESETS = [
           "none",
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
       },
       "tools": {
@@ -878,7 +904,8 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       }
-    }
+    },
+    "anthropic_base_url": "https://token.sensenova.cn/v1"
   },
   {
     "id": "siliconflow",
@@ -1029,7 +1056,7 @@ export const PRESETS = [
   {
     "id": "vertex",
     "name": "Google Vertex AI",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "protocol": "vertex_openai",
     "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
     "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
@@ -1059,11 +1086,18 @@ export const PRESETS = [
         "headroom_elevation": true,
         "model_matrix": {
           "flash": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "pro": [
             "low",
             "medium",
             "high"
           ]
-        }
+        },
+        "thought_tag_marker": true
       },
       "tools": {
         "normalize_choice_to_string": false,

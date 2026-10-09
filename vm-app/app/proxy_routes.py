@@ -42,6 +42,7 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse, Response
+from . import gemini_compat
 
 from .config_store import get_config, clear_cache
 from .scheduler import (
@@ -451,42 +452,9 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                 out["reasoning_effort"] = "none"
         else:
             # Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
+            # (thinking level, thought tags, headroom; see gemini_compat.py)
             if strat == "gemini_thinking_matrix":
-                is_gemma = m_name.startswith("gemma")
-                thinking_enabled = False
-                if not is_gemma:
-                    re = out.pop("reasoning_effort", None)
-                    if re is not None:
-                        effort = str(re).lower()
-                        extra = out.setdefault("extra_body", {}).setdefault("google", {})
-                        is_gemini_25 = m_name.startswith("gemini-2.5-")
-                        is_pro = "pro" in m_name
-                        if effort in ("none", "false"):
-                            extra["thinking_config"] = {"include_thoughts": False}
-                        elif is_gemini_25:
-                            extra["thinking_config"] = {"include_thoughts": True}
-                            thinking_enabled = True
-                        else:
-                            thinking_level = "low"
-                            if effort in ("high", "xhigh", "max"):
-                                thinking_level = "high"
-                            elif effort == "medium" and not is_pro:
-                                thinking_level = "medium"
-                            extra["thinking_config"] = {
-                                "include_thoughts": True,
-                                "thinking_level": thinking_level,
-                            }
-                            thinking_enabled = True
-                    else:
-                        cfg = out.get("extra_body", {}).get("google", {}).get("thinking_config", {})
-                        if cfg.get("include_thoughts") is not False and cfg.get("thinking_level"):
-                            thinking_enabled = True
-
-                if thinking_enabled and reasoning_rules.get("headroom_elevation", True):
-                    if "max_tokens" in out and isinstance(out["max_tokens"], int) and out["max_tokens"] < 16384:
-                        out["max_tokens"] = 65535
-                    if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
-                        out["max_completion_tokens"] = 65535
+                gemini_compat.apply_thinking(out, reasoning_rules, m_name)
             else:
                 # All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
                 # Pure passthrough: preserve reasoning_effort and payload format untouched
@@ -537,6 +505,18 @@ def _normalize_response_data(data: dict, rules: dict) -> None:
 
 
 # ── Backwards-compatibility wrapper stubs ────────────────────────────
+def _gemini_normalize_json_response(resp: Response) -> Response:
+    """Split Gemini thought tags / sign tool-call ids on a non-streaming reply."""
+    raw = getattr(resp, "body", b"") or b""
+    if b"<thought>" not in raw and b"thought_signature" not in raw and b"tool_calls" not in raw:
+        return resp
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return resp
+    return JSONResponse(content=gemini_compat.normalize_response(data))
+
+
 def _sanitize_amd_messages(out: dict) -> None:
     _apply_request_adapter_rules(out, {"messages": {"deny_developer_role": True, "system_first_only": True, "merge_system": True}}, is_agent_mode=True)
 
@@ -956,6 +936,16 @@ async def chat_completions(request: Request):
         "candidates": {"chat": candidates_list},
     }
 
+    # Gemini (VM only): thought signatures carried in tool_call ids, thought tags
+    # split into reasoning_content.  Track which candidates / upstream URLs are
+    # Gemini so only their responses are post-processed.
+    signed_ids = gemini_compat.has_signed_ids(body)
+    gemini_providers = {
+        c.get("provider") for c in candidates_list
+        if gemini_compat.is_gemini_rules(c.get("adapter_rules") or _get_preset_rules(c.get("provider", "")))
+    }
+    gemini_urls: set = set()
+
     def build_request(cand, api_key, upstream_base_url):
         # Isolate top-level and nested mutable fields (messages, tools, extra_body) via copy-on-write
         out = _clone_request_payload(body)
@@ -964,6 +954,11 @@ async def chat_completions(request: Request):
         rules = cand.get("adapter_rules") or _get_preset_rules(provider)
         _apply_request_adapter_rules(out, rules, is_agent_mode=not kb_force_no_reasoning, is_anthropic=False)
         url = join_upstream(upstream_base_url, "chat/completions")
+        is_gemini = gemini_compat.is_gemini_rules(rules)
+        if is_gemini:
+            gemini_urls.add(str(httpx.URL(url)))
+        if is_gemini or signed_ids:
+            gemini_compat.restore_signatures(out, keep=is_gemini)
         headers = {
             "Content-Type": "application/json",
         }
@@ -991,6 +986,7 @@ async def chat_completions(request: Request):
         is_passthrough = (
             cand["model"] == model_name
             and not kb_force_no_reasoning
+            and not signed_ids
             and (
                 provider.lower() == "openai"
                 or (
@@ -1012,9 +1008,15 @@ async def chat_completions(request: Request):
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder, lease: Optional[Any] = None):
             async def event_generator():
+                gfilter = gemini_compat.make_stream_filter() if str(resp.request.url) in gemini_urls else None
                 try:
-                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=None, keepalive_sec=15.0):
-                        yield chunk
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=gfilter, keepalive_sec=15.0):
+                        if chunk:
+                            yield chunk
+                    if gfilter is not None:
+                        tail_bytes = gfilter.flush()
+                        if tail_bytes:
+                            yield tail_bytes
                 finally:
                     try:
                         await resp.aclose()
@@ -1076,6 +1078,8 @@ async def chat_completions(request: Request):
             if isinstance(resp_data, dict):
                 resp_data = _normalize_tool_calls(resp_data)
             resp = JSONResponse(content=resp_data)
+        if gemini_providers and sr.routed_via.split("/", 1)[0] in gemini_providers:
+            resp = _gemini_normalize_json_response(resp)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)

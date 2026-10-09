@@ -1,7 +1,7 @@
 {
   "id": "google",
   "name": "Google AI Studio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "protocol": "google_openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
   "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
@@ -12,24 +12,29 @@
   },
   "recommended_models": [
     {
-      "name": "gemini-3.5-flash",
-      "upstream_model": "gemini-3.5-flash",
-      "description": "最新高性价比推理模型 (支持 low/medium/high 思考等级)"
+      "name": "gemini-3.8-flash",
+      "upstream_model": "gemini-3.8-flash",
+      "description": "最新 Flash（thinking_level minimal/low/medium/high）"
     },
     {
-      "name": "gemini-3.5-pro",
-      "upstream_model": "gemini-3.5-pro",
-      "description": "最新旗舰强推理模型 (支持 low/high 思考等级)"
+      "name": "gemini-3.5-flash",
+      "upstream_model": "gemini-3.5-flash",
+      "description": "高性价比 Flash"
+    },
+    {
+      "name": "gemini-3.1-pro",
+      "upstream_model": "gemini-3.1-pro",
+      "description": "旗舰 Pro（thinking_level low/medium/high，不可关闭思考）"
     },
     {
       "name": "gemini-2.5-flash",
       "upstream_model": "gemini-2.5-flash",
-      "description": "经典多模态快速模型"
+      "description": "经典 Flash（thinking_budget，可关闭思考）"
     },
     {
       "name": "gemini-2.5-pro",
       "upstream_model": "gemini-2.5-pro",
-      "description": "经典多模态深度思考模型"
+      "description": "经典 Pro（thinking_budget）"
     }
   ],
   "adapter_rules": {
@@ -46,6 +51,7 @@
         ],
         "pro": [
           "low",
+          "medium",
           "high"
         ]
       }
@@ -62,5 +68,6 @@
     "sanitization": {
       "unsupported_params": []
     }
-  }
+  },
+  "doc_url": "https://ai.google.dev/gemini-api/docs/openai"
 }
