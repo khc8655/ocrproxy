@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-09",
+  "version": "v2026.10.09-10",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "中转稳定性 P1 修复：饱和 Key 秒切、429 遵循 Retry-After、中途断流显式报错并计入统计、KB 内存回收节流",
+  "title": "首次登录导航栏补全与金库物理级三权分立 (v2026.10.09-10)",
   "changelog": [
-    "饱和 Key 不再阻塞：并发槽已满的 Key 自动排到候选末尾；后面还有空闲候选时最多等 1s，否则才等满 10s",
-    "429 遵循 Retry-After：Agent 模式在有备选时按 Retry-After 冷却该候选（上限 60s，单候选不冷却）；KB 模式取 max(cooldown_tpm_sec, Retry-After≤300s)",
-    "中途断流：首字节后上游断开时，向客户端补发终止 SSE 错误事件（OpenAI 格式 / Anthropic event: error），并按 502 记入统计、降低该候选的延迟排序权重",
-    "KB/OCR 内存回收节流：gc.collect()+malloc_trim 改为后台合并执行（同时最多 1 个、间隔≥2s、请求不再等待），突发入库时不再阻塞其它流"
+    "前端生命周期修复：抽离 initAppAfterAuth，首次登录成功时立即渲染顶部导航栏并加载模型与中枢预设，告别空白和按 F5 刷新",
+    "物理级三权分立：EdgeOne 与 VM 端彻底移除 ADMIN_PASSWORD 兜底金库逻辑，/api/vault/* 仅且只能使用 VAULT_ACCESS_TOKEN 鉴权",
+    "安装与环境支持：install.sh 与 init_config.py 全面支持 VAULT_ACCESS_TOKEN 自动生成与 .env 持久化，平滑升级自动补齐",
+    "报错文案修正：彻底清除后端 401 报错中遗留的历史 PROXY_API_KEY 误导文案"
   ]
 }

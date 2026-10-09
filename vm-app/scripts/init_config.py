@@ -22,8 +22,9 @@ def generate_fernet_key() -> str:
     return Fernet.generate_key().decode()
 
 
-def create_env_file(env_path: str, config_dir: str, proxy_key: str, admin_pass: str, encrypt_key: str, port: int = 3000, run_mode: str = "agent"):
+def create_env_file(env_path: str, config_dir: str, proxy_key: str, admin_pass: str, encrypt_key: str, port: int = 3000, run_mode: str = "agent", vault_token: str = None):
     """Create .env file with generated secrets."""
+    vault_token = vault_token or f"vault-{generate_random_key(32)}"
     content = f"""# ocrproxy 环境变量配置
 # 此文件包含敏感密钥，权限已设置为 600
 # 生成时间: 自动安装
@@ -40,6 +41,9 @@ PROXY_API_KEY={proxy_key}
 
 # 管理员密码 - 登录后台管理面板使用的密码
 ADMIN_PASSWORD={admin_pass}
+
+# EdgeOne 凭据中枢访问 Token (三权分立专用，用于拉取与同步上游模型密钥)
+VAULT_ACCESS_TOKEN={vault_token}
 
 # 配置文件加密密钥 (Fernet key)
 ENCRYPT_KEY={encrypt_key}
@@ -138,13 +142,15 @@ def main():
     encrypt_key = generate_fernet_key()
     proxy_key = f"sk-ocrproxy-{generate_random_key(32)}"
     admin_pass = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else generate_random_key(24)
+    vault_token = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] else f"vault-{generate_random_key(32)}"
     print(f"  [✓] Fernet 加密密钥已生成")
     print(f"  [✓] PROXY_API_KEY: {proxy_key}")
     print(f"  [✓] ADMIN_PASSWORD: {admin_pass}")
+    print(f"  [✓] VAULT_ACCESS_TOKEN: {vault_token}")
 
     # Create .env file
     print(f"\n[2/3] 创建环境变量文件 (端口: {port}, 模式: {run_mode})...")
-    create_env_file(env_path, config_dir, proxy_key, admin_pass, encrypt_key, port, run_mode)
+    create_env_file(env_path, config_dir, proxy_key, admin_pass, encrypt_key, port, run_mode, vault_token)
     print(f"  [✓] .env 文件已创建: {env_path} (权限 600)")
 
     # Initialize config
@@ -154,9 +160,10 @@ def main():
     print("\n" + "=" * 60)
     print("  初始化完成！请妥善保存以下密钥：")
     print("=" * 60)
-    print(f"\n  运行模式 (RUN_MODE)   = {run_mode}")
-    print(f"  客户端 Key (PROXY_KEY) = {proxy_key}")
-    print(f"  管理密码 (ADMIN_PASS) = {admin_pass}")
+    print(f"\n  运行模式 (RUN_MODE)        = {run_mode}")
+    print(f"  客户端 Key (PROXY_KEY)      = {proxy_key}")
+    print(f"  管理密码 (ADMIN_PASS)      = {admin_pass}")
+    print(f"  中枢令牌 (VAULT_TOKEN)     = {vault_token}")
     print(f"\n  配置目录: {config_dir}")
     print(f"  环境变量: {env_path}")
     print("\n" + "=" * 60 + "\n")
@@ -164,6 +171,7 @@ def main():
     result = {
         "proxy_key": proxy_key,
         "admin_pass": admin_pass,
+        "vault_token": vault_token,
         "encrypt_key": encrypt_key,
         "run_mode": run_mode,
         "port": port

@@ -116,19 +116,18 @@ export function checkAdminAuth(request, env) {
 
 /**
  * Role 3: Vault Access Auth (for /api/vault/* endpoints).
- * Strictly requires VAULT_ACCESS_TOKEN (or ADMIN_PASSWORD as master fallback).
- * PROXY_API_KEY is EXPLICITLY FORBIDDEN from accessing the secret Vault.
+ * Strictly requires VAULT_ACCESS_TOKEN (Strict 3-Role Privilege Separation).
+ * PROXY_API_KEY and ADMIN_PASSWORD are EXPLICITLY FORBIDDEN from accessing the secret Vault.
  */
 export function checkVaultAuth(request, env) {
   const vaultToken = env?.VAULT_ACCESS_TOKEN ? String(env.VAULT_ACCESS_TOKEN).trim() : '';
-  const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
 
-  if (!vaultToken && !adminPass) {
+  if (!vaultToken) {
     return authErrorResponse(
       503,
       'configuration_error',
       'vault_unconfigured',
-      'Server misconfiguration: Neither VAULT_ACCESS_TOKEN nor ADMIN_PASSWORD is configured. Vault access is blocked in fail-closed mode.'
+      'Server misconfiguration: VAULT_ACCESS_TOKEN is not configured. Vault access is blocked in fail-closed mode.'
     );
   }
 
@@ -137,10 +136,7 @@ export function checkVaultAuth(request, env) {
     return authErrorResponse(401, 'authentication_error', 'missing_vault_token', 'Missing Authorization header for Vault access.');
   }
 
-  if (vaultToken && timingSafeEqual(token, vaultToken)) {
-    return null; // Authorized
-  }
-  if (adminPass && timingSafeEqual(token, adminPass)) {
+  if (timingSafeEqual(token, vaultToken)) {
     return null; // Authorized
   }
 

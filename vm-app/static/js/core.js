@@ -164,13 +164,25 @@ function switchTab(id){
   renderNav();
   render();
 }
+async function initAppAfterAuth(){
+  showApp();
+  renderNav();
+  await loadData();
+  if (typeof loadPresetsCatalog === 'function') loadPresetsCatalog();
+  if (typeof fetchVaultManifest === 'function') fetchVaultManifest(true);
+}
 async function login(){
   const k=document.getElementById('loginKey').value.trim();
   loginErr('');
   if(!k){ loginErr('请输入管理员凭证'); return; }
   try {
     const r=await fetch('/api/admin/config',{headers:{'Authorization':'Bearer '+k}});
-    if(r.ok){ state.key=k; sessionStorage.setItem('admin_key',k); showApp(); toast('登录成功','ok'); loadData(); }
+    if(r.ok){
+      state.key=k;
+      sessionStorage.setItem('admin_key',k);
+      toast('登录成功','ok');
+      await initAppAfterAuth();
+    }
     else loginErr('凭证无效，请检查 ADMIN_PASSWORD 管理员密码');
   } catch(e){ loginErr('连接服务失败: '+e.message); }
 }

@@ -1663,7 +1663,6 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
         or v_cfg.get("token")
         or os.environ.get("EDGEONE_VAULT_TOKEN")
         or os.environ.get("VAULT_ACCESS_TOKEN")
-        or os.environ.get("ADMIN_PASSWORD")
         or ""
     ).strip()
 
@@ -1695,7 +1694,7 @@ async def vault_manifest_endpoint(request: Request):
             if res.status_code == 401:
                 return JSONResponse(status_code=401, content={
                     "ok": False,
-                    "error": "EdgeOne 中枢鉴权失败 (HTTP 401)。请在「系统设置」核对中枢访问 Token (即 EdgeOne 的 PROXY_API_KEY)"
+                    "error": "EdgeOne 中枢鉴权失败 (HTTP 401)。请核对中枢访问 Token 是否与 EdgeOne 环境变量 VAULT_ACCESS_TOKEN 完全一致。"
                 })
             if not res.is_success:
                 return JSONResponse(status_code=res.status_code, content={
@@ -1757,7 +1756,7 @@ async def vault_fetch_key_endpoint(request: Request):
             if res.status_code == 401:
                 return JSONResponse(status_code=401, content={
                     "ok": False,
-                    "error": "EdgeOne 中枢凭据鉴权失败 (HTTP 401)。请在系统设置中核对中枢 Token"
+                    "error": "EdgeOne 中枢凭据鉴权失败 (HTTP 401)。请核对中枢访问 Token 是否与 EdgeOne 环境变量 VAULT_ACCESS_TOKEN 完全一致。"
                 })
             if not res.is_success:
                 return JSONResponse(status_code=res.status_code, content={
@@ -1967,7 +1966,7 @@ async def vault_test_endpoint(request: Request):
                     "ok": False,
                     "status_code": 401,
                     "edgeone_url": edgeone_url,
-                    "error": "EdgeOne 中枢鉴权失败 (HTTP 401)。请核对 Token 是否与 EdgeOne 环境变量 PROXY_API_KEY 完全一致。"
+                    "error": "EdgeOne 中枢鉴权失败 (HTTP 401)。请核对 Token 是否与 EdgeOne 环境变量 VAULT_ACCESS_TOKEN 完全一致。"
                 })
             if not res.is_success:
                 return JSONResponse(status_code=res.status_code, content={

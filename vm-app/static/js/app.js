@@ -31,13 +31,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Initial Auth & Data Load
   if (state.key) {
-    showApp();
-    renderNav();
-    await loadData();
-    // Load presets catalog
-    loadPresetsCatalog();
-    // Pre-fetch EdgeOne Vault manifest silently
-    fetchVaultManifest(true);
+    await initAppAfterAuth();
   } else {
     showLogin();
   }

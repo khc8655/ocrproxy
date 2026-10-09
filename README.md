@@ -55,7 +55,7 @@ ocrprox (Monorepo)
 系统确立了“**本地存储为主权基石，中枢托管为增效辅助**”的双轨架构，既能统一享受 EdgeOne 中枢集中下发的厂商与密钥，又完全保留了各 VM 节点的本地自主控制权：
 
 ### 1. 职责与双轨机制
-- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中维护官方适配提供商与其拥有的 API Keys，支持脱敏清单分发与动态探测；中枢鉴权校验专用环境变量 `VAULT_ACCESS_TOKEN`（或超级管理员密码 `ADMIN_PASSWORD`），严格实行三权分立，客户端代理密钥 `PROXY_API_KEY` 严禁提取金库；
+- **EdgeOne 凭据资产中枢 (Vault Hub)**：集中维护官方适配提供商与其拥有的 API Keys，支持脱敏清单分发与动态探测；中枢鉴权严格校验专用环境变量 `VAULT_ACCESS_TOKEN`（彻底物理剥离 `ADMIN_PASSWORD` 与 `PROXY_API_KEY`），完全实行物理级三权分立，金库接口仅限专用金钥访问；
 - **VM 本地凭据自主管理 (Local Credential Sovereignty)**：
   - 完整保留「供应商与 Key 凭证库」管理面板（支持 A-Z 字母索引导航轨与分组标线）；
   - 支持随时在卡片上自主新增、编辑与删除本地专属 Key，变更直接持久化至 `proxy_config.enc`，绝不依赖或受制于中枢；

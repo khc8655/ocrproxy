@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.09-09"
+SCRIPT_VERSION="v2026.10.09-10"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -518,6 +518,13 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
         fi
     fi
 
+    # 确保 .env 包含 VAULT_ACCESS_TOKEN (三权分立专用中枢访问凭据)
+    if ! run_sudo grep -q "^VAULT_ACCESS_TOKEN=" "${INSTALL_DIR}/.env" 2>/dev/null; then
+        NEW_VAULT_TOKEN="vault-$(gen_random_str 32)"
+        echo "VAULT_ACCESS_TOKEN=${NEW_VAULT_TOKEN}" | run_sudo tee -a "${INSTALL_DIR}/.env" >/dev/null
+        info "已为三权分立自动生成并写入中枢访问 Token: VAULT_ACCESS_TOKEN"
+    fi
+
     # 统一确保运行用户权限
     run_sudo chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 
@@ -796,13 +803,23 @@ for candidate in "/root/proxy_config" "/tmp/proxy_config" "./proxy_config"; do
     fi
 done
 
+# 中枢访问 Token (三权分立专用，若传入则使用，否则自动生成)
+if [[ -n "$CLI_VAULT_TOKEN" ]]; then
+    FINAL_VAULT_TOKEN="$CLI_VAULT_TOKEN"
+elif [[ -n "$VAULT_ACCESS_TOKEN" ]]; then
+    FINAL_VAULT_TOKEN="$VAULT_ACCESS_TOKEN"
+else
+    FINAL_VAULT_TOKEN="vault-$(gen_random_str 32)"
+fi
+
 "${INSTALL_DIR}/venv/bin/python" "${INSTALL_DIR}/scripts/init_config.py" \
     "$EXTERNAL_CONFIG" \
     "${INSTALL_DIR}/config" \
     "${INSTALL_DIR}/.env" \
     "$FINAL_PORT" \
     "$FINAL_MODE" \
-    "$FINAL_PASSWORD"
+    "$FINAL_PASSWORD" \
+    "$FINAL_VAULT_TOKEN"
 
 # 保存 GITHUB_TOKEN 到 .env (若有)
 if [[ -n "$GITHUB_TOKEN" ]]; then

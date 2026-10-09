@@ -665,7 +665,6 @@ async def _lazy_fetch_vault_credential(config: dict, provider_name: str, key_lab
         v_cfg.get("token")
         or os.environ.get("EDGEONE_VAULT_TOKEN")
         or os.environ.get("VAULT_ACCESS_TOKEN")
-        or os.environ.get("ADMIN_PASSWORD")
         or ""
     ).strip()
 
