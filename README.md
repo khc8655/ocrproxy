@@ -492,6 +492,12 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.09-14` (2026-10-09)
+- **Gemini 思考签名与工具调用支持**：在 VM 执行器中集成 `gemini_compat.py`，通过在 `tool_call_id` 中以 `{id}:::{signature}` 无状态携带与还原 `thought_signature`，并配合 LRU 缓存与 `skip_thought_signature_validator` 双重兜底，彻底解决 Gemini 3 在 Cursor / Cline 等 OpenAI 客户端中多轮工具调用报 400 崩溃的缺陷；
+- **Vertex AI 思考标签流式分离**：实现 `_ThoughtSplitter` 跨 chunk 状态机与非流式拆分，将 Vertex AI 返回的 `<thought>...</thought>` 抽取至 `reasoning_content`，正文保留在 `content`，与客户端思考折叠无缝贴合；
+- **官方预设规则对齐**：补齐 MiniMax-M3.1-Flash-Preview 预设与大小写映射；商汤日日新 / Agnes 启用 Anthropic Messages 直通；更新 Google 推荐模型为 3.8 Flash / 3.5 Flash / 3.1 Pro / 2.5 系列；
+- **严格厂商隔离与零拷贝保护**：Gemini 执行器仅对 `reasoning.strategy == "gemini_thinking_matrix"` 候选生效，非 Gemini 候选节点与零拷贝 fast-path 保持 100% 原始透传，EdgeOne 与 KB 模式保持纯净零影响。
+
 ### `v2026.10.09-13` (2026-10-09)
 - **修复 systemd-run 非法参数**：彻底移除 `install.sh` 生成 CLI 中的 `--remain-after-exit=no` 非法参数并引入 `--collect` 机制，根治在服务器执行 `ocrproxy upgrade` 时报 `systemd-run: option '--remain-after-exit' doesn't allow an argument` 导致升级中断退出的缺陷；
 - **交互式终端直连优化**：在交互式终端 (TTY) 下执行 `ocrproxy upgrade` 时直接前台运行并实时回显下载与部署进度，不再误转入后台单元；

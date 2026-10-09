@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-13",
+  "version": "v2026.10.09-14",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "修复 systemd-run 语法参数与国内 OTA 极速下载链路 (v2026.10.09-13)",
+  "title": "官方适配器规则对齐与 Gemini 思考链签名架构集成 (v2026.10.09-14)",
   "changelog": [
-    "修复 systemd-run 非法参数：彻底移除 --remain-after-exit=no 语法错误并引入 --collect 自动回收机制，消除命令行执行 ocrproxy upgrade 时的崩溃报错",
-    "交互式终端直连优化：在交互式 TTY 终端执行 ocrproxy upgrade 时自动直通前台运行，提供完整的实时下载与部署进度输出",
-    "国内下载加速链路重构：优化 prepare_source_code 源码下载候选机制，默认优先轮询国内高速镜像源 (ghfast/gh-proxy/mirror) 并缩短连接超时，杜绝国内服务器在官方 GitHub 上重试等待 75 秒超限导致的 Web OTA 探测超时",
-    "后台升级指令增强：优化 Web 端 OTA 触发逻辑，新增向 systemd 单元传递环境变量与国内镜像降级兜底"
+    "Gemini 思考签名与工具调用支持：在 VM 执行器中集成 gemini_compat，通过在 tool_call_id 中无状态携带与还原 thought_signature，彻底解决 Gemini 3 在 Cursor / Cline 等 OpenAI 客户端中多轮工具调用报 400 崩溃的缺陷",
+    "Vertex AI 思考标签流式分离：实现 _ThoughtSplitter 跨 chunk 状态机与非流式拆分，将 Vertex AI 返回的 <thought>...</thought> 提取至 reasoning_content，正文保留在 content",
+    "官方预设规则对齐：补齐 MiniMax-M3.1-Flash-Preview 模型映射；商汤日日新 / Agnes 启用 Anthropic Messages 直通；更新 Google 推荐模型为 3.8 Flash / 3.5 Flash / 3.1 Pro / 2.5 系列",
+    "严格厂商隔离：Gemini 执行器仅对 reasoning.strategy==gemini_thinking_matrix 候选生效，非 Gemini 候选节点与零拷贝 fast-path 保持 100% 原始透传"
   ]
 }
