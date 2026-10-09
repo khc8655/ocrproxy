@@ -1,0 +1,114 @@
+{
+  "adapter_rules": {
+    "error_rules": [
+      {
+        "action": "failover",
+        "cooldown_sec": 120,
+        "failover": true,
+        "match_keywords": [
+          "rate limit",
+          "rate_limit",
+          "free-models-per-day",
+          "free_models_per_day",
+          "Rate limit exceeded"
+        ],
+        "match_status": 429,
+        "name": "free_tier_rate_limited"
+      },
+      {
+        "action": "quota_exhausted",
+        "cooldown_sec": 1800,
+        "failover": true,
+        "match_keywords": [
+          "credit",
+          "balance",
+          "insufficient",
+          "402"
+        ],
+        "match_status": 402,
+        "name": "negative_credit_balance"
+      }
+    ],
+    "inject_headers": {
+      "HTTP-Referer": "https://github.com/khc8655/ocrproxy",
+      "X-Title": "OCRProxy"
+    },
+    "reasoning": {
+      "strategy": "openai_passthrough",
+      "supported_levels": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "sanitization": {
+      "unsupported_params": []
+    },
+    "timeout_rules": {
+      "default_timeout_sec": 60
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "rescue_from_text": false,
+      "strip_json_schema": false
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    }
+  },
+  "anthropic_base_url": "https://openrouter.ai/api/v1",
+  "base_url": "https://openrouter.ai/api/v1",
+  "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
+  "doc_url": "https://openrouter.ai/docs/api/reference/overview",
+  "features": {
+    "anthropic_messages": true,
+    "multimodal": true,
+    "native_thinking": true,
+    "tools": true
+  },
+  "id": "openrouter",
+  "name": "OpenRouter",
+  "protocol": "openai",
+  "recommended_models": [
+    {
+      "description": "免费档最强 coding 模型（262K 上下文）",
+      "name": "qwen3-coder:free",
+      "upstream_model": "qwen/qwen3-coder:free"
+    },
+    {
+      "description": "Agentic coding 专用模型（262K 上下文）",
+      "name": "laguna-s-2.1:free",
+      "upstream_model": "poolside/laguna-s-2.1:free"
+    },
+    {
+      "description": "550B MoE 免费推理/调度模型（1M 上下文）",
+      "name": "nemotron-3-ultra:free",
+      "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+    },
+    {
+      "description": "30B MoE 轻量 coding 模型（256K 上下文）",
+      "name": "north-mini-code:free",
+      "upstream_model": "cohere/north-mini-code:free"
+    },
+    {
+      "description": "120B MoE 多智能体吞吐模型（1M 上下文）",
+      "name": "nemotron-3-super:free",
+      "upstream_model": "nvidia/nemotron-3-super-120b-a12b:free"
+    },
+    {
+      "description": "Google 多模态轻量模型（262K 上下文）",
+      "name": "gemma-4-26b:free",
+      "upstream_model": "google/gemma-4-26b-a4b-it:free"
+    },
+    {
+      "description": "动态路由：自动选择当前可用的免费模型（兜底用）",
+      "name": "openrouter-free-router",
+      "upstream_model": "openrouter/free"
+    }
+  ],
+  "version": "1.0.0"
+}

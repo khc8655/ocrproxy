@@ -1,54 +1,99 @@
 {
-  "id": "nvidia",
-  "name": "NVIDIA NIM",
-  "version": "1.0.0",
-  "protocol": "openai",
-  "base_url": "https://integrate.api.nvidia.com/v1",
-  "anthropic_base_url": null,
-  "doc_url": "https://build.nvidia.com",
-  "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
-  "features": {
-    "native_thinking": true,
-    "tools": true,
-    "multimodal": true
-  },
-  "recommended_models": [
-    {
-      "name": "llama-3.2-11b",
-      "upstream_model": "meta/llama-3.2-11b-vision-instruct",
-      "description": "Meta Llama 3.2 11B Vision 指令微调旗舰模型，极速响应 (<800ms)，支持视觉与函数调用"
-    },
-    {
-      "name": "nvidia-nemotron-3.5",
-      "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-      "description": "NVIDIA 官方自研 Nemotron-3.5 闪电深度推理模型，具备高智商思维链"
-    },
-    {
-      "name": "nemotron-3-ultra-550b",
-      "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b",
-      "description": "NVIDIA 官方 550B 超大规模 MoE 旗舰大模型"
-    }
-  ],
   "adapter_rules": {
+    "error_rules": [
+      {
+        "action": "failover",
+        "cooldown_sec": 3600,
+        "failover": true,
+        "match_keywords": [
+          "not found for account",
+          "function",
+          "not found"
+        ],
+        "match_status": 404,
+        "name": "model_not_activated_for_account"
+      },
+      {
+        "action": "failover",
+        "cooldown_sec": 90,
+        "failover": true,
+        "match_keywords": [
+          "rate limit",
+          "too many requests",
+          "429"
+        ],
+        "match_status": 429,
+        "name": "free_tier_rate_limited"
+      }
+    ],
     "reasoning": {
       "strategy": "openai_passthrough",
       "supported_levels": [
         "none",
         "low",
         "medium",
-        "high"
+        "high",
+        "max"
       ]
-    },
-    "tools": {
-      "normalize_choice_to_string": true,
-      "strip_json_schema": false,
-      "rescue_from_text": false
-    },
-    "user_tracking": {
-      "passthrough_user": true
     },
     "sanitization": {
       "unsupported_params": []
+    },
+    "timeout_rules": {
+      "default_timeout_sec": 60
+    },
+    "tools": {
+      "normalize_choice_to_string": true,
+      "rescue_from_text": false,
+      "strip_json_schema": false
+    },
+    "user_tracking": {
+      "passthrough_user": true
     }
-  }
+  },
+  "anthropic_base_url": null,
+  "base_url": "https://integrate.api.nvidia.com/v1",
+  "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
+  "doc_url": "https://docs.api.nvidia.com/",
+  "features": {
+    "multimodal": true,
+    "native_thinking": true,
+    "tools": true
+  },
+  "id": "nvidia",
+  "name": "NVIDIA NIM",
+  "protocol": "openai",
+  "recommended_models": [
+    {
+      "description": "120B MoE 旗舰，通用/coding 全能主力",
+      "name": "nemotron-3-super-120b",
+      "upstream_model": "nvidia/nemotron-3-super-120b-a12b"
+    },
+    {
+      "description": "30B 极速闪电推理模型，低延迟高性价比",
+      "name": "nemotron-3.5-lightning",
+      "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b"
+    },
+    {
+      "description": "Kimi K3 视觉+推理，256K 上下文，支持 reasoning_effort",
+      "name": "kimi-k3",
+      "upstream_model": "moonshotai/kimi-k3"
+    },
+    {
+      "description": "DeepSeek V4 Flash 变体，快速通用",
+      "name": "deepseek-v4-flash",
+      "upstream_model": "deepseek-ai/deepseek-v4-flash-0731"
+    },
+    {
+      "description": "Agentic coding 小快模型",
+      "name": "laguna-xs-2.1",
+      "upstream_model": "poolside/laguna-xs-2.1"
+    },
+    {
+      "description": "Llama 3.2 11B Vision，极速图文+函数调用",
+      "name": "llama-3.2-11b-vision",
+      "upstream_model": "meta/llama-3.2-11b-vision-instruct"
+    }
+  ],
+  "version": "2.0.0"
 }

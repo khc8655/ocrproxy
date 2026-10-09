@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T11:31:39.538Z",
+  "updated_at": "2026-10-09T15:07:05.998Z",
   "providers": [
     {
       "id": "agnes",
@@ -126,19 +126,19 @@
     {
       "id": "nvidia",
       "name": "NVIDIA NIM",
-      "version": "1.0.0",
-      "rule_hash": "ccc7323ff17f",
+      "version": "2.0.0",
+      "rule_hash": "187af2f5f93d",
       "protocol": "openai",
       "base_url": "https://integrate.api.nvidia.com/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://build.nvidia.com",
-      "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
+      "doc_url": "https://docs.api.nvidia.com/",
+      "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
       "features": {
+        "multimodal": true,
         "native_thinking": true,
-        "tools": true,
-        "multimodal": true
+        "tools": true
       },
-      "recommended_models_count": 3
+      "recommended_models_count": 6
     },
     {
       "id": "openai",
@@ -159,20 +159,38 @@
     },
     {
       "id": "opencode",
-      "name": "OpenCode",
-      "version": "1.0.0",
-      "rule_hash": "e1b353ccf196",
+      "name": "OpenCode Zen",
+      "version": "2.0.0",
+      "rule_hash": "e1aa35db8ce1",
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://opencode.ai/docs",
-      "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。",
+      "doc_url": "https://opencode.ai/docs/zen/",
+      "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
       "features": {
+        "multimodal": true,
         "native_thinking": true,
-        "tools": true,
-        "multimodal": true
+        "tools": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 8
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "version": "1.0.0",
+      "rule_hash": "3aefdebb947c",
+      "protocol": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "anthropic_base_url": "https://openrouter.ai/api/v1",
+      "doc_url": "https://openrouter.ai/docs/api/reference/overview",
+      "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
+      "features": {
+        "anthropic_messages": true,
+        "multimodal": true,
+        "native_thinking": true,
+        "tools": true
+      },
+      "recommended_models_count": 7
     },
     {
       "id": "sensenova",
