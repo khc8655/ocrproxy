@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-06",
+  "version": "v2026.10.09-07",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "单真理源统一 UI 架构：消除 EdgeOne 测按钮暂存死区与复原兜底，统一 EdgeOne 与 VM 首页接入网关与模型展示卡片",
+  "title": "后端核心服务与厂商规则绝对物理隔离：调度器与核心转发引擎中立化，剔除 OpenCode Free 硬编码债务，支持声明式规则与动态占位符",
   "changelog": [
-    "根治 EdgeOne 测按钮消失问题：修复 modelLatencyCache 引起的 TDZ 暂存死区及 CSS .spinner 缺失，在 finally 块中强制兜底恢复按钮状态",
-    "统一首页接入网关与模型展示卡片：VM 端与 EdgeOne 100% 对齐三行式卡片（Base URL、Client Key、可用模型胶囊与一键复制全部）",
-    "消除代码碎片化与排查成本：以 shared/admin 为唯一真理源，改一处两端同步，彻底杜绝维护两套 UI 逻辑",
-    "补齐 copyModelName、copyAllAvailableModels 与 manageAllModels 跨端交互助手，确保两端运行平稳健壮"
+    "确立铁律十一：后端核心服务（scheduler.py、proxy_routes.py、admin_routes.py）与厂商规则绝对物理隔离，核心引擎彻底中立，不包含任何第三方厂商硬编码",
+    "剔除 OpenCode Free 遗留硬编码：完全移除 _gen_opencode_session_id、_is_opencode_free、工具桩注入、401/403 匿名回退与父级向上映射脏代码",
+    "声明式协议与请求头支持：鉴权头支持 auth_header/auth_format 声明，自定义头支持 ${random_session_id}、${timestamp}、${uuid} 通用动态占位符求值",
+    "规范预设与前端入口：彻底清理 opencode-free 预设与前端入口，保留干净的官方标准版 opencode 预设，做到增删改厂商与 Key 零动主代码、零发版"
   ]
 }

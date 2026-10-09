@@ -357,27 +357,6 @@ const FALLBACK_PRESETS = {
       { name: 'glm-4.5', upstream: 'glm-4.5', desc: '智谱 GLM-4.5 旗舰推理大模型', checked: true, kb_type: 'chat' },
       { name: 'claude-3-7-sonnet', upstream: 'claude-3-7-sonnet', desc: 'Claude 3.7 Sonnet 强混合推理模型', checked: false, kb_type: 'chat' }
     ]
-  },
-  'opencode-free': {
-    id: 'opencode-free',
-    name: 'OpenCode Free (免费专区)',
-    version: '1.0.0',
-    base_url: 'https://opencode.ai/zen/v1',
-    protocols: ['chat'],
-    description: 'OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。',
-    recommended_models: [
-      { name: 'ling-3.1-flash-free', upstream: 'ling-3.1-flash-free', desc: '零一万物 3.1 Flash 旗舰推理思考模型 (Free 专区特调)', checked: true, kb_type: 'chat' },
-      { name: 'space-bunny-free', upstream: 'space-bunny-free', desc: 'Space Bunny 社区开源极速模型 (Free 专区稳定免门禁)', checked: true, kb_type: 'chat' },
-      { name: 'deepseek-v4-flash-free', upstream: 'deepseek-v4-flash-free', desc: 'DeepSeek V4 Flash 旗舰推理模型 (Free 专区特调)', checked: true, kb_type: 'chat' },
-      { name: 'mimo-v2.6-flash-free', upstream: 'mimo-v2.6-flash-free', desc: '小米 Mimo V2.6 Flash 高速模型 (Free 专区特调)', checked: false, kb_type: 'chat' },
-      { name: 'nemotron-3.5-lightning-free', upstream: 'nemotron-3.5-lightning-free', desc: 'Nvidia Nemotron 3.5 Lightning 超快模型 (Free 专区特调)', checked: false, kb_type: 'chat' }
-    ],
-    adapter_rules: {
-      opencode_free_bypass: true,
-      reasoning: {
-        strategy: 'openai_passthrough'
-      }
-    }
   }
 };
 

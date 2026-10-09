@@ -156,23 +156,7 @@
       },
       "recommended_models_count": 4
     },
-    {
-      "id": "opencode-free",
-      "name": "OpenCode Free",
-      "version": "1.0.0",
-      "rule_hash": "26230a7499d2",
-      "protocol": "openai",
-      "base_url": "https://opencode.ai/zen/v1",
-      "anthropic_base_url": null,
-      "doc_url": "https://opencode.ai/docs/free",
-      "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。",
-      "features": {
-        "native_thinking": true,
-        "tools": true,
-        "multimodal": true
-      },
-      "recommended_models_count": 5
-    },
+
     {
       "id": "opencode",
       "name": "OpenCode",

@@ -1550,15 +1550,8 @@ async def probe_models_endpoint(request: Request):
         except Exception as e:
             logger.warning("Failed to query vault for provider %s: %s", provider, e)
 
-    if provider in ("opencode-free", "opencode_free") and not base_url:
-        p_opencode = cfg.get("providers", {}).get("opencode", {})
-        base_url = p_local.get("base_url") or p_opencode.get("base_url") or "https://opencode.ai/zen/v1"
-
     if not candidate_keys:
-        if provider.lower() in ("opencode", "opencode-free", "opencode_free"):
-            candidate_keys.append(("免Key公共凭据", "public"))
-        else:
-            return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的可用 API Key（请先配置或勾选有效凭据）"})
+        return JSONResponse(status_code=400, content={"error": f"未找到供应商 [{provider}] 的可用 API Key（请先配置或勾选有效凭据）"})
 
     # 3. 针对 Google 或通用 OpenAI 进行探测并执行 Fallback 轮询
     is_google = provider.lower() == "google" or "generativelanguage.googleapis.com" in base_url.lower()
@@ -1635,10 +1628,6 @@ async def probe_models_endpoint(request: Request):
                             models.append(m_str)
 
                     models = sorted(list(set(models)))
-                    if provider.lower() in ("opencode-free", "opencode_free"):
-                        free_models = [m for m in models if m.endswith("-free")]
-                        other_models = [m for m in models if not m.endswith("-free")]
-                        models = free_models + other_models
                     if models:
                         return JSONResponse(content={
                             "ok": True,
@@ -1741,7 +1730,7 @@ async def vault_fetch_key_endpoint(request: Request):
         return JSONResponse(status_code=400, content={"error": "Missing provider or key_label"})
 
     # 1. 免密公共凭据兜底：直接本地持久化就绪，免打扰中枢
-    if key_label in ("public", "__public__") or (provider in ("opencode-free", "opencode_free") and key_label == "public"):
+    if key_label in ("public", "__public__"):
         cfg = await get_config()
         providers = cfg.setdefault("providers", {})
         local_p = providers.setdefault(provider, {})
@@ -1759,15 +1748,12 @@ async def vault_fetch_key_endpoint(request: Request):
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    # 2. 向上映射中枢供应商标识（例如 opencode-free 映射到父级真实提供商 opencode）
-    vault_lookup_provider = "opencode" if provider in ("opencode-free", "opencode_free") else provider
-
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             res = await client.post(
                 f"{edgeone_url}/api/vault/fetch",
                 headers=headers,
-                json={"provider": vault_lookup_provider, "key_label": key_label}
+                json={"provider": provider, "key_label": key_label}
             )
             if res.status_code == 401:
                 return JSONResponse(status_code=401, content={

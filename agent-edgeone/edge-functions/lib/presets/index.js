@@ -161,23 +161,7 @@ export const CATALOG = {
       },
       "recommended_models_count": 4
     },
-    {
-      "id": "opencode-free",
-      "name": "OpenCode Free",
-      "version": "1.0.0",
-      "rule_hash": "26230a7499d2",
-      "protocol": "openai",
-      "base_url": "https://opencode.ai/zen/v1",
-      "anthropic_base_url": null,
-      "doc_url": "https://opencode.ai/docs/free",
-      "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。",
-      "features": {
-        "native_thinking": true,
-        "tools": true,
-        "multimodal": true
-      },
-      "recommended_models_count": 5
-    },
+
     {
       "id": "opencode",
       "name": "OpenCode",
@@ -813,53 +797,7 @@ export const PRESETS = [
       }
     }
   },
-  {
-    "id": "opencode-free",
-    "name": "OpenCode Free",
-    "version": "1.0.0",
-    "protocol": "openai",
-    "base_url": "https://opencode.ai/zen/v1",
-    "doc_url": "https://opencode.ai/docs/free",
-    "description": "OpenCode Zen 免费模型特调版。系统自动注入规范 Session ID 与 CLI 特征头，补全桩工具穿透防薅羊毛门禁，支持免 Key 匿名兜底。",
-    "features": {
-      "native_thinking": true,
-      "tools": true,
-      "multimodal": true
-    },
-    "recommended_models": [
-      {
-        "name": "ling-3.1-flash-free",
-        "upstream_model": "ling-3.1-flash-free",
-        "description": "零一万物 3.1 Flash 旗舰推理思考模型 (Free 专区特调)"
-      },
-      {
-        "name": "space-bunny-free",
-        "upstream_model": "space-bunny-free",
-        "description": "Space Bunny 社区开源极速模型 (Free 专区稳定免门禁)"
-      },
-      {
-        "name": "deepseek-v4-flash-free",
-        "upstream_model": "deepseek-v4-flash-free",
-        "description": "DeepSeek V4 Flash 旗舰推理模型 (Free 专区特调)"
-      },
-      {
-        "name": "mimo-v2.6-flash-free",
-        "upstream_model": "mimo-v2.6-flash-free",
-        "description": "小米 Mimo V2.6 Flash 高速模型 (Free 专区特调)"
-      },
-      {
-        "name": "nemotron-3.5-lightning-free",
-        "upstream_model": "nemotron-3.5-lightning-free",
-        "description": "Nvidia Nemotron 3.5 Lightning 超快模型 (Free 专区特调)"
-      }
-    ],
-    "adapter_rules": {
-      "opencode_free_bypass": true,
-      "reasoning": {
-        "strategy": "openai_passthrough"
-      }
-    }
-  },
+
   {
     "id": "opencode",
     "name": "OpenCode",

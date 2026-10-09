@@ -52,22 +52,21 @@ from .scheduler import (
     _reclaim_memory,
 )
 
-def _gen_opencode_session_id() -> str:
-    """Generate a canonical session ID matching OpenCode CLI regex ^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$."""
-    hex_part = secrets.token_hex(6)
-    b62_chars = string.ascii_letters + string.digits
-    b62_part = "".join(secrets.choice(b62_chars) for _ in range(14))
-    return f"ses_{hex_part}{b62_part}"
-
-
-def _is_opencode_free(provider: str, rules: dict) -> bool:
-    """Check if the candidate belongs to OpenCode Free tier."""
-    p = (provider or "").lower().strip()
-    if p in ("opencode-free", "opencode_free"):
-        return True
-    if isinstance(rules, dict) and rules.get("opencode_free_bypass"):
-        return True
-    return False
+def _resolve_dynamic_placeholder(val: str) -> str:
+    """Resolve dynamic placeholders in header values or strings (e.g. ${random_session_id}, ${timestamp}, ${uuid})."""
+    if not isinstance(val, str) or "${" not in val:
+        return val
+    if "${random_session_id}" in val:
+        hex_part = secrets.token_hex(6)
+        b62_chars = string.ascii_letters + string.digits
+        b62_part = "".join(secrets.choice(b62_chars) for _ in range(14))
+        val = val.replace("${random_session_id}", f"ses_{hex_part}{b62_part}")
+    if "${timestamp}" in val:
+        val = val.replace("${timestamp}", str(int(time.time())))
+    if "${uuid}" in val:
+        import uuid
+        val = val.replace("${uuid}", str(uuid.uuid4()))
+    return val
 
 
 def _aggregate_sse_to_chat_completion(sse_bytes: bytes, model_name: str = "") -> dict:
@@ -78,7 +77,7 @@ def _aggregate_sse_to_chat_completion(sse_bytes: bytes, model_name: str = "") ->
     finish_reason = "stop"
     response_id = ""
     created = int(time.time())
-    model = model_name or "opencode-free"
+    model = model_name or "chat-completion"
     system_fingerprint = None
     usage = None
 
@@ -498,43 +497,8 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
         if not isinstance(mt, int) or mt <= 0:
             out["max_tokens"] = 4096
 
-    # 8. OpenCode Free Tier Bypass Rules (Stub Tools & Stream Enforcement)
-    if rules.get("opencode_free_bypass"):
-        tools = out.get("tools")
-        if not tools:
-            out["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "bash",
-                        "description": "Execute a bash command in the terminal",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "command": {"type": "string", "description": "The command to execute"}
-                            },
-                            "required": ["command"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "read",
-                        "description": "Read file contents",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "filePath": {"type": "string", "description": "Path to file"}
-                            },
-                            "required": ["filePath"]
-                        }
-                    }
-                }
-            ]
-            if not out.get("tool_choice"):
-                out["tool_choice"] = "none"
-        # Upstream requires stream: true for free models to bypass 403 FreeTierError
+    # 8. Declarative Stream Enforcement (if upstream strictly requires streaming)
+    if rules.get("stream_only"):
         out["stream"] = True
 
 
@@ -928,16 +892,8 @@ async def chat_completions(request: Request):
             if not isinstance(b, dict) or not b.get("provider") or not b.get("key"):
                 continue
             p_id = b["provider"]
-            p_info = providers_map.get(p_id)
-            if not p_info and p_id in ("opencode-free", "opencode_free"):
-                p_info = providers_map.get("opencode") or {
-                    "base_url": "https://opencode.ai/zen/v1",
-                    "keys": {"public": "public"}
-                }
-            p_info = p_info or {}
+            p_info = providers_map.get(p_id) or {}
             preset_r = dict(_get_preset_rules(p_info.get("preset_id", p_id)))
-            if p_id in ("opencode-free", "opencode_free"):
-                preset_r["opencode_free_bypass"] = True
             candidates_list.append({
                 "provider": p_id,
                 "key": b["key"],
@@ -995,31 +951,30 @@ async def chat_completions(request: Request):
         headers = {
             "Content-Type": "application/json",
         }
-        is_free = _is_opencode_free(provider, rules)
-        if provider.lower() == "vertex" or "aiplatform.googleapis.com" in upstream_base_url.lower():
-            headers["x-goog-api-key"] = str(api_key)
-        elif is_free and (not api_key or str(api_key).strip().lower() in ("public", "__public__")):
-            headers["Authorization"] = "Bearer public"
-        else:
-            headers["Authorization"] = f"Bearer {api_key}"
+        # 1. Declarative Auth Header (Config-driven, defaults to Authorization: Bearer {key})
+        auth_header = rules.get("auth_header") if isinstance(rules, dict) else None
+        auth_format = (rules.get("auth_format") if isinstance(rules, dict) else None) or "Bearer {key}"
+        if not auth_header:
+            if "aiplatform.googleapis.com" in upstream_base_url.lower() or provider.lower() == "vertex":
+                auth_header = "x-goog-api-key"
+                auth_format = "{key}"
+            else:
+                auth_header = "Authorization"
 
-        if is_free:
-            headers["x-opencode-session"] = _gen_opencode_session_id()
-            headers["x-opencode-client"] = "cli"
-            headers["User-Agent"] = "opencode/1.18.31 (darwin arm64; node22.11.0)"
-            headers["Accept"] = "application/json, text/event-stream"
+        if api_key:
+            headers[auth_header] = auth_format.format(key=api_key)
 
+        # 2. Declarative Header Injection (Supports dynamic placeholders like ${random_session_id})
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
-                headers[str(hk)] = str(hv)
+                headers[str(hk)] = _resolve_dynamic_placeholder(str(hv))
 
         # Fast-Path: when target model is identical and provider/rules require zero mutation,
         # pass raw bytes directly to upstream without expensive re-serialization.
         is_passthrough = (
             cand["model"] == model_name
             and not kb_force_no_reasoning
-            and not is_free
             and (
                 provider.lower() == "openai"
                 or (
@@ -1029,6 +984,7 @@ async def chat_completions(request: Request):
                     and not rules.get("messages")
                     and not rules.get("sanitization", {}).get("strip_params")
                     and not rules.get("tools", {}).get("deep_schema_sanitization")
+                    and not rules.get("inject_headers")
                 )
             )
         )

@@ -162,12 +162,8 @@ async function ensureKeysImported(bindings){
   const toFetch = [];
   for(const b of bindings){
     if(b.key === 'public' || b.key === '__public__') continue;
-    let lookupProv = b.provider;
-    if(lookupProv === 'opencode-free' || lookupProv === 'opencode_free'){
-      lookupProv = 'opencode';
-    }
-    const hasLocal = (state.config?.providers?.[b.provider]?.keys?.[b.key]) ||
-                     (state.config?.providers?.[lookupProv]?.keys?.[b.key]);
+    const lookupProv = b.provider;
+    const hasLocal = state.config?.providers?.[b.provider]?.keys?.[b.key];
     if(!hasLocal){
       toFetch.push({ ...b, fetchProv: lookupProv });
     }

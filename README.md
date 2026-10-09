@@ -96,28 +96,28 @@ ocrprox (Monorepo)
 
 ---
 
-## OpenCode 双轨供应商体系 (OpenCode Dual-Provider System)
+## 后端核心服务与厂商规则物理隔离架构 (Core Agnostic Engine & Declarative Rules Architecture)
 
-为彻底解决 OpenCode Zen 免费模型防薅羊毛严格门禁（`403 FreeTierError`）与付费/标准直通需求之间的冲突，OCRProxy 在 `v2026.10.07-01` 正式推出 **OpenCode 双轨供应商体系**：
+在 `v2026.10.09-07` 版本中，OCRProxy 正式实施**后端核心服务与厂商规则绝对物理隔离架构**（见《架构标准规范》铁律十一）：
 
-### 1. 轨道 A：`opencode` (标准版 · 纯直通)
-- **定位**：面向 OpenCode 官方付费模型或通用标准 API 访问；
-- **传输策略**：**100% 原样纯净透传**。绝不注入额外 Header，绝不修改请求体，绝不篡改 tools；
-- **凭据要求**：严格使用用户配置的真实 API Key；
-- **适用场景**：GLM-4、Claude 等付费配额调用。
+### 1. 核心网关引擎绝对“目中无人”
+- **调度器 (`scheduler.py`) 纯粹性**：职责仅限于高可用轮询、429 限流冷却、ActiveKey 主备故障转移与并发槽位控制。**绝对不包含任何第三方厂商名称的硬编码**，彻底杜绝隐式凭据查找与跨厂商降级；
+- **转发层 (`proxy_routes.py`) 通用性**：负责纯通用的 HTTP 请求生命周期管理与流式长连接保持；
+- **管理后台 (`admin_routes.py`) 标准化**：负责通用配置存取与标准 HTTP 探活，杜绝厂商特判。
 
-### 2. 轨道 B：`opencode-free` (免费专区 · 门禁自动穿透 + 免Key兜底)
-- **定位**：面向 OpenCode Zen 上动态变动的全部 `*-free` 免费模型（如 `ling-3.1-flash-free`、`deepseek-v4-flash-free`、`space-bunny-free`、`mimo-v2.6-flash-free`、`nemotron-3.5-lightning-free` 等）；
-- **全自动门禁穿透流水线**：
-  1. **规范会话指纹**：自动生成符合上游正则 `^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$` 的会话 ID，注入 `x-opencode-client: cli` 与 CLI User-Agent；
-  2. **智能体形态补全**：若客户端为纯文本请求（未传 tools），自动注入 `bash` 与 `read` 最小工具桩，并声明 `tool_choice: "none"`，完美满足上游防薅羊毛检测且不影响模型正常输出；
-  3. **强制流式自适应**：上游强制要求 `stream: true`。若客户端发起非流式请求，服务端以流式读取并在内存中即时聚合并还原为标准 OpenAI ChatCompletion JSON 响应；
-- **共享 Key 库与 `Bearer public` 自动降级兜底**：
-  - **自动共享 Key 库**：在后台无缝共享读取 `opencode` 中已经录入的大号、小号等凭据；
-  - **匿名免 Key 兜底**：支持免填 Key（直接使用 `Bearer public`）；当用户的个人 Key 遇到 403 或 429（账号免费配额超限）时，调度器全自动秒级降级为 `Bearer public` 兜底重试，保证模型调用零中断！
-- **中枢优先与严格本地边界**：
-  - 遵循「中枢第一，本地仅限显式配置」铁律：绝不强行在前端向本地供应商列表中注入伪造的 `opencode-free` 条目；
-  - 免费专区穿透规则作为内置适配器生效，真实模型直接挂载于中枢标准 `opencode` 或用户显式配置的节点上，支持删除并彻底杜绝幽灵复活。
+### 2. 彻底清偿 OpenCode Free 历史特化债务
+- **剔除所有侵入性 Hack**：鉴于上游官方 Free Tier 强推客户端设备指纹并频繁变动规则，系统彻底剥离了 `_gen_opencode_session_id`、`_is_opencode_free`、桩工具注入、401/403 匿名回退等所有脏代码；
+- **保留纯净标准版 `opencode`**：保留标准的 OpenCode 预设（纯净 OpenAI 协议直通，`https://opencode.ai/zen/v1`），仅供用户持有官方正规 API Key 时使用；
+- **彻底杜绝代码发版绑定**：增删改任何厂商适配，100% 只在 Web 控制台界面或预设 JSON 中进行，**主服务代码 0 改动、0 重启、0 发版**！
+
+### 3. 通用声明式规则与动态占位符机制 (Declarative Rules Contract)
+若特定上游需要非标鉴权或动态头，无需修改一行主代码，直接在规则配置中声明：
+- **声明式鉴权头**：配置 `auth_header: "x-custom-key"` 与 `auth_format: "Token {key}"`（默认 `Authorization: Bearer {key}`）；
+- **动态占位符支持**：在 `inject_headers` 中声明动态占位符，引擎自动求值：
+  - `${random_session_id}`：动态生成标准 CLI 会话 ID（如 `ses_4a...`）；
+  - `${timestamp}`：当前 Unix 时间戳（秒）；
+  - `${uuid}`：标准 UUIDv4；
+- **通用参数裁剪**：声明 `strip_params`、`stream_only` 等通用参数即可。
 
 ---
 
