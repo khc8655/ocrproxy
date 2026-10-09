@@ -140,6 +140,14 @@ ocrprox (Monorepo)
 - **保存强制反脱敏保真 (Fail-Safe Secret Guard · v2026.10.09-03)**：Web 控制台提交保存请求时，后端接口层与底层加密存储内核双重拦截掩码占位符，自动从磁盘现存配置中还原对应的真实有效密钥，物理杜绝掩码污染落盘；
 - **安全服务端代理路由**：客户端发起请求时，VM 后端核心调度器直接在安全本地持久化文件中寻址真实密钥与上游通信，全流程实现密文闭环。
 
+### 4. 单真理源统一 UI 架构 (Single-Source of Truth UI Architecture · v2026.10.09-06)
+- **唯一样式与视图中心 (`shared/admin/`)**：彻底打破 EdgeOne 与 VM 各自维护两套 HTML/CSS/JS 的割裂状态。所有前端组件与视图逻辑以 `shared/admin/` 为唯一真理源，`build-admin.mjs` 自动同步编译下发至 `vm-app/static/` 与 `edge-functions/`；
+- **首页接入网关与模型展示卡片 100% 对齐**：两端统一使用清晰大方的三行横向卡片：
+  1. Base URL（网关地址）与一键复制；
+  2. 客户端凭据 (Client Key) 与一键复制；
+  3. 可用模型胶囊标签（点击模型名即刻复制）+「复制全部模型名」与「管理全部模型」；
+- **探活与连通性健壮性**：消除 ES6 TDZ（暂存死区）异常，补齐旋转动画 `.spinner` 样式，在 `finally` 块中加入强制复原兜底，确保测试按钮永不消失。
+
 ---
 
 ## 模型提供商解耦架构与云端动态分发 (Decoupled Provider Architecture & CDN Distribution)

@@ -419,7 +419,7 @@ function renderLogsTable(){
   }).join('');
 }
 
-// Dashboard Gateway & Available Models (Compact Strip)
+// Dashboard Gateway & Available Models (Unified 3-Row Strip)
 function renderDashboardGateway(){
   const base = window.location.origin + '/v1';
   const urlEl = document.getElementById('dbBaseUrl');
@@ -443,9 +443,9 @@ function renderDashboardGateway(){
       const protos = getModelProtocols(mName);
       const protoBadges = renderProtocolBadges(protos, true);
       return `
-        <span class="badge badge-neutral mono" onclick="copyModelName('${esc(mName)}')" title="点击复制模型名称: ${esc(mName)}" style="cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:2px 7px; font-size:11px;">
+        <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(mName)}')" title="点击复制模型名称: ${esc(mName)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);">
           <span style="font-weight:500;">${esc(mName)}</span>
-          <span style="display:inline-flex; gap:3px;">${protoBadges}</span>
+          <span style="display:inline-flex;gap:3px;align-items:center;">${protoBadges}</span>
         </span>
       `;
     });
@@ -456,9 +456,9 @@ function renderDashboardGateway(){
       const cList = candidates[t] || [];
       if(cList.length > 0) {
         modelsList.push(`
-          <span class="badge badge-neutral mono" onclick="copyModelName('${esc(t)}')" title="点击复制模型名称: ${esc(t)}" style="cursor:pointer; display:inline-flex; align-items:center; gap:5px; padding:2px 7px; font-size:11px;">
+          <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(t)}')" title="点击复制模型名称: ${esc(t)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);">
             <span style="font-weight:500;">${esc(t)}</span>
-            <span class="badge badge-success" style="font-size:10px; padding:1px 4px;">openai</span>
+            <span class="badge badge-success" style="font-size:10px;padding:1px 4px;">openai</span>
           </span>
         `);
       }
@@ -466,32 +466,62 @@ function renderDashboardGateway(){
   }
 
   if(modelsList.length === 0) {
-    listContainer.innerHTML = '<span class="text-secondary" style="font-size:11px;">(无可用模型)</span>';
+    listContainer.innerHTML = '<span class="text-secondary" style="font-size:12px;">(暂无可用模型，请在「模型管理」中配置)</span>';
   } else {
     listContainer.innerHTML = modelsList.join('');
   }
 }
 
-function copyDbBaseUrl(){
-  const base = window.location.origin + '/v1';
-  if(navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(base).then(() => toast('Base URL 已复制到剪贴板', 'ok')).catch(() => {
-      prompt('请手动复制 Base URL:', base);
+function copyText(text, successMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast(successMsg || '已复制到剪贴板', 'ok')).catch(() => {
+      prompt('请手动复制:', text);
     });
   } else {
-    prompt('请手动复制 Base URL:', base);
+    prompt('请手动复制:', text);
   }
 }
 
-function copyDbClientKey(){
+function copyModelName(name) {
+  copyText(name, `已复制模型名称: ${name}`);
+}
+
+function copyDbBaseUrl() {
+  const base = window.location.origin + '/v1';
+  copyText(base, '网关 Base URL 已复制到剪贴板');
+}
+
+function copyDbClientKey() {
   const keyVal = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : '';
-  if(!keyVal) { toast('尚未获取到有效 API Key', 'err'); return; }
-  if(navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(keyVal).then(() => toast('客户端 API Key 已复制到剪贴板', 'ok')).catch(() => {
-      prompt('请手动复制 Key:', keyVal);
-    });
+  if (!keyVal) { toast('尚未获取到有效 API Key', 'err'); return; }
+  copyText(keyVal, '客户端 API Key 已复制到剪贴板');
+}
+
+function copyAllAvailableModels() {
+  const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
+  let models = [];
+  if (runMode === 'agent') {
+    models = Object.keys(state.config?.agent_models || {});
   } else {
-    prompt('请手动复制 Key:', keyVal);
+    const candidates = state.config?.candidates || {};
+    KB_TYPES.forEach(t => {
+      if ((candidates[t] || []).length > 0) models.push(t);
+    });
+  }
+  if (!models.length) {
+    toast('当前暂无可用模型', 'err');
+    return;
+  }
+  copyText(models.join(', '), '已复制全部模型名称');
+}
+
+function manageAllModels() {
+  if (typeof switchTab === 'function') {
+    if (document.getElementById('panel-models')) {
+      switchTab('models');
+    } else if (document.getElementById('panel-agents')) {
+      switchTab('agents');
+    }
   }
 }
 

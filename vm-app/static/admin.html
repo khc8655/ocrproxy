@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.08-02</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.09-06</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -43,35 +43,30 @@
   <main class="main">
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
-      <!-- Section 0: Gateway Access & Available Models (Compact Strip) -->
-      <div class="card card-pad mb-3" id="db-access-card" style="padding:10px 16px; background:var(--bg-card); border:1px solid var(--border);">
-        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; font-size:13px;">
-          <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-            <div style="display:inline-flex; align-items:center; gap:6px;">
-              <span style="font-weight:600; color:var(--text-secondary);">URL:</span>
-              <span class="mono" id="dbBaseUrl" style="color:var(--primary); font-weight:600;">—</span>
-              <button class="btn btn-sm btn-secondary" onclick="copyDbBaseUrl()" title="复制 Base URL" style="padding:2px 7px; font-size:11px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;">
-                <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                <span>复制</span>
-              </button>
-            </div>
-            <div style="display:inline-flex; align-items:center; gap:6px;">
-              <span style="font-weight:600; color:var(--text-secondary);">Key:</span>
-              <span class="mono" id="gwClientKeyVal" style="color:var(--text); font-weight:400;">&lt;CLIENT_KEY&gt;</span>
-              <button class="btn btn-sm btn-secondary" onclick="copyDbClientKey()" title="复制 Key" style="padding:2px 7px; font-size:11px; height:22px; line-height:1; display:inline-flex; align-items:center; gap:3px;">
-                <svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                <span>复制</span>
-              </button>
-            </div>
+      <!-- Section 0: Gateway Access & Available Models -->
+      <div class="section mb-4" id="db-access-section">
+        <div class="section-head">
+          <div class="section-title">接入网关与可用模型</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="copyAllAvailableModels()">复制全部模型名</button>
+            <button class="btn btn-primary btn-sm" onclick="manageAllModels()">管理全部模型</button>
           </div>
         </div>
-
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; border-top:1px solid var(--border-light); padding-top:6px;">
-          <span style="color:var(--text-secondary); font-weight:600; min-width:80px; display:inline-flex; align-items:center; gap:4px;">
-            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
-            可用模型:
-          </span>
-          <div id="listAvailableModels" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
+        <div class="gateway-card">
+          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding-bottom:10px;">
+            <span class="gateway-label">Base URL (网关地址)</span>
+            <span class="gateway-val mono" id="dbBaseUrl">—</span>
+            <button class="btn btn-secondary btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
+          </div>
+          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding:10px 0;">
+            <span class="gateway-label">客户端凭据 (Key)</span>
+            <span class="gateway-val mono" id="gwClientKeyVal">—</span>
+            <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
+          </div>
+          <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
+            <span class="gateway-label" style="padding-top:2px;">可用模型</span>
+            <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
+          </div>
         </div>
       </div>
 
@@ -775,12 +770,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.09-05"></script>
-  <script src="/static/js/vault.js?v=2026.10.09-05"></script>
-  <script src="/static/js/providers.js?v=2026.10.09-05"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.09-05"></script>
-  <script src="/static/js/models.js?v=2026.10.09-05"></script>
-  <script src="/static/js/settings.js?v=2026.10.09-05"></script>
-  <script src="/static/js/app.js?v=2026.10.09-05"></script>
+  <script src="/static/js/core.js?v=2026.10.09-06"></script>
+  <script src="/static/js/vault.js?v=2026.10.09-06"></script>
+  <script src="/static/js/providers.js?v=2026.10.09-06"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.09-06"></script>
+  <script src="/static/js/models.js?v=2026.10.09-06"></script>
+  <script src="/static/js/settings.js?v=2026.10.09-06"></script>
+  <script src="/static/js/app.js?v=2026.10.09-06"></script>
 </body>
 </html>

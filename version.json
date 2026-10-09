@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-05",
+  "version": "v2026.10.09-06",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "彻底拔除 OpenCode Free 幽灵供应商伪造注入与死循环复活，回归中枢第一原则",
+  "title": "单真理源统一 UI 架构：消除 EdgeOne 测按钮暂存死区与复原兜底，统一 EdgeOne 与 VM 首页接入网关与模型展示卡片",
   "changelog": [
-    "彻底拔除 _getAllProvidersList 中强制注入 opencode-free 并伪造为本地供应商的硬编码逻辑，恪守「只有手动配置才算本地」铁律",
-    "消除 Key 胶囊区域 cross-provider 污染：不再跨供应商拉取 opencode Key 混入本地，保障各厂商 Key 隔离",
-    "放开本地存储 Key 的删除图标显示：确保任何存在于本地配置中的 Key 芯片均带有删除 × 图标",
-    "强化 deleteLocalProviderFromModal 彻底删除与容错：支持大小写不敏感匹配、级联清理模型绑定残留，杜绝删后复活"
+    "根治 EdgeOne 测按钮消失问题：修复 modelLatencyCache 引起的 TDZ 暂存死区及 CSS .spinner 缺失，在 finally 块中强制兜底恢复按钮状态",
+    "统一首页接入网关与模型展示卡片：VM 端与 EdgeOne 100% 对齐三行式卡片（Base URL、Client Key、可用模型胶囊与一键复制全部）",
+    "消除代码碎片化与排查成本：以 shared/admin 为唯一真理源，改一处两端同步，彻底杜绝维护两套 UI 逻辑",
+    "补齐 copyModelName、copyAllAvailableModels 与 manageAllModels 跨端交互助手，确保两端运行平稳健壮"
   ]
 }

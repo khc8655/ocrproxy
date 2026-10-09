@@ -860,8 +860,9 @@
         _toast(`[${b.provider}/${b.key}] 探活失败: ${d.error || d.verdict || d.status}`, 'err');
       }
 
-      if (typeof modelLatencyCache !== 'undefined') {
-        modelLatencyCache[`model:${name}:${b.provider}:${b.key}`] = {
+      if (typeof window !== 'undefined') {
+        window.modelLatencyCache = window.modelLatencyCache || {};
+        window.modelLatencyCache[`model:${name}:${b.provider}:${b.key}`] = {
           ok: isSuccess,
           latency_ms: latency,
           status: isSuccess ? 200 : (d.status || 500)
@@ -871,8 +872,17 @@
       _toast(`[${b.provider}/${b.key}] 探活超时或异常: ${e.message}`, 'err');
     } finally {
       probingKeys.delete(probeKeyId);
-      if (typeof loadData === 'function') await loadData();
-      else renderAgentModels();
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '测';
+      }
+      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
+      try {
+        await reloadFn();
+      } catch (err) {
+        console.warn('Reload after probe warning:', err);
+        renderAgentModels();
+      }
     }
   }
 
@@ -938,8 +948,13 @@
     } finally {
       probingModels.delete(name);
       if (btn) { btn.disabled = false; btn.innerHTML = '全部探活'; }
-      if (typeof loadData === 'function') await loadData();
-      else renderAgentModels();
+      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
+      try {
+        await reloadFn();
+      } catch (err) {
+        console.warn('Reload after probe warning:', err);
+        renderAgentModels();
+      }
     }
   }
 
@@ -1039,9 +1054,10 @@
     const nk = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
     let ns = status[nk] || status[binding.provider + ':' + binding.key + ':agent:' + modelName];
 
-    if (!ns && typeof modelLatencyCache !== 'undefined') {
+    const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
+    if (!ns && latCache) {
       const cacheKey = `model:${modelName}:${binding.provider}:${binding.key}`;
-      const latInfo = modelLatencyCache[cacheKey];
+      const latInfo = latCache[cacheKey];
       if (latInfo) {
         ns = {
           status: latInfo.status || (latInfo.ok ? 200 : 500),

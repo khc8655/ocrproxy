@@ -1174,6 +1174,11 @@ tbody tr:last-child td { border-bottom: none; }
 td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); }
 .btn-icon { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border-radius: 4px; }
 
+/* Spinners & Loaders */
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.15); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+
 
 </style>
   <style>#app{display:none;}.modal{display:none;}</style>
@@ -1200,7 +1205,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.09-05</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.09-06</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1240,7 +1245,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.09-05</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.09-06</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1252,7 +1257,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           <div class="section-title">接入网关与可用模型</div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-secondary btn-sm" onclick="copyAllAvailableModels()">复制全部模型名</button>
-            <button class="btn btn-primary btn-sm" onclick="switchTab('agents')">管理全部模型</button>
+            <button class="btn btn-primary btn-sm" onclick="manageAllModels()">管理全部模型</button>
           </div>
         </div>
         <div class="gateway-card">
@@ -2545,8 +2550,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         _toast(\`[\${b.provider}/\${b.key}] 探活失败: \${d.error || d.verdict || d.status}\`, 'err');
       }
 
-      if (typeof modelLatencyCache !== 'undefined') {
-        modelLatencyCache[\`model:\${name}:\${b.provider}:\${b.key}\`] = {
+      if (typeof window !== 'undefined') {
+        window.modelLatencyCache = window.modelLatencyCache || {};
+        window.modelLatencyCache[\`model:\${name}:\${b.provider}:\${b.key}\`] = {
           ok: isSuccess,
           latency_ms: latency,
           status: isSuccess ? 200 : (d.status || 500)
@@ -2556,8 +2562,17 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       _toast(\`[\${b.provider}/\${b.key}] 探活超时或异常: \${e.message}\`, 'err');
     } finally {
       probingKeys.delete(probeKeyId);
-      if (typeof loadData === 'function') await loadData();
-      else renderAgentModels();
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '测';
+      }
+      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
+      try {
+        await reloadFn();
+      } catch (err) {
+        console.warn('Reload after probe warning:', err);
+        renderAgentModels();
+      }
     }
   }
 
@@ -2623,8 +2638,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     } finally {
       probingModels.delete(name);
       if (btn) { btn.disabled = false; btn.innerHTML = '全部探活'; }
-      if (typeof loadData === 'function') await loadData();
-      else renderAgentModels();
+      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
+      try {
+        await reloadFn();
+      } catch (err) {
+        console.warn('Reload after probe warning:', err);
+        renderAgentModels();
+      }
     }
   }
 
@@ -2724,9 +2744,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const nk = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
     let ns = status[nk] || status[binding.provider + ':' + binding.key + ':agent:' + modelName];
 
-    if (!ns && typeof modelLatencyCache !== 'undefined') {
+    const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
+    if (!ns && latCache) {
       const cacheKey = \`model:\${modelName}:\${binding.provider}:\${binding.key}\`;
-      const latInfo = modelLatencyCache[cacheKey];
+      const latInfo = latCache[cacheKey];
       if (latInfo) {
         ns = {
           status: latInfo.status || (latInfo.ok ? 200 : 500),
@@ -2990,10 +3011,10 @@ let healthData = {};
 let stateData = [];
 let ipData = {};
 let activeTab = 'dashboard';
-let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
+var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.09-05';
+const BUILD_VERSION = 'v2026.10.09-06';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3502,6 +3523,16 @@ function copyAllAvailableModels() {
     return;
   }
   copyText(models.join(', '), '已复制全部模型名称');
+}
+
+function manageAllModels() {
+  if (typeof switchTab === 'function') {
+    if (document.getElementById('panel-models')) {
+      switchTab('models');
+    } else if (document.getElementById('panel-agents')) {
+      switchTab('agents');
+    }
+  }
 }
 
 function copyText(text, successMsg) {

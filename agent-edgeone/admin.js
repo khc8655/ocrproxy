@@ -8,7 +8,7 @@ let healthData = {};
 let stateData = [];
 let ipData = {};
 let activeTab = 'dashboard';
-let modelLatencyCache = {}; // { "provider:key": { latency_ms, status } }
+var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
 const BUILD_VERSION = 'v2026.10.08-02';
@@ -520,6 +520,16 @@ function copyAllAvailableModels() {
     return;
   }
   copyText(models.join(', '), '已复制全部模型名称');
+}
+
+function manageAllModels() {
+  if (typeof switchTab === 'function') {
+    if (document.getElementById('panel-models')) {
+      switchTab('models');
+    } else if (document.getElementById('panel-agents')) {
+      switchTab('agents');
+    }
+  }
 }
 
 function copyText(text, successMsg) {
