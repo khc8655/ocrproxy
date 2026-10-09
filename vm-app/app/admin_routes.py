@@ -15,7 +15,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
 
-from .config_store import get_config, save_config, _get_config_dir
+from .config_store import get_config, save_config, _get_config_dir, is_masked_secret
 from .upstream import join_upstream, build_messages_upstream
 from . import stats
 from .auth import verify_admin_auth
@@ -109,6 +109,11 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
                 continue
             if p_name not in merged_providers:
                 merged_providers[p_name] = copy.deepcopy(p_val)
+                p_keys = merged_providers[p_name].get("keys")
+                if isinstance(p_keys, dict):
+                    for k_name, k_secret in list(p_keys.items()):
+                        if is_masked_secret(k_secret):
+                            p_keys.pop(k_name, None)
             else:
                 if p_val.get("base_url"):
                     merged_providers[p_name]["base_url"] = p_val["base_url"]
@@ -117,7 +122,7 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
                 if isinstance(incoming_keys, dict):
                     for k_name, k_secret in incoming_keys.items():
                         if k_name and k_secret:
-                            if isinstance(k_secret, str) and ("●" in k_secret or k_secret == "********" or k_secret.startswith("***")):
+                            if is_masked_secret(k_secret):
                                 continue
                             merged_keys[k_name] = k_secret
 
@@ -741,7 +746,9 @@ async def save_config_endpoint(request: Request):
                 }
             )
 
-        # 2. Asset preservation: keep existing candidates/agent_models/edgeone_vault if missing from incoming
+        # 2. Asset preservation: keep existing candidates/agent_models/edgeone_vault/providers if missing from incoming
+        if "providers" not in body or not isinstance(body["providers"], dict):
+            body["providers"] = current_config.get("providers") or {}
         if "candidates" not in body or not isinstance(body["candidates"], dict):
             body["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
         if "agent_models" not in body or not isinstance(body["agent_models"], dict):
@@ -754,6 +761,31 @@ async def save_config_endpoint(request: Request):
             if v_u:
                 body["edgeone_vault"]["url"] = v_u
                 body["edgeone_vault"]["edgeone_url"] = v_u
+
+        # 2.5 Secret preservation & fail-safe unmasking guard:
+        # Front-end receives masked keys (e.g. "●●●●●●●●" or "*******").
+        # When saving, unmask each key by restoring the actual secret from current_config.
+        curr_providers = current_config.get("providers") or {}
+        incoming_providers = body.get("providers")
+        if isinstance(incoming_providers, dict):
+            for p_name, p_data in incoming_providers.items():
+                if not isinstance(p_data, dict):
+                    continue
+                in_keys = p_data.get("keys")
+                if isinstance(in_keys, dict):
+                    curr_keys = curr_providers.get(p_name, {}).get("keys", {}) if isinstance(curr_providers.get(p_name), dict) else {}
+                    for k_lbl, k_val in list(in_keys.items()):
+                        if is_masked_secret(k_val):
+                            orig_secret = curr_keys.get(k_lbl)
+                            if orig_secret and not is_masked_secret(orig_secret):
+                                in_keys[k_lbl] = orig_secret
+                            elif isinstance(k_val, dict) and isinstance(orig_secret, dict):
+                                in_pk = k_val.get("private_key")
+                                orig_pk = orig_secret.get("private_key")
+                                if is_masked_secret(in_pk) and orig_pk and not is_masked_secret(orig_pk):
+                                    k_val["private_key"] = orig_pk
+                            else:
+                                in_keys.pop(k_lbl, None)
 
         # 3. Rolling encrypted backups (keep last 20)
         try:

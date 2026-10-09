@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-02",
+  "version": "v2026.10.09-03",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "提供商下拉选单去冗余与极简中圆点协议规范 (方案 C)",
+  "title": "Fail-Safe Secret Guard: 密钥反脱敏保真护栏与零掩码防污染",
   "changelog": [
-    "提供商选单彻底消灭括号与冗余别名：全面剔除 (SiliconFlow)、(SenseNova)、(StepFun)、(Gemini)、(标准版) 等双语括号与规格注释",
-    "彻底移除状态干扰方括号：移除下拉选单中的 [已就绪·只读] 与 [按需拉取] 冗余方括号标签，交由中枢/本地分组自然呈现",
-    "极简中圆点规范协议分隔（方案 C）：采用纯净中圆点 · 连接提供商名称与协议类型（如 硅基流动 · OpenAI、MiniMax · OpenAI / Message），视野通透清爽",
-    "预设数据源头与协议映射全量对齐：更新 catalog.json 与 presets 权威名称，补全 PROTOCOLS 别名字典，统一协议展示规范"
+    "后端保存强制反脱敏保真（Secret Preservation Guard）：在 POST /api/admin/config 拦截所有 Provider Keys，自动将前端持有的脱敏掩码（●●●●●●●●）无损还原为现存磁盘真实有效密文，杜绝真实凭证被掩码覆盖",
+    "底层加密存储终极内核守卫（Kernel Invariant Guard）：在 config_store.py save_to_disk 中增加断言与自愈逻辑，物理层面绝对禁止任何掩码字符写入加密配置文件",
+    "规则合并防污染：在 _merge_configs 中自动过滤并剥离掩码占位符，防止新规则合并混入假凭证",
+    "全流程自动化防御测试套件：新增 tests/test_secret_preservation.py 覆盖脱敏还原、混存新增、Vertex 私钥保真及 HTTP 请求头 ASCII 兼容性校验"
   ]
 }

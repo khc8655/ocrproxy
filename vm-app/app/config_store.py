@@ -53,6 +53,21 @@ def _bump_version_if_changed(config: dict):
         logger.info("Configuration content changed (version %d).", _config_version)
 
 
+def is_masked_secret(val) -> bool:
+    """Check if a secret value is a masked placeholder (e.g. ●●●●●●●● or ********)."""
+    if val is None:
+        return False
+    if isinstance(val, str):
+        s = val.strip()
+        return "●" in s or s == "********" or s.startswith("***")
+    if isinstance(val, dict):
+        pk = val.get("private_key")
+        if pk and isinstance(pk, str):
+            s = pk.strip()
+            return "●" in s or s == "********" or s.startswith("***")
+    return False
+
+
 def _get_config_dir() -> str:
     return os.environ.get("CONFIG_DIR", "/opt/ocrproxy/config")
 
@@ -137,6 +152,46 @@ def save_to_disk(config: dict) -> None:
     os.makedirs(config_dir, exist_ok=True)
 
     fernet = _get_fernet()
+
+    # Kernel Guard: Ensure no masked secrets are ever written to disk.
+    # If incoming config contains masked keys (● or ***), recover original secrets from existing disk file.
+    providers = config.get("providers")
+    if isinstance(providers, dict):
+        has_masked_keys = False
+        for p_data in providers.values():
+            if isinstance(p_data, dict) and isinstance(p_data.get("keys"), dict):
+                for k_v in p_data["keys"].values():
+                    if is_masked_secret(k_v):
+                        has_masked_keys = True
+                        break
+            if has_masked_keys:
+                break
+
+        if has_masked_keys and os.path.exists(config_file):
+            try:
+                with open(config_file, "rb") as f:
+                    disk_decrypted = fernet.decrypt(f.read())
+                disk_cfg = json.loads(disk_decrypted.decode("utf-8"))
+                disk_providers = disk_cfg.get("providers") or {}
+                for p_name, p_data in providers.items():
+                    if isinstance(p_data, dict) and isinstance(p_data.get("keys"), dict):
+                        disk_keys = disk_providers.get(p_name, {}).get("keys", {}) if isinstance(disk_providers.get(p_name), dict) else {}
+                        for k_lbl, k_val in list(p_data["keys"].items()):
+                            if is_masked_secret(k_val):
+                                orig = disk_keys.get(k_lbl)
+                                if orig and not is_masked_secret(orig):
+                                    p_data["keys"][k_lbl] = orig
+                                    logger.info("Kernel Guard: Restored masked key %s/%s from disk.", p_name, k_lbl)
+                                elif isinstance(k_val, dict) and isinstance(orig, dict):
+                                    if is_masked_secret(k_val.get("private_key")) and orig.get("private_key") and not is_masked_secret(orig.get("private_key")):
+                                        k_val["private_key"] = orig["private_key"]
+                                        logger.info("Kernel Guard: Restored masked service account private_key for %s/%s from disk.", p_name, k_lbl)
+                                else:
+                                    logger.warning("Kernel Guard: Removed masked key %s/%s with no disk counterpart.", p_name, k_lbl)
+                                    p_data["keys"].pop(k_lbl, None)
+            except Exception as e:
+                logger.error("Kernel Guard: Failed to unmask keys from disk: %s", e)
+
     data = json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8")
     encrypted = fernet.encrypt(data)
 
