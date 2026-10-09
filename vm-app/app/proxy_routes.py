@@ -383,9 +383,12 @@ def _apply_gemini_thinking(out: dict, rr: dict, m_name: str, is_agent_mode: bool
     reasoning_effort -> extra_body.google.thinking_config (Google forbids sending
     both).  Gemini 3.x takes thinking_level from the preset's model_matrix;
     Gemini 2.5 takes thinking_budget (Google's documented 1K/8K/24K mapping).
-    "none" / KB mode use the lowest setting the model allows: 2.5 Flash can
-    turn thinking off (budget 0); 2.5 Pro and 3.x cannot, so they get the
-    lowest budget/level and hide thoughts.
+    reasoning_effort="none" uses the lowest setting the model allows: 2.5
+    Flash can turn thinking off (budget 0); 2.5 Pro and 3.x cannot, so they
+    get the lowest budget/level and hide thoughts.
+
+    Gemini is only used in Agent mode (KB mode never routes to Gemini), so
+    there is no KB-specific branch: the client's reasoning_effort decides.
     """
     if m_name.startswith("gemma") or m_name.startswith("google/gemma"):
         return
@@ -399,13 +402,13 @@ def _apply_gemini_thinking(out: dict, rr: dict, m_name: str, is_agent_mode: bool
     levels.sort(key=_EFFORT_ORDER.index)
 
     effort = out.pop("reasoning_effort", None)
-    if is_agent_mode and effort is None:
+    if effort is None:
         cfg = (out.get("extra_body") or {}).get("google", {}).get("thinking_config", {})
         thinking_on = bool(cfg) and cfg.get("include_thoughts") is not False
         _gemini_headroom(out, rr, thinking_on)
         return
 
-    e = "none" if not is_agent_mode else str(effort).lower()
+    e = str(effort).lower()
     if e in ("xhigh", "max"):
         e = "high"
 

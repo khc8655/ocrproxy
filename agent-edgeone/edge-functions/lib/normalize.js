@@ -153,7 +153,8 @@ function geminiHeadroom(body, rr, thinkingOn) {
 /**
  * Gemini (AI Studio / Vertex): reasoning_effort -> extra_body.google.thinking_config.
  * 3.x uses thinking_level from model_matrix; 2.5 uses thinking_budget (1K/8K/24K).
- * "none" / KB mode use the lowest setting the model allows.
+ * reasoning_effort "none" uses the lowest setting the model allows.
+ * Gemini is Agent-mode only (KB never routes to Gemini): no KB-specific branch.
  */
 export function applyGeminiThinking(body, rr, modelName, isAgentMode) {
   if (modelName.startsWith('gemma') || modelName.startsWith('google/gemma')) return;
@@ -167,12 +168,12 @@ export function applyGeminiThinking(body, rr, modelName, isAgentMode) {
 
   const effort = body.reasoning_effort;
   delete body.reasoning_effort;
-  if (isAgentMode && (effort === undefined || effort === null)) {
+  if (effort === undefined || effort === null) {
     const cfg = body.extra_body?.google?.thinking_config;
     geminiHeadroom(body, rr, !!cfg && cfg.include_thoughts !== false);
     return;
   }
-  let e = isAgentMode ? String(effort).toLowerCase() : 'none';
+  let e = String(effort).toLowerCase();
   if (e === 'xhigh' || e === 'max') e = 'high';
 
   let tc;
