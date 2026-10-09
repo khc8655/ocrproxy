@@ -202,7 +202,10 @@ ocrprox (Monorepo)
 - **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`30s`**，支持针对长思考模型（o1/o3/DeepSeek-R1）灵活配置（如 120s），单个节点超时立即故障转移。
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
   - **动态自适应调度**：基于 `upstream_timeout_sec × max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
-  - **EdgeOne 边缘版**：默认 **`25s`**（在 EdgeOne 平台 30s 强杀前 5s 提前拦截，主动向客户端返回规范的 504 Gateway Timeout）。
+  - **EdgeOne 边缘版**：默认 **`300s`**。EdgeOne `fetch` 通过 `eo.timeoutSetting` 支持最长 300 秒出站超时（默认 15 秒，见腾讯云文档「边缘函数 Runtime APIs · Fetch」），边缘函数已显式设置，长思考模型可直接走 EdgeOne。
+- **`stream_idle_timeout_sec` (流式空闲超时 · v2026.10.09-08)**：默认 **`300s`**。流式请求的**首字节**仍受单 Key 超时约束（超时即 failover），流建立后上游静默（长思考、大段工具参数生成）在该时长内不会被截断。
+- **`cooldown_404_sec` (404 候选冷却 · v2026.10.09-08)**：默认 **`600s`**。某候选返回 404（模型下架/路径不符）时继续 failover 到其它候选并冷却该候选；仅当存在备选候选时生效。
+- **`kb_global_max_concurrency` (KB 全局并发阀 · v2026.10.09-08)**：默认 **`30`**，仅作用于 KB 类请求（KB chat / embedding / rerank / OCR），防大 base64 OOM；Agent 长流不占此阀，只受 `max_concurrency_per_key` 约束。uvicorn 连接上限可用环境变量 `UVICORN_LIMIT_CONCURRENCY`（默认 512）调整。
 - **`max_retries` / `schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
 - **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**。
 - **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。

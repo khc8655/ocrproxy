@@ -53,7 +53,10 @@ def main():
         "app.main:app",
         log_level="info",
         access_log=True,
-        limit_concurrency=150,
+        # Max simultaneous client connections before uvicorn answers 503.
+        # Agent mode keeps long-lived SSE streams open, so 150 was easy to hit
+        # with several IDE agents in parallel.  Override with UVICORN_LIMIT_CONCURRENCY.
+        limit_concurrency=int(os.environ.get("UVICORN_LIMIT_CONCURRENCY", "512")),
         timeout_keep_alive=30,
         timeout_graceful_shutdown=10,
     )

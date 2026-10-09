@@ -174,7 +174,8 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
         "schedule_total_budget", "max_concurrency_per_key",
         "cooldown_tpm_sec", "cooldown_quota_sec", "cooldown_5xx_sec",
         "cooldown_429_sec", "cooldown_403_sec", "cooldown_duration",
-        "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing"
+        "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing",
+        "kb_global_max_concurrency", "stream_idle_timeout_sec", "cooldown_404_sec"
     ]
     for sk in setting_keys:
         if sk in incoming:
