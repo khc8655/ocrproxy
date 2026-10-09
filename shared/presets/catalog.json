@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T10:48:55.313Z",
+  "updated_at": "2026-10-09T10:49:43.584Z",
   "providers": [
     {
       "id": "agnes",
@@ -109,19 +109,19 @@
       "id": "minimax",
       "name": "MiniMax",
       "version": "1.3.0",
-      "rule_hash": "cdb4978f9d32",
+      "rule_hash": "681f1b2de67d",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
       "doc_url": "https://platform.minimax.cn/docs/api-reference/text-chat-openai",
-      "description": "MiniMax 开放平台（国内），MiniMax-M3.1-Flash-Preview / M3 / M2.x，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
+      "description": "MiniMax 开放平台（国内），MiniMax-M3 / M3.1-Flash-Preview，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
       "features": {
         "native_thinking": true,
         "multimodal": true,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 4
+      "recommended_models_count": 2
     },
     {
       "id": "nvidia",

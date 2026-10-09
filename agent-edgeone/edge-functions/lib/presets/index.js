@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T10:48:55.313Z",
+  "updated_at": "2026-10-09T10:49:43.584Z",
   "providers": [
     {
       "id": "agnes",
@@ -114,19 +114,19 @@ export const CATALOG = {
       "id": "minimax",
       "name": "MiniMax",
       "version": "1.3.0",
-      "rule_hash": "cdb4978f9d32",
+      "rule_hash": "681f1b2de67d",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
       "doc_url": "https://platform.minimax.cn/docs/api-reference/text-chat-openai",
-      "description": "MiniMax 开放平台（国内），MiniMax-M3.1-Flash-Preview / M3 / M2.x，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
+      "description": "MiniMax 开放平台（国内），MiniMax-M3 / M3.1-Flash-Preview，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
       "features": {
         "native_thinking": true,
         "multimodal": true,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 4
+      "recommended_models_count": 2
     },
     {
       "id": "nvidia",
@@ -680,7 +680,7 @@ export const PRESETS = [
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
     "doc_url": "https://platform.minimax.cn/docs/api-reference/text-chat-openai",
-    "description": "MiniMax 开放平台（国内），MiniMax-M3.1-Flash-Preview / M3 / M2.x，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
+    "description": "MiniMax 开放平台（国内），MiniMax-M3 / M3.1-Flash-Preview，原生 OpenAI Chat Completions 与 Anthropic Messages 双协议直通",
     "features": {
       "native_thinking": true,
       "multimodal": true,
@@ -697,16 +697,6 @@ export const PRESETS = [
         "name": "MiniMax-M3.1-Flash-Preview",
         "upstream_model": "MiniMax-M3.1-Flash-Preview",
         "description": "1M 上下文、强制思考、reasoning_effort low~max（目前仅 M Plan / MiniMax Code 可用）"
-      },
-      {
-        "name": "MiniMax-M2.7",
-        "upstream_model": "MiniMax-M2.7",
-        "description": "纯文本 + 工具调用，思考不可关闭"
-      },
-      {
-        "name": "MiniMax-M2.7-highspeed",
-        "upstream_model": "MiniMax-M2.7-highspeed",
-        "description": "M2.7 高速版"
       }
     ],
     "adapter_rules": {
@@ -727,9 +717,7 @@ export const PRESETS = [
       },
       "case_sensitive_models": {
         "minimax-m3": "MiniMax-M3",
-        "minimax-m3.1-flash-preview": "MiniMax-M3.1-Flash-Preview",
-        "minimax-m2.7": "MiniMax-M2.7",
-        "minimax-m2.7-highspeed": "MiniMax-M2.7-highspeed"
+        "minimax-m3.1-flash-preview": "MiniMax-M3.1-Flash-Preview"
       },
       "tools": {
         "normalize_choice_to_string": false,

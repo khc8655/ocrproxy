@@ -388,9 +388,9 @@ test('normalize: google "minimal" on Flash honoured', () => {
   deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'minimal' });
 });
 
-test('normalize: google KB mode uses lowest level instead of only hiding thoughts', () => {
-  const body = { model: 'gemini-3.8-flash', reasoning_effort: 'high' };
-  normaliseForProvider(body, 'google', { isAgentMode: false });
+test('normalize: google reasoning "none" uses lowest level instead of only hiding thoughts', () => {
+  const body = { model: 'gemini-3.8-flash', reasoning_effort: 'none' };
+  normaliseForProvider(body, 'google');
   eq(body.reasoning_effort, undefined);
   deepEq(body.extra_body.google.thinking_config, { include_thoughts: false, thinking_level: 'minimal' });
 });

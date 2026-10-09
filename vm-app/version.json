@@ -1,13 +1,13 @@
 {
-  "version": "v2026.10.09-13",
+  "version": "v2026.10.09-14",
   "release_date": "2026-10-09",
   "commit": "HEAD",
   "title": "提供商适配对照官方文档修正：MiniMax / 商汤 / Agnes / Gemini (AI Studio, Vertex)",
   "changelog": [
-    "MiniMax：reasoning_effort=none 不再透传（M3.1-Flash-Preview 会 400，其它模型忽略），minimal→low；KB 模式不再发 none；只剥离 output_config.format，保留 output_config.effort（M3.1 官方思考深度控制），恢复 OpenAI 零拷贝 fast-path；补 M3.1-Flash-Preview / M2.7 模型",
+    "MiniMax：reasoning_effort=none 不再透传（M3.1-Flash-Preview 会 400，其它模型忽略），minimal→low；KB 模式不再发 none；只剥离 output_config.format，保留 output_config.effort（M3.1 官方思考深度控制），恢复 OpenAI 零拷贝 fast-path；补 M3.1-Flash-Preview 模型（不新增旧模型）",
     "商汤日日新：reasoning_effort 增加 max 档，minimal→low、xhigh→max；启用原生 Anthropic Messages（/v1/messages）",
     "Agnes：按官方文档追加 chat_template_kwargs.enable_thinking 开关（reasoning_effort 仍透传），KB 模式显式关闭思考；启用原生 Anthropic Messages",
-    "Gemini/Vertex：思考等级改为读取预设 model_matrix（Flash 支持 minimal，3.1 Pro 支持 medium）；2.5 系列改用官方 thinking_budget 映射（1K/8K/24K，2.5 Flash 的 none=0）；KB 模式真正降到最低思考档而不只是隐藏思考；推荐模型更新为 3.8 Flash / 3.1 Pro",
+    "Gemini/Vertex：思考等级改为读取预设 model_matrix（Flash 支持 minimal，3.1 Pro 支持 medium）；2.5 系列改用官方 thinking_budget 映射（1K/8K/24K，2.5 Flash 的 none=0）；Gemini 只用于 Agent 模式，不做 KB 专用分支，reasoning_effort=none 时降到模型允许的最低档；推荐模型更新为 3.8 Flash / 3.1 Pro",
     "新增通用声明式规则：reasoning.effort_map / effort_to_params / kb_mode / kb_params，strip_params 支持点路径；VM 与 EdgeOne 行为一致（192 组对拍）",
     "升级后请在管理端对已添加的 MiniMax / 商汤 / Agnes / Google / Vertex 提供商点一次规则更新，已存储的旧规则副本才会替换"
   ]
