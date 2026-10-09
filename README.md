@@ -481,11 +481,11 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ---
 
-## 迭代发版与质量红线
+## 规范体系、迭代发版与安全质量红线
 
-所有版本发布、特性迭代与安装脚本修改必须严格遵守官方 [《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)，核心执行：
-1. **版本矩阵全网联动**：同步递增 `version.json`, `install.sh`, `admin.html` 静态缓存等 6 处版本号；
-2. **安装脚本零代码漂移**：根目录 `install.sh` 与 `vm-app/install.sh` 保持 100% 同步，且自带系统/Python 依赖智能检测跳过机制；
-3. **自动化测试 100% 守门**：发版前必须执行 `python3 tests/test_phase3_phase4_audit.py` 并全量 PASS。
+所有版本发布、特性迭代与安装脚本修改必须严格遵守官方三大核心规范体系：
+1. **[《OCRProxy 核心架构规范与开发铁律》](ARCHITECTURE_STANDARDS.md)**：包含生产环境三套拓扑分工、单真理源 UI 开发铁律、核心服务与厂商规则绝对物理隔离铁律等十二大开发铁律；
+2. **[《OCRProxy 官方安全架构规范与红线标准》](docs/SECURITY_SPEC.md)**：确立物理级三权分立鉴权矩阵、Fail-Closed 默认拒绝、SSRF 深度防御、恒定时间比对、反脱敏保真与代码库零秘钥铁律；
+3. **[《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)**：执行版本号 6 处全网联动、安装脚本 100% 零漂移、以及包含安全测试在内的全量自动化测试 100% 守门发版 Checklist。
 
 

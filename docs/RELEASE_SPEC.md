@@ -77,10 +77,17 @@
 
 ## 4. 自动化测试硬性门禁
 
-在发版前，必须运行本地自动化测试套件：
+在发版前，必须运行本地自动化测试套件（含安全防御专项）：
 ```bash
+# 1. 核心安全防御与三权分立自动化测试 (6 项专项防御断言)
+node tests/test_security_hardening.mjs
+
+# 2. 规则隔离与端到端发版门禁测试
 python3 tests/test_phase3_phase4_audit.py
 node agent-edgeone/scripts/test-units.mjs
+
+# 3. 多源网络与更新检测专项测试
+python3 -m unittest tests/test_check_update_multi_source.py
 ```
 
 ### 4.1 核心断言项（缺失即失败）
@@ -89,7 +96,8 @@ node agent-edgeone/scripts/test-units.mjs
 3. `install.sh` 与 `vm-app/install.sh` 核心逻辑 100% 同步；
 4. `install.sh` 包含系统依赖智能跳过与 Python 依赖智能跳过检测点；
 5. `install.sh` 包含完整资产部署拷贝清单（`app`, `static`, `scripts`, `shared`, `requirements.txt`, `version.json`）；
-6. **EdgeOne 与 VM 前端双轨强一致性断言**：`agent-edgeone/admin.html` 与 `shared/admin/admin.html` 的超时输入范围（`max >= 300`）必须对齐，严禁出现已过时的“20~25s”历史残留文案与 `Math.min(30)` 硬编码截断。
+6. **EdgeOne 与 VM 前端双轨强一致性断言**：`agent-edgeone/admin.html` 与 `shared/admin/admin.html` 的超时输入范围（`max >= 300`）必须对齐，严禁出现已过时的“20~25s”历史残留文案与 `Math.min(30)` 硬编码截断；
+7. **全链路安全防护硬门禁**：三权分立权限校验、Fail-Closed 默认拒绝、SSRF 深度拦截、恒定时间比对、反脱敏保真必须 100% PASS。
 
 ---
 
@@ -115,7 +123,7 @@ node agent-edgeone/scripts/test-units.mjs
 
 ---
 
-## 6. 发版 Checklist 操作 SOP (六步闭环)
+## 6. 发版 Checklist 操作 SOP (七步闭环)
 
 每次发布新版本时，必须按顺序逐项核对：
 
@@ -123,20 +131,24 @@ node agent-edgeone/scripts/test-units.mjs
   - Python 语法检查：`python3 -m py_compile vm-app/app/*.py`
   - JS 单元测试：`node agent-edgeone/scripts/test-units.mjs`
   - 凭据安全与反脱敏测试：`python3 tests/test_secret_preservation.py`
-- [ ] **Step 2: 单真理源 UI 构建与能力对齐走查 (红线核对)**
+  - 核心安全防御自动化测试：`node tests/test_security_hardening.mjs`
+- [ ] **Step 2: 源码与提交零凭据审计 (Zero-Secret Audit)**
+  - 使用 `git diff` 严格审计即将提交的所有变更，确认 **0 真实 API Key、0 管理员密码、0 私钥凭证** 泄漏；
+  - 确保真实配置文件与本地测试套件已被 `.gitignore` 阻断。
+- [ ] **Step 3: 单真理源 UI 构建与能力对齐走查 (红线核对)**
   - 前端修改必须在 `shared/admin/` 完成，运行打包构建：`node agent-edgeone/scripts/build-admin.mjs`；
   - 确保 `vm-app/static/` 与 `edge-functions/` 产物全量同步更新；
   - 检查构建输出，确保零未内联标签、核心函数完备；
   - 检查 Key 测按钮具有 `finally` 兜底，CSS 包含 `.spinner` 旋转动画。
-- [ ] **Step 3: 版本矩阵统一提升 (当前版次递增)**
+- [ ] **Step 4: 版本矩阵统一提升 (当前版次递增)**
   - 同步递增 `version.json`, `vm-app/version.json`, `install.sh`, `vm-app/install.sh`, `shared/admin/admin.html`；
   - 重新执行 `node agent-edgeone/scripts/build-admin.mjs`，确保动态版本号注入各端。
-- [ ] **Step 4: 安装脚本依赖与资产完整性核对**
+- [ ] **Step 5: 安装脚本依赖与资产完整性核对**
   - 核对是否有新增依赖写入 `requirements.txt`；
   - 核对依赖智能跳过逻辑依然生效。
-- [ ] **Step 5: 运行自动化测试硬门禁**
-  - 运行 `python3 tests/test_phase3_phase4_audit.py`，确保所有断言（包括双轨 UI 对齐门禁）ALL TESTS PASSED。
-- [ ] **Step 6: 真实环境验证与截图存证**
+- [ ] **Step 6: 运行自动化测试硬门禁**
+  - 运行 `python3 tests/test_phase3_phase4_audit.py` 与 `npm test`，确保所有断言（包括双轨 UI 对齐门禁与安全防御）ALL TESTS PASSED。
+- [ ] **Step 7: 真实环境验证与文档同步**
   - 提交代码触发 GitHub Actions / EdgeOne 自动部署；
   - 生产/测试环境执行部署或升级，验证 API 200 OK 正常出字；
   - 访问管理控制台页面，确认版本号徽章更新、三行网关卡片渲染正常、测按钮正常工作；
