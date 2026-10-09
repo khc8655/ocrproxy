@@ -1192,7 +1192,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <p>OCRProxy EdgeOne 控制台</p>
     <div class="form-group">
       <label class="form-label" for="loginKey">管理员凭证</label>
-      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 或 PROXY_API_KEY" autocomplete="current-password">
+      <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 管理员密码" autocomplete="current-password">
     </div>
     <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
     <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--color-danger-50);border:1px solid var(--color-danger-500);color:var(--color-danger-500);font-size:12px;text-align:center;"></div>
@@ -3310,7 +3310,7 @@ function hideLoginOverlay() {
 async function doLogin() {
   const input = document.getElementById('loginKey').value.trim();
   if (!input && !getKey()) {
-    showLoginOverlay('请输入 PROXY_API_KEY');
+    showLoginOverlay('请输入 ADMIN_PASSWORD 管理员密码');
     return;
   }
   if (input) setKey(input);

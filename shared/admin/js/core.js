@@ -171,7 +171,7 @@ async function login(){
   try {
     const r=await fetch('/api/admin/config',{headers:{'Authorization':'Bearer '+k}});
     if(r.ok){ state.key=k; sessionStorage.setItem('admin_key',k); showApp(); toast('登录成功','ok'); loadData(); }
-    else loginErr('凭证无效，请检查 ADMIN_PASSWORD 或 PROXY_API_KEY');
+    else loginErr('凭证无效，请检查 ADMIN_PASSWORD 管理员密码');
   } catch(e){ loginErr('连接服务失败: '+e.message); }
 }
 function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }

@@ -307,7 +307,7 @@ function hideLoginOverlay() {
 async function doLogin() {
   const input = document.getElementById('loginKey').value.trim();
   if (!input && !getKey()) {
-    showLoginOverlay('请输入 PROXY_API_KEY');
+    showLoginOverlay('请输入 ADMIN_PASSWORD 管理员密码');
     return;
   }
   if (input) setKey(input);
