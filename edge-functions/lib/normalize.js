@@ -81,6 +81,122 @@ export function sanitizeAmdMessages(body) {
  * Pure Declarative Adapter Rules Executor.
  * Mutates `body` in place according to provider adapter_rules schema.
  */
+const EFFORT_ORDER = ['minimal', 'low', 'medium', 'high'];
+const GEMINI25_BUDGET = { minimal: 1024, low: 1024, medium: 8192, high: 24576 };
+
+function deepMergeParams(body, params) {
+  for (const [k, v] of Object.entries(params)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && body[k] && typeof body[k] === 'object' && !Array.isArray(body[k])) {
+      body[k] = { ...body[k], ...v };
+    } else {
+      body[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+    }
+  }
+}
+
+/**
+ * OpenAI-compatible providers. Agent mode: reasoning_effort passes through unless
+ * the preset declares effort_map (value -> replacement, null = drop) or
+ * effort_to_params (value or "*" -> params to inject). KB mode: kb_mode
+ * "none" (default, reasoning_effort="none") | "omit"; kb_params merged when present.
+ */
+function stripParam(obj, path) {
+  const i = path.indexOf('.');
+  if (i < 0) { delete obj[path]; return; }
+  const head = path.slice(0, i);
+  const sub = obj[head];
+  if (sub && typeof sub === 'object' && !Array.isArray(sub)) {
+    const copy = { ...sub };
+    stripParam(copy, path.slice(i + 1));
+    if (Object.keys(copy).length) obj[head] = copy; else delete obj[head];
+  }
+}
+
+export function applyEffortRules(body, rr, isAgentMode) {
+  if (!isAgentMode) {
+    if ((rr.kb_mode || 'none') === 'omit') {
+      delete body.reasoning_effort;
+    } else {
+      body.reasoning_effort = 'none';
+    }
+    if (rr.kb_params && typeof rr.kb_params === 'object') deepMergeParams(body, rr.kb_params);
+    return;
+  }
+  if (body.reasoning_effort === undefined || body.reasoning_effort === null) return;
+  let e = String(body.reasoning_effort).toLowerCase();
+  const emap = rr.effort_map || {};
+  if (Object.prototype.hasOwnProperty.call(emap, e)) {
+    const repl = emap[e];
+    if (repl === null) {
+      delete body.reasoning_effort;
+    } else {
+      body.reasoning_effort = repl;
+      e = String(repl).toLowerCase();
+    }
+  }
+  const e2p = rr.effort_to_params;
+  if (e2p && typeof e2p === 'object' && Object.keys(e2p).length) {
+    const params = e2p[e] !== undefined ? e2p[e] : e2p['*'];
+    if (params && typeof params === 'object') deepMergeParams(body, params);
+    if (rr.drop_effort_after_params !== false) delete body.reasoning_effort;
+  }
+}
+
+function geminiHeadroom(body, rr, thinkingOn) {
+  if (thinkingOn && rr.headroom_elevation !== false) {
+    for (const f of ['max_tokens', 'max_completion_tokens']) {
+      if (typeof body[f] === 'number' && body[f] < 16384) body[f] = 65535;
+    }
+  }
+}
+
+/**
+ * Gemini (AI Studio / Vertex): reasoning_effort -> extra_body.google.thinking_config.
+ * 3.x uses thinking_level from model_matrix; 2.5 uses thinking_budget (1K/8K/24K).
+ * "none" / KB mode use the lowest setting the model allows.
+ */
+export function applyGeminiThinking(body, rr, modelName, isAgentMode) {
+  if (modelName.startsWith('gemma') || modelName.startsWith('google/gemma')) return;
+  const name = modelName.includes('/') ? modelName.split('/').slice(1).join('/') : modelName;
+  const is25 = name.startsWith('gemini-2.5-');
+  const isPro = name.includes('pro');
+  const matrix = rr.model_matrix || {};
+  let levels = ((isPro ? matrix.pro : matrix.flash) || []).filter((l) => EFFORT_ORDER.includes(l));
+  if (!levels.length) levels = isPro ? ['low', 'high'] : ['minimal', 'low', 'medium', 'high'];
+  levels.sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
+
+  const effort = body.reasoning_effort;
+  delete body.reasoning_effort;
+  if (isAgentMode && (effort === undefined || effort === null)) {
+    const cfg = body.extra_body?.google?.thinking_config;
+    geminiHeadroom(body, rr, !!cfg && cfg.include_thoughts !== false);
+    return;
+  }
+  let e = isAgentMode ? String(effort).toLowerCase() : 'none';
+  if (e === 'xhigh' || e === 'max') e = 'high';
+
+  let tc;
+  let thinkingOn;
+  if (e === 'none' || e === 'false' || e === 'off') {
+    tc = is25 ? { include_thoughts: false, thinking_budget: isPro ? 128 : 0 } : { include_thoughts: false, thinking_level: levels[0] };
+    thinkingOn = false;
+  } else {
+    if (!EFFORT_ORDER.includes(e)) e = 'medium';
+    if (is25) {
+      tc = { include_thoughts: true, thinking_budget: GEMINI25_BUDGET[e] };
+    } else {
+      const req = EFFORT_ORDER.indexOf(e);
+      let lvl = levels[0];
+      for (const l of levels) if (EFFORT_ORDER.indexOf(l) <= req) lvl = l;
+      tc = { include_thoughts: true, thinking_level: lvl };
+    }
+    thinkingOn = true;
+  }
+  body.extra_body = { ...(body.extra_body || {}) };
+  body.extra_body.google = { ...(body.extra_body.google || {}), thinking_config: tc };
+  geminiHeadroom(body, rr, thinkingOn);
+}
+
 export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic = false) {
   if (!body || typeof body !== 'object' || !rules || typeof rules !== 'object') return body;
 
@@ -119,7 +235,7 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
   const stripParams = rules.sanitization?.strip_params || rules.sanitization?.unsupported_params;
   if (Array.isArray(stripParams)) {
     for (const sp of stripParams) {
-      delete body[sp];
+      stripParam(body, String(sp));
     }
   }
   const maxTokensCeil = rules.sanitization?.max_tokens_ceiling;
@@ -260,74 +376,14 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
-  // 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
+  // 6. Reasoning control (declarative, driven by preset `reasoning` rules)
   const reasoningRules = rules.reasoning;
-  if (reasoningRules && typeof reasoningRules === 'object') {
+  if (reasoningRules && typeof reasoningRules === 'object' && !isAnthropic) {
     const strat = reasoningRules.strategy || 'openai_passthrough';
-
-    if (!isAgentMode) {
-      // KB mode: suppress thinking latency for Gemini
-      if (strat === 'gemini_thinking_matrix') {
-        delete body.reasoning_effort;
-        body.extra_body = body.extra_body || {};
-        body.extra_body.google = body.extra_body.google || {};
-        body.extra_body.google.thinking_config = { include_thoughts: false };
-      } else {
-        body.reasoning_effort = 'none';
-      }
+    if (strat === 'gemini_thinking_matrix') {
+      applyGeminiThinking(body, reasoningRules, modelName, isAgentMode);
     } else {
-      // Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
-      if (strat === 'gemini_thinking_matrix') {
-        const isGemma = modelName.startsWith('gemma');
-        let thinkingEnabled = false;
-
-        if (!isGemma) {
-          const rawEffort = body.reasoning_effort !== undefined ? String(body.reasoning_effort).toLowerCase() : null;
-          if (rawEffort !== null) {
-            delete body.reasoning_effort;
-            body.extra_body = body.extra_body || {};
-            body.extra_body.google = body.extra_body.google || {};
-            const isGemini25 = modelName.startsWith('gemini-2.5-');
-            const isPro = modelName.includes('pro');
-
-            if (rawEffort === 'none' || rawEffort === 'false') {
-              body.extra_body.google.thinking_config = { include_thoughts: false };
-            } else if (isGemini25) {
-              body.extra_body.google.thinking_config = { include_thoughts: true };
-              thinkingEnabled = true;
-            } else {
-              let thinkingLevel = 'low';
-              if (rawEffort === 'high' || rawEffort === 'xhigh' || rawEffort === 'max') {
-                thinkingLevel = 'high';
-              } else if (rawEffort === 'medium' && !isPro) {
-                thinkingLevel = 'medium';
-              }
-              body.extra_body.google.thinking_config = {
-                include_thoughts: true,
-                thinking_level: thinkingLevel,
-              };
-              thinkingEnabled = true;
-            }
-          } else {
-            const cfg = body.extra_body?.google?.thinking_config;
-            if (cfg?.include_thoughts !== false && cfg?.thinking_level) {
-              thinkingEnabled = true;
-            }
-          }
-        }
-
-        if (thinkingEnabled && reasoningRules.headroom_elevation !== false) {
-          if (typeof body.max_tokens === 'number' && body.max_tokens < 16384) {
-            body.max_tokens = 65535;
-          }
-          if (typeof body.max_completion_tokens === 'number' && body.max_completion_tokens < 16384) {
-            body.max_completion_tokens = 65535;
-          }
-        }
-      } else {
-        // All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
-        // Pure passthrough: preserve reasoning_effort and payload format untouched
-      }
+      applyEffortRules(body, reasoningRules, isAgentMode);
     }
   }
 

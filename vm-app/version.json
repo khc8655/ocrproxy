@@ -2,11 +2,13 @@
   "version": "v2026.10.09-13",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "修复 systemd-run 语法参数与国内 OTA 极速下载链路 (v2026.10.09-13)",
+  "title": "提供商适配对照官方文档修正：MiniMax / 商汤 / Agnes / Gemini (AI Studio, Vertex)",
   "changelog": [
-    "修复 systemd-run 非法参数：彻底移除 --remain-after-exit=no 语法错误并引入 --collect 自动回收机制，消除命令行执行 ocrproxy upgrade 时的崩溃报错",
-    "交互式终端直连优化：在交互式 TTY 终端执行 ocrproxy upgrade 时自动直通前台运行，提供完整的实时下载与部署进度输出",
-    "国内下载加速链路重构：优化 prepare_source_code 源码下载候选机制，默认优先轮询国内高速镜像源 (ghfast/gh-proxy/mirror) 并缩短连接超时，杜绝国内服务器在官方 GitHub 上重试等待 75 秒超限导致的 Web OTA 探测超时",
-    "后台升级指令增强：优化 Web 端 OTA 触发逻辑，新增向 systemd 单元传递环境变量与国内镜像降级兜底"
+    "MiniMax：reasoning_effort=none 不再透传（M3.1-Flash-Preview 会 400，其它模型忽略），minimal→low；KB 模式不再发 none；只剥离 output_config.format，保留 output_config.effort（M3.1 官方思考深度控制），恢复 OpenAI 零拷贝 fast-path；补 M3.1-Flash-Preview / M2.7 模型",
+    "商汤日日新：reasoning_effort 增加 max 档，minimal→low、xhigh→max；启用原生 Anthropic Messages（/v1/messages）",
+    "Agnes：按官方文档追加 chat_template_kwargs.enable_thinking 开关（reasoning_effort 仍透传），KB 模式显式关闭思考；启用原生 Anthropic Messages",
+    "Gemini/Vertex：思考等级改为读取预设 model_matrix（Flash 支持 minimal，3.1 Pro 支持 medium）；2.5 系列改用官方 thinking_budget 映射（1K/8K/24K，2.5 Flash 的 none=0）；KB 模式真正降到最低思考档而不只是隐藏思考；推荐模型更新为 3.8 Flash / 3.1 Pro",
+    "新增通用声明式规则：reasoning.effort_map / effort_to_params / kb_mode / kb_params，strip_params 支持点路径；VM 与 EdgeOne 行为一致（192 组对拍）",
+    "升级后请在管理端对已添加的 MiniMax / 商汤 / Agnes / Google / Vertex 提供商点一次规则更新，已存储的旧规则副本才会替换"
   ]
 }

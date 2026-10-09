@@ -276,6 +276,175 @@ def _clone_request_payload(body: dict) -> dict:
     return out
 
 
+_EFFORT_ORDER = ["minimal", "low", "medium", "high"]
+_GEMINI25_BUDGET = {"minimal": 1024, "low": 1024, "medium": 8192, "high": 24576}
+
+
+def _deep_merge_params(out: dict, params: dict) -> None:
+    """Merge injected params one level deep (dict values are merged, others replaced)."""
+    for k, v in params.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            merged = dict(out[k])
+            merged.update(v)
+            out[k] = merged
+        else:
+            out[k] = copy.deepcopy(v) if isinstance(v, (dict, list)) else v
+
+
+def _strip_param(out: dict, path: str) -> None:
+    """Remove a top-level key, or a nested one with a dotted path ("output_config.format")."""
+    if "." not in path:
+        out.pop(path, None)
+        return
+    head, rest = path.split(".", 1)
+    sub = out.get(head)
+    if isinstance(sub, dict) and rest.split(".", 1)[0] in sub:
+        sub = dict(sub)
+        _strip_param(sub, rest)
+        if sub:
+            out[head] = sub
+        else:
+            out.pop(head, None)
+
+
+def _strip_needed(body: dict, rules: dict) -> bool:
+    for sp in (rules.get("sanitization", {}) or {}).get("strip_params", []) or []:
+        cur = body
+        for part in str(sp).split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                break
+            cur = cur[part]
+        else:
+            return True
+    return False
+
+
+def _effort_rewrite_needed(body: dict, rules: dict) -> bool:
+    """True when the declarative effort rules would change this request body
+    (used to keep the zero-copy fast-path for everything else)."""
+    rr = rules.get("reasoning") if isinstance(rules, dict) else None
+    if not isinstance(rr, dict):
+        return False
+    effort = body.get("reasoning_effort")
+    if effort is None:
+        return False
+    e = str(effort).lower()
+    emap = rr.get("effort_map") or {}
+    if e in emap:
+        return True
+    return bool(rr.get("effort_to_params"))
+
+
+def _apply_effort_rules(out: dict, rr: dict, is_agent_mode: bool) -> None:
+    """OpenAI-compatible providers.
+
+    Agent mode: reasoning_effort is passed through, except where the preset
+      declares `effort_map` (value -> replacement, null = drop the field) or
+      `effort_to_params` (value or "*" -> params to inject; the provider's own
+      thinking switch, e.g. chat_template_kwargs.enable_thinking).
+    KB mode: `kb_mode` "none" (default) sends reasoning_effort="none"; "omit"
+      removes it (provider rejects "none" / cannot turn thinking off).
+      `kb_params`, when present, are merged in as well (the provider's own
+      thinking switch).
+    """
+    if not is_agent_mode:
+        if rr.get("kb_mode", "none") == "omit":
+            out.pop("reasoning_effort", None)
+        else:
+            out["reasoning_effort"] = "none"
+        if isinstance(rr.get("kb_params"), dict):
+            _deep_merge_params(out, rr["kb_params"])
+        return
+
+    effort = out.get("reasoning_effort")
+    if effort is None:
+        return
+    e = str(effort).lower()
+    emap = rr.get("effort_map") or {}
+    if e in emap:
+        repl = emap[e]
+        if repl is None:
+            out.pop("reasoning_effort", None)
+        else:
+            out["reasoning_effort"] = repl
+            e = str(repl).lower()
+    e2p = rr.get("effort_to_params") or {}
+    if e2p:
+        params = e2p.get(e, e2p.get("*"))
+        if isinstance(params, dict):
+            _deep_merge_params(out, params)
+        if rr.get("drop_effort_after_params", True):
+            out.pop("reasoning_effort", None)
+
+
+def _apply_gemini_thinking(out: dict, rr: dict, m_name: str, is_agent_mode: bool) -> None:
+    """Gemini (AI Studio / Vertex OpenAI-compatible endpoints).
+
+    reasoning_effort -> extra_body.google.thinking_config (Google forbids sending
+    both).  Gemini 3.x takes thinking_level from the preset's model_matrix;
+    Gemini 2.5 takes thinking_budget (Google's documented 1K/8K/24K mapping).
+    "none" / KB mode use the lowest setting the model allows: 2.5 Flash can
+    turn thinking off (budget 0); 2.5 Pro and 3.x cannot, so they get the
+    lowest budget/level and hide thoughts.
+    """
+    if m_name.startswith("gemma") or m_name.startswith("google/gemma"):
+        return
+    name = m_name.split("/", 1)[-1]
+    is_25 = name.startswith("gemini-2.5-")
+    is_pro = "pro" in name
+    matrix = rr.get("model_matrix") or {}
+    levels = [l for l in (matrix.get("pro") if is_pro else matrix.get("flash")) or [] if l in _EFFORT_ORDER]
+    if not levels:
+        levels = ["low", "high"] if is_pro else ["minimal", "low", "medium", "high"]
+    levels.sort(key=_EFFORT_ORDER.index)
+
+    effort = out.pop("reasoning_effort", None)
+    if is_agent_mode and effort is None:
+        cfg = (out.get("extra_body") or {}).get("google", {}).get("thinking_config", {})
+        thinking_on = bool(cfg) and cfg.get("include_thoughts") is not False
+        _gemini_headroom(out, rr, thinking_on)
+        return
+
+    e = "none" if not is_agent_mode else str(effort).lower()
+    if e in ("xhigh", "max"):
+        e = "high"
+
+    if e in ("none", "false", "off"):
+        if is_25:
+            tc = {"include_thoughts": False, "thinking_budget": 128 if is_pro else 0}
+        else:
+            tc = {"include_thoughts": False, "thinking_level": levels[0]}
+        thinking_on = False
+    else:
+        if e not in _EFFORT_ORDER:
+            e = "medium"
+        if is_25:
+            tc = {"include_thoughts": True, "thinking_budget": _GEMINI25_BUDGET[e]}
+        else:
+            req = _EFFORT_ORDER.index(e)
+            lvl = levels[0]
+            for l in levels:
+                if _EFFORT_ORDER.index(l) <= req:
+                    lvl = l
+            tc = {"include_thoughts": True, "thinking_level": lvl}
+        thinking_on = True
+
+    extra = out.get("extra_body")
+    extra = dict(extra) if isinstance(extra, dict) else {}
+    google = dict(extra.get("google") or {})
+    google["thinking_config"] = tc
+    extra["google"] = google
+    out["extra_body"] = extra
+    _gemini_headroom(out, rr, thinking_on)
+
+
+def _gemini_headroom(out: dict, rr: dict, thinking_on: bool) -> None:
+    if thinking_on and rr.get("headroom_elevation", True):
+        for f in ("max_tokens", "max_completion_tokens"):
+            if isinstance(out.get(f), int) and out[f] < 16384:
+                out[f] = 65535
+
+
 def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is_anthropic: bool = False) -> None:
     """Pure declarative rule executor for all upstream providers.
     Mutates `out` in place according to provider adapter_rules schema.
@@ -311,7 +480,7 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
     # 2. Sanitization (parameter blacklisting and clamping)
     strip_params = rules.get("sanitization", {}).get("strip_params", [])
     for sp in strip_params:
-        out.pop(sp, None)
+        _strip_param(out, sp)
     max_tokens_ceil = rules.get("sanitization", {}).get("max_tokens_ceiling")
     if isinstance(max_tokens_ceil, int) and max_tokens_ceil > 0:
         if isinstance(out.get("max_tokens"), int) and out["max_tokens"] > max_tokens_ceil:
@@ -435,62 +604,14 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
             if ik not in out:
                 out[ik] = iv
 
-    # 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
+    # 6. Reasoning control (declarative, driven by preset `reasoning` rules)
     reasoning_rules = rules.get("reasoning", {})
-    if reasoning_rules and isinstance(reasoning_rules, dict):
+    if reasoning_rules and isinstance(reasoning_rules, dict) and not is_anthropic:
         strat = reasoning_rules.get("strategy", "openai_passthrough")
-
-        if not is_agent_mode:
-            # KB mode: suppress thinking latency for Gemini
-            if strat == "gemini_thinking_matrix":
-                out.pop("reasoning_effort", None)
-                out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
-                    "include_thoughts": False
-                }
-            else:
-                out["reasoning_effort"] = "none"
+        if strat == "gemini_thinking_matrix":
+            _apply_gemini_thinking(out, reasoning_rules, m_name, is_agent_mode)
         else:
-            # Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
-            if strat == "gemini_thinking_matrix":
-                is_gemma = m_name.startswith("gemma")
-                thinking_enabled = False
-                if not is_gemma:
-                    re = out.pop("reasoning_effort", None)
-                    if re is not None:
-                        effort = str(re).lower()
-                        extra = out.setdefault("extra_body", {}).setdefault("google", {})
-                        is_gemini_25 = m_name.startswith("gemini-2.5-")
-                        is_pro = "pro" in m_name
-                        if effort in ("none", "false"):
-                            extra["thinking_config"] = {"include_thoughts": False}
-                        elif is_gemini_25:
-                            extra["thinking_config"] = {"include_thoughts": True}
-                            thinking_enabled = True
-                        else:
-                            thinking_level = "low"
-                            if effort in ("high", "xhigh", "max"):
-                                thinking_level = "high"
-                            elif effort == "medium" and not is_pro:
-                                thinking_level = "medium"
-                            extra["thinking_config"] = {
-                                "include_thoughts": True,
-                                "thinking_level": thinking_level,
-                            }
-                            thinking_enabled = True
-                    else:
-                        cfg = out.get("extra_body", {}).get("google", {}).get("thinking_config", {})
-                        if cfg.get("include_thoughts") is not False and cfg.get("thinking_level"):
-                            thinking_enabled = True
-
-                if thinking_enabled and reasoning_rules.get("headroom_elevation", True):
-                    if "max_tokens" in out and isinstance(out["max_tokens"], int) and out["max_tokens"] < 16384:
-                        out["max_tokens"] = 65535
-                    if "max_completion_tokens" in out and isinstance(out["max_completion_tokens"], int) and out["max_completion_tokens"] < 16384:
-                        out["max_completion_tokens"] = 65535
-            else:
-                # All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
-                # Pure passthrough: preserve reasoning_effort and payload format untouched
-                pass
+            _apply_effort_rules(out, reasoning_rules, is_agent_mode)
 
     # 7. Anthropic Messages endpoint specific rules
     if is_anthropic:
@@ -998,9 +1119,10 @@ async def chat_completions(request: Request):
                     and rules.get("reasoning", {}).get("strategy") == "openai_passthrough"
                     and not rules.get("model_alias")
                     and not rules.get("messages")
-                    and not rules.get("sanitization", {}).get("strip_params")
+                    and not _strip_needed(body, rules)
                     and not rules.get("tools", {}).get("deep_schema_sanitization")
                     and not rules.get("inject_headers")
+                    and not _effort_rewrite_needed(body, rules)
                 )
             )
         )

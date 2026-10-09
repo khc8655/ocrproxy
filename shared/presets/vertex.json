@@ -1,7 +1,7 @@
 {
   "id": "vertex",
   "name": "Google Vertex AI",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "protocol": "vertex_openai",
   "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
   "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",
@@ -30,7 +30,17 @@
       "none_action": "include_thoughts_false",
       "headroom_elevation": true,
       "model_matrix": {
-        "flash": ["low", "medium", "high"]
+        "flash": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "pro": [
+          "low",
+          "medium",
+          "high"
+        ]
       }
     },
     "tools": {
