@@ -1,12 +1,12 @@
 {
-  "version": "v2026.10.09-10",
+  "version": "v2026.10.09-11",
   "release_date": "2026-10-09",
   "commit": "HEAD",
-  "title": "首次登录导航栏补全与金库物理级三权分立 (v2026.10.09-10)",
+  "title": "国内机器 OTA 更新多源轮询与平滑升级链路优化 (v2026.10.09-11)",
   "changelog": [
-    "前端生命周期修复：抽离 initAppAfterAuth，首次登录成功时立即渲染顶部导航栏并加载模型与中枢预设，告别空白和按 F5 刷新",
-    "物理级三权分立：EdgeOne 与 VM 端彻底移除 ADMIN_PASSWORD 兜底金库逻辑，/api/vault/* 仅且只能使用 VAULT_ACCESS_TOKEN 鉴权",
-    "安装与环境支持：install.sh 与 init_config.py 全面支持 VAULT_ACCESS_TOKEN 自动生成与 .env 持久化，平滑升级自动补齐",
-    "报错文案修正：彻底清除后端 401 报错中遗留的历史 PROXY_API_KEY 误导文案"
+    "国内 OTA 多源轮询：后台检查更新增加官方 GitHub、国内实时镜像 (ghfast) 与全球 CDN (jsDelivr) 自动轮询降级，国内主机 1 秒内检出新版本",
+    "更新状态精准显示：修复直连 GitHub 超时回退误报为“已是最新”的缺陷，精准区分网络连接超时与真实最新状态",
+    "升级镜像加速兜底：install.sh 与在线一键升级集成国内 ghfast 镜像加速，杜绝国内服务器升级拉取 GitHub 源码超时中断",
+    "全模式通用兼容：Agent 模式与 KB 知识库入库模式 100% 共享最新底层中转稳定性修复 (P0并发阀/P1内存节流/429退避)"
   ]
 }

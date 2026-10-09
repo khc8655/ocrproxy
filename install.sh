@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.09-10"
+SCRIPT_VERSION="v2026.10.09-11"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -235,6 +235,7 @@ prepare_source_code() {
         candidates+=("https://api.github.com/repos/${GITHUB_REPO}/tarball/${GITHUB_BRANCH}")
     fi
     candidates+=("${TARBALL_URL}")
+    candidates+=("https://ghfast.top/${TARBALL_URL}")
 
     local dl_ok=false
     for dl_url in "${candidates[@]}"; do
@@ -339,7 +340,10 @@ case "$1" in
         if [[ -n "$LATEST_SHA" ]]; then
             TARGET_REF="$LATEST_SHA"
         fi
-        curl -fsSL "${CURL_AUTH[@]}" "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
+        if ! curl -fsSL "${CURL_AUTH[@]}" --connect-timeout 8 "https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"; then
+            echo "直连 GitHub 超时，自动切换至国内加速镜像 (ghfast) 升级..."
+            curl -fsSL "${CURL_AUTH[@]}" "https://ghfast.top/https://raw.githubusercontent.com/${GITHUB_REPO}/${TARGET_REF}/install.sh" | bash -s -- --upgrade "${TOKEN_ARG[@]}" "$@"
+        fi
         ;;
     status)
         systemctl status ${SERVICE_NAME} --no-pager
@@ -361,7 +365,9 @@ case "$1" in
         ;;
     uninstall)
         shift
-        curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --uninstall "$@"
+        if ! curl -fsSL --connect-timeout 8 "https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --uninstall "$@"; then
+            curl -fsSL "https://ghfast.top/https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/install.sh" | bash -s -- --uninstall "$@"
+        fi
         ;;
     *)
         echo "================================================="

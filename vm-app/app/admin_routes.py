@@ -1361,26 +1361,37 @@ async def get_system_version_endpoint(request: Request):
 
 @router.get("/system/check-update")
 async def check_system_update_endpoint(request: Request):
-    """Check for new OCRProxy releases from GitHub."""
+    """Check for new OCRProxy releases from GitHub or CN mirror fallbacks."""
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     local_info = _load_local_version_info()
     curr_v = local_info.get("version", "v2026.10.07-01")
 
-    remote_url = "https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json"
+    # 多源检测链：官方 GitHub -> 国内镜像 (ghfast) -> CDN (jsDelivr)
+    remote_urls = [
+        "https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json",
+        "https://ghfast.top/https://raw.githubusercontent.com/khc8655/ocrproxy/main/version.json",
+        "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/version.json",
+    ]
     remote_data = None
-    try:
-        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
-            resp = await client.get(remote_url)
-            if resp.status_code == 200:
-                remote_data = resp.json()
-    except Exception as e:
-        logger.warning(f"Failed to fetch remote version from GitHub: {e}")
+    fetch_error = None
+    async with httpx.AsyncClient(timeout=3.5, follow_redirects=True) as client:
+        for url in remote_urls:
+            try:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    remote_data = resp.json()
+                    if isinstance(remote_data, dict) and "version" in remote_data:
+                        break
+            except Exception as e:
+                fetch_error = str(e)
+                logger.warning(f"Failed to fetch remote version from {url}: {e}")
 
-    if not remote_data or not isinstance(remote_data, dict):
+    if not remote_data or not isinstance(remote_data, dict) or "version" not in remote_data:
         return JSONResponse(content={
-            "ok": True,
+            "ok": False,
+            "network_error": True,
             "has_update": False,
             "current_version": curr_v,
             "latest_version": curr_v,
@@ -1388,7 +1399,7 @@ async def check_system_update_endpoint(request: Request):
             "title": local_info.get("title", ""),
             "changelog": local_info.get("changelog", []),
             "checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "notice": "未能连接到 GitHub 检查更新，当前保持本地版本"
+            "notice": f"未能连接到 GitHub 或国内镜像更新源: {fetch_error or '网络超时'}"
         })
 
     latest_v = remote_data.get("version", curr_v)
@@ -1398,6 +1409,7 @@ async def check_system_update_endpoint(request: Request):
 
     return JSONResponse(content={
         "ok": True,
+        "network_error": False,
         "has_update": has_update,
         "current_version": curr_v,
         "latest_version": latest_v,
@@ -1425,6 +1437,8 @@ async def upgrade_system_endpoint(request: Request):
             ["sudo", "-n", "systemd-run", "--unit=ocrproxy-ota-upgrade", "/usr/local/bin/ocrproxy", "upgrade"],
             ["sudo", "-n", "/usr/local/bin/ocrproxy", "upgrade"],
             ["/usr/local/bin/ocrproxy", "upgrade"],
+            ["sudo", "-n", "bash", "-c", "curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
+            ["bash", "-c", "curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
             ["sudo", "-n", "bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
             ["bash", "-c", "curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | bash -s -- --upgrade"],
         ]:

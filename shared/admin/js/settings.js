@@ -228,6 +228,21 @@ async function checkSystemUpdate(manual=true){
 
     if (!infoBox) return;
 
+    if (data.network_error || data.ok === false) {
+      infoBox.style.display = 'block';
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:10px 14px;margin-top:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div style="color:var(--warning);font-weight:600;">
+            ⚠️ 未能连接到版本更新服务器 (网络超时)
+            <span style="font-weight:normal;color:var(--text-secondary);margin-left:6px;">当前运行版本: ${esc(data.current_version || '')}</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-secondary);">检测时间: ${esc(data.checked_at || '')}</span>
+        </div>
+      `;
+      if (manual) toast(data.notice || '无法连接到更新服务器，请检查外网网络', 'err');
+      return;
+    }
+
     if (data.has_update) {
       infoBox.style.display = 'block';
       infoBox.innerHTML = `

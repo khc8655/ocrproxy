@@ -210,6 +210,8 @@ ocrprox (Monorepo)
 - **429 严格遵循 Retry-After (v2026.10.09-09)**：支持解析 HTTP 响应头中的 delta-seconds 与 RFC 1123 HTTP-date 格式。Agent 模式多候选时按 Retry-After 冷却该节点（上限 60s，单候选不冷冻）；KB 模式取 `max(cooldown_tpm_sec, Retry-After ≤ 300s)`。
 - **中途断流 SSE 终结事件 (Mid-Stream Break Terminal Event · v2026.10.09-09)**：流式传输在发出首字节后若遭遇上游连接中断（无法再 failover），向客户端补发标准终止 SSE 错误事件（OpenAI 格式 `data: {"error":...}`，Anthropic 格式 `event: error`），按 502 记入统计并惩罚延迟权重，杜绝客户端收到被静默截断的内容。
 - **KB/OCR 内存回收异步合并节流 (Coalesced Memory Reclaim · v2026.10.09-09)**：`gc.collect() + malloc_trim(0)` 改造为后台合并任务（并发最多 1 个、间隔 ≥2s、请求路径 0 毫秒阻塞），彻底消除入库高并发时的 GIL 争用卡顿。
+- **物理级三权分立与凭据中枢加固 (Strict Three-Role Privilege Separation · v2026.10.09-10)**：EdgeOne 与 VM 端彻底移除 `ADMIN_PASSWORD` 兜底访问金库凭据的后门逻辑，`/api/vault/*` 仅且只能使用专用 `VAULT_ACCESS_TOKEN` 进行鉴权；首次登录成功立即自动渲染导航栏并加载模型预设目录。
+- **国内 OTA 多源轮询与平滑升级加速 (Multi-Source OTA & CN Mirror Acceleration · v2026.10.09-11)**：后台更新检测引入多源轮询降级链（官方 GitHub ➔ 国内实时镜像 ghfast ➔ 全球 CDN jsDelivr），根除国内网络超时误报“已是最新”的假阳性缺陷；一键升级与 CLI 全链路支持国内镜像源高速下载源码。
 - **`max_retries` / `schedule_total_budget` (单请求重试上限)**：默认 **`3 次`**。
 - **`max_attempts_per_provider` (单厂商尝试上限)**：默认 **`2 次`**。
 - **`fast_failover_provider_down` (跨厂商快速熔断)**：默认 **开启**。当上游厂商遭遇 502/504 或超时且存在其他备用厂商时，直接跳过该厂商所有剩余 Key，秒级切换至备用厂商。
