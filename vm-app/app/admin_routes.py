@@ -1662,12 +1662,10 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
         body.get("token")
         or v_cfg.get("token")
         or os.environ.get("EDGEONE_VAULT_TOKEN")
+        or os.environ.get("VAULT_ACCESS_TOKEN")
+        or os.environ.get("ADMIN_PASSWORD")
         or ""
     ).strip()
-
-    # Fallback to local config proxy_api_key if vault token not explicitly configured
-    if not token and cfg.get("proxy_api_key"):
-        token = str(cfg.get("proxy_api_key")).strip()
 
     return edgeone_url, token
 
