@@ -38,11 +38,7 @@
         "medium",
         "high",
         "max"
-      ],
-      "effort_map": {
-        "minimal": "low",
-        "xhigh": "max"
-      }
+      ]
     },
     "tools": {
       "normalize_choice_to_string": false,

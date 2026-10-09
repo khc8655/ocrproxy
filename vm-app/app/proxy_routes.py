@@ -42,6 +42,7 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse, Response
+from . import gemini_compat
 
 from .config_store import get_config, clear_cache
 from .scheduler import (
@@ -276,178 +277,6 @@ def _clone_request_payload(body: dict) -> dict:
     return out
 
 
-_EFFORT_ORDER = ["minimal", "low", "medium", "high"]
-_GEMINI25_BUDGET = {"minimal": 1024, "low": 1024, "medium": 8192, "high": 24576}
-
-
-def _deep_merge_params(out: dict, params: dict) -> None:
-    """Merge injected params one level deep (dict values are merged, others replaced)."""
-    for k, v in params.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            merged = dict(out[k])
-            merged.update(v)
-            out[k] = merged
-        else:
-            out[k] = copy.deepcopy(v) if isinstance(v, (dict, list)) else v
-
-
-def _strip_param(out: dict, path: str) -> None:
-    """Remove a top-level key, or a nested one with a dotted path ("output_config.format")."""
-    if "." not in path:
-        out.pop(path, None)
-        return
-    head, rest = path.split(".", 1)
-    sub = out.get(head)
-    if isinstance(sub, dict) and rest.split(".", 1)[0] in sub:
-        sub = dict(sub)
-        _strip_param(sub, rest)
-        if sub:
-            out[head] = sub
-        else:
-            out.pop(head, None)
-
-
-def _strip_needed(body: dict, rules: dict) -> bool:
-    for sp in (rules.get("sanitization", {}) or {}).get("strip_params", []) or []:
-        cur = body
-        for part in str(sp).split("."):
-            if not isinstance(cur, dict) or part not in cur:
-                break
-            cur = cur[part]
-        else:
-            return True
-    return False
-
-
-def _effort_rewrite_needed(body: dict, rules: dict) -> bool:
-    """True when the declarative effort rules would change this request body
-    (used to keep the zero-copy fast-path for everything else)."""
-    rr = rules.get("reasoning") if isinstance(rules, dict) else None
-    if not isinstance(rr, dict):
-        return False
-    effort = body.get("reasoning_effort")
-    if effort is None:
-        return False
-    e = str(effort).lower()
-    emap = rr.get("effort_map") or {}
-    if e in emap:
-        return True
-    return bool(rr.get("effort_to_params"))
-
-
-def _apply_effort_rules(out: dict, rr: dict, is_agent_mode: bool) -> None:
-    """OpenAI-compatible providers.
-
-    Agent mode: reasoning_effort is passed through, except where the preset
-      declares `effort_map` (value -> replacement, null = drop the field) or
-      `effort_to_params` (value or "*" -> params to inject; the provider's own
-      thinking switch, e.g. chat_template_kwargs.enable_thinking).
-    KB mode: `kb_mode` "none" (default) sends reasoning_effort="none"; "omit"
-      removes it (provider rejects "none" / cannot turn thinking off).
-      `kb_params`, when present, are merged in as well (the provider's own
-      thinking switch).
-    """
-    if not is_agent_mode:
-        if rr.get("kb_mode", "none") == "omit":
-            out.pop("reasoning_effort", None)
-        else:
-            out["reasoning_effort"] = "none"
-        if isinstance(rr.get("kb_params"), dict):
-            _deep_merge_params(out, rr["kb_params"])
-        return
-
-    effort = out.get("reasoning_effort")
-    if effort is None:
-        return
-    e = str(effort).lower()
-    emap = rr.get("effort_map") or {}
-    if e in emap:
-        repl = emap[e]
-        if repl is None:
-            out.pop("reasoning_effort", None)
-        else:
-            out["reasoning_effort"] = repl
-            e = str(repl).lower()
-    e2p = rr.get("effort_to_params") or {}
-    if e2p:
-        params = e2p.get(e, e2p.get("*"))
-        if isinstance(params, dict):
-            _deep_merge_params(out, params)
-        if rr.get("drop_effort_after_params", True):
-            out.pop("reasoning_effort", None)
-
-
-def _apply_gemini_thinking(out: dict, rr: dict, m_name: str, is_agent_mode: bool) -> None:
-    """Gemini (AI Studio / Vertex OpenAI-compatible endpoints).
-
-    reasoning_effort -> extra_body.google.thinking_config (Google forbids sending
-    both).  Gemini 3.x takes thinking_level from the preset's model_matrix;
-    Gemini 2.5 takes thinking_budget (Google's documented 1K/8K/24K mapping).
-    reasoning_effort="none" uses the lowest setting the model allows: 2.5
-    Flash can turn thinking off (budget 0); 2.5 Pro and 3.x cannot, so they
-    get the lowest budget/level and hide thoughts.
-
-    Gemini is only used in Agent mode (KB mode never routes to Gemini), so
-    there is no KB-specific branch: the client's reasoning_effort decides.
-    """
-    if m_name.startswith("gemma") or m_name.startswith("google/gemma"):
-        return
-    name = m_name.split("/", 1)[-1]
-    is_25 = name.startswith("gemini-2.5-")
-    is_pro = "pro" in name
-    matrix = rr.get("model_matrix") or {}
-    levels = [l for l in (matrix.get("pro") if is_pro else matrix.get("flash")) or [] if l in _EFFORT_ORDER]
-    if not levels:
-        levels = ["low", "high"] if is_pro else ["minimal", "low", "medium", "high"]
-    levels.sort(key=_EFFORT_ORDER.index)
-
-    effort = out.pop("reasoning_effort", None)
-    if effort is None:
-        cfg = (out.get("extra_body") or {}).get("google", {}).get("thinking_config", {})
-        thinking_on = bool(cfg) and cfg.get("include_thoughts") is not False
-        _gemini_headroom(out, rr, thinking_on)
-        return
-
-    e = str(effort).lower()
-    if e in ("xhigh", "max"):
-        e = "high"
-
-    if e in ("none", "false", "off"):
-        if is_25:
-            tc = {"include_thoughts": False, "thinking_budget": 128 if is_pro else 0}
-        else:
-            tc = {"include_thoughts": False, "thinking_level": levels[0]}
-        thinking_on = False
-    else:
-        if e not in _EFFORT_ORDER:
-            e = "medium"
-        if is_25:
-            tc = {"include_thoughts": True, "thinking_budget": _GEMINI25_BUDGET[e]}
-        else:
-            req = _EFFORT_ORDER.index(e)
-            lvl = levels[0]
-            for l in levels:
-                if _EFFORT_ORDER.index(l) <= req:
-                    lvl = l
-            tc = {"include_thoughts": True, "thinking_level": lvl}
-        thinking_on = True
-
-    extra = out.get("extra_body")
-    extra = dict(extra) if isinstance(extra, dict) else {}
-    google = dict(extra.get("google") or {})
-    google["thinking_config"] = tc
-    extra["google"] = google
-    out["extra_body"] = extra
-    _gemini_headroom(out, rr, thinking_on)
-
-
-def _gemini_headroom(out: dict, rr: dict, thinking_on: bool) -> None:
-    if thinking_on and rr.get("headroom_elevation", True):
-        for f in ("max_tokens", "max_completion_tokens"):
-            if isinstance(out.get(f), int) and out[f] < 16384:
-                out[f] = 65535
-
-
 def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is_anthropic: bool = False) -> None:
     """Pure declarative rule executor for all upstream providers.
     Mutates `out` in place according to provider adapter_rules schema.
@@ -483,7 +312,7 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
     # 2. Sanitization (parameter blacklisting and clamping)
     strip_params = rules.get("sanitization", {}).get("strip_params", [])
     for sp in strip_params:
-        _strip_param(out, sp)
+        out.pop(sp, None)
     max_tokens_ceil = rules.get("sanitization", {}).get("max_tokens_ceiling")
     if isinstance(max_tokens_ceil, int) and max_tokens_ceil > 0:
         if isinstance(out.get("max_tokens"), int) and out["max_tokens"] > max_tokens_ceil:
@@ -607,14 +436,29 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
             if ik not in out:
                 out[ik] = iv
 
-    # 6. Reasoning control (declarative, driven by preset `reasoning` rules)
+    # 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
     reasoning_rules = rules.get("reasoning", {})
-    if reasoning_rules and isinstance(reasoning_rules, dict) and not is_anthropic:
+    if reasoning_rules and isinstance(reasoning_rules, dict):
         strat = reasoning_rules.get("strategy", "openai_passthrough")
-        if strat == "gemini_thinking_matrix":
-            _apply_gemini_thinking(out, reasoning_rules, m_name, is_agent_mode)
+
+        if not is_agent_mode:
+            # KB mode: suppress thinking latency for Gemini
+            if strat == "gemini_thinking_matrix":
+                out.pop("reasoning_effort", None)
+                out.setdefault("extra_body", {}).setdefault("google", {})["thinking_config"] = {
+                    "include_thoughts": False
+                }
+            else:
+                out["reasoning_effort"] = "none"
         else:
-            _apply_effort_rules(out, reasoning_rules, is_agent_mode)
+            # Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
+            # (thinking level, thought tags, headroom; see gemini_compat.py)
+            if strat == "gemini_thinking_matrix":
+                gemini_compat.apply_thinking(out, reasoning_rules, m_name)
+            else:
+                # All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
+                # Pure passthrough: preserve reasoning_effort and payload format untouched
+                pass
 
     # 7. Anthropic Messages endpoint specific rules
     if is_anthropic:
@@ -661,6 +505,18 @@ def _normalize_response_data(data: dict, rules: dict) -> None:
 
 
 # ── Backwards-compatibility wrapper stubs ────────────────────────────
+def _gemini_normalize_json_response(resp: Response) -> Response:
+    """Split Gemini thought tags / sign tool-call ids on a non-streaming reply."""
+    raw = getattr(resp, "body", b"") or b""
+    if b"<thought>" not in raw and b"thought_signature" not in raw and b"tool_calls" not in raw:
+        return resp
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return resp
+    return JSONResponse(content=gemini_compat.normalize_response(data))
+
+
 def _sanitize_amd_messages(out: dict) -> None:
     _apply_request_adapter_rules(out, {"messages": {"deny_developer_role": True, "system_first_only": True, "merge_system": True}}, is_agent_mode=True)
 
@@ -1080,6 +936,16 @@ async def chat_completions(request: Request):
         "candidates": {"chat": candidates_list},
     }
 
+    # Gemini (VM only): thought signatures carried in tool_call ids, thought tags
+    # split into reasoning_content.  Track which candidates / upstream URLs are
+    # Gemini so only their responses are post-processed.
+    signed_ids = gemini_compat.has_signed_ids(body)
+    gemini_providers = {
+        c.get("provider") for c in candidates_list
+        if gemini_compat.is_gemini_rules(c.get("adapter_rules") or _get_preset_rules(c.get("provider", "")))
+    }
+    gemini_urls: set = set()
+
     def build_request(cand, api_key, upstream_base_url):
         # Isolate top-level and nested mutable fields (messages, tools, extra_body) via copy-on-write
         out = _clone_request_payload(body)
@@ -1088,6 +954,11 @@ async def chat_completions(request: Request):
         rules = cand.get("adapter_rules") or _get_preset_rules(provider)
         _apply_request_adapter_rules(out, rules, is_agent_mode=not kb_force_no_reasoning, is_anthropic=False)
         url = join_upstream(upstream_base_url, "chat/completions")
+        is_gemini = gemini_compat.is_gemini_rules(rules)
+        if is_gemini:
+            gemini_urls.add(str(httpx.URL(url)))
+        if is_gemini or signed_ids:
+            gemini_compat.restore_signatures(out, keep=is_gemini)
         headers = {
             "Content-Type": "application/json",
         }
@@ -1115,6 +986,7 @@ async def chat_completions(request: Request):
         is_passthrough = (
             cand["model"] == model_name
             and not kb_force_no_reasoning
+            and not signed_ids
             and (
                 provider.lower() == "openai"
                 or (
@@ -1122,10 +994,9 @@ async def chat_completions(request: Request):
                     and rules.get("reasoning", {}).get("strategy") == "openai_passthrough"
                     and not rules.get("model_alias")
                     and not rules.get("messages")
-                    and not _strip_needed(body, rules)
+                    and not rules.get("sanitization", {}).get("strip_params")
                     and not rules.get("tools", {}).get("deep_schema_sanitization")
                     and not rules.get("inject_headers")
-                    and not _effort_rewrite_needed(body, rules)
                 )
             )
         )
@@ -1137,9 +1008,15 @@ async def chat_completions(request: Request):
     if is_stream:
         async def handle_stream(resp: httpx.Response, first_chunk: bytes, remainder, lease: Optional[Any] = None):
             async def event_generator():
+                gfilter = gemini_compat.make_stream_filter() if str(resp.request.url) in gemini_urls else None
                 try:
-                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=None, keepalive_sec=15.0):
-                        yield chunk
+                    async for chunk in _stream_with_keepalive(first_chunk, remainder, filter_fn=gfilter, keepalive_sec=15.0):
+                        if chunk:
+                            yield chunk
+                    if gfilter is not None:
+                        tail_bytes = gfilter.flush()
+                        if tail_bytes:
+                            yield tail_bytes
                 finally:
                     try:
                         await resp.aclose()
@@ -1201,6 +1078,8 @@ async def chat_completions(request: Request):
             if isinstance(resp_data, dict):
                 resp_data = _normalize_tool_calls(resp_data)
             resp = JSONResponse(content=resp_data)
+        if gemini_providers and sr.routed_via.split("/", 1)[0] in gemini_providers:
+            resp = _gemini_normalize_json_response(resp)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)

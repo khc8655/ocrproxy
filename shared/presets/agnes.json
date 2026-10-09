@@ -31,25 +31,7 @@
   ],
   "adapter_rules": {
     "reasoning": {
-      "strategy": "openai_passthrough",
-      "effort_to_params": {
-        "none": {
-          "chat_template_kwargs": {
-            "enable_thinking": false
-          }
-        },
-        "*": {
-          "chat_template_kwargs": {
-            "enable_thinking": true
-          }
-        }
-      },
-      "drop_effort_after_params": false,
-      "kb_params": {
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        }
-      }
+      "strategy": "openai_passthrough"
     },
     "tools": {
       "normalize_choice_to_string": false,

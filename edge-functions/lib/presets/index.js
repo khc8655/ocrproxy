@@ -5,13 +5,13 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T10:49:43.584Z",
+  "updated_at": "2026-10-09T11:14:03.416Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI",
       "version": "1.4.0",
-      "rule_hash": "312618c1bb98",
+      "rule_hash": "fefc72d3505b",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
       "anthropic_base_url": "https://apihub.agnes-ai.com/v1",
@@ -114,7 +114,7 @@ export const CATALOG = {
       "id": "minimax",
       "name": "MiniMax",
       "version": "1.3.0",
-      "rule_hash": "681f1b2de67d",
+      "rule_hash": "dc0aae66c67c",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -183,7 +183,7 @@ export const CATALOG = {
       "id": "sensenova",
       "name": "商汤日日新",
       "version": "1.3.0",
-      "rule_hash": "5cf137534429",
+      "rule_hash": "0cf60ddb3bd5",
       "protocol": "openai",
       "base_url": "https://token.sensenova.cn/v1",
       "anthropic_base_url": "https://token.sensenova.cn/v1",
@@ -302,25 +302,7 @@ export const PRESETS = [
     ],
     "adapter_rules": {
       "reasoning": {
-        "strategy": "openai_passthrough",
-        "effort_to_params": {
-          "none": {
-            "chat_template_kwargs": {
-              "enable_thinking": false
-            }
-          },
-          "*": {
-            "chat_template_kwargs": {
-              "enable_thinking": true
-            }
-          }
-        },
-        "drop_effort_after_params": false,
-        "kb_params": {
-          "chat_template_kwargs": {
-            "enable_thinking": false
-          }
-        }
+        "strategy": "openai_passthrough"
       },
       "tools": {
         "normalize_choice_to_string": false,
@@ -708,12 +690,7 @@ export const PRESETS = [
           "high",
           "xhigh",
           "max"
-        ],
-        "effort_map": {
-          "none": null,
-          "minimal": "low"
-        },
-        "kb_mode": "omit"
+        ]
       },
       "case_sensitive_models": {
         "minimax-m3": "MiniMax-M3",
@@ -726,7 +703,7 @@ export const PRESETS = [
       },
       "sanitization": {
         "strip_params": [
-          "output_config.format"
+          "output_config"
         ]
       }
     }
@@ -914,11 +891,7 @@ export const PRESETS = [
           "medium",
           "high",
           "max"
-        ],
-        "effort_map": {
-          "minimal": "low",
-          "xhigh": "max"
-        }
+        ]
       },
       "tools": {
         "normalize_choice_to_string": false,

@@ -363,36 +363,11 @@ test('normalize: sensenova does not inject reasoning_format', () => {
 });
 
 // normaliseForProvider — Google AI Studio / Gemini
-test('normalize: google reasoning "none" → lowest thinking_level, thoughts hidden (Gemini 3 cannot disable)', () => {
+test('normalize: google reasoning "none" → include_thoughts: false', () => {
   const body = { model: 'gemini-3.5-flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'google');
   eq(body.reasoning_effort, undefined);
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: false, thinking_level: 'minimal' });
-});
-
-test('normalize: google 2.5 flash "none" → thinking_budget 0', () => {
-  const body = { model: 'gemini-2.5-flash', reasoning_effort: 'none' };
-  normaliseForProvider(body, 'google');
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: false, thinking_budget: 0 });
-});
-
-test('normalize: google 2.5 "medium" → thinking_budget 8192', () => {
-  const body = { model: 'gemini-2.5-pro', reasoning_effort: 'medium' };
-  normaliseForProvider(body, 'google');
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_budget: 8192 });
-});
-
-test('normalize: google "minimal" on Flash honoured', () => {
-  const body = { model: 'gemini-3.8-flash', reasoning_effort: 'minimal' };
-  normaliseForProvider(body, 'google');
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'minimal' });
-});
-
-test('normalize: google reasoning "none" uses lowest level instead of only hiding thoughts', () => {
-  const body = { model: 'gemini-3.8-flash', reasoning_effort: 'none' };
-  normaliseForProvider(body, 'google');
-  eq(body.reasoning_effort, undefined);
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: false, thinking_level: 'minimal' });
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: false });
 });
 
 test('normalize: google reasoning "low" → thinking_level: low', () => {
@@ -409,11 +384,11 @@ test('normalize: google reasoning "medium" on Flash → thinking_level: medium',
   deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'medium' });
 });
 
-test('normalize: google reasoning "medium" on Pro → thinking_level: medium (3.1 Pro supports low/medium/high)', () => {
-  const body = { model: 'gemini-3.1-pro', reasoning_effort: 'medium' };
+test('normalize: google reasoning "medium" on Pro → thinking_level: low (Pro only has low/high)', () => {
+  const body = { model: 'gemini-3.5-pro', reasoning_effort: 'medium' };
   normaliseForProvider(body, 'google');
   eq(body.reasoning_effort, undefined);
-  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'medium' });
+  deepEq(body.extra_body.google.thinking_config, { include_thoughts: true, thinking_level: 'low' });
 });
 
 test('normalize: google reasoning "high" → thinking_level: high', () => {
@@ -517,22 +492,22 @@ test('normalize: vertex preserves existing google/ prefix on model', () => {
   const body = { model: 'google/gemini-3.8-flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'vertex');
   eq(body.model, 'google/gemini-3.8-flash');
-  deepEq(body.extra_body?.google?.thinking_config, { include_thoughts: false, thinking_level: 'minimal' });
+  deepEq(body.extra_body?.google?.thinking_config, { include_thoughts: false });
 });
 
 // normaliseForProvider — Agnes AI (Gemini-Only Transformation Rule)
-test('normalize: agnes reasoning_effort kept + documented enable_thinking switch added', () => {
+test('normalize: agnes reasoning_effort preserved untouched', () => {
   const body = { model: 'agnes-2.5-flash', reasoning_effort: 'high' };
   normaliseForProvider(body, 'agnes');
   eq(body.reasoning_effort, 'high');
-  deepEq(body.chat_template_kwargs, { enable_thinking: true });
+  eq(body.chat_template_kwargs, undefined);
 });
 
-test('normalize: agnes reasoning "none" → enable_thinking false', () => {
-  const body = { model: 'agnes-2.5-flash', reasoning_effort: 'none', chat_template_kwargs: { foo: 1 } };
+test('normalize: agnes reasoning "none" preserved untouched', () => {
+  const body = { model: 'agnes-2.5-flash', reasoning_effort: 'none' };
   normaliseForProvider(body, 'agnes');
   eq(body.reasoning_effort, 'none');
-  deepEq(body.chat_template_kwargs, { foo: 1, enable_thinking: false });
+  eq(body.chat_template_kwargs, undefined);
 });
 
 test('normalize: agnes default (no reasoning_effort) untouched', () => {
@@ -553,7 +528,6 @@ test('normalize: agnes in KB mode strictly disables thinking', () => {
   const body = { model: 'agnes-3.0-flash', reasoning_effort: 'high' };
   normaliseForProvider(body, 'agnes', { isAgentMode: false });
   eq(body.reasoning_effort, 'none');
-  deepEq(body.chat_template_kwargs, { enable_thinking: false });
 });
 
 // normaliseForProvider — AMD (Gemini-Only Transformation Rule)
@@ -649,43 +623,16 @@ test('normalize: minimax standard chat preserves clean agent parameters', () => 
   eq(body.model, 'MiniMax-M3');
 });
 
-test('normalize: minimax drops reasoning_effort "none" (M3.1-Flash returns 400 on it, others ignore it)', () => {
+test('normalize: minimax with reasoning_effort "none" preserved untouched', () => {
   const body = { model: 'MiniMax-M3', reasoning_effort: 'none' };
   normaliseForProvider(body, 'minimax');
-  eq(body.reasoning_effort, undefined);
+  eq(body.reasoning_effort, 'none');
 });
 
-test('normalize: minimax maps "minimal" → "low", keeps xhigh/max', () => {
-  const b1 = { model: 'MiniMax-M3.1-Flash-Preview', reasoning_effort: 'minimal' };
-  normaliseForProvider(b1, 'minimax');
-  eq(b1.reasoning_effort, 'low');
-  const b2 = { model: 'MiniMax-M3.1-Flash-Preview', reasoning_effort: 'max' };
-  normaliseForProvider(b2, 'minimax');
-  eq(b2.reasoning_effort, 'max');
-});
-
-test('normalize: minimax KB mode does not send reasoning_effort "none"', () => {
-  const body = { model: 'MiniMax-M3', reasoning_effort: 'high' };
-  normaliseForProvider(body, 'minimax', { isAgentMode: false });
-  eq(body.reasoning_effort, undefined);
-});
-
-test('normalize: minimax strips output_config.format only (effort is a documented M3.1 control)', () => {
-  const b1 = { model: 'minimax-m3', output_config: { format: 'text' } };
-  normaliseForProvider(b1, 'minimax');
-  eq(b1.output_config, undefined);
-  const b2 = { model: 'minimax-m3', output_config: { format: 'text', effort: 'high' } };
-  normaliseForProvider(b2, 'minimax');
-  deepEq(b2.output_config, { effort: 'high' });
-});
-
-test('normalize: sensenova maps minimal→low and xhigh→max, keeps none', () => {
-  const b1 = { model: 'deepseek-v4-flash', reasoning_effort: 'xhigh' };
-  normaliseForProvider(b1, 'sensenova');
-  eq(b1.reasoning_effort, 'max');
-  const b2 = { model: 'deepseek-v4-flash', reasoning_effort: 'minimal' };
-  normaliseForProvider(b2, 'sensenova');
-  eq(b2.reasoning_effort, 'low');
+test('normalize: minimax strips output_config', () => {
+  const body = { model: 'minimax-m3', output_config: { format: 'text' } };
+  normaliseForProvider(body, 'minimax');
+  eq(body.output_config, undefined);
 });
 
 test('rescueToolCallsFromText: extracts markdown json tool call', () => {

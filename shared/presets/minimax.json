@@ -34,12 +34,7 @@
         "high",
         "xhigh",
         "max"
-      ],
-      "effort_map": {
-        "none": null,
-        "minimal": "low"
-      },
-      "kb_mode": "omit"
+      ]
     },
     "case_sensitive_models": {
       "minimax-m3": "MiniMax-M3",
@@ -52,7 +47,7 @@
     },
     "sanitization": {
       "strip_params": [
-        "output_config.format"
+        "output_config"
       ]
     }
   }
