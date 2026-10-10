@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-09T11:31:39.538Z",
+  "updated_at": "2026-10-09T15:07:05.998Z",
   "providers": [
     {
       "id": "agnes",
@@ -131,19 +131,19 @@ export const CATALOG = {
     {
       "id": "nvidia",
       "name": "NVIDIA NIM",
-      "version": "1.0.0",
-      "rule_hash": "ccc7323ff17f",
+      "version": "2.0.0",
+      "rule_hash": "187af2f5f93d",
       "protocol": "openai",
       "base_url": "https://integrate.api.nvidia.com/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://build.nvidia.com",
-      "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
+      "doc_url": "https://docs.api.nvidia.com/",
+      "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
       "features": {
+        "multimodal": true,
         "native_thinking": true,
-        "tools": true,
-        "multimodal": true
+        "tools": true
       },
-      "recommended_models_count": 3
+      "recommended_models_count": 6
     },
     {
       "id": "openai",
@@ -164,20 +164,38 @@ export const CATALOG = {
     },
     {
       "id": "opencode",
-      "name": "OpenCode",
-      "version": "1.0.0",
-      "rule_hash": "e1b353ccf196",
+      "name": "OpenCode Zen",
+      "version": "2.0.0",
+      "rule_hash": "e1aa35db8ce1",
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
       "anthropic_base_url": null,
-      "doc_url": "https://opencode.ai/docs",
-      "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。",
+      "doc_url": "https://opencode.ai/docs/zen/",
+      "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
       "features": {
+        "multimodal": true,
         "native_thinking": true,
-        "tools": true,
-        "multimodal": true
+        "tools": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 8
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "version": "1.0.0",
+      "rule_hash": "3aefdebb947c",
+      "protocol": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "anthropic_base_url": "https://openrouter.ai/api/v1",
+      "doc_url": "https://openrouter.ai/docs/api/reference/overview",
+      "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
+      "features": {
+        "anthropic_messages": true,
+        "multimodal": true,
+        "native_thinking": true,
+        "tools": true
+      },
+      "recommended_models_count": 7
     },
     {
       "id": "sensenova",
@@ -709,58 +727,103 @@ export const PRESETS = [
     }
   },
   {
-    "id": "nvidia",
-    "name": "NVIDIA NIM",
-    "version": "1.0.0",
-    "protocol": "openai",
-    "base_url": "https://integrate.api.nvidia.com/v1",
-    "anthropic_base_url": null,
-    "doc_url": "https://build.nvidia.com",
-    "description": "NVIDIA NIM (Inference Microservices) 官方加速平台，精选支持 Llama 3.2 极速视觉/文本旗舰与 Nemotron 自研闪电深度思考模型，已加固流式自动关流防护",
-    "features": {
-      "native_thinking": true,
-      "tools": true,
-      "multimodal": true
-    },
-    "recommended_models": [
-      {
-        "name": "llama-3.2-11b",
-        "upstream_model": "meta/llama-3.2-11b-vision-instruct",
-        "description": "Meta Llama 3.2 11B Vision 指令微调旗舰模型，极速响应 (<800ms)，支持视觉与函数调用"
-      },
-      {
-        "name": "nvidia-nemotron-3.5",
-        "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "description": "NVIDIA 官方自研 Nemotron-3.5 闪电深度推理模型，具备高智商思维链"
-      },
-      {
-        "name": "nemotron-3-ultra-550b",
-        "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b",
-        "description": "NVIDIA 官方 550B 超大规模 MoE 旗舰大模型"
-      }
-    ],
     "adapter_rules": {
+      "error_rules": [
+        {
+          "action": "failover",
+          "cooldown_sec": 3600,
+          "failover": true,
+          "match_keywords": [
+            "not found for account",
+            "function",
+            "not found"
+          ],
+          "match_status": 404,
+          "name": "model_not_activated_for_account"
+        },
+        {
+          "action": "failover",
+          "cooldown_sec": 90,
+          "failover": true,
+          "match_keywords": [
+            "rate limit",
+            "too many requests",
+            "429"
+          ],
+          "match_status": 429,
+          "name": "free_tier_rate_limited"
+        }
+      ],
       "reasoning": {
         "strategy": "openai_passthrough",
         "supported_levels": [
           "none",
           "low",
           "medium",
-          "high"
+          "high",
+          "max"
         ]
-      },
-      "tools": {
-        "normalize_choice_to_string": true,
-        "strip_json_schema": false,
-        "rescue_from_text": false
-      },
-      "user_tracking": {
-        "passthrough_user": true
       },
       "sanitization": {
         "unsupported_params": []
+      },
+      "timeout_rules": {
+        "default_timeout_sec": 60
+      },
+      "tools": {
+        "normalize_choice_to_string": true,
+        "rescue_from_text": false,
+        "strip_json_schema": false
+      },
+      "user_tracking": {
+        "passthrough_user": true
       }
-    }
+    },
+    "anthropic_base_url": null,
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
+    "doc_url": "https://docs.api.nvidia.com/",
+    "features": {
+      "multimodal": true,
+      "native_thinking": true,
+      "tools": true
+    },
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "protocol": "openai",
+    "recommended_models": [
+      {
+        "description": "120B MoE 旗舰，通用/coding 全能主力",
+        "name": "nemotron-3-super-120b",
+        "upstream_model": "nvidia/nemotron-3-super-120b-a12b"
+      },
+      {
+        "description": "30B 极速闪电推理模型，低延迟高性价比",
+        "name": "nemotron-3.5-lightning",
+        "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b"
+      },
+      {
+        "description": "Kimi K3 视觉+推理，256K 上下文，支持 reasoning_effort",
+        "name": "kimi-k3",
+        "upstream_model": "moonshotai/kimi-k3"
+      },
+      {
+        "description": "DeepSeek V4 Flash 变体，快速通用",
+        "name": "deepseek-v4-flash",
+        "upstream_model": "deepseek-ai/deepseek-v4-flash-0731"
+      },
+      {
+        "description": "Agentic coding 小快模型",
+        "name": "laguna-xs-2.1",
+        "upstream_model": "poolside/laguna-xs-2.1"
+      },
+      {
+        "description": "Llama 3.2 11B Vision，极速图文+函数调用",
+        "name": "llama-3.2-11b-vision",
+        "upstream_model": "meta/llama-3.2-11b-vision-instruct"
+      }
+    ],
+    "version": "2.0.0"
   },
   {
     "id": "openai",
@@ -821,35 +884,219 @@ export const PRESETS = [
     }
   },
   {
-    "id": "opencode",
-    "name": "OpenCode",
-    "version": "1.0.0",
-    "protocol": "openai",
-    "base_url": "https://opencode.ai/zen/v1",
-    "doc_url": "https://opencode.ai/docs",
-    "description": "OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。",
-    "features": {
-      "native_thinking": true,
-      "tools": true,
-      "multimodal": true
-    },
-    "recommended_models": [
-      {
-        "name": "glm-4.5",
-        "upstream_model": "glm-4.5",
-        "description": "智谱 GLM-4.5 旗舰推理大模型"
-      },
-      {
-        "name": "claude-3-7-sonnet",
-        "upstream_model": "claude-3-7-sonnet",
-        "description": "Claude 3.7 Sonnet 强混合推理模型"
-      }
-    ],
     "adapter_rules": {
+      "error_rules": [
+        {
+          "action": "quota_exhausted",
+          "cooldown_sec": 1800,
+          "failover": true,
+          "match_keywords": [
+            "FreeTierError",
+            "free tier",
+            "within OpenCode"
+          ],
+          "match_status": 403,
+          "name": "zen_free_tier_forbidden"
+        },
+        {
+          "action": "failover",
+          "cooldown_sec": 300,
+          "failover": true,
+          "match_keywords": [
+            "FreeUsageLimitError",
+            "daily free usage limit",
+            "Rate limit exceeded"
+          ],
+          "match_status": 429,
+          "name": "zen_daily_free_limit"
+        }
+      ],
       "reasoning": {
         "strategy": "openai_passthrough"
+      },
+      "sanitization": {
+        "unsupported_params": []
+      },
+      "timeout_rules": {
+        "default_timeout_sec": 60
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "rescue_from_text": false,
+        "strip_json_schema": false
+      },
+      "user_tracking": {
+        "passthrough_user": true
       }
-    }
+    },
+    "base_url": "https://opencode.ai/zen/v1",
+    "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
+    "doc_url": "https://opencode.ai/docs/zen/",
+    "features": {
+      "multimodal": true,
+      "native_thinking": true,
+      "tools": true
+    },
+    "id": "opencode",
+    "name": "OpenCode Zen",
+    "protocol": "openai",
+    "recommended_models": [
+      {
+        "description": "Zen 免费全能 stealth 模型（限时免费）",
+        "name": "big-pickle",
+        "upstream_model": "big-pickle"
+      },
+      {
+        "description": "Zen 免费 stealth 模型，零数据保留",
+        "name": "space-bunny-free",
+        "upstream_model": "space-bunny-free"
+      },
+      {
+        "description": "阶跃 Step 5 Preview 免费版，零数据保留",
+        "name": "step-5-preview-free",
+        "upstream_model": "step-5-preview-free"
+      },
+      {
+        "description": "LongCat 2.5 Preview 免费版，零数据保留",
+        "name": "longcat-2.5-preview-free",
+        "upstream_model": "longcat-2.5-preview-free"
+      },
+      {
+        "description": "小米 MiMo V2.6 Flash 免费版",
+        "name": "mimo-v2.6-flash-free",
+        "upstream_model": "mimo-v2.6-flash-free"
+      },
+      {
+        "description": "Ling 3.1 Flash 免费版",
+        "name": "ling-3.1-flash-free",
+        "upstream_model": "ling-3.1-flash-free"
+      },
+      {
+        "description": "Nemotron 3 Ultra 免费试用（NVIDIA 通道，请勿传输机密数据）",
+        "name": "nemotron-3-ultra-free",
+        "upstream_model": "nemotron-3-ultra-free"
+      },
+      {
+        "description": "Nemotron 3.5 Lightning 免费试用（NVIDIA 通道）",
+        "name": "nemotron-3.5-lightning-free",
+        "upstream_model": "nemotron-3.5-lightning-free"
+      }
+    ],
+    "version": "2.0.0"
+  },
+  {
+    "adapter_rules": {
+      "error_rules": [
+        {
+          "action": "failover",
+          "cooldown_sec": 120,
+          "failover": true,
+          "match_keywords": [
+            "rate limit",
+            "rate_limit",
+            "free-models-per-day",
+            "free_models_per_day",
+            "Rate limit exceeded"
+          ],
+          "match_status": 429,
+          "name": "free_tier_rate_limited"
+        },
+        {
+          "action": "quota_exhausted",
+          "cooldown_sec": 1800,
+          "failover": true,
+          "match_keywords": [
+            "credit",
+            "balance",
+            "insufficient",
+            "402"
+          ],
+          "match_status": 402,
+          "name": "negative_credit_balance"
+        }
+      ],
+      "inject_headers": {
+        "HTTP-Referer": "https://github.com/khc8655/ocrproxy",
+        "X-Title": "OCRProxy"
+      },
+      "reasoning": {
+        "strategy": "openai_passthrough",
+        "supported_levels": [
+          "none",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "sanitization": {
+        "unsupported_params": []
+      },
+      "timeout_rules": {
+        "default_timeout_sec": 60
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "rescue_from_text": false,
+        "strip_json_schema": false
+      },
+      "user_tracking": {
+        "passthrough_user": true
+      }
+    },
+    "anthropic_base_url": "https://openrouter.ai/api/v1",
+    "base_url": "https://openrouter.ai/api/v1",
+    "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
+    "doc_url": "https://openrouter.ai/docs/api/reference/overview",
+    "features": {
+      "anthropic_messages": true,
+      "multimodal": true,
+      "native_thinking": true,
+      "tools": true
+    },
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "protocol": "openai",
+    "recommended_models": [
+      {
+        "description": "免费档最强 coding 模型（262K 上下文）",
+        "name": "qwen3-coder:free",
+        "upstream_model": "qwen/qwen3-coder:free"
+      },
+      {
+        "description": "Agentic coding 专用模型（262K 上下文）",
+        "name": "laguna-s-2.1:free",
+        "upstream_model": "poolside/laguna-s-2.1:free"
+      },
+      {
+        "description": "550B MoE 免费推理/调度模型（1M 上下文）",
+        "name": "nemotron-3-ultra:free",
+        "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      },
+      {
+        "description": "30B MoE 轻量 coding 模型（256K 上下文）",
+        "name": "north-mini-code:free",
+        "upstream_model": "cohere/north-mini-code:free"
+      },
+      {
+        "description": "120B MoE 多智能体吞吐模型（1M 上下文）",
+        "name": "nemotron-3-super:free",
+        "upstream_model": "nvidia/nemotron-3-super-120b-a12b:free"
+      },
+      {
+        "description": "Google 多模态轻量模型（262K 上下文）",
+        "name": "gemma-4-26b:free",
+        "upstream_model": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "description": "动态路由：自动选择当前可用的免费模型（兜底用）",
+        "name": "openrouter-free-router",
+        "upstream_model": "openrouter/free"
+      }
+    ],
+    "version": "1.0.0"
   },
   {
     "id": "sensenova",

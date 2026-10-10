@@ -1489,6 +1489,52 @@ test('getPreset: finds vertex with Gemini 3.8 Flash model and Project ID require
   truthy(upstreamNames.includes('google/gemini-3.8-flash'));
 });
 
+test('getPreset: finds openrouter with :free models and dual OpenAI/Anthropic endpoints', () => {
+  const p = getPreset('openrouter');
+  truthy(p);
+  eq(p.id, 'openrouter');
+  eq(p.base_url, 'https://openrouter.ai/api/v1');
+  eq(p.anthropic_base_url, 'https://openrouter.ai/api/v1');
+  const upstreamNames = p.recommended_models.map(m => m.upstream_model);
+  truthy(upstreamNames.includes('qwen/qwen3-coder:free'));
+  truthy(upstreamNames.includes('openrouter/free'));
+  // Free-tier guardrails: 429 failover + 402 quota_exhausted
+  const ruleNames = (p.adapter_rules?.error_rules || []).map(r => r.name);
+  truthy(ruleNames.includes('free_tier_rate_limited'));
+  truthy(ruleNames.includes('negative_credit_balance'));
+  // Attribution headers recommended by OpenRouter docs
+  eq(p.adapter_rules?.inject_headers?.['X-Title'], 'OCRProxy');
+});
+
+test('getPreset: nvidia v2.0.0 with current free models and per-account activation failover', () => {
+  const p = getPreset('nvidia');
+  truthy(p);
+  eq(p.id, 'nvidia');
+  eq(p.version, '2.0.0');
+  const upstreamNames = p.recommended_models.map(m => m.upstream_model);
+  truthy(upstreamNames.includes('nvidia/nemotron-3-super-120b-a12b'));
+  truthy(upstreamNames.includes('moonshotai/kimi-k3'));
+  const rules = p.adapter_rules?.error_rules || [];
+  const notActivated = rules.find(r => r.name === 'model_not_activated_for_account');
+  truthy(notActivated);
+  eq(notActivated.match_status, 404);
+});
+
+test('getPreset: opencode v2.0.0 Zen free models with free-tier error rules', () => {
+  const p = getPreset('opencode');
+  truthy(p);
+  eq(p.id, 'opencode');
+  eq(p.name, 'OpenCode Zen');
+  eq(p.version, '2.0.0');
+  eq(p.base_url, 'https://opencode.ai/zen/v1');
+  const modelNames = p.recommended_models.map(m => m.name);
+  truthy(modelNames.includes('big-pickle'));
+  truthy(modelNames.includes('space-bunny-free'));
+  const ruleNames = (p.adapter_rules?.error_rules || []).map(r => r.name);
+  truthy(ruleNames.includes('zen_free_tier_forbidden'));
+  truthy(ruleNames.includes('zen_daily_free_limit'));
+});
+
 test('buildChatUrl: correctly preserves Vertex openapi endpoint path', () => {
   const globalUrl = 'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/endpoints/openapi';
   eq(buildChatUrl(globalUrl), 'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/endpoints/openapi/chat/completions');
