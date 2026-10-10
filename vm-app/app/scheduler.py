@@ -12,7 +12,7 @@ import gc
 import ctypes
 import ctypes.util
 import httpx
-from typing import Optional, Any, Callable, Dict, Set
+from typing import Optional, Any, Callable, Dict, Set, Tuple, List
 from dataclasses import dataclass
 
 from . import stats
@@ -121,11 +121,14 @@ class AllCandidatesFailedError(Exception):
     the proxy layer can forward the real upstream error to the client
     instead of a generic 503.
     """
-    def __init__(self, message, last_status_code=None, last_response_body=None, errors=None):
+    def __init__(self, message, last_status_code=None, last_response_body=None, errors=None,
+                 trail: str = "", retry_after: Optional[float] = None):
         super().__init__(message)
         self.last_status_code = last_status_code
         self.last_response_body = last_response_body
         self.errors = errors or []
+        self.trail = trail
+        self.retry_after = retry_after
 
 
 class GlobalOverloadError(Exception):
@@ -265,7 +268,9 @@ class ScheduleResult:
         routed_via: str = "",
         fallback_attempts: int = 0,
         lease: Optional[ConcurrencyLease] = None,
+        trail: str = "",
     ):
+        self.trail = trail
         self._data = data
         self.raw_content = raw_content
         self.stream_resp = stream_resp
@@ -582,7 +587,7 @@ def _prune_runtime_state(config: dict):
             except KeyError:
                 continue
     valid_agent_models = set(config.get("agent_models", {}).keys())
-    for state in (_cooldown_until, _consecutive_failures, _last_failure_at, _latency_history):
+    for state in (_cooldown_until, _consecutive_failures, _last_failure_at, _latency_history, _stall_strikes):
         for k in list(state.keys()):
             if k not in valid_cand_ids:
                 del state[k]
@@ -615,6 +620,7 @@ def reset_runtime_state():
     _last_failure_at.clear()
     _quota_exhausted_cands.clear()
     _latency_history.clear()
+    _stall_strikes.clear()
     _semaphores.clear()
     _semaphore_limits.clear()
     _sticky_agent_active_keys.clear()
@@ -639,6 +645,255 @@ async def _peek_first_chunk(resp: httpx.Response):
     except httpx.HTTPError as e:
         return b"", None, f"stream broke before first byte ({type(e).__name__}: {e})"
     return b"", None, None  # stream ended with zero bytes
+
+
+# ---------------------------------------------------------------------------
+# First-payload detection (stream turn integrity)
+#
+# A 2xx stream is only committed to the client once it has produced a real
+# payload (content / reasoning / tool-call delta).  Until then we keep
+# buffering the preamble (role-only deltas, ': keep-alive' comments,
+# usage-only frames, Anthropic message_start / ping) so that
+#   * an in-band error frame sent with HTTP 200 fails over to the next
+#     candidate instead of being forwarded as the "answer", and
+#   * a stream that ends without any payload (empty completion) fails over.
+# If the first-byte deadline passes while only preamble has arrived the
+# stream is committed exactly as before (hidden-reasoning models may stay
+# silent behind keep-alives for a long time — never kill those).
+# ---------------------------------------------------------------------------
+_PEEK_MAX_BUFFER = 64 * 1024
+
+_OPENAI_PAYLOAD_DELTA_KEYS = ("content", "reasoning_content", "reasoning", "tool_calls", "function_call", "audio")
+
+
+def _sse_event_verdict(data: str):
+    """Classify one SSE `data:` payload.
+
+    Returns ("payload"|"preamble"|"error"|"done"|"unknown", error_json_or_None)."""
+    data = data.strip()
+    if not data:
+        return "preamble", None
+    if data == "[DONE]":
+        return "done", None
+    try:
+        obj = json.loads(data)
+    except Exception:
+        return "unknown", None
+    if not isinstance(obj, dict):
+        return "unknown", None
+    # In-band errors: OpenAI-style {"error": {...}} without choices, or
+    # Anthropic {"type": "error", "error": {...}}.
+    if obj.get("type") == "error" or (obj.get("error") and not obj.get("choices")):
+        return "error", obj
+    choices = obj.get("choices")
+    if isinstance(choices, list):
+        for ch in choices:
+            if not isinstance(ch, dict):
+                continue
+            if ch.get("text"):  # legacy completions
+                return "payload", None
+            delta = ch.get("delta") or ch.get("message") or {}
+            if isinstance(delta, dict):
+                for k in _OPENAI_PAYLOAD_DELTA_KEYS:
+                    if delta.get(k):
+                        return "payload", None
+            if ch.get("finish_reason") in ("length", "content_filter", "tool_calls", "function_call"):
+                # A deliberate non-"stop" finish is a real (if empty) answer.
+                return "payload", None
+        return "preamble", None  # role-only / usage-only / empty delta
+    t = obj.get("type")
+    if isinstance(t, str):
+        if t in ("message_start", "ping", "content_block_stop", "message_delta"):
+            return "preamble", None
+        if t == "message_stop":
+            return "done", None
+        if t == "content_block_start":
+            cb = obj.get("content_block") or {}
+            if isinstance(cb, dict) and cb.get("type") in ("tool_use", "server_tool_use"):
+                return "payload", None
+            return "preamble", None
+        if t == "content_block_delta":
+            d = obj.get("delta") or {}
+            if isinstance(d, dict) and any(d.get(k) for k in ("text", "thinking", "partial_json")):
+                return "payload", None
+            return "preamble", None
+    return "unknown", None
+
+
+def _scan_sse_prefix(buf: bytes, final: bool = False):
+    """Scan buffered SSE bytes. Returns (verdict, error_obj).
+
+    verdict: "payload" | "error" | "empty" | "pending" | "unknown"
+    "unknown" means the body does not look like SSE we understand — commit
+    and stream it untouched."""
+    try:
+        text = buf.decode("utf-8", errors="replace")
+    except Exception:
+        return "unknown", None
+    stripped = text.lstrip()
+    if stripped and not (stripped.startswith("data:") or stripped.startswith("event:")
+                         or stripped.startswith(":") or stripped.startswith("id:")
+                         or stripped.startswith("retry:")):
+        return "unknown", None
+    text = text.replace("\r\n", "\n")
+    events = text.split("\n\n")
+    if not final:
+        events = events[:-1]  # last piece may be incomplete
+    saw_done = False
+    for ev in events:
+        data_lines = [ln[5:].lstrip() if ln.startswith("data:") else None for ln in ev.split("\n")]
+        data_lines = [d for d in data_lines if d is not None]
+        if not data_lines:
+            continue
+        verdict, err = _sse_event_verdict("\n".join(data_lines))
+        if verdict == "payload":
+            return "payload", None
+        if verdict == "error":
+            return "error", err
+        if verdict == "unknown":
+            return "unknown", None
+        if verdict == "done":
+            saw_done = True
+    if saw_done or final:
+        return "empty", None
+    return "pending", None
+
+
+async def _resume_after(pending: "asyncio.Task", gen):
+    """Continue a stream whose next __anext__ is already in flight."""
+    try:
+        chunk = await pending
+    except StopAsyncIteration:
+        return
+    yield chunk
+    async for chunk in gen:
+        yield chunk
+
+
+async def _peek_until_payload(resp: httpx.Response, deadline_mono: float):
+    """Buffer a 2xx stream until its first real payload.
+
+    Returns (buffered_bytes, remainder_iter, verdict, info):
+      verdict "payload"  — commit; buffered bytes + remainder are the stream
+      verdict "preamble" — deadline reached with only preamble; commit anyway
+      verdict "unknown"  — not SSE we understand / buffer cap; commit
+      verdict "error"    — in-band error frame; info = error json (dict)
+      verdict "empty"    — stream ended without any payload
+      verdict "none"     — zero bytes before deadline/close; info = reason str or None
+    """
+    gen = resp.aiter_bytes()
+    it = gen.__aiter__()
+    buf = bytearray()
+    pending = None
+    while True:
+        remaining = deadline_mono - time.monotonic()
+        if remaining <= 0:
+            if not buf:
+                if pending is not None:
+                    pending.cancel()
+                return b"", None, "none", "timeout"
+            rem = _resume_after(pending, it) if pending is not None else it
+            return bytes(buf), rem, "preamble", None
+        if pending is None:
+            pending = asyncio.ensure_future(it.__anext__())
+        done, _ = await asyncio.wait([pending], timeout=remaining)
+        if not done:
+            continue  # loop re-checks the deadline
+        try:
+            chunk = pending.result()
+        except StopAsyncIteration:
+            pending = None
+            if not buf:
+                return b"", None, "none", None
+            verdict, err = _scan_sse_prefix(bytes(buf), final=True)
+            if verdict == "error":
+                return bytes(buf), None, "error", err
+            if verdict in ("payload", "unknown"):
+                return bytes(buf), None, verdict, None
+            return bytes(buf), None, "empty", None
+        except httpx.HTTPError as e:
+            pending = None
+            if not buf:
+                return b"", None, "none", f"stream broke before first byte ({type(e).__name__}: {e})"
+            return bytes(buf), None, "empty", f"stream broke before first payload ({type(e).__name__}: {e})"
+        pending = None
+        if not chunk:
+            continue
+        buf.extend(chunk)
+        verdict, err = _scan_sse_prefix(bytes(buf))
+        if verdict == "error":
+            return bytes(buf), None, "error", err
+        if verdict in ("payload", "unknown"):
+            return bytes(buf), it, verdict, None
+        if verdict == "empty":
+            return bytes(buf), None, "empty", None
+        if len(buf) > _PEEK_MAX_BUFFER:
+            return bytes(buf), it, "unknown", None
+
+
+def _inband_status(err_obj) -> int:
+    """Map an in-band error frame to an HTTP-like status for the failure policy."""
+    e = err_obj.get("error") if isinstance(err_obj, dict) else None
+    cand = []
+    if isinstance(e, dict):
+        cand += [e.get("code"), e.get("status"), e.get("http_code")]
+        t = str(e.get("type") or "").lower()
+        if "overloaded" in t:
+            return 503
+        if "rate_limit" in t:
+            return 429
+        if "authentication" in t or "permission" in t:
+            return 401
+        if "invalid_request" in t:
+            return 400
+    for c in cand:
+        try:
+            n = int(c)
+            if 400 <= n <= 599:
+                return n
+        except (TypeError, ValueError):
+            continue
+    return 502
+
+
+_NONSTREAM_PAYLOAD_KEYS = ("choices", "data", "results", "content", "output", "candidates", "embeddings", "result")
+
+
+def _nonstream_inband_error(raw: bytes):
+    """HTTP 2xx body that is really an error object -> parsed dict, else None."""
+    if not raw or len(raw) > _PEEK_MAX_BUFFER:
+        return None
+    head = raw.lstrip()[:1]
+    if head != b"{":
+        return None
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    is_err = obj.get("type") == "error" or bool(obj.get("error"))
+    if not is_err or any(obj.get(k) for k in _NONSTREAM_PAYLOAD_KEYS):
+        return None
+    return obj
+
+
+# Agent-mode stall ladder: a candidate that burned its whole first-byte window
+# (or could not even connect) is benched briefly so priority/latency strategies
+# stop paying the full timeout on every request.  Reset on the first success.
+_STALL_LADDER_SEC = (30.0, 120.0, 600.0)
+_STALL_DECAY_SEC = 1800.0
+_stall_strikes: Dict[str, Tuple[int, float]] = {}
+
+
+def _stall_bench_seconds(cand_id: str) -> float:
+    now = time.time()
+    n, last = _stall_strikes.get(cand_id, (0, 0.0))
+    if now - last > _STALL_DECAY_SEC:
+        n = 0
+    n += 1
+    _stall_strikes[cand_id] = (n, now)
+    return _STALL_LADDER_SEC[min(n, len(_STALL_LADDER_SEC)) - 1]
 
 
 _lazy_fetch_failed_until: Dict[str, float] = {}
@@ -950,6 +1205,15 @@ async def schedule(
     start_monotonic = time.monotonic()
     deadline = start_monotonic + total_budget_sec
     errors = []
+    # Compact per-attempt trail for the X-Fallback-Trail header / diagnostics.
+    trail: List[str] = []
+
+    def _trail_add(prov: str, key: str, cls: str):
+        if len(trail) < 10:
+            trail.append(f"{prov}/{key}={cls}")
+
+    _has_alternatives = len(ordered_items) > 1
+    _multi_provider = len({c.get("provider") for _, c in ordered_items}) > 1
     attempt_seq = 0
     last_status_code = None
     last_err_body = None
@@ -1060,6 +1324,7 @@ async def schedule(
                     cand_timeout_sec = upstream_timeout_sec
 
             # Hard deadline constraint: candidate timeout never exceeds remaining budget
+            cand_timeout_full = max(1.0, cand_timeout_sec)
             cand_timeout_sec = max(1.0, min(cand_timeout_sec, remaining_budget))
             cand_req_timeout = httpx.Timeout(cand_timeout_sec, connect=min(5.0, cand_timeout_sec))
 
@@ -1093,6 +1358,7 @@ async def schedule(
                 err_msg = f"{cand_id} key concurrency semaphore wait timed out after {acquire_timeout:.1f}s"
                 logger.warning(err_msg)
                 errors.append(err_msg)
+                _trail_add(provider_name, key_label, "busy")
                 continue
 
             global_sem = None
@@ -1155,43 +1421,59 @@ async def schedule(
                         resp = await _send_with_stale_retry(_do_send, cand_id)
 
                     status_code = resp.status_code
+                    inband_body: Optional[str] = None
+                    first_chunk = b""
+                    remainder = None
+                    cand_model_name = cand.get("model")
+
+                    if 200 <= status_code < 300 and is_stream:
+                        # Buffer until the first real payload (see _peek_until_payload):
+                        # in-band error frames and empty completions fail over before
+                        # anything is sent to the client.
+                        first_chunk, remainder, verdict, info = await _peek_until_payload(
+                            resp, max(time.monotonic() + 0.5, first_byte_deadline))
+                        if verdict == "none" and info == "timeout":
+                            await resp.aclose()
+                            raise httpx.ReadTimeout(f"no first byte within {cand_timeout_sec:.0f}s")
+                        if verdict == "error":
+                            await resp.aclose()
+                            status_code = _inband_status(info)
+                            inband_body = json.dumps(info, ensure_ascii=False)
+                            logger.warning(f"{cand_id} sent an in-band error frame with HTTP 200 -> treating as HTTP {status_code}")
+                        elif verdict == "none" or (verdict == "empty" and _has_alternatives):
+                            await resp.aclose()
+                            if verdict == "none":
+                                reason = info or "stream closed without sending any data"
+                                trail_cls = "nodata"
+                            else:
+                                reason = info or "stream ended without any content (empty completion)"
+                                trail_cls = "empty"
+                            err_msg = f"{cand_id} returned HTTP 200 but {reason}"
+                            logger.warning(err_msg)
+                            errors.append(err_msg)
+                            _trail_add(provider_name, key_label, trail_cls)
+                            cand_latency = time.time() - cand_start
+                            stats.record(model_type, 502, cand_latency,
+                                         provider=provider_name, key=key_label, error_msg=err_msg,
+                                         category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
+                                         cand_model=cand_model_name)
+                            # Short cooldown — likely a transient provider glitch
+                            _cooldown_until[cand_id] = time.time() + 5.0
+                            continue
+                    elif 200 <= status_code < 300:
+                        _inb = _nonstream_inband_error(resp.content)
+                        if _inb is not None:
+                            status_code = _inband_status(_inb)
+                            inband_body = resp.content.decode("utf-8", errors="replace")
+                            await resp.aclose()
+                            logger.warning(f"{cand_id} returned an error object with HTTP 2xx -> treating as HTTP {status_code}")
 
                     # Success path (2xx)
                     if 200 <= status_code < 300:
-                        # For streams, peek the first chunk BEFORE committing to
-                        # this candidate.  Some providers return HTTP 200 and then
-                        # close the stream without sending a byte (or die with a
-                        # protocol error) — treat that as a failure and fail over
-                        # instead of handing the client a dead stream.
-                        first_chunk = b""
-                        remainder = None
-                        cand_model_name = cand.get("model")
-                        if is_stream:
-                            try:
-                                first_chunk, remainder, peek_err = await asyncio.wait_for(
-                                    _peek_first_chunk(resp),
-                                    timeout=max(0.5, first_byte_deadline - time.monotonic()),
-                                )
-                            except asyncio.TimeoutError:
-                                await resp.aclose()
-                                raise httpx.ReadTimeout(f"no first byte within {cand_timeout_sec:.0f}s")
-                            if not first_chunk:
-                                await resp.aclose()
-                                reason = peek_err or "stream closed without sending any data"
-                                err_msg = f"{cand_id} returned HTTP 200 but {reason}"
-                                logger.warning(err_msg)
-                                errors.append(err_msg)
-                                cand_latency = time.time() - cand_start
-                                stats.record(model_type, 502, cand_latency,
-                                             provider=provider_name, key=key_label, error_msg=err_msg,
-                                             category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
-                                             cand_model=cand_model_name)
-                                # Short cooldown — likely a transient provider glitch
-                                _cooldown_until[cand_id] = time.time() + 5.0
-                                continue
 
                         _consecutive_failures[cand_id] = 0
                         _last_failure_at.pop(cand_id, None)
+                        _stall_strikes.pop(cand_id, None)
                         _cooldown_until[cand_id] = 0.0
                         _quota_exhausted_cands.discard(cand_id)
 
@@ -1240,6 +1522,7 @@ async def schedule(
                                     routed_via=routed_via,
                                     fallback_attempts=attempt_seq - 1,
                                     lease=lease,
+                                    trail="; ".join(trail),
                                 )
                             # No handle_stream provided: hand back an async
                             # generator that replays the prefetched chunk and
@@ -1263,6 +1546,7 @@ async def schedule(
                                 routed_via=routed_via,
                                 fallback_attempts=attempt_seq - 1,
                                 lease=lease,
+                                trail="; ".join(trail),
                             )
                         else:
                             raw_content = resp.content
@@ -1277,17 +1561,19 @@ async def schedule(
                                 routed_via=routed_via,
                                 fallback_attempts=attempt_seq - 1,
                                 lease=lease,
+                                trail="; ".join(trail),
                             )
 
-                    # Failure path (Non-2xx)
-                    if is_stream:
+                    # Failure path (Non-2xx, or 2xx carrying an in-band error)
+                    if is_stream and inband_body is None:
                         try:
                             await asyncio.wait_for(resp.aread(), timeout=max(1.0, cand_timeout_sec))
                         except asyncio.TimeoutError:
                             await resp.aclose()
                             raise httpx.ReadTimeout(f"error body not received within {cand_timeout_sec:.0f}s")
 
-                    raw_bytes = resp.content
+                    raw_bytes = inband_body.encode("utf-8") if inband_body is not None else resp.content
+                    _trail_add(provider_name, key_label, f"inband{status_code}" if inband_body is not None else str(status_code))
                     try:
                         err_body_text = raw_bytes.decode("utf-8", errors="replace")
                     except Exception:
@@ -1422,6 +1708,12 @@ async def schedule(
                     if eval_res.mark_provider_down and fast_failover_provider_down and not is_agent:
                         down_providers.add(provider_name)
                         logger.warning(f"Fast failover: provider {provider_name} returned {status_code}, skipping remaining keys for this request")
+                    elif (is_agent and fast_failover_provider_down and _multi_provider
+                          and status_code in (502, 503, 504)):
+                        # Gateway-level outage: other keys of the same provider sit
+                        # behind the same gateway, so try another provider first.
+                        down_providers.add(provider_name)
+                        logger.warning(f"Fast failover (agent): provider {provider_name} returned {status_code}, trying other providers first")
 
                 except httpx.ReadTimeout as e:
                     if fast_failover_provider_down and category != "agent":
@@ -1432,8 +1724,16 @@ async def schedule(
                             last_status_code=504,
                             last_response_body=None,
                         )
+                    _trail_add(provider_name, key_label, "timeout")
                     if category != "agent":
                         _cooldown_until[cand_id] = time.time() + cooldown_read_timeout
+                    elif _has_alternatives and cand_timeout_sec >= 0.75 * cand_timeout_full:
+                        # Burned (nearly) its whole own window without answering:
+                        # bench it briefly so the next requests don't pay the
+                        # same timeout again.  Cleared on the next success.
+                        _bench = _stall_bench_seconds(cand_id)
+                        _cooldown_until[cand_id] = time.time() + _bench
+                        logger.warning(f"{cand_id} stalled for {cand_timeout_sec:.0f}s — benching {_bench:.0f}s")
                     else:
                         _cooldown_until.pop(cand_id, None)
                     _record_latency(cand_id, cand_timeout_sec)
@@ -1457,10 +1757,16 @@ async def schedule(
                             last_status_code=502,
                             last_response_body=None,
                         )
+                    _trail_add(provider_name, key_label, "connect")
                     if category != "agent":
                         _cooldown_until[cand_id] = time.time() + 5.0
                     else:
-                        _cooldown_until.pop(cand_id, None)
+                        if _has_alternatives:
+                            _cooldown_until[cand_id] = time.time() + _stall_bench_seconds(cand_id)
+                        else:
+                            _cooldown_until.pop(cand_id, None)
+                        if fast_failover_provider_down and _multi_provider:
+                            down_providers.add(provider_name)
                     _record_latency(cand_id, 10.0)
                     err_msg = f"{cand_id} encountered ConnectTimeout: {str(e)}"
                     logger.error(err_msg)
@@ -1500,10 +1806,17 @@ async def schedule(
                         consecutive_5xx_count=cf,
                         config_params=cooldown_cfg,
                     )
+                    _is_connect_err = isinstance(e, httpx.ConnectError)
+                    _trail_add(provider_name, key_label, "connect" if _is_connect_err else type(e).__name__[:24])
                     if eval_res.cooldown_sec > 0:
                         _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
+                    elif category == "agent" and _is_connect_err and _has_alternatives:
+                        _cooldown_until[cand_id] = time.time() + _stall_bench_seconds(cand_id)
                     else:
                         _cooldown_until.pop(cand_id, None)
+                    if (category == "agent" and _is_connect_err and fast_failover_provider_down
+                            and _multi_provider):
+                        down_providers.add(provider_name)
 
                     err_msg = f"{cand_id} encountered {type(e).__name__}: {str(e)}"
                     logger.error(err_msg)
@@ -1548,9 +1861,15 @@ async def schedule(
                f"Please retry in a few seconds.")
         last_status_code = 503
         last_err_body = json.dumps({"detail": msg})
+    # Soonest cooldown expiry among this request's candidates -> Retry-After.
+    _now = time.time()
+    _exp = [_cooldown_until.get(get_candidate_id(c), 0.0) - _now for _, c in ordered_items]
+    _exp = [x for x in _exp if x > 0]
     raise AllCandidatesFailedError(
         msg,
         last_status_code=last_status_code,
         last_response_body=last_err_body,
         errors=errors[:5],  # cap list size in the exception object
+        trail="; ".join(trail),
+        retry_after=(min(_exp) if _exp and last_status_code in (429, 503) else None),
     )

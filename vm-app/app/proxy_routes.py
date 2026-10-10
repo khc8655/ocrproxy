@@ -640,6 +640,18 @@ _MAX_OCR_BODY_BYTES = 20 * 1024 * 1024
 def _error_response(exc: Exception) -> JSONResponse:
     """Build an error JSONResponse from an AllCandidatesFailedError or generic Exception."""
     if isinstance(exc, AllCandidatesFailedError):
+        resp = _error_response_body(exc)
+        if getattr(exc, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(exc.trail, safe="/=; ")
+        ra = getattr(exc, "retry_after", None)
+        if ra:
+            resp.headers["Retry-After"] = str(max(1, int(ra + 0.999)))
+        return resp
+    return _error_response_body(exc)
+
+
+def _error_response_body(exc: Exception) -> JSONResponse:
+    if isinstance(exc, AllCandidatesFailedError):
         status = exc.last_status_code or 503
         if exc.last_response_body:
             try:
@@ -1040,6 +1052,8 @@ async def chat_completions(request: Request):
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+            if getattr(sr, "trail", ""):
+                sr.stream_resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
             sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
         except AllCandidatesFailedError as e:
@@ -1083,6 +1097,8 @@ async def chat_completions(request: Request):
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        if getattr(sr, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
         resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
         return resp
     except AllCandidatesFailedError as e:
@@ -1252,6 +1268,8 @@ async def anthropic_messages(request: Request):
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+            if getattr(sr, "trail", ""):
+                sr.stream_resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
             sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
         except AllCandidatesFailedError as e:
@@ -1271,6 +1289,8 @@ async def anthropic_messages(request: Request):
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        if getattr(sr, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
         resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
         return resp
     except AllCandidatesFailedError as e:
@@ -1359,6 +1379,8 @@ async def embeddings(request: Request):
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        if getattr(sr, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
@@ -1439,6 +1461,8 @@ async def rerank(request: Request):
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        if getattr(sr, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
@@ -1551,6 +1575,8 @@ async def ocr(request: Request):
         resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
+        if getattr(sr, "trail", ""):
+            resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
         return resp
     except AllCandidatesFailedError as e:
         return _error_response(e)
