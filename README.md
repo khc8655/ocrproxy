@@ -492,6 +492,16 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.10-01` (2026-10-10)
+- **调度器首包真内容判定 (First-Payload Detection)**：流式响应自动缓冲前导帧 (role-only delta, `: keep-alive`, usage-only 帧, Anthropic message_start / ping) 直至首个真实有效负载到达才向客户端提交。捕获上游 200 in-band 错误帧并自动透明 failover 至下一个候选节点，彻底根除上游返回 200 包含错误内容导致客户端崩溃的假 200 缺陷；
+- **空回复与断流自动切换**：流式响应未产生任何实际内容即结束时自动触发故障转移；非流式 2xx 但仅包含 error 对象的响应同样自动切换至备用节点；
+- **Agent 阶梯冷却与同网关熔断**：首包超时耗尽或连接失败按 30s -> 2min -> 10min 阶梯冷却（请求成功一次立即清零），遇到 502/503/504 网关故障时自动优先跳过同厂商其他 Key 尝试其他可用厂商；
+- **免费提供商生态扩充与更新**：
+  - 新增 **OpenRouter** (`openrouter.json`) 官方预设：收录 7 大热门免费模型 (`:free`) 与 OpenAI/Anthropic 双端点，支持 429 故障转移与 402 余额耗尽识别；
+  - 升级 **NVIDIA NIM** (`nvidia.json` v2.0.0)：更新至最新免费模型矩阵，完善未激活 (404) 与免费配额超限 (403/429) 的自动切换策略；
+  - 升级 **OpenCode Zen** (`opencode.json` v2.0.0)：精简免费模型集合，适配免费层级 403/429 判定规则；
+- **可观测性与标准协议增强**：所有代理请求增加 `X-Fallback-Trail` 诊断追踪响应头；全节点冷却时返回标准 HTTP `Retry-After` 头部。
+
 ### `v2026.10.09-14` (2026-10-09)
 - **Gemini 思考签名与工具调用支持**：在 VM 执行器中集成 `gemini_compat.py`，通过在 `tool_call_id` 中以 `{id}:::{signature}` 无状态携带与还原 `thought_signature`，并配合 LRU 缓存与 `skip_thought_signature_validator` 双重兜底，彻底解决 Gemini 3 在 Cursor / Cline 等 OpenAI 客户端中多轮工具调用报 400 崩溃的缺陷；
 - **Vertex AI 思考标签流式分离**：实现 `_ThoughtSplitter` 跨 chunk 状态机与非流式拆分，将 Vertex AI 返回的 `<thought>...</thought>` 抽取至 `reasoning_content`，正文保留在 `content`，与客户端思考折叠无缝贴合；
