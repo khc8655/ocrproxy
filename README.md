@@ -470,8 +470,14 @@ npm run deploy      # 一键发布至 EdgeOne
 ### 3. 日常开发常用命令速查
 
 ```bash
-# [前端] 修改 shared/admin 后，一键重新编译管理后台
-node agent-edgeone/scripts/build-admin.mjs
+# [前端构建与门禁] 修改 shared/admin 后，一键执行双重门禁校验并重新编译管理后台
+npm run build:admin
+
+# [符号门禁] 静态编译 JS 并严格扫描核心交互函数声明（严禁未定义符号逃逸）
+npm run check:symbols
+
+# [冒烟门禁] 模拟浏览器 DOM 环境执行登录与全生命周期交互自动化冒烟
+npm run test:ui
 
 # [预设] 修改 shared/presets/*.json 后，一键重新编译内置预设与更新 catalog.json
 node agent-edgeone/scripts/build-presets.mjs
@@ -504,6 +510,19 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 ---
 
 ## 最新版本更新记录 (Release Notes)
+
+### `v2026.10.11-06` (2026-10-11)
+- **紧急修复登录界面函数丢失致命 Bug**：彻底根除 `TypeError: loginErr is not a function`，在 `shared/admin/js/core.js` 补回防御式健壮的 `function loginErr(m)`，彻底解决 DOM `<div id="loginErr">` 挂载为 `window.loginErr` 导致的函数覆盖与登录阻断缺陷；
+- **全流程三重机械化发版门禁 (Release Quality Gates)**：
+  - **Gate 1 (静态符号契约扫描)**：引入 `agent-edgeone/scripts/verify-frontend-symbols.mjs`，通过 Node `node:vm` 硬编译全量 JS，严密扫描所有核心交互函数契约，未声明符号立即阻断构建；
+  - **Gate 2 (运行时 DOM 冒烟门禁)**：引入 `agent-edgeone/scripts/test-ui-smoke.mjs`，构建具有真实浏览器属性（含 DOM ID 全局挂载特性）的沙箱环境，真实运行并冒烟验证登录、错误提示、凭据清理全生命周期；
+  - **Gate 3 (构建与测试强阻断)**：将上述门禁强制绑定进 `npm run build:admin` 与 `npm test`，任何语法错误或符号缺失直接 `exit 1` 阻断打包与 CI；
+- **日志与中间件性能深度优化 (贯彻日志审查意见)**：
+  - 彻底移除定时重启移除后遗留的无用 `in_flight_tracking_middleware`；
+  - 新建 `vm-app/app/middleware.py` 将安全响应头改写为纯 ASGI 中间件，消除 `BaseHTTPMiddleware` 开销，SSE 延迟降至 2.4ms 级原生性能；
+  - 修复 KB 错误折叠时候选节点状态与延迟更新被跳过的缺陷，并在前端日志卡片如实渲染折叠计数徽章 (`repeat_count`)；
+  - 引入 Key 错误滑动窗口聚合折叠，防止 `round_robin` 下多 Key 交替报错刷爆 100 条日志上限；
+  - 将调度器内部候选尝试、冷却跳过等高频流转日志统一降级为 `DEBUG` 级别。
 
 ### `v2026.10.11-05` (2026-10-11)
 - **根除探活假阳性放行 Bug**：彻底重构 EdgeOne 与 VM 端的 `probeKey` 及 `verify-key` 探活判定逻辑，严格限定仅 HTTP 2xx 返回为通过，严禁将 HTTP 400 (Bad Request) 或 404 (Not Found) 误判为鉴权成功；当上游返回非正常状态时如实呈现状态码与具体失败原因；

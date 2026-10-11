@@ -9,7 +9,9 @@
   },
   "scripts": {
     "build:presets": "node scripts/build-presets.mjs",
-    "build:admin": "node scripts/build-admin.mjs",
+    "check:symbols": "node scripts/verify-frontend-symbols.mjs",
+    "test:ui": "node scripts/test-ui-smoke.mjs",
+    "build:admin": "node scripts/verify-frontend-symbols.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs",
     "dev": "npm run build:admin && edgeone makers dev",
     "deploy": "npm run build:admin && edgeone makers deploy",
     "deploy:preview": "npm run build:admin && edgeone makers deploy -e preview",
@@ -18,7 +20,7 @@
     "env:pull": "edgeone makers env pull -f .env",
     "ip-check": "bash scripts/check-ip-diversity.sh",
     "smoke": "bash scripts/smoke-test.sh",
-    "test": "node scripts/test-units.mjs"
+    "test": "node scripts/verify-frontend-symbols.mjs && node scripts/test-ui-smoke.mjs && node scripts/test-units.mjs"
   },
   "devDependencies": {
     "edgeone": "^1.0.0"

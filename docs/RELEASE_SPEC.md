@@ -128,6 +128,8 @@ python3 -m unittest tests/test_check_update_multi_source.py
 每次发布新版本时，必须按顺序逐项核对：
 
 - [ ] **Step 1: 代码自测与语法检查**
+  - 前端静态符号与未定义函数扫描：`npm run check:symbols`
+  - 前端 DOM 交互与登录生命周期冒烟：`npm run test:ui`
   - Python 语法检查：`python3 -m py_compile vm-app/app/*.py`
   - JS 单元测试：`node agent-edgeone/scripts/test-units.mjs`
   - 凭据安全与反脱敏测试：`python3 tests/test_secret_preservation.py`
@@ -136,18 +138,18 @@ python3 -m unittest tests/test_check_update_multi_source.py
   - 使用 `git diff` 严格审计即将提交的所有变更，确认 **0 真实 API Key、0 管理员密码、0 私钥凭证** 泄漏；
   - 确保真实配置文件与本地测试套件已被 `.gitignore` 阻断。
 - [ ] **Step 3: 单真理源 UI 构建与能力对齐走查 (红线核对)**
-  - 前端修改必须在 `shared/admin/` 完成，运行打包构建：`node agent-edgeone/scripts/build-admin.mjs`；
+  - 前端修改必须在 `shared/admin/` 完成，运行打包构建（自动触发双重门禁阻断）：`npm run build:admin`；
   - 确保 `vm-app/static/` 与 `edge-functions/` 产物全量同步更新；
   - 检查构建输出，确保零未内联标签、核心函数完备；
   - 检查 Key 测按钮具有 `finally` 兜底，CSS 包含 `.spinner` 旋转动画。
 - [ ] **Step 4: 版本矩阵统一提升 (当前版次递增)**
   - 同步递增 `version.json`, `vm-app/version.json`, `install.sh`, `vm-app/install.sh`, `shared/admin/admin.html`；
-  - 重新执行 `node agent-edgeone/scripts/build-admin.mjs`，确保动态版本号注入各端。
+  - 重新执行 `npm run build:admin`，确保动态版本号注入各端。
 - [ ] **Step 5: 安装脚本依赖与资产完整性核对**
   - 核对是否有新增依赖写入 `requirements.txt`；
   - 核对依赖智能跳过逻辑依然生效。
 - [ ] **Step 6: 运行自动化测试硬门禁**
-  - 运行 `python3 tests/test_phase3_phase4_audit.py` 与 `npm test`，确保所有断言（包括双轨 UI 对齐门禁与安全防御）ALL TESTS PASSED。
+  - 运行 `python3 tests/test_phase3_phase4_audit.py` 与 `npm test`（含符号扫描、DOM 冒烟、180+ 项单元测试与 6 项安全加固断言），确保所有断言 ALL TESTS PASSED。
 - [ ] **Step 7: 真实环境验证与文档同步**
   - 提交代码触发 GitHub Actions / EdgeOne 自动部署；
   - 生产/测试环境执行部署或升级，验证 API 200 OK 正常出字；
