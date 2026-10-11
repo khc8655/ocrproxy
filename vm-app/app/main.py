@@ -32,12 +32,22 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("ocrproxy")
 
 
+from .auto_restart import sync_auto_restart_worker, stop_auto_restart_worker
+from . import stats
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not os.environ.get("PROXY_API_KEY"):
         logger.warning("PROXY_API_KEY is not set — every /v1 request will be rejected with 401.")
+    try:
+        cfg = await get_config()
+        sync_auto_restart_worker(cfg)
+    except Exception as e:
+        logger.warning("Could not initialize auto-restart worker on startup: %s", e)
     yield
     # Clean up resources on shutdown.
+    stop_auto_restart_worker()
     await close_client()
     logger.info("OCRProxy shutdown complete.")
 
@@ -67,6 +77,20 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Server"] = "webserver"
     return response
+
+
+@app.middleware("http")
+async def in_flight_tracking_middleware(request: Request, call_next):
+    """Track in-flight /v1 proxy requests to ensure graceful scheduled restarts."""
+    is_proxy_req = request.url.path.startswith(("/v1", "/api/v1"))
+    if is_proxy_req:
+        stats.inc_in_flight()
+    try:
+        return await call_next(request)
+    finally:
+        if is_proxy_req:
+            stats.dec_in_flight()
+
 
 
 # Mount routers

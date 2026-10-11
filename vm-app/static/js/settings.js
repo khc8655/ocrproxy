@@ -32,10 +32,16 @@ function renderSettings(){
   set('s_cooldown403', c.cooldown_403_sec ?? 600);
 
   // Maintenance: Auto Restart
-  const autoRestartEl=document.getElementById('s_autoRestart');
-  if(autoRestartEl) {
+  const autoRestartEl = document.getElementById('s_autoRestart');
+  const autoRestartTimeEl = document.getElementById('s_autoRestartTime');
+  if (autoRestartEl) {
     const isAgent = (c.run_mode || c._run_mode) === 'agent';
-    autoRestartEl.checked = c.auto_restart_enabled !== undefined ? !!c.auto_restart_enabled : !isAgent;
+    const isEnabled = c.auto_restart_enabled !== undefined ? !!c.auto_restart_enabled : !isAgent;
+    autoRestartEl.checked = isEnabled;
+    if (autoRestartTimeEl) {
+      autoRestartTimeEl.value = c.auto_restart_time || '04:00';
+    }
+    toggleAutoRestartTimeInput(isEnabled);
   }
 
   // Card 6: EdgeOne Vault Hub
@@ -426,7 +432,15 @@ async function saveSettings(silent=false){
 
   // Maintenance: Auto Restart
   const autoRestartEl = document.getElementById('s_autoRestart');
-  if (autoRestartEl) c.auto_restart_enabled = !!autoRestartEl.checked;
+  const autoRestartTimeEl = document.getElementById('s_autoRestartTime');
+  if (autoRestartEl) {
+    c.auto_restart_enabled = !!autoRestartEl.checked;
+    if (autoRestartTimeEl && autoRestartTimeEl.value) {
+      c.auto_restart_time = autoRestartTimeEl.value.trim() || '04:00';
+    } else {
+      c.auto_restart_time = '04:00';
+    }
+  }
 
   // Card 6: EdgeOne Vault Hub
   const vaultUrlEl = document.getElementById('cfg_vault_url');
@@ -443,4 +457,18 @@ async function saveSettings(silent=false){
 
   await persistConfig(silent ? null : '系统参数已保存并立即生效');
 }
+
+function toggleAutoRestartTimeInput(enabled) {
+  const timeWrapper = document.getElementById('autoRestartTimeWrapper');
+  const timeInput = document.getElementById('s_autoRestartTime');
+  if (timeWrapper) {
+    timeWrapper.style.opacity = enabled ? '1' : '0.45';
+    timeWrapper.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
+  if (timeInput) {
+    timeInput.disabled = !enabled;
+  }
+}
+window.toggleAutoRestartTimeInput = toggleAutoRestartTimeInput;
+
 

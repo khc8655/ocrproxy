@@ -80,6 +80,7 @@ def init_config(config_dir: str, encrypt_key: str, proxy_key: str, run_mode: str
             "agent_routing_strategy": "sticky_failover",
             "kb_routing_strategy": "round_robin",
             "auto_restart_enabled": (run_mode != "agent"),
+            "auto_restart_time": "04:00",
             "upstream_timeout": 12,
             "upstream_timeout_chat": 45,
             "chat_fast_timeout": 30,

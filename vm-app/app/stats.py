@@ -353,3 +353,31 @@ def reset():
     with _lock:
         _stats.clear()
         _stats.update(_get_empty_stats())
+
+
+# In-flight active proxy requests counter for graceful restart and health monitoring
+_in_flight_requests = 0
+_in_flight_lock = threading.Lock()
+
+
+def inc_in_flight() -> int:
+    """Increment the in-flight requests counter."""
+    global _in_flight_requests
+    with _in_flight_lock:
+        _in_flight_requests += 1
+        return _in_flight_requests
+
+
+def dec_in_flight() -> int:
+    """Decrement the in-flight requests counter (floored at 0)."""
+    global _in_flight_requests
+    with _in_flight_lock:
+        _in_flight_requests = max(0, _in_flight_requests - 1)
+        return _in_flight_requests
+
+
+def get_in_flight_count() -> int:
+    """Return the current number of in-flight requests."""
+    with _in_flight_lock:
+        return _in_flight_requests
+

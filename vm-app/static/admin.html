@@ -30,7 +30,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.10-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.11-01</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -330,15 +330,21 @@
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
               <div>
                 <div style="font-weight:600;color:var(--text);margin-bottom:2px;">每日定时平滑重启 (Daily Auto-Restart)</div>
-                <div class="text-secondary text-sm">每日凌晨 04:00 自动重启服务释放内存堆（Agent 模式推荐关闭以保持会话连续；KB 模式建议开启）</div>
+                <div class="text-secondary text-sm">在指定低峰时刻自动优雅释放内存堆；未配置/未开启时零开销，绝不启动常驻重启进程（Agent 模式推荐关闭以保持会话连续；KB 模式建议开启）</div>
               </div>
-              <label class="checkbox" style="font-weight:600;">
-                <input type="checkbox" id="s_autoRestart">
-                <span>开启定时重启</span>
-              </label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div id="autoRestartTimeWrapper" style="display:inline-flex;align-items:center;gap:6px;">
+                  <span class="text-secondary text-sm">时间:</span>
+                  <input type="time" id="s_autoRestartTime" class="form-control" style="width:105px;padding:4px 8px;font-size:13px;" value="04:00" title="设置每天自动重启的时间点 (24小时制)">
+                </div>
+                <label class="checkbox" style="font-weight:600;margin:0;">
+                  <input type="checkbox" id="s_autoRestart" onchange="toggleAutoRestartTimeInput(this.checked)">
+                  <span>开启定时重启</span>
+                </label>
+              </div>
             </div>
             <div class="hint-box mt-3" style="font-size:12px;color:var(--text-secondary);background:var(--bg-subtle);border:1px solid var(--border);padding:10px 14px;">
-              <b>日志空间保护机制：</b>系统底层配置了 <code>journald</code> 50MB 磁盘配额自动轮转（<code>SystemMaxUse=50M</code>, 7天保留），内存错误日志严格限定在 100 条以内，无需重启即可确保长期运行磁盘与内存零积压。
+              <b>智能平滑退避保护：</b>到达设定时间后，系统会自动检测是否有正在进行的流式/长连接推理，优先等待请求完毕（最长缓冲 30 秒）再释放进程；底层依托 systemd（<code>Restart=always</code>）秒级拉起全新进程，保证无感平滑。
             </div>
           </div>
 
@@ -768,12 +774,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.10-01"></script>
-  <script src="/static/js/vault.js?v=2026.10.10-01"></script>
-  <script src="/static/js/providers.js?v=2026.10.10-01"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.10-01"></script>
-  <script src="/static/js/models.js?v=2026.10.10-01"></script>
-  <script src="/static/js/settings.js?v=2026.10.10-01"></script>
-  <script src="/static/js/app.js?v=2026.10.10-01"></script>
+  <script src="/static/js/core.js?v=2026.10.11-01"></script>
+  <script src="/static/js/vault.js?v=2026.10.11-01"></script>
+  <script src="/static/js/providers.js?v=2026.10.11-01"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.11-01"></script>
+  <script src="/static/js/models.js?v=2026.10.11-01"></script>
+  <script src="/static/js/settings.js?v=2026.10.11-01"></script>
+  <script src="/static/js/app.js?v=2026.10.11-01"></script>
 </body>
 </html>
