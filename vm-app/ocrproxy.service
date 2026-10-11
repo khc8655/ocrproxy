@@ -15,6 +15,11 @@ EnvironmentFile=/opt/ocrproxy/.env
 # payloads (e.g. OCR base64 images).  Capping to 2 arenas eliminates the
 # fragmentation at the source — no need to limit request body size.
 Environment=MALLOC_ARENA_MAX=2
+# MALLOC_MMAP_THRESHOLD_=131072: pin the mmap threshold (disables glibc's
+# dynamic raise) so multi-MB OCR buffers are munmap'd — and returned to the OS —
+# the moment they are freed.  The app also sets this via mallopt() at startup,
+# so existing units without this line get the same behaviour.
+Environment=MALLOC_MMAP_THRESHOLD_=131072
 # --limit-concurrency 150: uvicorn rejects connections beyond this with 503
 # BEFORE the request body is parsed — complements the in-app global semaphore
 # (30 in-flight upstream calls) and protects the heap from oversized bursts.

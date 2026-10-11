@@ -72,9 +72,32 @@ try:
 except Exception:
     pass  # non-Linux platforms or missing libc — silently skip
 
+# Pin glibc's mmap threshold.  By default glibc raises the threshold every
+# time a large mmap'd block is freed (up to 32 MB), after which multi-MB OCR
+# base64 strings are carved out of the heap, get pinned by small long-lived
+# objects allocated after them, and are only returned by malloc_trim().  A
+# fixed threshold (setting it also disables the dynamic adjustment) keeps
+# every >=128 KB buffer on mmap, so freeing it returns the pages to the OS at
+# once.  Measured on the OCR path: post-burst RSS 220 MB -> 42 MB without
+# any trim, peak -25%.  Same as MALLOC_MMAP_THRESHOLD_=131072, but works on
+# existing installs without touching the systemd unit; the env var wins.
+_M_MMAP_THRESHOLD = -3
+_MMAP_THRESHOLD_BYTES = 128 * 1024
+if _libc is not None and not os.environ.get("MALLOC_MMAP_THRESHOLD_"):
+    try:
+        _libc.mallopt.argtypes = [ctypes.c_int, ctypes.c_int]
+        _libc.mallopt.restype = ctypes.c_int
+        _libc.mallopt(_M_MMAP_THRESHOLD, _MMAP_THRESHOLD_BYTES)
+    except Exception:
+        pass
+
 
 def _reclaim_memory_sync():
-    """Synchronous GC + malloc_trim — run in a thread to avoid blocking the event loop."""
+    """Synchronous GC + malloc_trim — run in a thread to avoid blocking the event loop.
+
+    Upstream request bodies are no longer kept alive by httpx's response
+    cycle (see release_httpx_response), so payloads are freed by refcount;
+    gc.collect() stays as a safety net for any other cycle."""
     gc.collect()
     if _libc is not None:
         try:
@@ -106,12 +129,31 @@ async def _reclaim_runner():
 
 
 async def _reclaim_memory():
-    """Request a (coalesced, throttled) gc.collect() + malloc_trim(0).
+    """Request a (coalesced, throttled) malloc_trim(0).
     Returns immediately; the actual work runs in the background."""
     global _reclaim_task
     if _reclaim_task is not None and not _reclaim_task.done():
         return
     _reclaim_task = asyncio.create_task(_reclaim_runner())
+
+
+def release_httpx_response(resp) -> None:
+    """Break httpx's Response <-> BoundAsyncStream reference cycle.
+
+    httpx binds every response's stream back to the response itself
+    (response.stream = BoundAsyncStream(..., response=response)), and the
+    response holds response.request, whose _content is the FULL upstream
+    request body.  That cycle is invisible to reference counting, so every
+    upstream body (a 20 MB OCR image, a long Agent context) stayed alive until
+    the next generation-2 GC — the real reason RSS did not come back after an
+    OCR batch without a forced gc.collect().  Call once the response has been
+    fully consumed/closed; afterwards it is freed by refcount immediately."""
+    if resp is None:
+        return
+    try:
+        resp.stream = httpx.ByteStream(b"")
+    except Exception:
+        pass
 
 
 class AllCandidatesFailedError(Exception):
@@ -1372,6 +1414,7 @@ async def schedule(
 
             lease = ConcurrencyLease(key_sem=sem, global_sem=global_sem)
             lease_transferred = False
+            resp = None
 
             try:
                 # Budget re-check AFTER queueing: time spent waiting on semaphores counts
@@ -1540,6 +1583,7 @@ async def schedule(
                                     try:
                                         await r.aclose()
                                     finally:
+                                        release_httpx_response(r)
                                         l.release()
                             return ScheduleResult(
                                 stream_resp=_fallback_gen(),
@@ -1831,6 +1875,10 @@ async def schedule(
             finally:
                 if not lease_transferred:
                     lease.release()
+                    # Response fully read/closed here (non-stream, error, or a
+                    # stream we failed over from): drop the httpx cycle so the
+                    # upstream request body is freed now, not at the next GC.
+                    release_httpx_response(resp)
 
         # Check if all candidates were cooling down and we can wait within budget
         if not errors and loop_idx == 0:
