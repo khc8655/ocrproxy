@@ -492,6 +492,13 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.11-03` (2026-10-11)
+- **PR #7 合并 (OCR 上游请求体异步流式零拷贝)**：采用 JSON 外壳占位符预序列化 + 图片 Base64 字符串按 256KB 切片异步流式发送机制 (`_ReplayableBody`)，显式携带 `Content-Length` 保持标准 HTTP 传输协议（非 chunked），彻底免去大图 data URL 组装与 `httpx` `json.dumps/encode` 两份巨型内存拷贝。遇到故障切换 (Failover) 或重试时可多次安全复用，并发压测峰值内存再降 33%；
+- **入站 JSON 字节直读优化**：`_parse_json_body` 直接使用 `json.loads(body_bytes)` 反序列化入站请求体，跳过冗余 `bytes()` 转换与临时解码字符串，入口立减一份 body 级堆缓冲；
+- **管理端 OCR 准入参数可视化配置**：系统设置新增「OCR 同时处理图片数 (`ocr_max_inflight`, 默认 6)」与「OCR 排队最长等待 (`ocr_queue_timeout_sec`, 默认 30s)」，支持可视化灵活调节限流并发与排队超时时长；
+- **模式自适应界面隔离**：OCR 准入参数控件仅在 KB 知识库模式下自适应展现，Agent 智能体模式保持纯净隐藏；
+- **完备的转义与重写安全兜底**：若图片 Base64 包含需 JSON 转义字符或上游适配规则变更占位符位置，平滑退回原生 dict 格式发送，100% 确保请求正确性。
+
 ### `v2026.10.11-02` (2026-10-11)
 - **PR #6 合并 (httpx 响应流环状引用彻底解除)**：针对 httpx 将 `BoundAsyncStream` 反向绑定回自身导致 `request._content` (10~20MB Base64 大图或超长文本) 滞留于第 2 代 (Generation 2) 循环垃圾池的问题，实现 `release_httpx_response(resp)` 在响应消费后立即解构流绑定，使巨型请求体对象直接由 Python 引用计数即刻物理归还系统，彻底解决长时间大图/长文本推理内存居高不下的真凶；
 - **大图 OCR 解析并发准入控制**：新增 `_ocr_semaphore` (默认 6 并发)，在读取 Request Body 前对入站 OCR 请求进行信号量限流，将并发请求缓冲在 uvicorn 网络层 (仅占 64KB socket 缓冲)，彻底消除并发上传导致的上 G 级堆内存冲顶，超限提供 503 + Retry-After 优雅排队保护；

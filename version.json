@@ -1,13 +1,13 @@
 {
-  "version": "v2026.10.11-02",
+  "version": "v2026.10.11-03",
   "release_date": "2026-10-11",
   "commit": "HEAD",
-  "title": "内存泄漏与请求体驻留物理根治，全面废除定时重启 (v2026.10.11-02)",
+  "title": "OCR 上游请求体异步流式零拷贝与准入参数管理 (v2026.10.11-03)",
   "changelog": [
-    "PR #6 核心合并 (httpx 响应流环状引用彻底解除)：在消费完上游响应后立即执行 release_httpx_response 切断 Response 与 BoundAsyncStream 循环引用，促使大请求体 (大图 Base64 / 巨型 Prompt) 能够被 Python 引用计数即刻物理归还系统，根除 Generation 2 GC 滞留",
-    "大图解析并发准入控制：新增 _ocr_semaphore 准入控制，在读取 Request Body 前对入站 OCR 请求进行限流排队，将并发请求缓冲在网络层 (仅占 64KB socket 缓冲)，彻底消除并发上传导致的上 G 级堆内存冲顶，超限提供 503 + Retry-After 优雅排队保护",
-    "固定 glibc mmap 阈值为 128KB：通过 mallopt(M_MMAP_THRESHOLD, 128KB) 强制所有 >=128KB 的图像与字符缓冲区由系统独立 mmap 分配，在解引用时直接通过 munmap 将物理内存页秒级归还 Linux 内核，杜绝堆内存碎片",
-    "OCR 上游响应零拷贝透传：上游识别结果直接以 raw_content 透传客户端，移除冗余的 json.loads 反序列化与二次 JSONResponse 序列化，节约两倍大内存拷贝",
-    "全面废除定时重启功能：鉴于内存泄漏与碎片已在底层物理根治，长时间运行内存平稳归零，彻底移除 KB 与 Agent 模式下的每日定时重启进程、配置项及前端面板，保持业务会话长久连续"
+    "PR #7 核心合并 (OCR 上游请求体异步流式零拷贝)：采用 JSON 外壳占位符预序列化 + 图片 Base64 按 256KB 切片异步流式发送机制 (_ReplayableBody)，显式携带 Content-Length 保持标准 HTTP 传输，彻底免去大图 data URL 组装与 httpx json.dumps/encode 两份巨型内存拷贝，Failover 故障切换与重试安全无损复用",
+    "入站 JSON 字节直读优化：_parse_json_body 直接使用 json.loads(bytearray) 反序列化入站请求体，跳过冗余 bytes() 转换与临时解码字符串，入口立减一份 body 级堆缓冲",
+    "管理后台 OCR 准入配置项：系统设置新增「OCR 同时处理图片数 (ocr_max_inflight, 默认 6)」与「OCR 排队最长等待 (ocr_queue_timeout_sec, 默认 30s)」，支持灵活设置并发上限与排队超时",
+    "模式自适应界面隔离：OCR 准入参数控件仅在 KB 知识库模式下自适应展现，Agent 智能体模式保持纯净隐藏，彻底避免参数干扰与认知负担",
+    "完备的转义与重写安全兜底：若图片 Base64 包含需 JSON 转义字符或上游适配规则变更占位符位置，平滑退回原生 dict 格式发送，100% 确保请求正确性"
   ]
 }
