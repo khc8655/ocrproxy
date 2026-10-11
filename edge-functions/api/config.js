@@ -23,6 +23,7 @@ import {
   validateUpstreamUrl,
 } from '../lib/config.js';
 import { normaliseForProvider } from '../lib/normalize.js';
+import { edgeLogger } from '../lib/logger.js';
 
 function checkAuth(request, env) {
   return checkAdminAuth(request, env);
@@ -145,6 +146,17 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
   } else {
     ok = false;
     verdict = `upstream error (${resp.status})`;
+  }
+
+  if (!ok) {
+    edgeLogger.warn('ProbeWarn', 'Key probe failed', {
+      provider: providerName || 'unknown',
+      key: keyLabel || 'unknown',
+      model: targetModel || '(models)',
+      status: resp ? resp.status : 0,
+      verdict,
+      upstream: baseUrl,
+    });
   }
 
   return {
@@ -336,22 +348,27 @@ export async function onRequestPut(context) {
     wrapped = await saveConfig(incoming, kv);
   } catch (e) {
     if (e.status === 409) {
+      edgeLogger.warn('ConfigError', 'Config version conflict (409)', { client_version: incoming._version, remote_version: e.curVersion });
       return new Response(
         JSON.stringify({ error: { type: 'conflict', message: e.message }, _version: e.curVersion }),
         { status: 409, headers: { 'content-type': 'application/json' } }
       );
     }
     if (e instanceof ConfigError) {
+      edgeLogger.error('ConfigError', 'Config schema validation rejected', { error: e.message });
       return new Response(
         JSON.stringify({ error: { type: 'invalid_config', message: e.message } }),
         { status: 400, headers: { 'content-type': 'application/json' } }
       );
     }
+    edgeLogger.error('KVError', 'KV write persistence failed', { error: e?.message || e });
     return new Response(
       JSON.stringify({ error: { type: 'kv_error', message: `KV write failed: ${e?.message || e}` } }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
   }
+
+  edgeLogger.info('ConfigAudit', 'Configuration updated and persisted to KV', { version: wrapped._version, source: 'kv' });
 
   return new Response(
     JSON.stringify({

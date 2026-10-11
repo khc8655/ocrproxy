@@ -536,7 +536,7 @@ async def _send_with_stale_retry(do_send: Callable[[], Any], cand_id: str):
     except _STALE_CONN_ERRORS as e:
         if time.monotonic() - t0 > _STALE_RETRY_WINDOW_SEC:
             raise
-        logger.info("Stale pooled connection for %s (%s: %s) — retrying once on a fresh connection",
+        logger.debug("Stale pooled connection for %s (%s: %s) — retrying once on a fresh connection",
                     cand_id, type(e).__name__, e)
         return await do_send()
 
@@ -1269,7 +1269,7 @@ async def schedule(
         for orig_idx, cand in ordered_items:
             # Check maximum retry budget
             if attempt_seq >= max_retries:
-                logger.info("Reached maximum candidate retry limit (%d attempts)", max_retries)
+                logger.debug("Reached maximum candidate retry limit (%d attempts)", max_retries)
                 errors.append(f"max_retries_{max_retries}_reached")
                 break
 
@@ -1292,18 +1292,18 @@ async def schedule(
 
             # Provider down fast failover
             if fast_failover_provider_down and provider_name in down_providers:
-                logger.info("Skipping candidate %s — provider %s marked down for this request", cand_id, provider_name)
+                logger.debug("Skipping candidate %s — provider %s marked down for this request", cand_id, provider_name)
                 continue
 
             # Per-provider attempt limit
             if provider_attempts.get(provider_name, 0) >= max_attempts_per_provider:
-                logger.info("Skipping candidate %s — reached max %d attempts for provider %s", cand_id, max_attempts_per_provider, provider_name)
+                logger.debug("Skipping candidate %s — reached max %d attempts for provider %s", cand_id, max_attempts_per_provider, provider_name)
                 continue
 
             # 2. Cooldown check
             cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
             if time.time() < cooldown_expiry:
-                logger.info(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
+                logger.debug(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
                 continue
 
             provider = providers.get(provider_name)
@@ -1374,7 +1374,7 @@ async def schedule(
             sem_id = f"{provider_name}:{key_label}"
             sem = await get_key_semaphore(sem_id, concurrency_limit)
 
-            logger.info(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id} (timeout={cand_timeout_sec:.0f}s)")
+            logger.debug(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id} (timeout={cand_timeout_sec:.0f}s)")
 
             cand_start = time.time()
             now_mono = time.monotonic()
@@ -1719,7 +1719,7 @@ async def schedule(
                             _consecutive_failures[cand_id] = cf
                         else:
                             cf = _consecutive_failures.get(cand_id, 1)
-                            logger.info(f"Collapsed burst 5xx failure for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
+                            logger.debug(f"Collapsed burst 5xx failure for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
                     else:
                         cf = 0
                         _consecutive_failures[cand_id] = 0
@@ -1747,12 +1747,12 @@ async def schedule(
 
                     if eval_res.is_quota:
                         _quota_exhausted_cands.add(cand_id)
-                        logger.warning(f"{status_code} Quota limit on {cand_id} (欠费/超额) — cool down {eval_res.cooldown_sec:.0f}s")
+                        logger.warning(f"[VM:CircuitBreaker] {status_code} Quota limit on {cand_id} (欠费/超额) — cool down {eval_res.cooldown_sec:.0f}s")
                     else:
                         _quota_exhausted_cands.discard(cand_id)
 
                     if eval_res.circuit_breaker_triggered:
-                        logger.warning(f"Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {eval_res.cooldown_sec:.0f}s.")
+                        logger.warning(f"[VM:CircuitBreaker] Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {eval_res.cooldown_sec:.0f}s.")
 
                     if eval_res.mark_provider_down and fast_failover_provider_down and not is_agent:
                         down_providers.add(provider_name)
@@ -1845,7 +1845,7 @@ async def schedule(
                         _consecutive_failures[cand_id] = cf
                     else:
                         cf = _consecutive_failures.get(cand_id, 1)
-                        logger.info(f"Collapsed burst exception for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
+                        logger.debug(f"Collapsed burst exception for {cand_id} within {FAILURE_COLLAPSE_WINDOW_SEC}s window (consecutive failures kept at {cf})")
 
                     eval_res = evaluate_candidate_failure(
                         status_code=500,
@@ -1894,7 +1894,7 @@ async def schedule(
                 min_expiry = min(expiries)
                 wait_time = min_expiry - time.time()
                 if 0 < wait_time <= min(5.0, remaining_mono):
-                    logger.info(f"All candidates cooling down, waiting {wait_time:.2f}s within budget for earliest key...")
+                    logger.debug(f"All candidates cooling down, waiting {wait_time:.2f}s within budget for earliest key...")
                     await asyncio.sleep(wait_time + 0.1)
                     continue
         break

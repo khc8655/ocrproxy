@@ -8,6 +8,7 @@ import hmac
 from collections import defaultdict
 from typing import Optional, Union, List, Dict
 from fastapi import Request
+from .logger_utils import vm_logger, mask_secret
 
 # Anti-bruteforce rate-limiting for admin authentication:
 # Track failed attempts per client IP in a sliding window.
@@ -98,6 +99,7 @@ def verify_proxy_auth(request: Request, config: Optional[dict] = None) -> bool:
     """
     token = _extract_token(request)
     if not token:
+        vm_logger.warning("AuthError", "Missing client authorization header", ip=_get_client_ip(request), path=str(request.url.path))
         return False
 
     # 1. Check config-defined proxy_api_key (Admin UI managed)
@@ -126,6 +128,7 @@ def verify_proxy_auth(request: Request, config: Optional[dict] = None) -> bool:
     if admin_pass and _safe_compare(token, admin_pass):
         return True
 
+    vm_logger.warning("AuthError", "Invalid client proxy API key rejected", ip=_get_client_ip(request), token=mask_secret(token), path=str(request.url.path))
     return False
 
 
@@ -135,15 +138,25 @@ def verify_admin_auth(request: Request) -> bool:
     Strictly accepts ADMIN_PASSWORD to protect management actions.
     Enforces anti-bruteforce protection.
     """
+    ip = _get_client_ip(request)
     if is_ip_blocked(request):
+        vm_logger.warning("AuthBlocked", "Admin auth request blocked by anti-bruteforce lock", ip=ip, path=str(request.url.path))
         return False
 
     admin_pass = os.environ.get("ADMIN_PASSWORD")
     if not admin_pass:
+        vm_logger.error("AuthError", "ADMIN_PASSWORD is not set in VM environment variables", path=str(request.url.path))
         return False
 
     token = _extract_token(request)
+    if not token:
+        vm_logger.warning("AuthError", "Missing admin credentials in request", ip=ip, path=str(request.url.path))
+        record_admin_auth_result(request, False)
+        return False
+
     ok = _safe_compare(token, admin_pass)
     record_admin_auth_result(request, ok)
+    if not ok:
+        vm_logger.warning("AuthError", "Invalid admin password rejected", ip=ip, path=str(request.url.path))
     return ok
 

@@ -7,6 +7,7 @@
  */
 
 import { checkAdminAuth, validateUpstreamUrl } from '../../lib/config.js';
+import { edgeLogger, maskSecret } from '../../lib/logger.js';
 
 function checkAuth(request, env) {
   return checkAdminAuth(request, env);
@@ -255,6 +256,16 @@ export async function onRequestPost(context) {
   // 3. Responses protocol (future-proof)
   if (protocols.includes('responses')) {
     results['responses'] = { valid: true, status: 200, latency_ms: 1, message: '协议就绪 (未来支持)' };
+  }
+
+  if (!overallValid) {
+    edgeLogger.warn('ProbeWarn', 'Key online verification failed', {
+      provider: provider || 'unknown',
+      base_url: baseUrl,
+      protocols: protocols.join(','),
+      error: errorMsgs.join('；') || 'unknown error',
+      key: maskSecret(apiKey),
+    });
   }
 
   return new Response(

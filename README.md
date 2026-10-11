@@ -340,11 +340,10 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 
 安装脚本自动完成以下配置：
 1. 配置 `systemd` 服务守护进程（支持 Dual-Stack IPv6/IPv4 `::` 或 `127.0.0.1` 监听）；
-2. 自动配置 `journald` 50MB 磁盘日志配额与 7 天保留策略，彻底防止日志占满磁盘；
-3. 生成加密主密钥并创建通用初始配置文件 `/opt/ocrproxy/config/proxy_config.enc`；
-4. 注册 `/usr/local/bin/ocrproxy` CLI 管理命令与 `/etc/sudoers.d/ocrproxy` 免密运维白名单；
-5. 安装完成友好打印：本地运行端口、网络监听模式、Web 管理后台默认密码、大模型接入 API Key、Caddyfile 反代推荐配置样例（`flush_interval -1` 无缓冲适配 SSE）、常用运维命令；
-6. 支持随心平滑升级：运行 `ocrproxy upgrade` 或再次执行安装命令，即刻就地无损升级。
+2. 生成加密主密钥并创建通用初始配置文件 `/opt/ocrproxy/config/proxy_config.enc`；
+3. 注册 `/usr/local/bin/ocrproxy` CLI 管理命令与 `/etc/sudoers.d/ocrproxy` 免密运维白名单；
+4. 安装完成友好打印：本地运行端口、网络监听模式、Web 管理后台默认密码、大模型接入 API Key、Caddyfile 反代推荐配置样例（`flush_interval -1` 无缓冲适配 SSE）、常用运维命令；
+5. 支持随心平滑升级：运行 `ocrproxy upgrade` 或再次执行安装命令，即刻就地无损升级。
 
 ---
 
@@ -414,6 +413,20 @@ npm run deploy      # 一键发布至 EdgeOne
 - **EdgeOne 流式背压规范与首块预读 (Chunk Peeking)**：
   - `createKeepAliveStream` 彻底废除 `while(true)` 无限循环，重构为符合 Web Streams 规范的标准 `pull(controller)` 按需驱动模式，当下游消费缓慢时自动停止拉取，背压完全生效；
   - 边缘流式转发集成首块预读（Chunk Peeking）：在返回响应给下游前先预读第一包数据，若上游返回 HTTP 200 但立即断连发送 0 字节，边缘节点捕获后主动判定为 `empty_stream` 并触发下一个候选节点 Failover，杜绝向客户端吐出空流。
+
+### 6. EdgeOne Marks 与 VM 双端统一日志体系与安全脱敏 (Unified Logging & Zero Secret Leakage)
+- **双端标准事件标签 (Unified Event Tags)**：EdgeOne 边缘函数（腾讯云 Serverless V8）与 VM 服务端（FastAPI / Uvicorn）在严重错误与关键审计事件中采用完全对齐的标准标签：
+  - `[AuthError]`：密码错误、客户端 Key 无效、Vault 越权、缺少必需环境变量 (503/401/403)；
+  - `[AuthBlocked]`：触发防暴力破解 IP 临时封禁；
+  - `[ConfigError]` / `[KVError]` / `[DiskError]`：配置校验失败、乐观锁版本冲突 (409)、存储读写异常；
+  - `[ProbeWarn]`：管理员探活 Key / 测试模型失败（上游返回 400/401/404/5xx 或连接超时）；
+  - `[CircuitBreaker]`：上游 Key 遭遇 429 限流或 5xx 熔断冷却；
+  - `[FailoverExhausted]`：所有候选节点重试全部耗尽；
+  - `[ConfigAudit]`：配置成功保存并持久化。
+- **Zero Secret Leakage 安全脱敏守卫**：
+  - 双端日志模块（`agent-edgeone/edge-functions/lib/logger.js` 与 `vm-app/app/logger_utils.py`）内置严格脱敏过滤器；
+  - 密钥统一输出别名或掩码（如 `sk-20e7****fcb3`），密码与 Token 一律为 `[REDACTED_SECRET]`，绝对禁止明文泄露至日志流；
+  - 严格遵守 EdgeOne 单条日志 4KB 长度限制，长文本自动截断。
 
 ---
 

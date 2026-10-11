@@ -48,6 +48,7 @@ import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fet
 import { onRequestPost as vaultCredentialsPost } from '../edge-functions/api/vault/credentials.js';
 import { onRequestPost as probeModelsPost } from '../edge-functions/api/admin/probe-models.js';
 import { onRequestGet as statsGet, onRequestPost as statsPost } from '../edge-functions/api/admin/stats.js';
+import { maskSecret, sanitizeMeta, edgeLogger } from '../edge-functions/lib/logger.js';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -1953,6 +1954,64 @@ test('checkAuth supports both ADMIN_PASSWORD and PROXY_API_KEY', () => {
   const res = checkAuth(badReq, env);
   truthy(res instanceof Response);
   eq(res.status, 401);
+});
+
+test('maskSecret masks keys, passwords, and tokens correctly', () => {
+  eq(maskSecret(null), '');
+  eq(maskSecret(''), '');
+  eq(maskSecret('12345'), '****');
+  eq(maskSecret('12345678'), '****');
+
+  const skKey = 'sk-proj-1234567890abcdef1234';
+  const maskedSk = maskSecret(skKey);
+  truthy(maskedSk.startsWith('sk-proj'));
+  truthy(maskedSk.endsWith('1234'));
+  truthy(maskedSk.includes('****'));
+  truthy(!maskedSk.includes('1234567890abcdef'));
+
+  const token = 'secret_password_token_here';
+  eq(maskSecret(token), 'secr****here');
+});
+
+test('sanitizeMeta redacts sensitive keys and truncates long strings', () => {
+  const meta = {
+    key: 'sk-1234567890',
+    api_key: 'my-secret-key',
+    password: 'super-secret-admin-pass',
+    token: 'bearer-token-val',
+    normal_field: 'deepseek-chat',
+    bearer_header: 'Bearer raw_token_secret',
+    long_body: 'x'.repeat(600),
+  };
+  const clean = sanitizeMeta(meta);
+  eq(clean.key, '[REDACTED_SECRET]');
+  eq(clean.api_key, '[REDACTED_SECRET]');
+  eq(clean.password, '[REDACTED_SECRET]');
+  eq(clean.token, '[REDACTED_SECRET]');
+  eq(clean.normal_field, 'deepseek-chat');
+  eq(clean.bearer_header, 'Bearer [REDACTED_SECRET]');
+  truthy(clean.long_body.endsWith('...[TRUNCATED]'));
+});
+
+test('edgeLogger logs with [EdgeOne:Tag] prefix and redacts secrets', () => {
+  const errLogs = [];
+  const origError = console.error;
+  console.error = (msg) => errLogs.push(msg);
+
+  try {
+    edgeLogger.error('AuthError', 'Invalid admin password rejected', {
+      ip: '1.2.3.4',
+      password: 'mypassword123',
+    });
+
+    eq(errLogs.length, 1);
+    truthy(errLogs[0].startsWith('[EdgeOne:AuthError] Invalid admin password rejected |'));
+    truthy(errLogs[0].includes('ip=1.2.3.4'));
+    truthy(errLogs[0].includes('password=[REDACTED_SECRET]'));
+    truthy(!errLogs[0].includes('mypassword123'));
+  } finally {
+    console.error = origError;
+  }
 });
 
 console.log('\n----');

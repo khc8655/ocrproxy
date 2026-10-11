@@ -54,6 +54,7 @@ from .scheduler import (
     StreamInterruptedError,
     release_httpx_response,
 )
+from .logger_utils import vm_logger
 
 def _resolve_dynamic_placeholder(val: str) -> str:
     """Resolve dynamic placeholders in header values or strings (e.g. ${random_session_id}, ${timestamp}, ${uuid})."""
@@ -654,6 +655,7 @@ def _error_response(exc: Exception) -> JSONResponse:
 def _error_response_body(exc: Exception) -> JSONResponse:
     if isinstance(exc, AllCandidatesFailedError):
         status = exc.last_status_code or 503
+        vm_logger.error("FailoverExhausted", f"All candidate nodes failed: {str(exc)}", status=status, trail=getattr(exc, "trail", ""))
         if exc.last_response_body:
             try:
                 body = json.loads(exc.last_response_body)

@@ -10,6 +10,8 @@
  * 3. SSRF Protection (blocks private IPs, link-local, cloud metadata, and loopback addresses)
  */
 
+import { edgeLogger, maskSecret } from './logger.js';
+
 /**
  * Constant-time string comparison to prevent timing attacks.
  */
@@ -62,6 +64,7 @@ export function checkClientAuth(request, env, config) {
   const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
 
   if (!proxyKey && !adminPass) {
+    edgeLogger.error('AuthError', 'Neither PROXY_API_KEY nor ADMIN_PASSWORD is configured in EdgeOne environment variables', { path: request?.url });
     return authErrorResponse(
       503,
       'configuration_error',
@@ -72,6 +75,7 @@ export function checkClientAuth(request, env, config) {
 
   const token = extractAuthToken(request);
   if (!token) {
+    edgeLogger.warn('AuthError', 'Missing Authorization header for proxy call', { path: request?.url });
     return authErrorResponse(401, 'authentication_error', 'missing_api_key', 'Missing Authorization header.');
   }
 
@@ -82,6 +86,7 @@ export function checkClientAuth(request, env, config) {
     return null; // Superadmin access to client proxy
   }
 
+  edgeLogger.warn('AuthError', 'Invalid client API key rejected', { path: request?.url, token: maskSecret(token) });
   return authErrorResponse(401, 'authentication_error', 'invalid_api_key', 'Invalid client API key.');
 }
 
@@ -94,6 +99,7 @@ export function checkAdminAuth(request, env) {
   const adminPass = env?.ADMIN_PASSWORD ? String(env.ADMIN_PASSWORD).trim() : '';
 
   if (!adminPass) {
+    edgeLogger.error('AuthError', 'ADMIN_PASSWORD is not configured in EdgeOne environment variables', { path: request?.url });
     return authErrorResponse(
       503,
       'configuration_error',
@@ -104,6 +110,7 @@ export function checkAdminAuth(request, env) {
 
   const token = extractAuthToken(request);
   if (!token) {
+    edgeLogger.warn('AuthError', 'Missing Authorization header for admin access', { path: request?.url });
     return authErrorResponse(401, 'authentication_error', 'missing_credentials', 'Missing Authorization header for admin access.');
   }
 
@@ -111,6 +118,7 @@ export function checkAdminAuth(request, env) {
     return null; // Authorized
   }
 
+  edgeLogger.warn('AuthError', 'Invalid admin password rejected', { path: request?.url });
   return authErrorResponse(401, 'authentication_error', 'invalid_credentials', 'Invalid admin password.');
 }
 
@@ -123,6 +131,7 @@ export function checkVaultAuth(request, env) {
   const vaultToken = env?.VAULT_ACCESS_TOKEN ? String(env.VAULT_ACCESS_TOKEN).trim() : '';
 
   if (!vaultToken) {
+    edgeLogger.error('AuthError', 'VAULT_ACCESS_TOKEN is not configured in EdgeOne environment variables', { path: request?.url });
     return authErrorResponse(
       503,
       'configuration_error',
@@ -133,6 +142,7 @@ export function checkVaultAuth(request, env) {
 
   const token = extractAuthToken(request);
   if (!token) {
+    edgeLogger.warn('AuthError', 'Missing Authorization header for Vault access', { path: request?.url });
     return authErrorResponse(401, 'authentication_error', 'missing_vault_token', 'Missing Authorization header for Vault access.');
   }
 
@@ -140,6 +150,7 @@ export function checkVaultAuth(request, env) {
     return null; // Authorized
   }
 
+  edgeLogger.warn('AuthError', 'Invalid Vault access token rejected', { path: request?.url });
   return authErrorResponse(401, 'authentication_error', 'invalid_vault_token', 'Invalid Vault access token.');
 }
 

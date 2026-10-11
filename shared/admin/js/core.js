@@ -186,6 +186,13 @@ async function login(){
     else loginErr('凭证无效，请检查 ADMIN_PASSWORD 管理员密码');
   } catch(e){ loginErr('连接服务失败: '+e.message); }
 }
+function loginErr(m){ 
+  const e = document.getElementById('loginErr'); 
+  if (e) {
+    e.textContent = m || ''; 
+    e.style.display = m ? 'block' : 'none'; 
+  }
+}
 function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
 function clearLoginCacheAndReload(){ 
   try {
@@ -428,13 +435,16 @@ function renderLogsTable(){
     const badge = l.status === 429 
       ? '<span class="badge badge-warn">429 限流</span>' 
       : '<span class="badge badge-error">' + l.status + '</span>';
+    const repeatBadge = (l.repeat_count && l.repeat_count > 1)
+      ? `<span class="badge badge-neutral" style="margin-left:5px;font-size:11px;font-weight:700;" title="最近60秒内连续折叠 ${l.repeat_count} 次">×${l.repeat_count}</span>`
+      : '';
     return `<tr>
       <td class="mono">${new Date(l.timestamp).toLocaleString()}</td>
       <td>${catBadge}</td>
       <td class="mono truncate" style="max-width:180px;" title="${esc(modelTag)}"><b>${esc(modelTag)}</b></td>
       <td>${esc(l.provider)}</td>
       <td><span class="badge badge-neutral">${esc(l.key)}</span></td>
-      <td>${badge}</td>
+      <td>${badge}${repeatBadge}</td>
       <td class="mono" style="max-width:320px;white-space:normal;word-break:break-all;" title="${esc(l.error)}">${esc(l.error)}</td>
     </tr>`;
   }).join('');

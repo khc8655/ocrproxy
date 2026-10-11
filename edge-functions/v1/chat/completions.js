@@ -44,6 +44,7 @@ import {
   recordFailure,
   getCooldownsBatch,
 } from '../../lib/cooldowns.js';
+import { edgeLogger } from '../../lib/logger.js';
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000; // 300s (5min) full EdgeOne fetch limit for deep reasoning models
@@ -257,10 +258,16 @@ export async function onRequestPost(context) {
     lastErrorText = result.errorText || '';
     lastStatus = result.status || 0;
 
-    // For 5xx / timeout / empty stream, mark provider as down if fast-failover is on
+    // For 5xx / timeout / empty stream / 429, mark provider as down if fast-failover is on
     if (result.kind === 'empty_stream' || result.kind === 'read_timeout' ||
-        (result.status >= 500 && result.status < 600)) {
-      if (fastFailoverProvDown) {
+        (result.status >= 500 && result.status < 600) || result.status === 429) {
+      edgeLogger.warn('CircuitBreaker', `Candidate node failed (${result.kind || `http_${result.status}`})`, {
+        provider: binding.provider,
+        key: binding.keyLabel,
+        model: binding.upstreamModel || body.model,
+        status: result.status,
+      });
+      if (fastFailoverProvDown && result.status !== 429) {
         downProviders.add(binding.provider);
       }
       if (kv) {
@@ -306,7 +313,12 @@ export async function onRequestPost(context) {
     userFriendlyMsg += ` [详情${lastDetail}]`;
   }
 
-  console.error(`[EdgeOne:FailoverExhausted] model=${body.model} final_status=${finalStatus} attempts=${attemptLog.join('->')} total_ms=${Date.now() - startMs}`);
+  edgeLogger.error('FailoverExhausted', `All candidate keys exhausted for model ${body.model}`, {
+    model: body.model,
+    final_status: finalStatus,
+    attempts: attemptLog.join('->'),
+    total_ms: Date.now() - startMs,
+  });
   return new Response(
     JSON.stringify({
       error: {

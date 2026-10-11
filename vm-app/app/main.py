@@ -59,30 +59,9 @@ app = FastAPI(
 )
 
 
-@app.middleware("http")
-async def security_headers_middleware(request: Request, call_next):
-    """Enforce enterprise security headers on all responses and mask server fingerprint."""
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    response.headers["Server"] = "webserver"
-    return response
+from .middleware import SecurityHeadersASGIMiddleware
 
-
-@app.middleware("http")
-async def in_flight_tracking_middleware(request: Request, call_next):
-    """Track in-flight /v1 proxy requests to ensure graceful scheduled restarts."""
-    is_proxy_req = request.url.path.startswith(("/v1", "/api/v1"))
-    if is_proxy_req:
-        stats.inc_in_flight()
-    try:
-        return await call_next(request)
-    finally:
-        if is_proxy_req:
-            stats.dec_in_flight()
+app.add_middleware(SecurityHeadersASGIMiddleware)
 
 
 

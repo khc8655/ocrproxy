@@ -57,11 +57,6 @@ def _get_empty_stats() -> dict:
             "reranker": _empty_metric_stats(),
             "ocr": _empty_metric_stats(),
         },
-        # Legacy compatibility keys
-        "chat": _empty_metric_stats(),
-        "embedding": _empty_metric_stats(),
-        "reranker": _empty_metric_stats(),
-        "ocr": _empty_metric_stats(),
         "candidates_status": {},
         "error_logs": []
     }
@@ -86,11 +81,6 @@ def get_stats() -> dict:
         return {
             "agent": agent_copy,
             "kb": kb_copy,
-            # Legacy compatibility top-level keys
-            "chat": dict(_stats["kb"]["chat"]),
-            "embedding": dict(_stats["kb"]["embedding"]),
-            "reranker": dict(_stats["kb"]["reranker"]),
-            "ocr": dict(_stats["kb"]["ocr"]),
             "candidates_status": {k: dict(v) for k, v in _stats["candidates_status"].items()},
             "error_logs": [dict(log) for log in _stats["error_logs"]]
         }
@@ -108,6 +98,56 @@ def set_agent_active_key(model_name: str, key_label: str):
         if "active_keys" not in _stats["agent"]:
             _stats["agent"]["active_keys"] = {}
         _stats["agent"]["active_keys"][model_name] = key_label
+
+
+def _record_error_log_locked(
+    category: str,
+    type_name: str,
+    model_name: str,
+    provider: Optional[str],
+    key: Optional[str],
+    code: int,
+    error_msg: str,
+    now_ms: int
+) -> None:
+    """Record an error log entry with sliding-window folding and 300-char truncation."""
+    prov = provider or "unknown"
+    k = key or "unknown"
+    m_name = model_name or type_name
+    truncated_err = (error_msg or "")[:300]
+
+    # Sliding window search: check recent items within 60s (up to first 20 entries)
+    matched_idx = -1
+    for idx, item in enumerate(_stats["error_logs"][:20]):
+        if (item.get("category") == category and
+            item.get("model_name") == m_name and
+            item.get("provider") == prov and
+            item.get("key") == k and
+            item.get("status") == code and
+            (now_ms - item.get("timestamp", 0) < 60000)):
+            matched_idx = idx
+            break
+
+    if matched_idx >= 0:
+        matched_item = _stats["error_logs"].pop(matched_idx)
+        matched_item["repeat_count"] = matched_item.get("repeat_count", 1) + 1
+        matched_item["timestamp"] = now_ms
+        matched_item["error"] = truncated_err
+        _stats["error_logs"].insert(0, matched_item)
+    else:
+        _stats["error_logs"].insert(0, {
+            "timestamp": now_ms,
+            "category": category,
+            "type": type_name,
+            "model_name": m_name,
+            "provider": prov,
+            "key": k,
+            "status": code,
+            "error": truncated_err,
+            "repeat_count": 1
+        })
+        if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
+            _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
 
 
 def record_agent(
@@ -171,39 +211,27 @@ def record_agent(
 
             now_ms = int(time.time() * 1000)
             if code != 200 and error_msg:
-                m_stats["last_error"] = error_msg
+                m_stats["last_error"] = error_msg[:300]
                 m_stats["last_error_time"] = now_ms
 
-                _stats["error_logs"].insert(0, {
-                    "timestamp": now_ms,
-                    "category": "agent",
-                    "type": "agent",
-                    "model_name": model_name,
-                    "provider": provider or "unknown",
-                    "key": key or "unknown",
-                    "status": code,
-                    "error": error_msg
-                })
-                if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
-                    _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
+                _record_error_log_locked(
+                    category="agent",
+                    type_name="agent",
+                    model_name=model_name,
+                    provider=provider,
+                    key=key,
+                    code=code,
+                    error_msg=error_msg,
+                    now_ms=now_ms
+                )
 
         now_ms = int(time.time() * 1000)
         lat_ms = int(round(lat * 1000)) if lat > 0 else 0
 
-        # 3. Update Candidate Node Status (Isolated for Agent)
-        # Always update candidate status whether probe or real traffic
+        # 3. Update Candidate Node Status (Isolated for Agent, single canonical key)
         if provider and key:
             node_key = f"agent:{model_name}:{provider}:{key}"
             _stats["candidates_status"][node_key] = {
-                "status": code,
-                "latency_ms": lat_ms,
-                "category": "agent",
-                "model": model_name,
-                "time": now_ms,
-                "is_quota": is_quota
-            }
-            # Also populate lookup key for UI backwards compatibility
-            _stats["candidates_status"][f"{provider}:{key}:agent:{model_name}"] = {
                 "status": code,
                 "latency_ms": lat_ms,
                 "category": "agent",
@@ -250,43 +278,26 @@ def record_kb(
             else:
                 t_stats["5xx"] += 1
 
-            # Update legacy top-level dict for backwards compatibility
-            if kb_type in _stats:
-                _stats[kb_type] = dict(t_stats)
-
             now_ms = int(time.time() * 1000)
             if code != 200 and error_msg:
-                if _stats["error_logs"]:
-                    last_log = _stats["error_logs"][0]
-                    if (last_log.get("provider") == provider and
-                        last_log.get("key") == key and
-                        last_log.get("status") == code and
-                        last_log.get("model_name") == (model or kb_type) and
-                        (now_ms - last_log.get("timestamp", 0) < 60000)):
-                        last_log["repeat_count"] = last_log.get("repeat_count", 1) + 1
-                        last_log["timestamp"] = now_ms
-                        return
-
-                _stats["error_logs"].insert(0, {
-                    "timestamp": now_ms,
-                    "category": "kb",
-                    "type": kb_type,
-                    "model_name": model or kb_type,
-                    "provider": provider or "unknown",
-                    "key": key or "unknown",
-                    "status": code,
-                    "error": error_msg[:300],  # Bound error text length
-                    "repeat_count": 1
-                })
-                if len(_stats["error_logs"]) > MAX_ERROR_LOGS:
-                    _stats["error_logs"] = _stats["error_logs"][:MAX_ERROR_LOGS]
+                _record_error_log_locked(
+                    category="kb",
+                    type_name=kb_type,
+                    model_name=model or kb_type,
+                    provider=provider,
+                    key=key,
+                    code=code,
+                    error_msg=error_msg,
+                    now_ms=now_ms
+                )
 
         now_ms = int(time.time() * 1000)
         lat_ms = int(round(lat * 1000)) if lat > 0 else 0
 
-        # Update Candidate Node Status (Isolated for KB with model dimension)
+        # Update Candidate Node Status (Isolated for KB with model dimension, single canonical key)
         if provider and key:
-            status_entry = {
+            node_key = f"kb:{kb_type}:{provider}:{key}:{model}" if model else f"kb:{kb_type}:{provider}:{key}"
+            _stats["candidates_status"][node_key] = {
                 "status": code,
                 "latency_ms": lat_ms,
                 "category": "kb",
@@ -295,11 +306,6 @@ def record_kb(
                 "time": now_ms,
                 "is_quota": is_quota
             }
-            if model:
-                _stats["candidates_status"][f"kb:{kb_type}:{provider}:{key}:{model}"] = status_entry
-            # Also store legacy format for backward compatibility
-            _stats["candidates_status"][f"kb:{kb_type}:{provider}:{key}"] = status_entry
-            _stats["candidates_status"][f"{provider}:{key}:{kb_type}"] = status_entry
 
 
 def record(
@@ -354,30 +360,4 @@ def reset():
         _stats.clear()
         _stats.update(_get_empty_stats())
 
-
-# In-flight active proxy requests counter for graceful restart and health monitoring
-_in_flight_requests = 0
-_in_flight_lock = threading.Lock()
-
-
-def inc_in_flight() -> int:
-    """Increment the in-flight requests counter."""
-    global _in_flight_requests
-    with _in_flight_lock:
-        _in_flight_requests += 1
-        return _in_flight_requests
-
-
-def dec_in_flight() -> int:
-    """Decrement the in-flight requests counter (floored at 0)."""
-    global _in_flight_requests
-    with _in_flight_lock:
-        _in_flight_requests = max(0, _in_flight_requests - 1)
-        return _in_flight_requests
-
-
-def get_in_flight_count() -> int:
-    """Return the current number of in-flight requests."""
-    with _in_flight_lock:
-        return _in_flight_requests
 

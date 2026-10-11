@@ -19,6 +19,7 @@ from .config_store import get_config, save_config, _get_config_dir, is_masked_se
 from .upstream import join_upstream, build_messages_upstream
 from . import stats
 from .auth import verify_admin_auth
+from .logger_utils import vm_logger, mask_secret
 
 router = APIRouter(prefix="/api/admin")
 logger = logging.getLogger("admin_routes")
@@ -740,6 +741,7 @@ async def save_config_endpoint(request: Request):
         # If client provides _version and it is strictly lower than current version on disk,
         # reject with 409 Conflict to protect against stale tabs overwriting newly added keys/models.
         if client_ver is not None and isinstance(client_ver, int) and client_ver < curr_ver:
+            vm_logger.warning("ConfigError", "Config version conflict (409)", client_version=client_ver, remote_version=curr_ver)
             return JSONResponse(
                 status_code=409,
                 content={
@@ -818,6 +820,7 @@ async def save_config_endpoint(request: Request):
             _sync_env_run_mode(new_run_mode)
 
         await save_config(body)
+        vm_logger.info("ConfigAudit", "Configuration saved to disk successfully", version=next_ver, run_mode=new_run_mode or "unchanged")
 
         for m_name, m_cfg in (body.get("agent_models") or {}).items():
             if isinstance(m_cfg, dict) and m_cfg.get("active_key"):
@@ -831,6 +834,7 @@ async def save_config_endpoint(request: Request):
             "_version": next_ver
         })
     except Exception as e:
+        vm_logger.error("DiskError", "Failed to persist configuration to disk", error=str(e))
         logger.error("Failed to save config: %s", e, exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to save configuration"})
 
@@ -1051,6 +1055,17 @@ async def verify_key_endpoint(request: Request):
     if "responses" in protocols:
         results["responses"] = {"valid": True, "status": 200, "latency_ms": 1, "message": "协议就绪 (未来支持)"}
 
+    if not overall_valid:
+        vm_logger.warning(
+            "ProbeWarn",
+            "Key online verification failed",
+            provider=provider or "unknown",
+            base_url=base_url,
+            protocols=",".join(protocols),
+            error="；".join(error_msgs) if error_msgs else "unknown error",
+            key=mask_secret(api_key),
+        )
+
     return JSONResponse(content={
         "valid": overall_valid,
         "protocols": results,
@@ -1136,6 +1151,7 @@ async def test_candidate_endpoint(request: Request):
                 return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
+            vm_logger.warning("ProbeWarn", "Manual test candidate rejected", provider=provider_name, key=key_label, model=model, status=resp.status_code, error=err_text[:100])
             if category == "agent":
                 stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, error_msg=f"Manual test failed: {err_text}", is_probe=True, set_active=False)
             else:
@@ -1148,15 +1164,18 @@ async def test_candidate_endpoint(request: Request):
             })
     except httpx.ReadTimeout:
         lat_sec = time.time() - start_t
+        vm_logger.warning("ProbeWarn", "Manual test candidate timed out (30s)", provider=provider_name, key=key_label, model=model)
         stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test timeout (30s)", is_probe=True, set_active=False)
         return JSONResponse(content={"success": False, "error": "请求超时 (30s)，上游模型可能响应过慢"})
     except httpx.ConnectError as e:
         lat_sec = time.time() - start_t
+        vm_logger.warning("ProbeWarn", "Manual test candidate connect failed", provider=provider_name, key=key_label, model=model, error=str(e))
         stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg="Manual test connect error", is_probe=True, set_active=False)
         logger.warning("Test candidate connect error: %s", e)
         return JSONResponse(content={"success": False, "error": "连接上游服务器失败"})
     except Exception as e:
         lat_sec = time.time() - start_t
+        vm_logger.error("ProbeWarn", "Manual test candidate unexpected error", provider=provider_name, key=key_label, model=model, error=str(e))
         stats.record(cand_type, 500, lat_sec, provider=provider_name, key=key_label, category=category, request_model=model_name, cand_model=model, error_msg=f"Manual test error: {str(e)}", is_probe=True, set_active=False)
         logger.error("Test candidate unexpected error: %s", e, exc_info=True)
         return JSONResponse(content={"success": False, "error": "测试失败"})
