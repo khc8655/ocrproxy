@@ -31,30 +31,15 @@ function renderSettings(){
   set('s_circuitThreshold', c.circuit_break_threshold ?? 3);
   set('s_cooldown403', c.cooldown_403_sec ?? 600);
 
-  // Maintenance: Auto Restart
-  const autoRestartEl = document.getElementById('s_autoRestart');
-  const autoRestartTimeEl = document.getElementById('s_autoRestartTime');
-  if (autoRestartEl) {
-    const isAgent = (c.run_mode || c._run_mode) === 'agent';
-    const isEnabled = c.auto_restart_enabled !== undefined ? !!c.auto_restart_enabled : !isAgent;
-    autoRestartEl.checked = isEnabled;
-    if (autoRestartTimeEl) {
-      autoRestartTimeEl.value = c.auto_restart_time || '04:00';
-    }
-    toggleAutoRestartTimeInput(isEnabled);
-  }
-
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
   set('cfg_vault_url', vCfg.edgeone_url || vCfg.url || '');
   set('cfg_vault_token', vCfg.token || '');
 
-  // EdgeOne Environment Adaptations: hide remote vault config and host restart
+  // EdgeOne Environment Adaptations: hide remote vault config
   if (typeof IS_EDGEONE !== 'undefined' && IS_EDGEONE) {
     const vaultCard = document.getElementById('cfg_vault_url')?.closest('.card');
     if (vaultCard) vaultCard.style.display = 'none';
-    const restartCard = document.getElementById('s_autoRestart')?.closest('.card');
-    if (restartCard) restartCard.style.display = 'none';
     if (modeEl) {
       Array.from(modeEl.options).forEach(opt => {
         if (opt.value !== 'agent') opt.style.display = 'none';
@@ -430,18 +415,6 @@ async function saveSettings(silent=false){
   c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
   delete c.latency_based_routing;
 
-  // Maintenance: Auto Restart
-  const autoRestartEl = document.getElementById('s_autoRestart');
-  const autoRestartTimeEl = document.getElementById('s_autoRestartTime');
-  if (autoRestartEl) {
-    c.auto_restart_enabled = !!autoRestartEl.checked;
-    if (autoRestartTimeEl && autoRestartTimeEl.value) {
-      c.auto_restart_time = autoRestartTimeEl.value.trim() || '04:00';
-    } else {
-      c.auto_restart_time = '04:00';
-    }
-  }
-
   // Card 6: EdgeOne Vault Hub
   const vaultUrlEl = document.getElementById('cfg_vault_url');
   const vaultTokenEl = document.getElementById('cfg_vault_token');
@@ -457,18 +430,5 @@ async function saveSettings(silent=false){
 
   await persistConfig(silent ? null : '系统参数已保存并立即生效');
 }
-
-function toggleAutoRestartTimeInput(enabled) {
-  const timeWrapper = document.getElementById('autoRestartTimeWrapper');
-  const timeInput = document.getElementById('s_autoRestartTime');
-  if (timeWrapper) {
-    timeWrapper.style.opacity = enabled ? '1' : '0.45';
-    timeWrapper.style.pointerEvents = enabled ? 'auto' : 'none';
-  }
-  if (timeInput) {
-    timeInput.disabled = !enabled;
-  }
-}
-window.toggleAutoRestartTimeInput = toggleAutoRestartTimeInput;
 
 

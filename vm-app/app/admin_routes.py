@@ -166,7 +166,7 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
     # 4. Update top-level setting parameters if present in incoming (EXCLUDING run_mode)
     setting_keys = [
         "proxy_api_key", "proxy_keys",
-        "agent_routing_strategy", "kb_routing_strategy", "auto_restart_enabled", "auto_restart_time",
+        "agent_routing_strategy", "kb_routing_strategy",
         "request_total_budget_sec", "upstream_timeout_sec", "max_attempts_per_provider",
         "fast_failover_provider_down",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
@@ -818,11 +818,6 @@ async def save_config_endpoint(request: Request):
             _sync_env_run_mode(new_run_mode)
 
         await save_config(body)
-        try:
-            from .auto_restart import sync_auto_restart_worker
-            sync_auto_restart_worker(body)
-        except Exception as ar_err:
-            logger.warning("Could not sync auto-restart worker on config save: %s", ar_err)
 
         for m_name, m_cfg in (body.get("agent_models") or {}).items():
             if isinstance(m_cfg, dict) and m_cfg.get("active_key"):

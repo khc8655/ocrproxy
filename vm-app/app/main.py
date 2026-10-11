@@ -32,7 +32,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("ocrproxy")
 
 
-from .auto_restart import sync_auto_restart_worker, stop_auto_restart_worker
 from . import stats
 
 
@@ -40,14 +39,8 @@ from . import stats
 async def lifespan(app: FastAPI):
     if not os.environ.get("PROXY_API_KEY"):
         logger.warning("PROXY_API_KEY is not set — every /v1 request will be rejected with 401.")
-    try:
-        cfg = await get_config()
-        sync_auto_restart_worker(cfg)
-    except Exception as e:
-        logger.warning("Could not initialize auto-restart worker on startup: %s", e)
     yield
     # Clean up resources on shutdown.
-    stop_auto_restart_worker()
     await close_client()
     logger.info("OCRProxy shutdown complete.")
 
