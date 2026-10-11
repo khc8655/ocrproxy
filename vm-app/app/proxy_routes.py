@@ -52,6 +52,7 @@ from .scheduler import (
     reset_runtime_state,
     _reclaim_memory,
     StreamInterruptedError,
+    release_httpx_response,
 )
 
 def _resolve_dynamic_placeholder(val: str) -> str:
@@ -1033,6 +1034,7 @@ async def chat_completions(request: Request):
                     try:
                         await resp.aclose()
                     finally:
+                        release_httpx_response(resp)
                         if lease is not None:
                             lease.release()
             return StreamingResponse(
@@ -1249,6 +1251,7 @@ async def anthropic_messages(request: Request):
                     try:
                         await resp.aclose()
                     finally:
+                        release_httpx_response(resp)
                         if lease is not None:
                             lease.release()
             return StreamingResponse(
@@ -1474,6 +1477,55 @@ async def rerank(request: Request):
 
 # ── OCR (KB only — not a standard OpenAI endpoint) ──────────────────
 
+# OCR admission control.  The image body (up to 20 MB of base64) is held in
+# memory 4-6x over while it is parsed and forwarded, and it used to be read
+# BEFORE any concurrency gate — the global semaphore is only taken inside
+# schedule().  A batch of large images therefore had no memory ceiling at all
+# (simulated 30 x 15 MB: ~1.08 GB peak, above MemoryMax=1024M).  This gate is
+# taken before the body is read: a queued request costs ~64 KB (uvicorn pauses
+# the socket at its high-water mark), so batches wait in line instead of
+# piling up on the heap or bouncing off a 2 s 503.
+_OCR_DEFAULT_MAX_INFLIGHT = 6
+_OCR_DEFAULT_QUEUE_TIMEOUT_SEC = 30.0
+_ocr_semaphore: Optional[asyncio.Semaphore] = None
+_ocr_semaphore_limit: int = 0
+
+
+def _ocr_limits(config: dict):
+    try:
+        limit = max(1, int(config.get("ocr_max_inflight", _OCR_DEFAULT_MAX_INFLIGHT)))
+    except (ValueError, TypeError):
+        limit = _OCR_DEFAULT_MAX_INFLIGHT
+    try:
+        wait = max(0.0, float(config.get("ocr_queue_timeout_sec", _OCR_DEFAULT_QUEUE_TIMEOUT_SEC)))
+    except (ValueError, TypeError):
+        wait = _OCR_DEFAULT_QUEUE_TIMEOUT_SEC
+    return limit, wait
+
+
+def _get_ocr_semaphore(limit: int) -> asyncio.Semaphore:
+    """Rebuilt when the configured limit changes (in-flight requests keep the
+    old object, so the cap may briefly over-subscribe — same trade-off as the
+    per-key semaphores)."""
+    global _ocr_semaphore, _ocr_semaphore_limit
+    if _ocr_semaphore is None or _ocr_semaphore_limit != limit:
+        _ocr_semaphore = asyncio.Semaphore(limit)
+        _ocr_semaphore_limit = limit
+    return _ocr_semaphore
+
+
+def _ocr_busy_response(limit: int, waited: float) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": str(max(1, int(min(waited, 10.0) or 1)))},
+        content={"error": {
+            "message": f"OCR queue is full ({limit} images in flight, waited {waited:.0f}s). Retry later.",
+            "type": "server_error",
+            "code": "ocr_queue_full",
+        }},
+    )
+
+
 @router.post("/ocr")
 async def ocr(request: Request):
     config = await get_config()
@@ -1487,6 +1539,25 @@ async def ocr(request: Request):
             content={"error": {"message": "Endpoint /v1/ocr is disabled in Agent mode.", "type": "invalid_request_error"}}
         )
 
+    # Admission BEFORE reading the body (see _ocr_semaphore above).
+    limit, wait = _ocr_limits(config)
+    sem = _get_ocr_semaphore(limit)
+    try:
+        if wait > 0:
+            await asyncio.wait_for(sem.acquire(), timeout=wait)
+        elif sem.locked():
+            return _ocr_busy_response(limit, 0.0)
+        else:
+            await sem.acquire()
+    except asyncio.TimeoutError:
+        return _ocr_busy_response(limit, wait)
+    try:
+        return await _ocr_handle(request, config)
+    finally:
+        sem.release()
+
+
+async def _ocr_handle(request: Request, config: dict):
     body, err = await _parse_json_body(request, max_bytes=_MAX_OCR_BODY_BYTES)
     if err:
         return err
@@ -1572,7 +1643,11 @@ async def ocr(request: Request):
             req_config, "ocr", build_request,
             category="kb", request_model="ocr"
         )
-        resp = JSONResponse(content=sr.data)
+        # Pass the upstream JSON through as-is: no parse + re-serialise.
+        if sr.raw_content is not None:
+            resp = Response(content=sr.raw_content, media_type="application/json")
+        else:
+            resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
         if getattr(sr, "trail", ""):
