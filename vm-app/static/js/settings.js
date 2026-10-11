@@ -22,6 +22,8 @@ function renderSettings(){
   set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 2);
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
   set('s_concurrency', c.max_concurrency_per_key ?? 5);
+  set('s_ocrMaxInflight', c.ocr_max_inflight ?? 6);
+  set('s_ocrQueueTimeout', c.ocr_queue_timeout_sec ?? 30);
   const ffEl = document.getElementById('s_fastFailover');
   if (ffEl) ffEl.checked = c.fast_failover_provider_down !== undefined ? !!c.fast_failover_provider_down : true;
 
@@ -81,6 +83,10 @@ function onRunModeChange(){
   if(kbItem) kbItem.style.display = isAgent ? 'none' : 'block';
   if(agItem) agItem.style.display = isKb ? 'none' : 'block';
   if(kbTimeout) kbTimeout.style.display = isAgent ? 'none' : 'block';
+  ['st-item-ocr-inflight', 'st-item-ocr-queue'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAgent ? 'none' : 'block';
+  });
 
   // Dynamic labels based on run mode
   const lblChatTimeout = document.getElementById('lbl_chatTimeout');
@@ -403,6 +409,13 @@ async function saveSettings(silent=false){
   c.upstream_timeout_embedding = c.upstream_timeout_kb;
   c.upstream_timeout_rerank = Math.min(30, c.upstream_timeout_kb);
   c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 5;
+  const ocrInflightEl = document.getElementById('s_ocrMaxInflight');
+  if (ocrInflightEl) c.ocr_max_inflight = Math.min(30, Math.max(1, Number(ocrInflightEl.value) || 6));
+  const ocrQueueEl = document.getElementById('s_ocrQueueTimeout');
+  if (ocrQueueEl) {
+    const v = Number(ocrQueueEl.value);
+    c.ocr_queue_timeout_sec = (ocrQueueEl.value.trim() === '' || !Number.isFinite(v)) ? 30 : Math.min(300, Math.max(0, v));
+  }
   const ffEl = document.getElementById('s_fastFailover');
   c.fast_failover_provider_down = ffEl ? !!ffEl.checked : true;
 

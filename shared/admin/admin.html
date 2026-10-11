@@ -280,6 +280,16 @@
               <input type="number" id="s_kbTimeout" class="form-control" placeholder="默认 60" min="10" max="300">
               <span class="hint">Embedding / OCR / Reranker 等大文档批处理耗时计算超时（默认 60s）</span>
             </div>
+            <div class="setting-item" id="st-item-ocr-inflight">
+              <label class="form-label" for="s_ocrMaxInflight">OCR 同时处理图片数 (ocr_max_inflight)</label>
+              <input type="number" id="s_ocrMaxInflight" class="form-control" placeholder="默认 6" min="1" max="30">
+              <span class="hint">读入图片之前就限流，超出的请求排队、不占内存；1GB 内存建议 4–6</span>
+            </div>
+            <div class="setting-item" id="st-item-ocr-queue">
+              <label class="form-label" for="s_ocrQueueTimeout">OCR 排队最长等待 (ocr_queue_timeout_sec)</label>
+              <input type="number" id="s_ocrQueueTimeout" class="form-control" placeholder="默认 30" min="0" max="300">
+              <span class="hint">排队超过这个时间返回 503 + Retry-After（默认 30s；0 = 满了立即拒绝）</span>
+            </div>
             <div class="setting-item">
               <label class="form-label" for="s_concurrency">单 Key 最大并发保护 (max_concurrency_per_key)</label>
               <input type="number" id="s_concurrency" class="form-control" placeholder="默认 5" min="1" max="50">
