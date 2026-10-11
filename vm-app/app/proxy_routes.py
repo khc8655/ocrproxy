@@ -761,10 +761,13 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
                                    "type": "invalid_request_error"}},
             )
             return (None, None, err) if return_raw_bytes else (None, err)
-        raw = bytes(body_bytes)
-        parsed = json.loads(raw.decode("utf-8"))
         if return_raw_bytes:
+            raw = bytes(body_bytes)
+            parsed = json.loads(raw.decode("utf-8"))
             return parsed, raw, None
+        # json.loads accepts the bytearray directly: skips a full bytes() copy
+        # and a separate decoded str (one less body-sized buffer at peak).
+        parsed = json.loads(body_bytes)
         return parsed, None
     except json.JSONDecodeError:
         err = JSONResponse(
@@ -1477,6 +1480,62 @@ async def rerank(request: Request):
 
 # ── OCR (KB only — not a standard OpenAI endpoint) ──────────────────
 
+# ── OCR zero-copy request body ──
+# The image is by far the largest part of an OCR upstream request.  Instead of
+# embedding it in a dict and letting httpx json.dumps() + encode() the whole
+# thing (two more body-sized buffers per attempt, re-done on every failover),
+# the JSON envelope is serialised with a placeholder and the image string is
+# streamed between the two halves, encoded slice by slice.  The body is a
+# replayable async iterable, so stale-connection retries and failover reuse it,
+# and an explicit Content-Length keeps it a normal (non-chunked) request.
+_OCR_IMG_PLACEHOLDER = "__OCRPROXY_IMAGE_PLACEHOLDER_7f3a__"
+_JSON_UNSAFE_RE = re.compile(r'[\x00-\x1f"\\\x7f-\U0010ffff]')
+_OCR_SLICE_CHARS = 256 * 1024
+
+
+class _ReplayableBody:
+    """Async-iterable body: head bytes, then `text` encoded in slices, then
+    tail bytes.  Not an async generator, so httpx can iterate it again on a
+    retry.  `text` must be pure ASCII and JSON-safe (checked by the caller)."""
+    __slots__ = ("head", "text", "tail", "length")
+
+    def __init__(self, head: bytes, text: str, tail: bytes):
+        self.head, self.text, self.tail = head, text, tail
+        self.length = len(head) + len(text) + len(tail)
+
+    async def __aiter__(self):
+        yield self.head
+        t = self.text
+        for i in range(0, len(t), _OCR_SLICE_CHARS):
+            yield t[i:i + _OCR_SLICE_CHARS].encode("ascii")
+        yield self.tail
+
+
+def _ocr_stream_body(chat_body: dict, image: str):
+    """Serialise chat_body (whose image url is _OCR_IMG_PLACEHOLDER) around
+    `image`.  Returns None when the fast path does not apply (image needs JSON
+    escaping, or an adapter rule moved/duplicated the placeholder) so the
+    caller falls back to the plain dict body."""
+    if _JSON_UNSAFE_RE.search(image) is not None:
+        return None
+    envelope = json.dumps(chat_body, ensure_ascii=False, separators=(",", ":"))
+    parts = envelope.split(_OCR_IMG_PLACEHOLDER)
+    if len(parts) != 2:
+        return None
+    return _ReplayableBody(parts[0].encode("utf-8"), image, parts[1].encode("utf-8"))
+
+
+def _replace_placeholder(obj, image: str):
+    """Fallback: put the real image back wherever the placeholder ended up."""
+    if isinstance(obj, dict):
+        return {k: _replace_placeholder(v, image) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_placeholder(v, image) for v in obj]
+    if isinstance(obj, str) and _OCR_IMG_PLACEHOLDER in obj:
+        return obj.replace(_OCR_IMG_PLACEHOLDER, image)
+    return obj
+
+
 # OCR admission control.  The image body (up to 20 MB of base64) is held in
 # memory 4-6x over while it is parsed and forwarded, and it used to be read
 # BEFORE any concurrency gate — the global semaphore is only taken inside
@@ -1568,9 +1627,9 @@ async def _ocr_handle(request: Request, config: dict):
 
     prompt = body.get("prompt", "请识别图片中的所有文字内容，返回纯文本。")
 
-    # Build the data-URL once and reuse the same string reference in every
-    # failover attempt.  Python's string interning means all dict references
-    # to `img` point to the same underlying buffer — no per-attempt copy.
+    # The image string is shared by every failover attempt: the zero-copy
+    # body (_ocr_stream_body) streams `img_head` + `img` without copying it.
+    img_head = ""
     if img_url:
         img = img_url
     else:
@@ -1591,7 +1650,10 @@ async def _ocr_handle(request: Request, config: dict):
             mime = "image/heic"
         else:
             mime = "image/png"
-        img = f"data:{mime};base64,{img_b64}"
+        # Don't build a second full-size "data:...;base64,<b64>" string: the
+        # short prefix is serialised into the JSON envelope instead.
+        img_head = f"data:{mime};base64,"
+        img = img_b64
 
     # Release the original body dict and the raw base64/url locals early so
     # only `img` and `prompt` keep the payload alive during failover attempts.
@@ -1605,7 +1667,7 @@ async def _ocr_handle(request: Request, config: dict):
             "model": cand["model"],
             "messages": [{"role": "user", "content": [
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": img}},
+                {"type": "image_url", "image_url": {"url": img_head + _OCR_IMG_PLACEHOLDER}},
             ]}],
             "max_tokens": 4096,
             "stream": False,
@@ -1623,7 +1685,13 @@ async def _ocr_handle(request: Request, config: dict):
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
                 headers[str(hk)] = str(hv)
-        return "POST", url, headers, chat_body
+        stream_body = _ocr_stream_body(chat_body, img)
+        if stream_body is not None:
+            headers["Content-Length"] = str(stream_body.length)
+            return "POST", url, headers, stream_body
+        # Fallback (rare): image needs JSON escaping or a rule rewrote the
+        # message — send a plain dict with the full data URL.
+        return "POST", url, headers, _replace_placeholder(chat_body, img)
 
     # OCR / vision models need a longer timeout than chat
     try:
@@ -1660,7 +1728,7 @@ async def _ocr_handle(request: Request, config: dict):
     except Exception as e:
         return _error_response(e)
     finally:
-        del img
+        del img, img_head
         del prompt
         del build_request
         asyncio.create_task(_reclaim_memory())

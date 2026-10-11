@@ -1428,6 +1428,11 @@ async def schedule(
                     if isinstance(req_body, (bytes, bytearray)):
                         req_content = bytes(req_body)
                         req_json = None
+                    elif hasattr(req_body, "__aiter__"):
+                        # Replayable streamed body (e.g. OCR's ReplayableBody):
+                        # sent as-is; build_request supplies Content-Length.
+                        req_content = req_body
+                        req_json = None
                     else:
                         req_content = None
                         req_json = req_body
