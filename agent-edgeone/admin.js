@@ -326,6 +326,15 @@ function doLogout() {
   showLoginOverlay();
 }
 
+function clearLoginCacheAndReload() {
+  clearKey();
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch (_) {}
+  window.location.reload();
+}
+
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
@@ -351,12 +360,12 @@ async function loadAllData() {
 
 // ---- Rendering -----------------------------------------------------------
 function renderAll() {
-  renderDashboard();
-  renderAgentModels();
-  renderProviders();
-  renderSettings();
-  renderRawJson();
-  renderAccess();
+  try { renderDashboard(); } catch (e) { console.error('renderDashboard failed:', e); }
+  try { renderAgentModels(); } catch (e) { console.error('renderAgentModels failed:', e); }
+  try { renderProviders(); } catch (e) { console.error('renderProviders failed:', e); }
+  try { renderSettings(); } catch (e) { console.error('renderSettings failed:', e); }
+  try { renderRawJson(); } catch (e) { console.error('renderRawJson failed:', e); }
+  try { renderAccess(); } catch (e) { console.error('renderAccess failed:', e); }
 }
 
 function renderSettings() {

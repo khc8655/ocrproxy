@@ -144,13 +144,25 @@ export async function onRequestPost(context) {
           },
         });
         const chatLat = Date.now() - startT;
-        if (chatResp.status === 200 || chatResp.status === 201 || chatResp.status === 400 || chatResp.status === 404) {
+        const chatText = (await chatResp.text().catch(() => '')).toLowerCase();
+        if (chatResp.status === 200 || chatResp.status === 201) {
           results['chat'] = { valid: true, status: chatResp.status, latency_ms: chatLat, message: '鉴权验证通过' };
         } else if (chatResp.status === 401 || chatResp.status === 403) {
           overallValid = false;
           const err = `密钥无效，上游拒绝访问 (HTTP ${chatResp.status})`;
           results['chat'] = { valid: false, status: chatResp.status, latency_ms: chatLat, error: err };
           errorMsgs.push(`OpenAI Chat: ${err}`);
+        } else if (chatResp.status === 400 || chatResp.status === 404) {
+          const isModelError = chatText.includes('model_not_found') || chatText.includes('model') || chatText.includes('does not exist');
+          const isAuthError = chatText.includes('auth') || chatText.includes('key') || chatText.includes('token') || chatText.includes('unauthorized') || chatText.includes('permission');
+          if (isModelError && !isAuthError) {
+            results['chat'] = { valid: true, status: chatResp.status, latency_ms: chatLat, message: '端点连通，凭据基本有效（上游模型需单独指定）' };
+          } else {
+            overallValid = false;
+            const err = `上游返回 HTTP ${chatResp.status}: ${chatText.slice(0, 80) || '参数或密钥校验未通过'}`;
+            results['chat'] = { valid: false, status: chatResp.status, latency_ms: chatLat, error: err };
+            errorMsgs.push(`OpenAI Chat: ${err}`);
+          }
         } else {
           overallValid = false;
           const err = `上游返回异常状态 (HTTP ${chatResp.status})`;
@@ -216,13 +228,15 @@ export async function onRequestPost(context) {
         results['messages'] = { valid: false, status: resp.status, latency_ms: lat, error: err };
         errorMsgs.push(`Anthropic Messages: ${err}`);
       } else if (resp.status === 400 || resp.status === 404) {
-        if (text.includes('authentication') || text.includes('unauthorized') || text.includes('invalid_api_key') || text.includes('forbidden')) {
+        const isModelError = text.includes('model_not_found') || text.includes('model') || text.includes('does not exist');
+        const isAuthError = text.includes('authentication') || text.includes('unauthorized') || text.includes('invalid_api_key') || text.includes('forbidden') || text.includes('key') || text.includes('auth');
+        if (isModelError && !isAuthError) {
+          results['messages'] = { valid: true, status: resp.status, latency_ms: lat, message: '端点连通，凭据基本有效（上游模型需单独指定）' };
+        } else {
           overallValid = false;
-          const err = `密钥认证失败 (HTTP ${resp.status})`;
+          const err = `密钥认证失败或格式错误 (HTTP ${resp.status})`;
           results['messages'] = { valid: false, status: resp.status, latency_ms: lat, error: err };
           errorMsgs.push(`Anthropic Messages: ${err}`);
-        } else {
-          results['messages'] = { valid: true, status: resp.status, latency_ms: lat, message: '端点鉴权通过' };
         }
       } else {
         overallValid = false;

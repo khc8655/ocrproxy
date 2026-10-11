@@ -946,15 +946,25 @@ async def verify_key_endpoint(request: Request):
                         "Content-Type": "application/json",
                         "User-Agent": "ocrproxy-verifier/1.0"
                     }, json={"model": "test-key-probe", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1})
-                    lat_ms = max(1, int((time.monotonic() - t0) * 1000))
                     sc_chat = resp_chat.status_code
-                    if sc_chat in (200, 201, 400, 404):
+                    chat_text = (resp_chat.text or "").lower()
+                    if sc_chat in (200, 201):
                         results["chat"] = {"valid": True, "status": sc_chat, "latency_ms": lat_ms, "message": "鉴权验证通过"}
                     elif sc_chat in (401, 403):
                         overall_valid = False
                         err = f"密钥无效，上游拒绝访问 (HTTP {sc_chat})"
                         results["chat"] = {"valid": False, "status": sc_chat, "latency_ms": lat_ms, "error": err}
                         error_msgs.append(f"OpenAI Chat: {err}")
+                    elif sc_chat in (400, 404):
+                        is_model_err = any(x in chat_text for x in ("model_not_found", "model", "does not exist"))
+                        is_auth_err = any(x in chat_text for x in ("auth", "key", "token", "unauthorized", "permission"))
+                        if is_model_err and not is_auth_err:
+                            results["chat"] = {"valid": True, "status": sc_chat, "latency_ms": lat_ms, "message": "端点连通，凭据基本有效（上游模型需单独指定）"}
+                        else:
+                            overall_valid = False
+                            err = f"上游返回 HTTP {sc_chat}: {chat_text[:80] or '参数或密钥校验未通过'}"
+                            results["chat"] = {"valid": False, "status": sc_chat, "latency_ms": lat_ms, "error": err}
+                            error_msgs.append(f"OpenAI Chat: {err}")
                     else:
                         overall_valid = False
                         err = f"上游返回异常状态 (HTTP {sc_chat})"
@@ -1014,13 +1024,15 @@ async def verify_key_endpoint(request: Request):
                 error_msgs.append(f"Anthropic Messages: {err}")
             elif status_code in (400, 404):
                 lower_text = text.lower()
-                if any(x in lower_text for x in ("authentication", "unauthorized", "invalid_api_key", "forbidden")):
+                is_model_err = any(x in lower_text for x in ("model_not_found", "model", "not found", "does not exist"))
+                is_auth_err = any(x in lower_text for x in ("authentication", "unauthorized", "invalid_api_key", "forbidden", "auth", "key", "token"))
+                if is_model_err and not is_auth_err:
+                    results["messages"] = {"valid": True, "status": status_code, "latency_ms": lat_ms, "message": "端点连通，凭据基本有效（上游模型需单独指定）"}
+                else:
                     overall_valid = False
-                    err = f"密钥认证失败 (HTTP {status_code})"
+                    err = f"密钥认证失败或格式错误 (HTTP {status_code})"
                     results["messages"] = {"valid": False, "status": status_code, "latency_ms": lat_ms, "error": err}
                     error_msgs.append(f"Anthropic Messages: {err}")
-                else:
-                    results["messages"] = {"valid": True, "status": status_code, "latency_ms": lat_ms, "message": "端点鉴权通过"}
             else:
                 overall_valid = False
                 err = f"端点返回非预期响应 (HTTP {status_code}): {text[:60]}"

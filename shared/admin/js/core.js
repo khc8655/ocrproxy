@@ -186,8 +186,15 @@ async function login(){
     else loginErr('凭证无效，请检查 ADMIN_PASSWORD 管理员密码');
   } catch(e){ loginErr('连接服务失败: '+e.message); }
 }
-function loginErr(m){ const e=document.getElementById('loginErr'); e.textContent=m; e.style.display=m?'block':'none'; }
 function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
+function clearLoginCacheAndReload(){ 
+  try {
+    sessionStorage.clear();
+    localStorage.clear();
+  } catch(_) {}
+  state.key=''; 
+  location.reload(); 
+}
 
 // Data & Persistence & Vault
 

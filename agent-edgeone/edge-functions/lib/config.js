@@ -112,6 +112,18 @@ export const CONFIG_KV_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
  */
 export async function saveConfig(incomingConfig, kv) {
   const incoming = incomingConfig?.config || incomingConfig;
+
+  // Auto-prune orphaned agent model bindings if any provider key was removed
+  if (incoming && incoming.providers && incoming.agent_models) {
+    for (const [mName, m] of Object.entries(incoming.agent_models)) {
+      if (Array.isArray(m?.keys)) {
+        m.keys = m.keys.filter(b => {
+          return b && b.provider && b.key && incoming.providers[b.provider]?.keys?.[b.key];
+        });
+      }
+    }
+  }
+
   const validationErr = validateConfig(incoming);
   if (validationErr) {
     throw new ConfigError(validationErr);

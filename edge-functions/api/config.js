@@ -132,17 +132,19 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
     verdict = targetModel ? `model ${targetModel} ok` : 'reachable + key accepted';
   } else if (resp.status === 401 || resp.status === 403) {
     ok = false;
-    verdict = 'key rejected (401/403)';
+    verdict = `key rejected (${resp.status})`;
   } else if (resp.status === 429) {
     ok = false;
     verdict = 'rate-limited (429)';
   } else if (resp.status === 404) {
-    ok = targetModel ? false : true;
-    verdict = targetModel ? `model ${targetModel} not found (404)` : 'reachable, but /models not exposed (chat works)';
+    ok = false;
+    verdict = targetModel ? `model ${targetModel} not found (404)` : 'endpoint /models not found (404)';
+  } else if (resp.status === 400) {
+    ok = false;
+    verdict = 'bad request (400: key or format rejected)';
   } else {
-    // 400 with model thinking message could still mean model exists and key is good
-    ok = resp.status === 400;
-    verdict = `status ${resp.status}`;
+    ok = false;
+    verdict = `upstream error (${resp.status})`;
   }
 
   return {

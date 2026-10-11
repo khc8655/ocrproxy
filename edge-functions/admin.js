@@ -1196,6 +1196,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
     <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--color-danger-50);border:1px solid var(--color-danger-500);color:var(--color-danger-500);font-size:12px;text-align:center;"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="clearLoginCacheAndReload()" style="width:100%;margin-top:10px;font-size:12px;color:var(--color-text-3);">清除本地登录缓存并刷新</button>
   </form>
 </div>
 
@@ -1205,7 +1206,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.11-04</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.11-05</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1245,7 +1246,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.11-04</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.11-05</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -2740,13 +2741,16 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
   // 8. Render Single Binding Row in Key Table
   function renderAgentBindingRow(idx, binding, modelName, i, status, totalCount) {
+    if (!binding || typeof binding !== 'object') return '';
+    const prov = binding.provider || 'unknown';
+    const key = binding.key || 'unknown';
     const { probingKeys } = getCtx();
-    const nk = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
-    let ns = status[nk] || status[binding.provider + ':' + binding.key + ':agent:' + modelName];
+    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
+    let ns = status[nk] || status[prov + ':' + key + ':agent:' + modelName];
 
     const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
     if (!ns && latCache) {
-      const cacheKey = \`model:\${modelName}:\${binding.provider}:\${binding.key}\`;
+      const cacheKey = \`model:\${modelName}:\${prov}:\${key}\`;
       const latInfo = latCache[cacheKey];
       if (latInfo) {
         ns = {
@@ -2776,10 +2780,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       time = _fmtTime(ns.time);
     }
 
-    const probeKeyId = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
+    const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
     const isProbing = probingKeys.has(probeKeyId);
 
-    const keyBadgeHtml = \`<span class="badge badge-neutral">\${_esc(binding.key)}</span>\`;
+    const keyBadgeHtml = \`<span class="badge badge-neutral">\${_esc(key)}</span>\`;
 
     const orderInputHtml = \`<input type="number" min="1" max="\${totalCount}" value="\${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
@@ -2789,11 +2793,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
     const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
-    const isActive = (binding.key === activeKey);
+    const isActive = (key === activeKey);
 
     const setActiveBtn = isActive
       ? \`<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>\`
-      : \`<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="\${_esc(modelName)}" data-key="\${_esc(binding.key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>\`;
+      : \`<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="\${_esc(modelName)}" data-key="\${_esc(key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>\`;
 
     const actions = \`
       \${setActiveBtn}
@@ -2805,7 +2809,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     return \`<tr>
       <td>\${orderInputHtml}</td>
-      <td><b>\${_esc(binding.provider)}</b></td>
+      <td><b>\${_esc(prov)}</b></td>
       <td>\${keyBadgeHtml}</td>
       <td>\${badge}</td>
       <td class="text-sm text-secondary">\${time}</td>
@@ -2873,7 +2877,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
-            <tbody>\${rows.length ? rows.join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
+            <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
         <div id="liveTestRes-\${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
@@ -3014,7 +3018,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.11-04';
+const BUILD_VERSION = 'v2026.10.11-05';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3329,6 +3333,15 @@ function doLogout() {
   showLoginOverlay();
 }
 
+function clearLoginCacheAndReload() {
+  clearKey();
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch (_) {}
+  window.location.reload();
+}
+
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
@@ -3354,12 +3367,12 @@ async function loadAllData() {
 
 // ---- Rendering -----------------------------------------------------------
 function renderAll() {
-  renderDashboard();
-  renderAgentModels();
-  renderProviders();
-  renderSettings();
-  renderRawJson();
-  renderAccess();
+  try { renderDashboard(); } catch (e) { console.error('renderDashboard failed:', e); }
+  try { renderAgentModels(); } catch (e) { console.error('renderAgentModels failed:', e); }
+  try { renderProviders(); } catch (e) { console.error('renderProviders failed:', e); }
+  try { renderSettings(); } catch (e) { console.error('renderSettings failed:', e); }
+  try { renderRawJson(); } catch (e) { console.error('renderRawJson failed:', e); }
+  try { renderAccess(); } catch (e) { console.error('renderAccess failed:', e); }
 }
 
 function renderSettings() {

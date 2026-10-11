@@ -1050,13 +1050,16 @@
 
   // 8. Render Single Binding Row in Key Table
   function renderAgentBindingRow(idx, binding, modelName, i, status, totalCount) {
+    if (!binding || typeof binding !== 'object') return '';
+    const prov = binding.provider || 'unknown';
+    const key = binding.key || 'unknown';
     const { probingKeys } = getCtx();
-    const nk = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
-    let ns = status[nk] || status[binding.provider + ':' + binding.key + ':agent:' + modelName];
+    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
+    let ns = status[nk] || status[prov + ':' + key + ':agent:' + modelName];
 
     const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
     if (!ns && latCache) {
-      const cacheKey = `model:${modelName}:${binding.provider}:${binding.key}`;
+      const cacheKey = `model:${modelName}:${prov}:${key}`;
       const latInfo = latCache[cacheKey];
       if (latInfo) {
         ns = {
@@ -1086,10 +1089,10 @@
       time = _fmtTime(ns.time);
     }
 
-    const probeKeyId = 'agent:' + modelName + ':' + binding.provider + ':' + binding.key;
+    const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
     const isProbing = probingKeys.has(probeKeyId);
 
-    const keyBadgeHtml = `<span class="badge badge-neutral">${_esc(binding.key)}</span>`;
+    const keyBadgeHtml = `<span class="badge badge-neutral">${_esc(key)}</span>`;
 
     const orderInputHtml = `<input type="number" min="1" max="${totalCount}" value="${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
@@ -1099,11 +1102,11 @@
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
     const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
-    const isActive = (binding.key === activeKey);
+    const isActive = (key === activeKey);
 
     const setActiveBtn = isActive
       ? `<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>`
-      : `<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="${_esc(modelName)}" data-key="${_esc(binding.key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>`;
+      : `<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="${_esc(modelName)}" data-key="${_esc(key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>`;
 
     const actions = `
       ${setActiveBtn}
@@ -1115,7 +1118,7 @@
 
     return `<tr>
       <td>${orderInputHtml}</td>
-      <td><b>${_esc(binding.provider)}</b></td>
+      <td><b>${_esc(prov)}</b></td>
       <td>${keyBadgeHtml}</td>
       <td>${badge}</td>
       <td class="text-sm text-secondary">${time}</td>
@@ -1183,7 +1186,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
-            <tbody>${rows.length ? rows.join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
+            <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
         <div id="liveTestRes-${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
