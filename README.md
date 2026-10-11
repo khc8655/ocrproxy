@@ -492,6 +492,11 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.11-04` (2026-10-11)
+- **控制台设置面板 DOM 闭合与卡片规范对齐**：修复 Card 4 (容灾运维) 网格容器闭合标签缺失导致的层级塌陷缺陷，彻底根治 OTA 升级与重启横栏被挤压为两列网格以及 Card 5、Card 6 被错误吞噬嵌套进 Card 4 的排版异常；
+- **各设置卡片独立容器层级恢复**：恢复 Card 1~Card 6 单卡同级独立规范，使控制台布局回归标准扁平、清晰规范的视觉呈现；
+- **自动化 HTML 标签平衡语法门禁**：新增 `test_admin_html_tag_nesting_and_balance` 单元测试，在每次构建和单测执行时自动检验全站 HTML 标签开闭配对，杜绝标签错位流向生产。
+
 ### `v2026.10.11-03` (2026-10-11)
 - **PR #7 合并 (OCR 上游请求体异步流式零拷贝)**：采用 JSON 外壳占位符预序列化 + 图片 Base64 字符串按 256KB 切片异步流式发送机制 (`_ReplayableBody`)，显式携带 `Content-Length` 保持标准 HTTP 传输协议（非 chunked），彻底免去大图 data URL 组装与 `httpx` `json.dumps/encode` 两份巨型内存拷贝。遇到故障切换 (Failover) 或重试时可多次安全复用，并发压测峰值内存再降 33%；
 - **入站 JSON 字节直读优化**：`_parse_json_body` 直接使用 `json.loads(body_bytes)` 反序列化入站请求体，跳过冗余 `bytes()` 转换与临时解码字符串，入口立减一份 body 级堆缓冲；
