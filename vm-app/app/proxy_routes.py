@@ -54,7 +54,7 @@ from .scheduler import (
     StreamInterruptedError,
     release_httpx_response,
 )
-from .logger_utils import vm_logger
+from .logger_utils import vm_logger, clean_upstream_error_text
 
 def _resolve_dynamic_placeholder(val: str) -> str:
     """Resolve dynamic placeholders in header values or strings (e.g. ${random_session_id}, ${timestamp}, ${uuid})."""
@@ -663,20 +663,36 @@ def _error_response_body(exc: Exception) -> JSONResponse:
                     return JSONResponse(status_code=status, content=body)
                 elif isinstance(body, dict):
                     msg = body.get("message") or body.get("detail") or "Upstream error"
+                    err_type = "invalid_request_error" if status in (400, 404, 413, 422) else ("rate_limit_error" if status == 429 else "api_error")
+                    err_code = "request_too_large" if status == 413 else ("model_not_found" if status == 404 else ("rate_limit_exceeded" if status == 429 else str(status)))
                     return JSONResponse(
                         status_code=status,
-                        content={"error": {"message": str(msg), "code": str(status)}},
+                        content={"error": {"message": str(msg), "type": err_type, "code": err_code}},
                     )
             except (json.JSONDecodeError, TypeError):
                 pass
+
+        # Non-JSON or HTML upstream error: sanitize to prevent breaking client AI SDKs (Cursor / Cline)
+        raw_source = exc.last_response_body if exc.last_response_body else str(exc)
+        clean_msg = clean_upstream_error_text(raw_source, status_code=status)
+        err_type = "invalid_request_error" if status in (400, 404, 413, 422) else ("rate_limit_error" if status == 429 else "api_error")
+        err_code = "request_too_large" if status == 413 else ("model_not_found" if status == 404 else ("rate_limit_exceeded" if status == 429 else "all_candidates_failed"))
+
         return JSONResponse(
             status_code=status,
-            content={"error": {"message": str(exc), "code": "all_candidates_failed"}},
+            content={
+                "error": {
+                    "message": clean_msg,
+                    "type": err_type,
+                    "param": None,
+                    "code": err_code,
+                }
+            },
         )
     logger.error("Unhandled proxy error: %s", exc, exc_info=True)
     return JSONResponse(
         status_code=503,
-        content={"error": {"message": "Service temporarily unavailable. Please retry later.", "code": "service_unavailable"}},
+        content={"error": {"message": "Service temporarily unavailable. Please retry later.", "type": "api_error", "code": "service_unavailable"}},
     )
 
 

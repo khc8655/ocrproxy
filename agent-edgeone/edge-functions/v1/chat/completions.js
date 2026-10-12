@@ -50,6 +50,31 @@ const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000; // 300s (5min) full EdgeOne fetch limit for deep reasoning models
 const MAX_RETRIES = 3;
 
+function cleanUpstreamErrorText(rawText, statusCode = 500) {
+  if (!rawText) return `Upstream service returned HTTP ${statusCode}`;
+  const str = String(rawText).trim();
+  if (!str) return `Upstream service returned HTTP ${statusCode}`;
+
+  if (/<html|<body|<!doctype|<title/i.test(str)) {
+    const titleMatch = str.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      const title = titleMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (title) {
+        if (statusCode === 413) {
+          return `Upstream payload limit exceeded: ${title}. (Request body too large for provider)`;
+        }
+        return `Upstream gateway error: ${title} (HTTP ${statusCode})`;
+      }
+    }
+    const stripped = str.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (stripped) {
+      return stripped.slice(0, 150);
+    }
+    return `Upstream service returned HTTP ${statusCode}`;
+  }
+  return str.slice(0, 200);
+}
+
 export async function onRequestPost(context) {
   if (context?.request?.method === 'OPTIONS') {
     return onRequestOptions(context);
@@ -294,7 +319,8 @@ export async function onRequestPost(context) {
   }
 
   // All retries exhausted — preserve real upstream status code (e.g. 429, 401, 403, 502, 504)
-  const lastDetail = lastErrorText ? `: ${lastErrorText.slice(0, 200)}` : '';
+  const cleanDetail = cleanUpstreamErrorText(lastErrorText, lastStatus);
+  const lastDetail = cleanDetail ? `: ${cleanDetail.slice(0, 200)}` : '';
   const finalStatus = (lastStatus >= 400 && lastStatus < 600)
     ? lastStatus
     : (attemptLog.some((a) => a.includes('timeout') || a.includes('read_timeout')) ? 504 : 503);
@@ -302,6 +328,8 @@ export async function onRequestPost(context) {
   let userFriendlyMsg = `当前模型所有 ${tried.size} 个候选 Key 均已尝试但均失败 (${attemptLog.join(' -> ')})。`;
   if (finalStatus === 429) {
     userFriendlyMsg += ` 上游源站返回 429 频控/并发超限。服务暂不可用，建议切换备用模型。`;
+  } else if (finalStatus === 413) {
+    userFriendlyMsg += ` 上游源站返回 413 请求体体积超限 (Payload Too Large)。请缩减请求上下文。`;
   } else if (finalStatus === 403 || finalStatus === 401) {
     userFriendlyMsg += ` 上游源站返回 ${finalStatus} 鉴权或配额异常。建议检查配置或切换模型。`;
   } else if (finalStatus === 504) {
@@ -322,9 +350,9 @@ export async function onRequestPost(context) {
   return new Response(
     JSON.stringify({
       error: {
-        type: finalStatus === 429 ? 'rate_limit_error' : (finalStatus >= 500 ? 'upstream_error' : 'failover_exhausted'),
+        type: finalStatus === 429 ? 'rate_limit_error' : (finalStatus === 413 ? 'invalid_request_error' : (finalStatus >= 500 ? 'upstream_error' : 'failover_exhausted')),
         message: userFriendlyMsg,
-        code: finalStatus === 429 ? 'rate_limit_exceeded' : (finalStatus === 504 ? 'gateway_timeout' : 'failover_exhausted'),
+        code: finalStatus === 429 ? 'rate_limit_exceeded' : (finalStatus === 413 ? 'request_too_large' : (finalStatus === 504 ? 'gateway_timeout' : 'failover_exhausted')),
         trace: attemptLog,
       },
     }),

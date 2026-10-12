@@ -1,13 +1,12 @@
 {
-  "version": "v2026.10.11-06",
-  "release_date": "2026-10-11",
+  "version": "v2026.10.12-01",
+  "release_date": "2026-10-12",
   "commit": "HEAD",
-  "title": "紧急修复登录界面函数丢失与日志性能深度优化 (v2026.10.11-06)",
+  "title": "上游非JSON报错智能清洗与413请求超限快速熔断 (v2026.10.12-01)",
   "changelog": [
-    "紧急修复登录界面 TypeError: loginErr is not a function 缺陷：补齐误删的 loginErr 函数，彻底根除登录按钮无响应报错",
-    "修复日志折叠时节点状态与延迟未刷新缺陷：移除 record_kb 折叠中断 return，确保候选节点实时反映最新耗时与健康状态",
-    "升级滑动窗口日志折叠与 repeat_count 展示：实现多 Key 轮询交替 429 报错精准聚合，并在控制台状态列清晰渲染折叠频次徽章",
-    "根除 in_flight 中间件开销并重构纯 ASGI 安全头：消除 BaseHTTPMiddleware 对流式响应的协程调度损耗，SSE 流延迟恢复至 2.4ms 级原生性能",
-    "精简候选节点状态写入与日志瘦身：消除重复多 Key 写入与 legacy 字典深拷贝，将高频内部调度流转日志降级为 DEBUG 级别"
+    "智能清洗上游非 JSON/HTML 错误页：针对 Nginx 413、Cloudflare 502/504 等 HTML 报错，自动提取核心错误标题并剔除 HTML 标签，返回符合 OpenAI 规范的 JSON 错误，彻底根除客户端 AI 插件（Cursor/Cline 等）反序列化崩溃",
+    "413 Payload 超限快速熔断机制：针对当前请求体过大（413）的不可恢复错误，自动标记 provider 并跳过同 provider 其他 key 的无意义重试，显著缩减客户端等待时延",
+    "调度错误结构化记录与净化：错误信息经清洗后规范写入 stats.error_logs 与控制台日志，杜绝原始 HTML 源码污染后台仪表盘与 journald 系统日志",
+    "EdgeOne 边缘函数错误响应对称对齐：同步升级 EdgeOne 端的错误清洗与 413 描述规范，确保多端体验完全一致"
   ]
 }

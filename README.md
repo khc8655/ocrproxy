@@ -511,6 +511,12 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.12-01` (2026-10-12)
+- **上游非 JSON / HTML 报错智能清洗与 OpenAI 规范对齐**：彻底解决上游服务商（如 OpenAgents、Cloudflare、Nginx）在遇到 413 请求体超限或 502/504 网关异常时直接返回原始 HTML 网页导致客户端 AI 插件（Cursor、Cline 等）反序列化崩溃的问题；通过 `clean_upstream_error_text` 智能提取 `<title>` 与核心错误语义，自动清洗 HTML 标签，返回符合 OpenAI 标准规范的 JSON 错误体（`error.type="invalid_request_error"`, `error.code="request_too_large"`）；
+- **413 Payload 超限快速熔断机制 (Fast Failover Short-Circuit)**：在调度器中针对 413（请求体过大）这一不可通过换 Key 恢复的错误进行特化处理，自动将该 provider 标记为 down 并跳过同 provider 其他 Key 的无意义重复尝试，无其他可用跨厂商节点时快速熔断返回客户端，大幅缩减超时等待时间；
+- **调度报错结构化净化**：清洗后的错误描述统一写入 `stats.error_logs` 与控制台日志，杜绝原始 HTML 源码污染后台仪表盘与 journald 系统日志；
+- **EdgeOne 边缘函数错误响应对称对齐**：同步升级 EdgeOne 端的非 JSON 错误清洗与 413 描述规范，确保多端体验完全一致。
+
 ### `v2026.10.11-06` (2026-10-11)
 - **EdgeOne 客户端凭据与管理员密码物理隔离**：彻底根除 EdgeOne 首页「接入网关与可用模型」卡片误读 `getKey()` 导致客户端 API Key 读成 Web 登录密码的缺陷；重构为独立 `getClientKey()` 函数，后端 `/api/config` 自动回填 EdgeOne 环境变量 `PROXY_API_KEY`，在全局设置面板新增 `PROXY_API_KEY` 可视化配置与一键复制，彻底隔离后台管理密码与客户端凭据；
 - **紧急修复登录界面函数丢失致命 Bug**：彻底根除 `TypeError: loginErr is not a function`，在 `shared/admin/js/core.js` 补回防御式健壮的 `function loginErr(m)`，彻底解决 DOM `<div id="loginErr">` 挂载为 `window.loginErr` 导致的函数覆盖与登录阻断缺陷；

@@ -67,6 +67,61 @@ def format_vm_log(tag: str, message: str, meta: Optional[Dict[str, Any]] = None)
     return f"{prefix} | {meta_str}"
 
 
+def clean_upstream_error_text(raw_text: Optional[str], status_code: int = 500) -> str:
+    """Clean and sanitize upstream error text, stripping HTML markup and extracting concise descriptions.
+
+    Prevents leaking raw HTML pages (e.g. Nginx 413 / Cloudflare 502) into client OpenAI error payloads
+    which would otherwise crash client AI SDKs and toolings (like Cursor / Cline).
+    """
+    if not raw_text:
+        return f"Upstream service returned HTTP {status_code}"
+
+    text = str(raw_text).strip()
+    if not text:
+        return f"Upstream service returned HTTP {status_code}"
+
+    import re
+    import html
+
+    # Check if text contains HTML markup
+    is_html = ("<html" in text.lower() or "<body" in text.lower() or "<!doctype" in text.lower() or "<title" in text.lower())
+    if is_html:
+        # 1. Try to extract <title>...</title>
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+        if title_match:
+            candidate = title_match.group(1).strip()
+            candidate = html.unescape(candidate)
+            candidate = re.sub(r"<[^>]+>", " ", candidate).strip()
+            if candidate:
+                if status_code == 413:
+                    return f"Upstream payload limit exceeded: {candidate}. (Request body too large for upstream provider)"
+                return f"Upstream gateway error: {candidate} (HTTP {status_code})"
+
+        # 2. Try to extract <h1>...</h1> or <h2>...</h2>
+        h_match = re.search(r"<h[1-2][^>]*>(.*?)</h[1-2]>", text, re.IGNORECASE | re.DOTALL)
+        if h_match:
+            candidate = html.unescape(h_match.group(1).strip())
+            candidate = re.sub(r"<[^>]+>", " ", candidate).strip()
+            if candidate:
+                if status_code == 413:
+                    return f"Upstream payload limit exceeded: {candidate}. (Request body too large for upstream provider)"
+                return f"Upstream error (HTTP {status_code}): {candidate}"
+
+        # 3. Strip all HTML tags and collapse whitespace
+        stripped = re.sub(r"<[^>]+>", " ", text)
+        stripped = html.unescape(stripped)
+        stripped = re.sub(r"\s+", " ", stripped).strip()
+        if stripped:
+            if status_code == 413:
+                return f"Upstream payload limit exceeded (HTTP 413): {stripped[:150]}"
+            return f"Upstream error (HTTP {status_code}): {stripped[:150]}"
+        return f"Upstream service returned HTTP {status_code}"
+
+    # Non-HTML text: trim and sanitize
+    clean = re.sub(r"\s+", " ", text).strip()
+    return clean[:300]
+
+
 class VMLogger:
     """Unified logger wrapper for VM application."""
 
@@ -84,3 +139,4 @@ class VMLogger:
 
 
 vm_logger = VMLogger()
+

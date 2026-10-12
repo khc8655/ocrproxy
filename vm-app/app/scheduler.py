@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from . import stats
 from .config_store import get_config_version
+from .logger_utils import clean_upstream_error_text
 
 logger = logging.getLogger("scheduler")
 
@@ -1677,26 +1678,51 @@ async def schedule(
                     # others from being tried.  If every candidate fails, the last
                     # upstream status (e.g. 404) is still returned to the client.
                     if status_code == 400 and not _400_is_key_issue:
+                        clean_400_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
                         logger.warning(
-                            f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {err_body_text[:120]}"
+                            f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {clean_400_msg[:120]}"
                         )
                         raise AllCandidatesFailedError(
-                            f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {err_body_text[:200]}",
+                            f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {clean_400_msg[:200]}",
                             last_status_code=status_code,
                             last_response_body=err_body_text,
                         )
 
+                    # 413 Request Entity Too Large: payload exceeded upstream provider limits.
+                    # Retrying other keys of the same provider is futile.
+                    if status_code == 413:
+                        down_providers.add(provider_name)
+                        other_provider_remains = any(
+                            c.get("provider", "") != provider_name
+                            for _, c in ordered_items[attempt_seq:]
+                        )
+                        clean_413_msg = clean_upstream_error_text(err_body_text, status_code=413)
+                        if not other_provider_remains:
+                            logger.warning(
+                                f"Aborting failover for HTTP 413 (Payload Too Large) from {cand_id}: {clean_413_msg[:120]}"
+                            )
+                            raise AllCandidatesFailedError(
+                                f"Candidate {cand_id} returned HTTP 413: {clean_413_msg}",
+                                last_status_code=413,
+                                last_response_body=err_body_text,
+                            )
+                        logger.warning(
+                            f"Fast failover for HTTP 413: provider {provider_name} rejected payload, skipping remaining keys for this provider"
+                        )
+
                     # 2. Manual routing strategy: no failover, raise immediately
                     if strategy == "manual":
+                        clean_manual_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
                         raise AllCandidatesFailedError(
-                            f"Candidate {cand_id} failed with HTTP {status_code}: {err_body_text[:200]}",
+                            f"Candidate {cand_id} failed with HTTP {status_code}: {clean_manual_msg[:200]}",
                             last_status_code=status_code,
                             last_response_body=err_body_text,
                         )
 
                     cand_latency = time.time() - cand_start
-                    err_msg = f"{cand_id} returned HTTP {status_code}: {err_body_text[:120]}"
-                    logger.warning(f"Candidate {cand_id} failed with HTTP {status_code} ({cand_latency:.2f}s): {err_body_text[:80]}")
+                    clean_err_detail = clean_upstream_error_text(err_body_text, status_code=status_code)
+                    err_msg = f"{cand_id} returned HTTP {status_code}: {clean_err_detail[:120]}"
+                    logger.warning(f"Candidate {cand_id} failed with HTTP {status_code} ({cand_latency:.2f}s): {clean_err_detail[:80]}")
                     errors.append(err_msg)
 
                     stats.record(model_type, status_code, cand_latency,
