@@ -192,6 +192,14 @@ _cooldown_until: Dict[str, float] = {}
 _consecutive_failures: Dict[str, int] = {}
 _last_failure_at: Dict[str, float] = {}
 _quota_exhausted_cands: Set[str] = set()
+# HTTP 410 Gone: the upstream retired this model.  Keyed by "provider:model"
+# (not per key) because a retired model is gone for every key of that
+# provider.  Value is the expiry timestamp (default 24 h, cooldown_410_sec).
+# Deliberately survives reset_runtime_state() (/v1/reload) so a reload does
+# not resurrect a retired model; it is only dropped when the provider/model
+# leaves the config, or when the TTL expires.
+_gone_models: Dict[str, float] = {}
+DEFAULT_COOLDOWN_410_SEC = 86400.0
 _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
 _sem_lock = asyncio.Lock()
@@ -224,15 +232,46 @@ HARD_QUOTA_KEYWORDS = (
 )
 QUOTA_EXHAUSTED_KEYWORDS = HARD_QUOTA_KEYWORDS
 
+def _gone_key(provider: str, model: Optional[str]) -> str:
+    return f"{provider}:{model}"
+
+
+def _is_model_gone(provider: str, model: Optional[str]) -> bool:
+    """True while provider:model is marked retired (HTTP 410); lazily expires."""
+    gk = _gone_key(provider, model)
+    expiry = _gone_models.get(gk)
+    if expiry is None:
+        return False
+    if expiry <= time.time():
+        _gone_models.pop(gk, None)
+        return False
+    return True
+
+
+def _mark_model_gone(provider: str, model: Optional[str], ttl_sec: float):
+    if ttl_sec <= 0:
+        return
+    _gone_models[_gone_key(provider, model)] = time.time() + ttl_sec
+
+
+def get_gone_models() -> Dict[str, float]:
+    """provider:model -> expiry timestamp for models the upstream retired (410)."""
+    now = time.time()
+    return {k: v for k, v in _gone_models.items() if v > now}
+
+
 def get_active_cooldowns() -> Dict[str, dict]:
     """Return candidates currently cooling down or quota-exhausted."""
     now = time.time()
     res = {}
     for cand_id, expiry in list(_cooldown_until.items()):
         if expiry > now:
+            prov, _, rest = cand_id.partition(":")
+            model = rest.partition(":")[2]
             res[cand_id] = {
                 "cooling": True,
                 "is_quota": cand_id in _quota_exhausted_cands,
+                "is_gone": _is_model_gone(prov, model),
             }
     return res
 
@@ -343,6 +382,8 @@ class FailureEvaluation:
     is_quota: bool
     mark_provider_down: bool
     circuit_breaker_triggered: bool
+    # HTTP 410: model permanently retired upstream for this provider.
+    model_gone: bool = False
 
 
 def evaluate_candidate_failure(
@@ -384,6 +425,19 @@ def evaluate_candidate_failure(
             is_quota=False,
             mark_provider_down=False,
             circuit_breaker_triggered=False,
+        )
+
+    # 1c. 410 Gone: the upstream permanently retired this model.  Unlike 404
+    # (often a wrong path / transient delisting) this is explicit, so park the
+    # candidate for a long time in both modes; the scheduler additionally
+    # marks provider:model gone so every key of that provider is skipped.
+    if status_code == 410:
+        return FailureEvaluation(
+            cooldown_sec=config_params.get("cooldown_410_sec", DEFAULT_COOLDOWN_410_SEC),
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+            model_gone=True,
         )
 
     # 2. Agent Mode: Only hard quota or auth failure causes long cooldown. Transient errors do NOT freeze the key.
@@ -622,13 +676,20 @@ def _prune_runtime_state(config: dict):
     global _last_config_version
     valid_cand_ids = set()
     valid_key_ids = set()
+    valid_gone_keys = set()
     for cands in config.get("candidates", {}).values():
         for cand in cands:
             try:
                 valid_cand_ids.add(get_candidate_id(cand))
                 valid_key_ids.add(f"{cand['provider']}:{cand['key']}")
+                valid_gone_keys.add(_gone_key(cand['provider'], cand.get('model')))
             except KeyError:
                 continue
+    # Retired (410) models stay retired across config reloads; only forget
+    # them once the provider/model is no longer configured at all.
+    for k in list(_gone_models.keys()):
+        if k not in valid_gone_keys:
+            del _gone_models[k]
     valid_agent_models = set(config.get("agent_models", {}).keys())
     for state in (_cooldown_until, _consecutive_failures, _last_failure_at, _latency_history, _stall_strikes):
         for k in list(state.keys()):
@@ -1199,6 +1260,12 @@ async def schedule(
     except (ValueError, TypeError):
         cooldown_404_sec = 600.0
 
+    # 410 Gone (model retired upstream) - default 24 h; 0 disables parking.
+    try:
+        cooldown_410_sec = max(0.0, float(config.get("cooldown_410_sec", DEFAULT_COOLDOWN_410_SEC)))
+    except (ValueError, TypeError):
+        cooldown_410_sec = DEFAULT_COOLDOWN_410_SEC
+
     # 429 TPM Rate Limit Cooldown (default 15s)
     try:
         cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 15))))
@@ -1243,6 +1310,7 @@ async def schedule(
         "cooldown_5xx_sec": cooldown_5xx_sec,
         "circuit_break_threshold": circuit_break_threshold,
         "circuit_cooldown_sec": circuit_cooldown,
+        "cooldown_410_sec": cooldown_410_sec,
     }
 
     start_monotonic = time.monotonic()
@@ -1305,6 +1373,12 @@ async def schedule(
             cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
             if time.time() < cooldown_expiry:
                 logger.debug(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
+                continue
+
+            # 2b. Model retired upstream (HTTP 410) for this provider: skip every
+            # key, even when the client named the model explicitly.
+            if _is_model_gone(provider_name, cand_model_name):
+                logger.debug("Skipping candidate %s - model %s retired by %s (410)", cand_id, cand_model_name, provider_name)
                 continue
 
             provider = providers.get(provider_name)
@@ -1710,6 +1784,16 @@ async def schedule(
                             f"Fast failover for HTTP 413: provider {provider_name} rejected payload, skipping remaining keys for this provider"
                         )
 
+                    # 410 Gone: model retired upstream.  Mark provider:model gone
+                    # before anything else (incl. manual strategy) so later
+                    # requests, and the remaining keys of this request, skip it.
+                    if status_code == 410:
+                        _mark_model_gone(provider_name, cand_model_name, cooldown_410_sec)
+                        logger.warning(
+                            f"Model {cand_model_name} retired by provider {provider_name} (HTTP 410); "
+                            f"skipping it on all keys for {cooldown_410_sec:.0f}s"
+                        )
+
                     # 2. Manual routing strategy: no failover, raise immediately
                     if strategy == "manual":
                         clean_manual_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
@@ -1936,9 +2020,17 @@ async def schedule(
     else:
         # All candidates were skipped (e.g. in cooldown) – no actual request
         # was attempted, so there is no upstream status/body to forward.
-        msg = (f"No available candidates for {model_type} – all are in cooldown. "
-               f"Please retry in a few seconds.")
-        last_status_code = 503
+        if ordered_items and all(_is_model_gone(c.get("provider", ""), c.get("model"))
+                                 for _, c in ordered_items):
+            # Every candidate's model has been retired upstream: say so with
+            # 410 instead of a misleading "retry in a few seconds" 503.
+            msg = (f"Model for {model_type} has been retired by every configured upstream "
+                   f"(HTTP 410 Gone). Remove or replace it in the model config.")
+            last_status_code = 410
+        else:
+            msg = (f"No available candidates for {model_type} – all are in cooldown. "
+                   f"Please retry in a few seconds.")
+            last_status_code = 503
         last_err_body = json.dumps({"detail": msg})
     # Soonest cooldown expiry among this request's candidates -> Retry-After.
     _now = time.time()

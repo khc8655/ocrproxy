@@ -43,6 +43,8 @@ import {
   bindingId,
   recordFailure,
   getCooldownsBatch,
+  setCooldown,
+  COOLDOWN_DURATIONS,
 } from '../../lib/cooldowns.js';
 import { edgeLogger } from '../../lib/logger.js';
 
@@ -304,6 +306,25 @@ export async function onRequestPost(context) {
       `${binding.provider}/${binding.keyLabel}=${result.kind || `http_${result.status}`}`
     );
 
+    // 410 Gone: upstream retired this model.  Park every key of this provider
+    // for the same upstream model (24 h, persisted to KV) so neither the rest
+    // of this request nor later requests hit it again.  Mirrors VM scheduler.
+    if (result.status === 410) {
+      const goneModel = binding.upstreamModel || body.model;
+      const goneUntil = Date.now() + COOLDOWN_DURATIONS.MODEL_GONE_410 * 1000;
+      edgeLogger.warn('ModelGone', `Model retired upstream (HTTP 410), parking all keys`, {
+        provider: binding.provider,
+        model: goneModel,
+      });
+      for (const b of candidatePool) {
+        if (b.provider !== binding.provider || (b.upstreamModel || body.model) !== goneModel) continue;
+        cooldowns.set(bindingId(b), goneUntil);
+        if (kv) {
+          setCooldown(b.provider, b.keyLabel, COOLDOWN_DURATIONS.MODEL_GONE_410, kv, b.upstreamModel || '').catch(() => {});
+        }
+      }
+    }
+
     // Non-retriable? (e.g. 400 bad request, or manual mode) Return immediately
     if (strategy === 'manual' || !shouldFailover(result.status, result.kind, lastErrorText)) {
       if (result.response) {
@@ -328,6 +349,8 @@ export async function onRequestPost(context) {
   let userFriendlyMsg = `当前模型所有 ${tried.size} 个候选 Key 均已尝试但均失败 (${attemptLog.join(' -> ')})。`;
   if (finalStatus === 429) {
     userFriendlyMsg += ` 上游源站返回 429 频控/并发超限。服务暂不可用，建议切换备用模型。`;
+  } else if (finalStatus === 410) {
+    userFriendlyMsg += ` 上游源站返回 410 模型已下线 (Gone)，已自动暂停该模型 24 小时。请在模型配置中移除或替换。`;
   } else if (finalStatus === 413) {
     userFriendlyMsg += ` 上游源站返回 413 请求体体积超限 (Payload Too Large)。请缩减请求上下文。`;
   } else if (finalStatus === 403 || finalStatus === 401) {
