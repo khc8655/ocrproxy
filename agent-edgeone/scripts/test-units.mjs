@@ -813,6 +813,15 @@ function makeMockKV() {
 }
 
 // ---- classifyFailure / shouldFailover -----------------------------------
+test('classifyFailure: returns 24h model-gone cooldown for 410', () => {
+  eq(classifyFailure(410, 'http'), COOLDOWN_DURATIONS.MODEL_GONE_410);
+  eq(COOLDOWN_DURATIONS.MODEL_GONE_410, 86400);
+});
+
+test('shouldFailover: 410 fails over to another provider', () => {
+  eq(shouldFailover(410, 'http'), true);
+});
+
 test('classifyFailure: returns 60s for 429', () => {
   eq(classifyFailure(429, 'http'), COOLDOWN_DURATIONS.TPM_429);
   eq(COOLDOWN_DURATIONS.TPM_429, 60);

@@ -1,12 +1,13 @@
 {
-  "version": "v2026.10.12-01",
+  "version": "v2026.10.12-02",
   "release_date": "2026-10-12",
   "commit": "HEAD",
-  "title": "上游非JSON报错智能清洗与413请求超限快速熔断 (v2026.10.12-01)",
+  "title": "上游 410 模型下线识别与跨 Key 跳过 (v2026.10.12-02)",
   "changelog": [
-    "智能清洗上游非 JSON/HTML 错误页：针对 Nginx 413、Cloudflare 502/504 等 HTML 报错，自动提取核心错误标题并剔除 HTML 标签，返回符合 OpenAI 规范的 JSON 错误，彻底根除客户端 AI 插件（Cursor/Cline 等）反序列化崩溃",
-    "413 Payload 超限快速熔断机制：针对当前请求体过大（413）的不可恢复错误，自动标记 provider 并跳过同 provider 其他 key 的无意义重试，显著缩减客户端等待时延",
-    "调度错误结构化记录与净化：错误信息经清洗后规范写入 stats.error_logs 与控制台日志，杜绝原始 HTML 源码污染后台仪表盘与 journald 系统日志",
-    "EdgeOne 边缘函数错误响应对称对齐：同步升级 EdgeOne 端的错误清洗与 413 描述规范，确保多端体验完全一致"
+    "上游返回 HTTP 410 Gone 时识别为模型永久下线：VM 调度器把 provider:model 标记为下线（默认 24 小时，可用 cooldown_410_sec 调整，0 为关闭），同一厂商所有 Key 一并跳过，不再每次请求都白撞一次 410；Agent 与 KB 模式、manual 策略均生效",
+    "下线标记在 /v1/reload 与配置热重载后保留，不会被重载恢复；仅在该厂商模型从配置中移除或到期后清除；冷却列表新增 is_gone 标识",
+    "某模型的全部候选都已下线时直接返回 410 和明确提示，不再返回误导性的“请几秒后重试” 503",
+    "EdgeOne 边缘函数对称对齐：410 时把同厂商同上游模型的全部 Key 写入 24 小时 KV 冷却，并给出 410 中文提示；新增 MODEL_GONE_410 常量与单元测试",
+    "新增 vm-app/scripts/scheduler_410_test.py 回归测试"
   ]
 }

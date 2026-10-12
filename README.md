@@ -511,6 +511,13 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.12-02` (2026-10-12)
+- **上游 410 模型下线识别（借鉴 freellmapi #1421/#1423）**：上游返回 HTTP 410 Gone 时，VM 调度器把 `provider:model` 标记为永久下线（默认 24 小时，设置项 `cooldown_410_sec`，设为 0 关闭），同一厂商下所有 Key 一并跳过，客户端点名该模型也不再撞上游；Agent / KB 模式与 manual 策略均生效；
+- **重载不复活**：下线标记在 `/v1/reload` 和配置热重载后保留，只有该厂商模型从配置中移除或到期才清除；冷却列表新增 `is_gone` 字段；
+- **全部下线直接 410**：某模型全部候选都已下线时直接返回 410 与明确提示，替代原先误导性的 “请几秒后重试” 503；
+- **EdgeOne 对称对齐**：410 时把同厂商同上游模型的所有 Key 写入 24 小时 KV 冷却，并返回 410 中文提示；
+- 新增 `vm-app/scripts/scheduler_410_test.py` 回归测试与 EdgeOne 单元测试。
+
 ### `v2026.10.12-01` (2026-10-12)
 - **上游非 JSON / HTML 报错智能清洗与 OpenAI 规范对齐**：彻底解决上游服务商（如 OpenAgents、Cloudflare、Nginx）在遇到 413 请求体超限或 502/504 网关异常时直接返回原始 HTML 网页导致客户端 AI 插件（Cursor、Cline 等）反序列化崩溃的问题；通过 `clean_upstream_error_text` 智能提取 `<title>` 与核心错误语义，自动清洗 HTML 标签，返回符合 OpenAI 标准规范的 JSON 错误体（`error.type="invalid_request_error"`, `error.code="request_too_large"`）；
 - **413 Payload 超限快速熔断机制 (Fast Failover Short-Circuit)**：在调度器中针对 413（请求体过大）这一不可通过换 Key 恢复的错误进行特化处理，自动将该 provider 标记为 down 并跳过同 provider 其他 Key 的无意义重复尝试，无其他可用跨厂商节点时快速熔断返回客户端，大幅缩减超时等待时间；

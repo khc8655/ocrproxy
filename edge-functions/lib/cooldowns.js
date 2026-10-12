@@ -46,6 +46,7 @@ export const COOLDOWN_DURATIONS = Object.freeze({
   EMPTY_STREAM: 5,   // 200 + zero bytes — provider glitch
   CIRCUIT_BREAKER: 300, // VM: circuit_cooldown_sec — when fail_count >= threshold
   KEY_DRIFT: 30,     // 401/404 — config drift
+  MODEL_GONE_410: 86400, // VM: cooldown_410_sec — model retired upstream (HTTP 410)
 });
 
 export const CIRCUIT_BREAKER_THRESHOLD = 3; // VM: circuit_break_threshold
@@ -260,6 +261,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
     return 0; // Client-side parameter error, do not cooldown
   }
 
+  if (status === 410) return COOLDOWN_DURATIONS.MODEL_GONE_410;
   if (status === 401 || status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
   if (status >= 500) return COOLDOWN_DURATIONS.SERVER_5XX;
   return 0;
