@@ -48,6 +48,7 @@ import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fet
 import { onRequestPost as vaultCredentialsPost } from '../edge-functions/api/vault/credentials.js';
 import { onRequestPost as probeModelsPost } from '../edge-functions/api/admin/probe-models.js';
 import { onRequestGet as statsGet, onRequestPost as statsPost } from '../edge-functions/api/admin/stats.js';
+import { onRequestGet as configGet } from '../edge-functions/api/config.js';
 import { maskSecret, sanitizeMeta, edgeLogger } from '../edge-functions/lib/logger.js';
 import { readFileSync } from 'node:fs';
 
@@ -1930,6 +1931,36 @@ test('bundled admin ui: has isolated EdgeOne vault hub admin UI per ARCHITECTURE
   // 4. Guaranteed agent model UI functions
   truthy(content.includes('renderAgentModels'));
   truthy(content.includes('saveAgentModel'));
+  // 5. Proxy API Key isolation & UI input (never read admin password into client key)
+  truthy(content.includes('function getClientKey()'));
+  truthy(content.includes('id="set_proxy_api_key"'));
+  truthy(!content.includes('clientKey = getKey()'));
+  truthy(!content.includes("const key = getKey() || 'YOUR_PROXY_API_KEY'"));
+});
+
+test('api/config.js: onRequestGet injects env.PROXY_API_KEY into returned config.proxy_api_key', async () => {
+  const env = {
+    ADMIN_PASSWORD: 'admin_test_pass',
+    PROXY_API_KEY: 'sk-edgeone-env-proxy-key',
+  };
+  const mockKv = {
+    get: async () => JSON.stringify({
+      config: {
+        providers: {
+          deepseek: { base_url: 'https://api.deepseek.com', keys: { k1: 'sk-111' } }
+        },
+        agent_models: {}
+      }
+    }),
+    put: async () => {},
+  };
+  const req = new Request('http://localhost/api/config', {
+    headers: { 'authorization': 'Bearer admin_test_pass' }
+  });
+  const res = await configGet({ request: req, env, agent_kv: mockKv });
+  eq(res.status, 200);
+  const data = await res.json();
+  eq(data.config.proxy_api_key, 'sk-edgeone-env-proxy-key');
 });
 
 test('checkAuth supports both ADMIN_PASSWORD and PROXY_API_KEY', () => {

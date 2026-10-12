@@ -1331,6 +1331,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <div class="card card-pad mb-4">
           <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">分流算法与超时预算</h4>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label" for="set_proxy_api_key">客户端调用密钥 (PROXY_API_KEY)</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="set_proxy_api_key" class="form-control mono" placeholder="sk-..." style="flex:1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()">复制 Key</button>
+              </div>
+              <div class="text-secondary text-sm mt-1">客户端（Cursor / Cline / OpenAI SDK 等）调用 <code>/v1/*</code> 接口所需的凭证。系统优先读取 EdgeOne 环境变量中的 <code>PROXY_API_KEY</code>，亦可在此保存至 KV 覆盖。</div>
+            </div>
             <div class="form-group">
               <label class="form-label">路由分流算法 (agent_routing_strategy)</label>
               <select id="set_routing_strategy" class="form-control">
@@ -3212,6 +3220,10 @@ function getKey() {
   return localStorage.getItem(TOKEN_KEY) || '';
 }
 
+function getClientKey() {
+  return (cfg && cfg.proxy_api_key) ? String(cfg.proxy_api_key).trim() : '';
+}
+
 function setKey(k) {
   localStorage.setItem(TOKEN_KEY, k);
 }
@@ -3377,6 +3389,9 @@ function renderAll() {
 
 function renderSettings() {
   const s = cfg.settings || {};
+  const elProxyKey = document.getElementById('set_proxy_api_key');
+  if (elProxyKey) elProxyKey.value = getClientKey();
+
   const elStrat = document.getElementById('set_routing_strategy');
   if (elStrat) elStrat.value = s.agent_routing_strategy || cfg.agent_routing_strategy || 'sticky_failover';
 
@@ -3408,6 +3423,15 @@ function renderSettings() {
   if (elCd403) elCd403.value = s.cooldown_403_sec || 600;
 }
 
+function copyProxyKey() {
+  const key = document.getElementById('set_proxy_api_key')?.value.trim() || getClientKey();
+  if (!key) {
+    toast('尚未配置或获取到有效客户端 API Key (PROXY_API_KEY)', 'err');
+    return;
+  }
+  copyText(key, '客户端 API Key 已复制到剪贴板');
+}
+
 async function saveSettings() {
   const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 120;
   const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
@@ -3425,9 +3449,19 @@ async function saveSettings() {
     circuit_break_threshold: Number(document.getElementById('set_circuit_break_threshold').value) || 3,
     cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
   };
+  const proxyKeyInput = document.getElementById('set_proxy_api_key');
+  if (proxyKeyInput) {
+    const val = proxyKeyInput.value.trim();
+    if (val) {
+      cfg.proxy_api_key = val;
+    } else {
+      delete cfg.proxy_api_key;
+    }
+  }
   const ok = await persistConfig();
   if (ok) {
     toast('全局策略设置已保存生效', 'ok');
+    renderDashboardGateway();
   }
 }
 
@@ -3488,7 +3522,7 @@ function renderDashboardGateway() {
   const urlEl = document.getElementById('dbBaseUrl');
   if (urlEl) urlEl.textContent = base;
 
-  const clientKey = getKey() || 'YOUR_PROXY_API_KEY';
+  const clientKey = getClientKey();
   const keyEl = document.getElementById('gwClientKeyVal');
   if (keyEl) keyEl.textContent = clientKey || '<PROXY_API_KEY>';
 
@@ -3521,7 +3555,11 @@ function copyDbBaseUrl() {
 }
 
 function copyDbClientKey() {
-  const key = getKey() || 'YOUR_PROXY_API_KEY';
+  const key = getClientKey();
+  if (!key) {
+    toast('尚未配置或获取到有效客户端 API Key (PROXY_API_KEY)', 'err');
+    return;
+  }
   copyText(key, '客户端 API Key 已复制到剪贴板');
 }
 
@@ -3774,7 +3812,7 @@ function renderAccess() {
   const models = Object.keys(cfg.agent_models || {});
   const messagesModels = models.filter(m => getModelProtocols(m).includes('messages'));
   const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
-  const proxyKey = getKey() || 'YOUR_PROXY_API_KEY';
+  const proxyKey = getClientKey() || 'YOUR_PROXY_API_KEY';
 
   const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   setT('accBaseUrl', base);

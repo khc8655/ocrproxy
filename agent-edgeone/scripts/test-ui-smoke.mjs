@@ -221,6 +221,27 @@ try {
   process.exit(1);
 }
 
+console.log('  ▸ 测试用例 6: 客户端 Key 隔离测试 (严禁读取管理员密码展示在首页网关)...');
+try {
+  vm.runInContext(`
+    state.config = { proxy_api_key: 'sk-client-key-12345', agent_models: {} };
+    state.key = 'AdminSecretPassword999';
+    renderDashboardGateway();
+  `, sandbox);
+  const gwKey = sandbox.document.getElementById('gwClientKeyVal').textContent;
+  if (gwKey === 'AdminSecretPassword999' || gwKey.includes('AdminSecret')) {
+    console.error('❌ [SmokeFailure] 客户端凭据错误显示为管理员密码！');
+    process.exit(1);
+  }
+  if (gwKey !== 'sk-client-key-12345') {
+    console.error(`❌ [SmokeFailure] 客户端凭据未正确展示 proxy_api_key: ${gwKey}`);
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('❌ [SmokeFailure] renderDashboardGateway 客户端 Key 隔离测试异常:', e);
+  process.exit(1);
+}
+
 if (capturedErrors.length > 0) {
   console.error(`❌ [SmokeFailure] 冒烟测试捕获到全局异常:`, capturedErrors);
   process.exit(1);

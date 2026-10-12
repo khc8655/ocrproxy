@@ -156,6 +156,14 @@
         <div class="card card-pad mb-4">
           <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">分流算法与超时预算</h4>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label" for="set_proxy_api_key">客户端调用密钥 (PROXY_API_KEY)</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="set_proxy_api_key" class="form-control mono" placeholder="sk-..." style="flex:1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()">复制 Key</button>
+              </div>
+              <div class="text-secondary text-sm mt-1">客户端（Cursor / Cline / OpenAI SDK 等）调用 <code>/v1/*</code> 接口所需的凭证。系统优先读取 EdgeOne 环境变量中的 <code>PROXY_API_KEY</code>，亦可在此保存至 KV 覆盖。</div>
+            </div>
             <div class="form-group">
               <label class="form-label">路由分流算法 (agent_routing_strategy)</label>
               <select id="set_routing_strategy" class="form-control">

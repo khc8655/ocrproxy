@@ -512,6 +512,7 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 ## 最新版本更新记录 (Release Notes)
 
 ### `v2026.10.11-06` (2026-10-11)
+- **EdgeOne 客户端凭据与管理员密码物理隔离**：彻底根除 EdgeOne 首页「接入网关与可用模型」卡片误读 `getKey()` 导致客户端 API Key 读成 Web 登录密码的缺陷；重构为独立 `getClientKey()` 函数，后端 `/api/config` 自动回填 EdgeOne 环境变量 `PROXY_API_KEY`，在全局设置面板新增 `PROXY_API_KEY` 可视化配置与一键复制，彻底隔离后台管理密码与客户端凭据；
 - **紧急修复登录界面函数丢失致命 Bug**：彻底根除 `TypeError: loginErr is not a function`，在 `shared/admin/js/core.js` 补回防御式健壮的 `function loginErr(m)`，彻底解决 DOM `<div id="loginErr">` 挂载为 `window.loginErr` 导致的函数覆盖与登录阻断缺陷；
 - **全流程三重机械化发版门禁 (Release Quality Gates)**：
   - **Gate 1 (静态符号契约扫描)**：引入 `agent-edgeone/scripts/verify-frontend-symbols.mjs`，通过 Node `node:vm` 硬编译全量 JS，严密扫描所有核心交互函数契约，未声明符号立即阻断构建；

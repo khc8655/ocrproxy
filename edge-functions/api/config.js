@@ -260,13 +260,19 @@ export async function onRequestGet(context) {
     });
   }
 
+  const proxyKey = config.proxy_api_key || (context.env?.PROXY_API_KEY ? String(context.env.PROXY_API_KEY).trim() : '');
+  const outConfig = {
+    ...config,
+    proxy_api_key: proxyKey,
+  };
+
   return new Response(
     JSON.stringify({
       source,
       last_modified: lastModified,
       kv_binding: kvRes?.name || null,
       _version: config._version || 0,
-      config,
+      config: outConfig,
     }),
     {
       status: 200,
