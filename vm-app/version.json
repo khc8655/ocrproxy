@@ -1,13 +1,11 @@
 {
-  "version": "v2026.10.12-02",
-  "release_date": "2026-10-12",
+  "version": "v2026.10.13-01",
+  "release_date": "2026-10-13",
   "commit": "HEAD",
-  "title": "上游 410 模型下线识别与跨 Key 跳过 (v2026.10.12-02)",
+  "title": "MiniMax-M3.1-Flash-Preview 双协议适配与声明式思考深度降级 (v2026.10.13-01)",
   "changelog": [
-    "上游返回 HTTP 410 Gone 时识别为模型永久下线：VM 调度器把 provider:model 标记为下线（默认 24 小时，可用 cooldown_410_sec 调整，0 为关闭），同一厂商所有 Key 一并跳过，不再每次请求都白撞一次 410；Agent 与 KB 模式、manual 策略均生效",
-    "下线标记在 /v1/reload 与配置热重载后保留，不会被重载恢复；仅在该厂商模型从配置中移除或到期后清除；冷却列表新增 is_gone 标识",
-    "某模型的全部候选都已下线时直接返回 410 和明确提示，不再返回误导性的“请几秒后重试” 503",
-    "EdgeOne 边缘函数对称对齐：410 时把同厂商同上游模型的全部 Key 写入 24 小时 KV 冷却，并给出 410 中文提示；新增 MODEL_GONE_410 常量与单元测试",
-    "新增 vm-app/scripts/scheduler_410_test.py 回归测试"
+    "升级 shared/presets/minimax.json 至 v1.4.0：针对 MiniMax-M3.1-Flash-Preview 强制 adaptive 思考特性，声明 effort_map (none/minimal -> low)、force_adaptive_thinking 与 disallow_reasoning_split_false，彻底消除 Hermes 等客户端后台生成标题传入 reasoning_effort=none 引发的 HTTP 400 (2013) 报错",
+    "通用规则执行器支持声明式 effort_map、force_adaptive_thinking 及 Anthropic /v1/messages 端点下 output_config.effort 的保留与映射",
+    "合并内置最新预设规则与持久化配置规则，确保预设升级无需重建供应商即可自动生效"
   ]
 }

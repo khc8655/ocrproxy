@@ -1,7 +1,7 @@
 {
   "id": "minimax",
   "name": "MiniMax",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "protocol": "openai",
   "base_url": "https://api.minimaxi.com/v1",
   "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -34,7 +34,13 @@
         "high",
         "xhigh",
         "max"
-      ]
+      ],
+      "effort_map": {
+        "none": "low",
+        "minimal": "low"
+      },
+      "force_adaptive_thinking": true,
+      "disallow_reasoning_split_false": true
     },
     "case_sensitive_models": {
       "minimax-m3": "MiniMax-M3",

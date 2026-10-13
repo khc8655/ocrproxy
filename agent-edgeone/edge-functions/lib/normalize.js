@@ -119,7 +119,15 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
   const stripParams = rules.sanitization?.strip_params || rules.sanitization?.unsupported_params;
   if (Array.isArray(stripParams)) {
     for (const sp of stripParams) {
-      delete body[sp];
+      if (sp === 'output_config' && isAnthropic && body.output_config && typeof body.output_config === 'object') {
+        if (body.output_config.effort !== undefined) {
+          body.output_config = { effort: body.output_config.effort };
+        } else {
+          delete body.output_config;
+        }
+      } else {
+        delete body[sp];
+      }
     }
   }
   const maxTokensCeil = rules.sanitization?.max_tokens_ceiling;
@@ -260,7 +268,7 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
-  // 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
+  // 6. Reasoning strategy execution
   const reasoningRules = rules.reasoning;
   if (reasoningRules && typeof reasoningRules === 'object') {
     const strat = reasoningRules.strategy || 'openai_passthrough';
@@ -273,10 +281,16 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
         body.extra_body.google = body.extra_body.google || {};
         body.extra_body.google.thinking_config = { include_thoughts: false };
       } else {
-        body.reasoning_effort = 'none';
+        const effortMap = reasoningRules.effort_map;
+        if (effortMap && typeof effortMap === 'object' && effortMap.none) {
+          body.reasoning_effort = effortMap.none;
+        } else {
+          body.reasoning_effort = 'none';
+        }
       }
     } else {
-      // Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
+      // Agent mode: Gemini transforms reasoning_effort to extra_body.google.thinking_config;
+      // other providers pass through while enforcing declarative effort_map / adaptive thinking constraints.
       if (strat === 'gemini_thinking_matrix') {
         const isGemma = modelName.startsWith('gemma');
         let thinkingEnabled = false;
@@ -325,8 +339,43 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
           }
         }
       } else {
-        // All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
-        // Pure passthrough: preserve reasoning_effort and payload format untouched
+        const effortMap = reasoningRules.effort_map;
+        if (effortMap && typeof effortMap === 'object') {
+          if (body.reasoning_effort !== undefined && body.reasoning_effort !== null) {
+            const rawEff = String(body.reasoning_effort).toLowerCase().trim();
+            if (Object.prototype.hasOwnProperty.call(effortMap, rawEff)) {
+              const mapped = effortMap[rawEff];
+              if (mapped === null) {
+                delete body.reasoning_effort;
+              } else {
+                body.reasoning_effort = mapped;
+              }
+            }
+          }
+          if (body.output_config && typeof body.output_config === 'object' && body.output_config.effort !== undefined && body.output_config.effort !== null) {
+            const rawOcEff = String(body.output_config.effort).toLowerCase().trim();
+            if (Object.prototype.hasOwnProperty.call(effortMap, rawOcEff)) {
+              const mappedOc = effortMap[rawOcEff];
+              if (mappedOc === null) {
+                delete body.output_config.effort;
+              } else {
+                body.output_config = { ...body.output_config, effort: mappedOc };
+              }
+            }
+          }
+        }
+
+        if (reasoningRules.force_adaptive_thinking) {
+          if (body.thinking && typeof body.thinking === 'object' && String(body.thinking.type || '').toLowerCase() === 'disabled') {
+            body.thinking = { ...body.thinking, type: 'adaptive' };
+          }
+        }
+
+        if (reasoningRules.disallow_reasoning_split_false) {
+          if (body.reasoning_split === false) {
+            body.reasoning_split = true;
+          }
+        }
       }
     }
   }
@@ -341,6 +390,22 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
   return body;
 }
 
+function resolveEffectiveRules(presetRules, overrideRules) {
+  if (!presetRules || typeof presetRules !== 'object' || Object.keys(presetRules).length === 0) {
+    return overrideRules || {};
+  }
+  if (!overrideRules || typeof overrideRules !== 'object' || Object.keys(overrideRules).length === 0) {
+    return presetRules;
+  }
+  const merged = { ...overrideRules, ...presetRules };
+  for (const subKey of ['reasoning', 'case_sensitive_models', 'sanitization', 'tools', 'messages']) {
+    if (overrideRules[subKey] || presetRules[subKey]) {
+      merged[subKey] = { ...(overrideRules[subKey] || {}), ...(presetRules[subKey] || {}) };
+    }
+  }
+  return merged;
+}
+
 /**
  * Public normalisation API for chat completions.
  */
@@ -348,7 +413,7 @@ export function normaliseForProvider(body, provider, configOverride = null, isAg
   if (!body || typeof body !== 'object') return body;
   const p = String(provider || '').toLowerCase();
   const preset = getPreset(p) || {};
-  const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
+  const rules = resolveEffectiveRules(preset.adapter_rules, configOverride?.adapter_rules);
   const agentMode = configOverride?.isAgentMode !== undefined ? configOverride.isAgentMode : isAgentMode;
   return applyAdapterRules(body, rules, agentMode, false);
 }
@@ -360,7 +425,7 @@ export function normaliseMessagesForProvider(body, provider, configOverride = nu
   if (!body || typeof body !== 'object') return body;
   const p = String(provider || '').toLowerCase();
   const preset = getPreset(p) || {};
-  const rules = configOverride?.adapter_rules || preset.adapter_rules || {};
+  const rules = resolveEffectiveRules(preset.adapter_rules, configOverride?.adapter_rules);
   return applyAdapterRules(body, rules, true, true);
 }
 

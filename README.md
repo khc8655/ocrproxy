@@ -117,7 +117,7 @@ ocrprox (Monorepo)
   - `${random_session_id}`：动态生成标准 CLI 会话 ID（如 `ses_4a...`）；
   - `${timestamp}`：当前 Unix 时间戳（秒）；
   - `${uuid}`：标准 UUIDv4；
-- **通用参数裁剪**：声明 `strip_params`、`stream_only` 等通用参数即可。
+- **通用参数裁剪与声明式思考约束**：声明 `strip_params`、`stream_only`、`reasoning.effort_map`（如将不支持的 `"none"` 映射为 `"low"`）、`reasoning.force_adaptive_thinking`、`reasoning.disallow_reasoning_split_false` 等通用参数即可，且 Anthropic `/v1/messages` 端点下自动保留 `output_config.effort`。
 
 ---
 

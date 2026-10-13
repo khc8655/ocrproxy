@@ -27,7 +27,7 @@ import {
   DEFAULT_SETTINGS,
   checkAuth,
 } from '../edge-functions/lib/config.js';
-import { normaliseForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream } from '../edge-functions/lib/normalize.js';
+import { normaliseForProvider, normaliseMessagesForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream } from '../edge-functions/lib/normalize.js';
 import {
   getCooldown,
   setCooldown,
@@ -611,7 +611,7 @@ test('normalize: sensenova preserves object tool_choice for modern agents', () =
   deepEq(body.tool_choice, obj);
 });
 
-// normaliseForProvider — MiniMax (Gemini-Only Transformation Rule)
+// normaliseForProvider — MiniMax (Declarative effort_map & adaptive thinking rules)
 test('normalize: minimax with reasoning_effort "medium" preserved untouched', () => {
   const body = { model: 'minimax-m3', reasoning_effort: 'medium' };
   normaliseForProvider(body, 'minimax');
@@ -625,16 +625,24 @@ test('normalize: minimax standard chat preserves clean agent parameters', () => 
   eq(body.model, 'MiniMax-M3');
 });
 
-test('normalize: minimax with reasoning_effort "none" preserved untouched', () => {
-  const body = { model: 'MiniMax-M3', reasoning_effort: 'none' };
+test('normalize: minimax maps reasoning_effort "none" to "low" to prevent HTTP 400 (2013)', () => {
+  const body = { model: 'minimax-m3.1-flash-preview', reasoning_effort: 'none', thinking: { type: 'disabled' }, reasoning_split: false };
   normaliseForProvider(body, 'minimax');
-  eq(body.reasoning_effort, 'none');
+  eq(body.model, 'MiniMax-M3.1-Flash-Preview');
+  eq(body.reasoning_effort, 'low');
+  eq(body.thinking.type, 'adaptive');
+  eq(body.reasoning_split, true);
 });
 
-test('normalize: minimax strips output_config', () => {
-  const body = { model: 'minimax-m3', output_config: { format: 'text' } };
-  normaliseForProvider(body, 'minimax');
-  eq(body.output_config, undefined);
+test('normalize: minimax strips output_config on OpenAI endpoint but preserves effort on Anthropic endpoint', () => {
+  const bodyOpenai = { model: 'minimax-m3', output_config: { format: 'text', effort: 'high' } };
+  normaliseForProvider(bodyOpenai, 'minimax');
+  eq(bodyOpenai.output_config, undefined);
+
+  const bodyAnthropic = { model: 'minimax-m3.1-flash-preview', output_config: { format: 'text', effort: 'none' } };
+  normaliseMessagesForProvider(bodyAnthropic, 'minimax');
+  eq(bodyAnthropic.model, 'MiniMax-M3.1-Flash-Preview');
+  deepEq(bodyAnthropic.output_config, { effort: 'low' });
 });
 
 test('rescueToolCallsFromText: extracts markdown json tool call', () => {

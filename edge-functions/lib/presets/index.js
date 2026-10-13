@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-12T07:45:41.658Z",
+  "updated_at": "2026-10-13T03:49:49.256Z",
   "providers": [
     {
       "id": "agnes",
@@ -113,8 +113,8 @@ export const CATALOG = {
     {
       "id": "minimax",
       "name": "MiniMax",
-      "version": "1.3.0",
-      "rule_hash": "dc0aae66c67c",
+      "version": "1.4.0",
+      "rule_hash": "e5cff916701c",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
       "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -675,7 +675,7 @@ export const PRESETS = [
   {
     "id": "minimax",
     "name": "MiniMax",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -708,7 +708,13 @@ export const PRESETS = [
           "high",
           "xhigh",
           "max"
-        ]
+        ],
+        "effort_map": {
+          "none": "low",
+          "minimal": "low"
+        },
+        "force_adaptive_thinking": true,
+        "disallow_reasoning_split_false": true
       },
       "case_sensitive_models": {
         "minimax-m3": "MiniMax-M3",

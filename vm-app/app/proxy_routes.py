@@ -234,6 +234,22 @@ def _get_preset_rules(provider_id: str) -> dict:
     return _get_preset(provider_id).get("adapter_rules", {})
 
 
+def _resolve_adapter_rules(provider_id: str, p_info: Optional[dict] = None) -> dict:
+    """Resolve effective adapter_rules by merging latest preset rules over stored provider rules."""
+    p_cfg = p_info if isinstance(p_info, dict) else {}
+    preset_r = _get_preset_rules(p_cfg.get("preset_id") or provider_id)
+    stored_r = p_cfg.get("adapter_rules") if isinstance(p_cfg.get("adapter_rules"), dict) else {}
+    if not preset_r:
+        return stored_r
+    if not stored_r:
+        return dict(preset_r)
+    merged = {**stored_r, **preset_r}
+    for sub_key in ("reasoning", "case_sensitive_models", "sanitization", "tools", "messages"):
+        if isinstance(stored_r.get(sub_key), dict) or isinstance(preset_r.get(sub_key), dict):
+            merged[sub_key] = {**(stored_r.get(sub_key) or {}), **(preset_r.get(sub_key) or {})}
+    return merged
+
+
 def _sanitize_gemini_schema(schema):
     """Recursively strip $schema, additionalProperties, $defs, $ref and validate required properties."""
     if not isinstance(schema, dict):
@@ -314,7 +330,13 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
     # 2. Sanitization (parameter blacklisting and clamping)
     strip_params = rules.get("sanitization", {}).get("strip_params", [])
     for sp in strip_params:
-        out.pop(sp, None)
+        if sp == "output_config" and is_anthropic and isinstance(out.get("output_config"), dict):
+            if "effort" in out["output_config"]:
+                out["output_config"] = {"effort": out["output_config"]["effort"]}
+            else:
+                out.pop("output_config", None)
+        else:
+            out.pop(sp, None)
     max_tokens_ceil = rules.get("sanitization", {}).get("max_tokens_ceiling")
     if isinstance(max_tokens_ceil, int) and max_tokens_ceil > 0:
         if isinstance(out.get("max_tokens"), int) and out["max_tokens"] > max_tokens_ceil:
@@ -438,7 +460,7 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
             if ik not in out:
                 out[ik] = iv
 
-    # 6. Reasoning strategy execution (Gemini-only transformation; all others are passthrough)
+    # 6. Reasoning strategy execution
     reasoning_rules = rules.get("reasoning", {})
     if reasoning_rules and isinstance(reasoning_rules, dict):
         strat = reasoning_rules.get("strategy", "openai_passthrough")
@@ -451,16 +473,43 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                     "include_thoughts": False
                 }
             else:
-                out["reasoning_effort"] = "none"
+                effort_map = reasoning_rules.get("effort_map")
+                if isinstance(effort_map, dict) and "none" in effort_map and effort_map["none"]:
+                    out["reasoning_effort"] = effort_map["none"]
+                else:
+                    out["reasoning_effort"] = "none"
         else:
-            # Agent mode: ONLY Gemini transforms reasoning_effort to extra_body.google.thinking_config
-            # (thinking level, thought tags, headroom; see gemini_compat.py)
+            # Agent mode: Gemini transforms reasoning_effort to extra_body.google.thinking_config;
+            # other providers pass through while enforcing declarative effort_map / adaptive thinking constraints.
             if strat == "gemini_thinking_matrix":
                 gemini_compat.apply_thinking(out, reasoning_rules, m_name)
             else:
-                # All other providers (OpenAI, DeepSeek, MiniMax, StepFun, AMD, B.AI, Agnes, etc.)
-                # Pure passthrough: preserve reasoning_effort and payload format untouched
-                pass
+                effort_map = reasoning_rules.get("effort_map")
+                if isinstance(effort_map, dict):
+                    if out.get("reasoning_effort") is not None:
+                        raw_eff = str(out["reasoning_effort"]).lower().strip()
+                        if raw_eff in effort_map:
+                            mapped = effort_map[raw_eff]
+                            if mapped is None:
+                                out.pop("reasoning_effort", None)
+                            else:
+                                out["reasoning_effort"] = mapped
+                    if isinstance(out.get("output_config"), dict) and out["output_config"].get("effort") is not None:
+                        raw_oc_eff = str(out["output_config"]["effort"]).lower().strip()
+                        if raw_oc_eff in effort_map:
+                            mapped_oc = effort_map[raw_oc_eff]
+                            if mapped_oc is None:
+                                out["output_config"].pop("effort", None)
+                            else:
+                                out["output_config"] = {**out["output_config"], "effort": mapped_oc}
+
+                if reasoning_rules.get("force_adaptive_thinking"):
+                    if isinstance(out.get("thinking"), dict) and str(out["thinking"].get("type", "")).lower() == "disabled":
+                        out["thinking"] = {**out["thinking"], "type": "adaptive"}
+
+                if reasoning_rules.get("disallow_reasoning_split_false"):
+                    if out.get("reasoning_split") is False:
+                        out["reasoning_split"] = True
 
     # 7. Anthropic Messages endpoint specific rules
     if is_anthropic:
@@ -923,12 +972,11 @@ async def chat_completions(request: Request):
                 continue
             p_id = b["provider"]
             p_info = providers_map.get(p_id) or {}
-            preset_r = dict(_get_preset_rules(p_info.get("preset_id", p_id)))
             candidates_list.append({
                 "provider": p_id,
                 "key": b["key"],
                 "model": b.get("upstream_model") or default_upstream,
-                "adapter_rules": p_info.get("adapter_rules") or preset_r,
+                "adapter_rules": _resolve_adapter_rules(p_id, p_info),
             })
 
         if not candidates_list:
@@ -1019,6 +1067,10 @@ async def chat_completions(request: Request):
         # pass raw bytes directly to upstream without expensive re-serialization.
         is_passthrough = (
             cand["model"] == model_name
+            and out.get("model") == body.get("model")
+            and out.get("reasoning_effort") == body.get("reasoning_effort")
+            and out.get("thinking") == body.get("thinking")
+            and out.get("reasoning_split") == body.get("reasoning_split")
             and not kb_force_no_reasoning
             and not signed_ids
             and (
@@ -1215,7 +1267,7 @@ async def anthropic_messages(request: Request):
             "provider": p_name,
             "key": b["key"],
             "model": b.get("upstream_model") or default_upstream,
-            "adapter_rules": p_cfg.get("adapter_rules") or _get_preset_rules(p_cfg.get("preset_id", p_name)),
+            "adapter_rules": _resolve_adapter_rules(p_name, p_cfg),
         })
 
     if not candidates_list:
