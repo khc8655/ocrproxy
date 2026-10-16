@@ -1166,12 +1166,6 @@
       let strategyLabel = `${(m.keys || []).length} 个 Key · 粘性故障转移 (固定当前，遇错顺延)`;
       if (strategy === 'manual') {
         strategyLabel = `${(m.keys || []).length} 个 Key · 纯手动直通 (当前使用: ${_esc(activeKey)})`;
-      } else if (strategy === 'round_robin') {
-        strategyLabel = `${(m.keys || []).length} 个 Key · 轮询负载均衡 (依次轮流)`;
-      } else if (strategy === 'priority_fallback') {
-        strategyLabel = `${(m.keys || []).length} 个 Key · 主备优先级降级 (首选降级)`;
-      } else if (strategy === 'latency_based') {
-        strategyLabel = `${(m.keys || []).length} 个 Key · 最低延迟优先`;
       }
 
       const totalKeys = (m.keys || []).length;

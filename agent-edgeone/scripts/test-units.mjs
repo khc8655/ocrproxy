@@ -218,7 +218,7 @@ test('orderBindings: sticky_failover starts at cursor and updates on success', (
   eq(ordered[2].provider, 'p1');
 });
 
-test('orderBindings: round_robin advances cursor sequentially', () => {
+test('orderBindings: legacy round_robin falls back to sticky_failover', () => {
   const list = [
     { provider: 'p1', keyLabel: 'k1' },
     { provider: 'p2', keyLabel: 'k2' }
@@ -226,9 +226,7 @@ test('orderBindings: round_robin advances cursor sequentially', () => {
   const o1 = orderBindings(list, 'test-rr-model', 'round_robin');
   eq(o1[0].provider, 'p1');
   const o2 = orderBindings(list, 'test-rr-model', 'round_robin');
-  eq(o2[0].provider, 'p2');
-  const o3 = orderBindings(list, 'test-rr-model', 'round_robin');
-  eq(o3[0].provider, 'p1');
+  eq(o2[0].provider, 'p1');
 });
 
 // resolveBinding

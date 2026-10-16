@@ -1,13 +1,12 @@
 {
-  "version": "v2026.10.16-01",
+  "version": "v2026.10.16-02",
   "release_date": "2026-10-16",
   "commit": "HEAD",
-  "title": "智能体首字节超时解耦、连接池自愈与协议合规升级 (v2026.10.16-01)",
+  "title": "Agent 网络错误可重试、粘性同 Key 退避重试与分流策略精简 (v2026.10.16-02)",
   "changelog": [
-    "废除按模型名猜测思考超时的硬编码逻辑，引入 Agent 模式独立首字节超时配置 agent_first_byte_timeout_sec（默认 120s），彻底解决长思考模型（如 deepseek-v4.1-flash / r1 等）因排队首字节被提前掐断 503 的问题；KB 模式与 Agent 模式超时参数全面解耦",
-    "将闲置/失效连接重试探测窗口从 2.0s 放宽至 5.0s，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连",
-    "出站请求规范化：客户端默认附带 User-Agent: OCRProxy/{version}，流式请求在 build_request 中显式附带 Accept: text/event-stream，避免被上游 CDN 或防火墙误伤",
-    "安全防线加固补丁：SSRF 盲区阻断（强制要求 HTTPS 且阻断内网与云元数据 IP）、金库专钥敏感反显脱敏（掩码保真）、CORS 跨域分层收敛（管理接口隔离跨域头）",
-    "候选节点与模型绑定去重保护：新增或编辑候选节点与模型时杜绝重复挂载与幽灵覆盖"
+    "上游网络层错误（连接失败/断连/超时）不再返回 500：连接类返回 502、读超时返回 504，上游原始 500 按网关语义转为 502；500 仅保留给代理自身错误",
+    "错误响应增加 x-should-retry 与 Retry-After：可重试的状态（408/409/429/5xx/52x）标记为 true，其余 4xx 标记为 false，OpenAI/Anthropic SDK 会优先读取这个头",
+    "Agent 粘性模式：提供商/CDN 级故障（502/503/504/52x、建连失败、断连）先在原 Key 上按 1s、2s 退避重试，最多 2 次（agent_same_key_retries），之后再切换提供商；429/401/额度类错误仍立即换 Key；同 Key 重试不占用 max_retries 配额",
+    "Agent 分流策略精简为粘性故障转移和纯手动直通两种，旧配置值（round_robin/priority_fallback/latency_based/random）自动按粘性处理；KB 策略不变"
   ]
 }

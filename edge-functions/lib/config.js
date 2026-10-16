@@ -427,7 +427,7 @@ const _rrAgentIndices = new Map();        // model -> rr index
 
 /**
  * Get ordered candidate bindings based on routing strategy (matches VM scheduler).
- * Strategies: 'manual', 'sticky_failover' (default), 'round_robin', 'priority_fallback', 'random'
+ * Strategies: 'manual', 'sticky_failover' (default). Legacy values map to sticky_failover.
  *
  * @param {Array} bindings - list of valid bindings
  * @param {string} model - requested model name
@@ -439,6 +439,8 @@ export function orderBindings(bindings, model, strategy = 'sticky_failover', con
   if (!bindings || bindings.length === 0) return [];
   const n = bindings.length;
   if (n <= 1) return bindings.slice(0, 1);
+  // Agent mode supports only 'sticky_failover' and 'manual'; legacy values fall back to sticky.
+  if (strategy !== 'manual') strategy = 'sticky_failover';
 
   const activeKey = _stickyAgentActiveKeys.get(model) || configuredActiveKey;
 

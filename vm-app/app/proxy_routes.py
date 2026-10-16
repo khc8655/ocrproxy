@@ -697,13 +697,32 @@ def _error_response(exc: Exception) -> JSONResponse:
         ra = getattr(exc, "retry_after", None)
         if ra:
             resp.headers["Retry-After"] = str(max(1, int(ra + 0.999)))
-        return resp
-    return _error_response_body(exc)
+        return _mark_retryable(resp)
+    return _mark_retryable(_error_response_body(exc))
+
+
+_RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 529})
+
+
+def _mark_retryable(resp):
+    """Tell clients explicitly whether to retry (OpenAI / Anthropic SDKs read
+    x-should-retry before their status-code rules)."""
+    if resp.status_code in _RETRYABLE_STATUSES:
+        resp.headers["x-should-retry"] = "true"
+        if "retry-after" not in resp.headers:
+            resp.headers["Retry-After"] = "1"
+    elif 400 <= resp.status_code < 500:
+        resp.headers["x-should-retry"] = "false"
+    return resp
 
 
 def _error_response_body(exc: Exception) -> JSONResponse:
     if isinstance(exc, AllCandidatesFailedError):
         status = exc.last_status_code or 503
+        # An upstream 500 is an upstream failure: as a gateway we answer 502.
+        # Only a genuine proxy-side error keeps 500.
+        if status == 500 and not getattr(exc, "internal", False):
+            status = 502
         vm_logger.error("FailoverExhausted", f"All candidate nodes failed: {str(exc)}", status=status, trail=getattr(exc, "trail", ""))
         if exc.last_response_body:
             try:
