@@ -13,11 +13,15 @@
 | **KB 入库模式** | `model` 为虚拟别名（`chat`/`embedding`/`reranker`/`ocr`） | 使用 `candidates` 中对应类型的全部候选轮询，chat 禁用思考，**始终快速**（非流式 + 短超时，写死无需配置） | 独立记账在 `stats.kb[type]`，看板显示 4 项入库任务指标，与 Agent 互不干扰 |
 | **Agent 模式** | `model` 为真实模型名（如 `deepseek-v4-flash`） | 从**模型为主的 `agent_models` 字典**取该模型的 Key 列表按序调用，429/500 自动切换下一个 Key；支持 `upstream_model` 上游 ID 重写 | 独立记账在 `stats.agent`，提供**模型 ID 调用排行看板**与**故障切换 (Failover) 深度监控** |
 
-- **Agent 模式完全透明 (v2026.10.04-02)**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。
+- **Agent 模式完全透明与企业级加固 (v2026.10.16-02)**：不修改请求体，Agent 发什么就传什么（tools、reasoning_effort、stream 等全部原样传递）。
   - **OpenAI 零拷贝极速转发 (Fast-Path)**：命中原生中转时直接提取二进制 `raw_bytes`，跳过 Python 字典反序列化；响应直接下发原始 bytes，跳过 JSON 重编码；流式 SSE 原生字节直通，彻底删除 `_filter_chunk` 正则拦截；
   - **除 Gemini 外思考不转化**：彻底清除 MiniMax、StepFun、AMD、B.AI、Agnes 的思考等级重映射，客户端指定什么档位就透传什么档位；
   - **Gemini 唯一适配例外**：严格仅针对 Google AI Studio 与 Google Vertex AI 保留 `gemini_thinking_matrix`、思考预算自动提升以及 Tool Schema `$schema`/`additionalProperties` 深度清洗；
-  - **Tool Choice 结构化原生支持**：全面关闭 `normalize_choice_to_string`，完美兼容 Cursor、Cline 指定的精细化对象工具调用。
+  - **Tool Choice 结构化原生支持**：全面关闭 `normalize_choice_to_string`，完美兼容 Cursor、Cline 指定的精细化对象工具调用；
+  - **独立首字节超时解耦 (`agent_first_byte_timeout_sec`)**：默认 120s，深度思考长推理模型（DeepSeek-R1 / V4.1-Flash）等待思考不再被 KB 短超时掐断；
+  - **网关传输错误规范化与自动重试**：将 ConnectTimeout、ReadTimeout、连接重置等统一映射为 HTTP 502/504，并注入 `x-should-retry: true` 与 `Retry-After: 1`，Cursor / Claude Code 等客户端能自动识别并进行标准重试；
+  - **智能体粘性同 Key 级数退避重试 (`agent_same_key_retries`)**：在 `sticky_failover` 模式下，当遭遇网关级瞬态错误（502/503/504）且无备选 Key 时，在原 Key 上先执行 1s、2s 级数退避重试（默认最多 2 次），平滑应对跨国网络轻微抖动；
+  - **路由策略精简收敛**：Agent 模式全面收敛为 `sticky_failover` (粘性故障转移 · 智能体推荐) 与 `manual` (纯手动直通模式 · 锁定 Key / 纯透传)。手动模式下受 120s 首字节与 300s 空闲超时网络硬时钟全面保护，100% 原始透传且绝无无限挂起风险。
 - **Google Vertex AI 协议级深度适配**：支持官方 OpenAPI 端点（`/endpoints/openapi`），智能识别并消除 `/v1` 拼接错误；针对 API Key 认证自动注入专属 `x-goog-api-key: <KEY>` 鉴权头（替换 Bearer 格式，根治 401 UNAUTHENTICATED 错误）；支持 Key 级独立绑定 Project ID 与 Location；
 - **Agent 模型维度深度追踪**：按模型 ID 实时汇总调用量占比、成功率、平均耗时、429 限流次数、5xx 异常次数、多 Key 自动切换次数（Failovers）、最后错误原因与发生时间
 - **探活与节点健康状态隔离**：Agent 探活与调用采用专属节点 Key（`agent:{model}:{provider}:{key}`），KB 采用（`kb:{type}:{provider}:{key}`），同一个 Key 在不同场景下的健康状态互不污染
@@ -48,8 +52,8 @@
 
 ### 运维与安全
 
-- **假死自动恢复**：每 60s 健康检查，10s 无响应自动重启
-- **每日定时重启**：凌晨 04:00 自动重启释放累积堆内存
+- **假死自动恢复**：每 60s 健康检查，10s 无响应由 systemd 自动重启恢复
+- **零泄漏常驻内存架构 (v2026.10.11-02)**：底层解除 httpx 响应流环状引用 (`release_httpx_response`)，锁定 `M_MMAP_THRESHOLD=128KB` 强制巨型图像和长文本由 `munmap` 秒级归还内核，彻底废除历史每日定时重启，保证会话与入库 24 小时连续不中断
 - **systemd 内存限制**：MemoryHigh=768M 触发回收压力，MemoryMax=1024M 硬上限防 OOM 全机挂
 - **加密存储**：配置文件使用 Fernet 对称加密，密钥不落盘明文
 - **配置导入与导出**：支持一键导出带时间戳的完整配置 JSON 备份；导入支持“完全覆盖”与“增量合并”双模式，导入前自动生成 `.bak` 快照并严格校验 Schema
@@ -84,7 +88,7 @@ sudo bash install.sh
 - 创建 Python 虚拟环境并安装依赖
 - 生成 Fernet 加密密钥、`PROXY_API_KEY`、`ADMIN_PASSWORD`
 - 创建加密的配置文件
-- 配置 systemd 服务 + 健康检查定时器 + 每日重启定时器
+- 配置 systemd 服务 + 健康检查定时器 (`ocrproxy-health.timer`)
 - 设置严格的文件权限
 
 ### 3. 配置 Caddy 反向代理
@@ -244,13 +248,12 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 ### systemd 组件一览
 
-安装脚本会创建 3 个 systemd 单元：
+安装脚本会创建 2 个核心 systemd 单元：
 
 | 单元 | 类型 | 说明 |
 |------|------|------|
 | `ocrproxy.service` | service | 主服务进程（uvicorn） |
-| `ocrproxy-health.timer` | timer | 每 60s 健康检查，假死自动重启 |
-| `ocrproxy-restart.timer` | timer | 每日 04:00 定时重启 |
+| `ocrproxy-health.timer` | timer | 每 60s 健康检查，假死自动重启恢复 |
 
 ### 冷却与熔断策略
 
@@ -270,12 +273,15 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 连续失败达到 `circuit_break_threshold`（默认 3 次）触发熔断，冷却时间提升至 `circuit_cooldown_sec`（默认 300s）。
 
-其他调度行为（v3.1）：
+其他调度行为：
 
+- **四层超时硬防御 (v2026.10.16-02)**：5s 建连超时 (502) -> 120s 首字节超时 (504, `agent_first_byte_timeout_sec`) -> 300s 空闲超时 (`stream_idle_timeout_sec`) -> 单调时钟全局死线。
+- **网关状态规范化与重试头 (v2026.10.16-02)**：底层网络传输错误映射为 502/504，注入 `x-should-retry: true` 与 `Retry-After: 1` 引导客户端无缝重试。
+- **同 Key 级数退避重试 (v2026.10.16-02)**：遭遇 502/503/504 且无备选 Key 时执行 1s、2s 级数退避重试（最多 2 次）。
 - **全局过载快速失败**：全局并发上限 30 饱和时，新请求最多排队 2s，超限返回 `503 + Retry-After`（`code=server_overloaded`），不会无限排队占用内存。
 - **排队时间计入预算**：在 Key 信号量上的排队等待消耗故障切换总预算，预算耗尽的请求不再发往上游。
-- **预算封顶 180s**：agent 模式的故障切换总预算硬上限 180s（显式配置的 `schedule_total_budget` 优先）。
-- **embedding / rerank 独立超时**：`upstream_timeout_embedding`（默认 60s）、`upstream_timeout_rerank`（默认 30s），并按候选数扩展预算 —— 修复了此前沿用全局 12s 超时导致一次超时就耗尽 15s 预算、其余 Key 永远轮不到的问题。
+- **预算封顶 600s**：agent 模式的故障切换总预算自适应扩展，硬上限 600s（显式配置的 `schedule_total_budget` 优先）。
+- **embedding / rerank 独立超时**：`upstream_timeout_embedding`（默认 60s）、`upstream_timeout_rerank`（默认 30s），并按候选数扩展预算。
 - **配置热更新即时生效**：管理面板修改 `max_concurrency_per_key` 或增删 Key 后立即生效（无需重启）；配置变化时自动清理已删除 Key 的冷却/熔断/延迟状态。`POST /v1/reload` 会额外清空全部运行时状态。
 
 ### EdgeOne 凭据中枢穿透写入与运行时自愈机制
@@ -287,7 +293,7 @@ OCRProxy 实现了免代码发版、即配即用的资产中枢联动能力：
 
 ### 内存管理机制
 
-本服务针对 2 核 / 1.6 GB 低配 VM 优化，采用多层内存安全策略：
+本服务针对 2 核 / 1.6 GB 低配 VM 深度优化，采用全链路零泄漏常驻内存架构：
 
 ```
 请求进入
@@ -295,13 +301,15 @@ OCRProxy 实现了免代码发版、即配即用的资产中枢联动能力：
   → uvicorn --limit-concurrency 150     # 连接层背压
   → 全局 semaphore(30, 2s 快速失败)    # 背压：最多 30 个并发上游请求，超限 503+Retry-After
   → per-key semaphore(5)               # 单 Key 限流（排队时间计入预算）
+  → ConcurrencyLease 全生命周期锁定    # 流式传输期间持有租约，客户端断连即刻瞬时释放
   → OCR 完成后 del body/img_b64        # 立即释放原始请求体
-  → gc.collect() + malloc_trim         # 归还堆页给内核
+  → release_httpx_response             # 解除 httpx 响应流环状引用，彻底消除 Gen2 垃圾滞留
   → MALLOC_ARENA_MAX=2                 # 源头消除 glibc 碎片
+  → M_MMAP_THRESHOLD=128KB             # >=128KB 缓冲区直接 munmap 秒级归还 Linux 内核
+  → 异步合并节流 malloc_trim(0)        # 避免 GIL 争用，平滑回收堆页
   → MemoryHigh=768M                    # 内核回收压力
   → MemoryMax=1024M                    # 硬上限 OOM Kill
   → health-check (60s)                 # 假死自动重启
-  → daily restart (04:00)              # 兜底清零
 ```
 
 ### 资源占用参考
@@ -383,8 +391,6 @@ vm-app/
 ├── ocrproxy.service          # systemd 服务模板
 ├── ocrproxy-health.service   # 健康检查服务
 ├── ocrproxy-health.timer     # 健康检查定时器（60s）
-├── ocrproxy-restart.service  # 定时重启服务
-├── ocrproxy-restart.timer    # 每日重启定时器（04:00）
 ├── Caddyfile.example         # Caddy 反向代理配置示例
 ├── requirements.txt
 └── README.md                 # 本文件
@@ -396,7 +402,11 @@ vm-app/
 
 ```json
 {
-  "upstream_timeout": 12,
+  "upstream_timeout": 15,
+  "agent_first_byte_timeout_sec": 120,
+  "agent_routing_strategy": "sticky_failover",
+  "agent_same_key_retries": 2,
+  "stream_idle_timeout_sec": 300,
   "upstream_timeout_chat": 120,
   "upstream_timeout_ocr": 60,
   "upstream_timeout_embedding": 60,
@@ -408,7 +418,7 @@ vm-app/
   "cooldown_403_sec": 600,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "chat_fast_timeout": 30,      # KB 模式写死快速：非流式 + 此超时（无 chat_fast_mode 开关）
+  "chat_fast_timeout": 30,
   "latency_based_routing": false,
   "providers": {
     "siliconflow": {
@@ -443,12 +453,16 @@ vm-app/
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `upstream_timeout` | 12 | 通用上游超时（秒） |
+| `agent_first_byte_timeout_sec` | 120 | **Agent 智能体独立首字节超时（秒）**。等待模型首包（含 reasoning 思考帧），与 KB 超时彻底解耦 |
+| `agent_routing_strategy` | "sticky_failover" | **Agent 路由分流策略**。`sticky_failover` (粘性故障转移) 或 `manual` (纯手动直通，受 120s/300s 硬时钟保护) |
+| `agent_same_key_retries` | 2 | **智能体同 Key 退避重试上限**。遇 502/503/504 瞬态网络错误且无备选 Key 时在原 Key 执行 1s、2s 级数退避重试 |
+| `stream_idle_timeout_sec` | 300 | **流式块间空闲超时（秒）**。首包后允许静默的最长时限，避免上游假死或断流挂死 |
+| `upstream_timeout` / `upstream_timeout_sec` | 15 | KB 模式单次处理超时（秒） |
 | `upstream_timeout_chat` | 120 | Chat 模型超时（秒），推理模型需要更长时间 |
 | `upstream_timeout_ocr` | 60 | OCR / 视觉模型超时（秒） |
 | `upstream_timeout_embedding` | 60 | Embedding 超时（秒），大批量文档入库需要更长时间 |
 | `upstream_timeout_rerank` | 30 | Reranker 超时（秒），长候选列表重排需要更长时间 |
-| `schedule_total_budget` | 15 | 总故障转移预算（秒），超时后停止尝试更多候选。实际值会随候选数量自适应扩展（至少保证 3 次切换尝试，硬上限 180s；排队等待同样计入预算） |
+| `schedule_total_budget` | 15 | 基础故障转移预算（秒），实际根据单次超时 × 重试次数自适应推导扩展，硬上限放宽至 600s |
 | `max_concurrency_per_key` | 5 | 每个 Key 的最大并发请求数 |
 | `cooldown_duration` | 30 | 5xx 及其他错误冷却时间（秒） |
 | `cooldown_429_sec` | 60 | 429 限流冷却时间（秒） |

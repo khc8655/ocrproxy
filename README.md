@@ -186,23 +186,37 @@ ocrprox (Monorepo)
 为了从根源上杜绝在高峰期或上游拥堵时请求挂起数分钟的问题，OCRProxy 实现了全链路统一的 **Schema v2 全局超时控制与智能熔断体系**：
 
 ### 1. 分流策略 (`agent_routing_strategy`)
-- **`sticky_failover` (粘性故障转移 - 智能体推荐)**：
-  - 默认固定使用当前的可用 Key；
-  - 仅当该 Key 触发 429 限流或 5xx 错误时顺延切换至下一个候选 Key；
+在 Agent 智能体直连场景下，系统全面精简并收敛为两大最符合实际开发心智的核心策略：
+- **`sticky_failover` (粘性故障转移 · 智能体推荐)**：
+  - 默认固定使用当前激活的主力 Key；
+  - 仅当该 Key 触发 429 限流、5xx 服务端错误或网关连接超时时顺延切换至下一个候选 Key；
   - **切换后长期驻留新 Key**，杜绝多轮对话中的 Key 频繁抖动。
-- **`manual` (纯手动直通模式 - 锁定 Key / 纯透传)**：
+- **`manual` (纯手动直通模式 · 锁定 Key / 纯透传)**：
   - 由管理员在模型列表中手动指定激活某一个 Key（`active_key`），提供可视化状态与一键切换；
-  - **绝不自动切 Key、不自动轮询、不熔断**；死等上游返回，原始状态码（200/400/401/403/429/500/504）与响应体 100% 纯透传；
+  - **单 Key 独占直通**：绝不自动切 Key、不自动轮询、不熔断；**受 120s 首字节与 300s 空闲超时的网络硬时钟全面保护**，原始状态码（200/400/401/403/429/500/502/504）与响应体 100% 原始透传，绝无死锁或无限挂死风险；
   - 后台设置面板自动灰化禁用重试次数、熔断与冷却参数。
-- **`round_robin` (轮询负载均衡)**：原子递增轮询可用 Key，均匀分摊 TPM/RPM 压力。
-- **`priority_fallback` (优先级优先)**：严格按列表顺序尝试。
-- **`latency_based` (最低延迟优先)**：基于近期实测延迟智能路由至响应最快的优质 Key。
+- *(注：底层保留 `round_robin` 轮询、`priority_fallback` 优先级优先及 `latency_based` 延迟感知供兼容)*
 
-### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget)
-- **`agent_first_byte_timeout_sec` (智能体独立首字节超时 · v2026.10.16-01)**：默认 **`120s`**。Agent 模式独立首字节（含 reasoning 思考帧）等待超时，彻底解耦 KB 与 Agent 的超时时钟，废除按模型名猜测思考超时的硬编码逻辑，深度思考长推理模型（如 DeepSeek-R1 / V4.1-Flash）不再被提前掐断。
-- **`upstream_timeout_sec` (KB 对话单次处理超时)**：默认 **`15s`**，专供 KB 模式快速轮询与并发任务调度。
+### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget & Fault Tolerance)
+为保障智能体长思考模型稳定运行、并在遇到异常时实现精准快速恢复，OCRProxy 建立了**四层硬时钟防御体系**：
+
+| 层级 | 防御机制 | 默认时限 | 说明与行为 |
+| :--- | :--- | :--- | :--- |
+| **第 1 层** | **TCP 建连超时** (`connect`) | **5 秒** | 上游域名无法解析、网络中断或机房不可达时，5s 内无法握手立即掐断，抛出 **`HTTP 502 Bad Gateway`**。 |
+| **第 2 层** | **首字节 / 思考等待超时** (`read`) | **120 秒**<br>*(由 `agent_first_byte_timeout_sec` 控制)* | 请求发出后等待上游首包（含 reasoning 思考帧）。超 120 秒未返回即触发 `ReadTimeout`，抛出 **`HTTP 504 Gateway Timeout`**，彻底解耦 KB 与 Agent 超时。 |
+| **第 3 层** | **流式块间空闲超时** (`stream_idle_timeout_sec`) | **300 秒** | 推流建立后，若上游突发静默中断，连续 300s 无新 token 自动截断并补发标准 SSE 错误帧；推流期间每 15 秒注入 `: keep-alive\n\n` 心跳防止客户端断开。 |
+| **第 4 层** | **单请求全局硬时钟死线** (`total_budget_sec`) | **自适应 (上限 600s)**<br>*(manual 模式约 305s)* | 调度器单调时钟硬死线，无论发生何种重试或挂起，到达死线强行终结请求，彻底杜绝孤儿协程。 |
+
+- **网关级传输错误规范化与自动重试头 (Gateway Statuses & Retry Headers · v2026.10.16-02)**：
+  - 将底层网络传输异常（`ConnectTimeout`、`ReadTimeout`、`ConnectError`、`RemoteProtocolError` 等）统一规范化映射为 HTTP **`502 Bad Gateway`** / **`504 Gateway Timeout`**，并显式注入响应头 `x-should-retry: true` 与 `Retry-After: 1`；
+  - 彻底改变以往直接抛 500 导致客户端彻底放弃重试的问题，使 Cursor、Claude Code、openai-python 等客户端能准确识别并自动发起无缝重试。
+- **智能体粘性同 Key 级数退避重试 (Sticky Same-Key Backoff Retry · v2026.10.16-02)**：
+  - 在 `sticky_failover` 模式下，当遭遇网关级瞬态错误（502/503/504/连接重置）且无备选 Key 时，在原 Key 上执行 1s、2s 级数退避重试（受 `agent_same_key_retries` 约束，默认最多 2 次），平滑应对跨国链路轻微抖动。
+- **智能体独立首字节超时 (`agent_first_byte_timeout_sec` · v2026.10.16-01)**：默认 **`120s`**。Agent 模式独立首字节（含 reasoning 思考帧）等待超时，彻底解耦 KB 与 Agent 的超时时钟，废除按模型名猜测思考超时的硬编码逻辑，深度思考长推理模型（如 DeepSeek-R1 / V4.1-Flash）首包不再被提前掐断。
 - **失效连接 5s 探测自愈窗口 (`_STALE_RETRY_WINDOW_SEC` · v2026.10.16-01)**：放宽至 **`5.0s`**，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连，同时避免非幂等请求的盲目重试。
 - **出站请求规范化 (v2026.10.16-01)**：HTTP 客户端默认注入 `User-Agent: OCRProxy/{version}`，流式推理自动注入 `Accept: text/event-stream`，避免被上游 CDN 或防火墙误判。
+- **添加模型跨 Key 防重复绑定校验 (Model Binding Deduplication · v2026.10.16-01)**：在控制台添加或编辑模型时，智能检测同一提供商下是否已存在同名上游模型绑定，杜绝重复创建脏节点。
+- **`upstream_timeout_sec` (KB 对话单次处理超时)**：默认 **`15s`**，专供 KB 模式快速轮询与并发任务调度。
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
   - **动态自适应调度**：基于当前模式单次超时 `× max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
   - **EdgeOne 边缘版**：默认 **`300s`**。EdgeOne `fetch` 通过 `eo.timeoutSetting` 支持最长 300 秒出站超时（默认 15 秒，见腾讯云文档「边缘函数 Runtime APIs · Fetch」），边缘函数已显式设置，长思考模型可直接走 EdgeOne。
@@ -513,6 +527,32 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 ---
 
 ## 最新版本更新记录 (Release Notes)
+
+### `v2026.10.16-02` (2026-10-16)
+- **网关级传输错误规范化与自动重试头 (PR #9)**：
+  - 将底层网络传输异常（`httpx.ConnectTimeout`、`httpx.ReadTimeout`、`ConnectError`、`RemoteProtocolError` 等）统一规范化映射为 HTTP **`502 Bad Gateway`** 与 **`504 Gateway Timeout`**，并自动注入响应头 `x-should-retry: true` 与 `Retry-After: 1`；
+  - 彻底改变以往直接抛 500 导致客户端（Cursor、Claude Code、openai-python 等）放弃重试的问题，使客户端能够按标准进行无缝重试；
+- **智能体粘性同 Key 级数退避重试 (Sticky Same-Key Backoff Retry)**：
+  - 在 `sticky_failover` 模式下，当遭遇网关级瞬态错误（502/503/504/连接重置）且当前无其他备选 Key 时，在原 Key 上先执行 1s、2s 级数退避重试（受 `agent_same_key_retries` 约束，默认最多 2 次），平滑应对跨国链路轻微抖动，避免直接向客户端抛错；
+- **Agent 路由策略全面收敛精简**：
+  - 管理后台与调度器将 Agent 路由策略全面精简为两大最符合实际心智的选项：`sticky_failover` (粘性故障转移 · 智能体推荐) 与 `manual` (纯手动直通模式 · 锁定 Key / 纯透传)；
+  - 澄清 `manual` 直通模式行为：单 Key 独占直通，不切 Key、不重试、不熔断，但受 120s 首字节与 300s 空闲超时的网络硬时钟全面保护，绝无无限挂起风险。
+
+### `v2026.10.16-01` (2026-10-16)
+- **解耦 Agent 首字节超时与 KB 超时**：
+  - 新增 `agent_first_byte_timeout_sec`（默认 120s），彻底废除按模型名猜测思考超时的硬编码逻辑，深度思考长推理模型（如 DeepSeek-R1、V4.1-Flash）首包不再被提前掐断；
+  - 彻底解耦 KB 入库短超时（`upstream_timeout_sec` 15s）与 Agent 推理长超时，两者互不影响；
+- **失效连接 5.0s 探测自愈窗口**：
+  - 将 `_STALE_RETRY_WINDOW_SEC` 放宽至 5.0s，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连，同时避免非幂等 POST 请求的盲目重试；
+- **出站请求标准化**：
+  - HTTP 客户端默认注入 `User-Agent: OCRProxy/{version}`，流式请求默认注入 `Accept: text/event-stream`，避免被上游 CDN 或防火墙误拦截；
+- **模型跨 Key 防重复绑定校验**：
+  - 控制台新增或编辑模型时，智能检测同一提供商下是否已存在同名上游模型绑定，杜绝重复创建脏节点。
+
+### `v2026.10.13-01` (2026-10-13)
+- **MiniMax 预设升级至 v1.4.0**：
+  - 新增声明式 `effort_map` (将不支持的 `"none"` 映射为 `"low"`)；
+  - 引入双协议自适应思考规则，完美兼容 Anthropic (`/v1/messages`) 与 OpenAI 思考参数，保障长上下文生成稳定性。
 
 ### `v2026.10.12-02` (2026-10-12)
 - **上游 410 模型下线识别（借鉴 freellmapi #1421/#1423）**：上游返回 HTTP 410 Gone 时，VM 调度器把 `provider:model` 标记为永久下线（默认 24 小时，设置项 `cooldown_410_sec`，设为 0 关闭），同一厂商下所有 Key 一并跳过，客户端点名该模型也不再撞上游；Agent / KB 模式与 manual 策略均生效；
