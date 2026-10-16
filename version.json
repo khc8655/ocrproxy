@@ -1,11 +1,13 @@
 {
-  "version": "v2026.10.13-01",
-  "release_date": "2026-10-13",
+  "version": "v2026.10.16-01",
+  "release_date": "2026-10-16",
   "commit": "HEAD",
-  "title": "MiniMax-M3.1-Flash-Preview 双协议适配与声明式思考深度降级 (v2026.10.13-01)",
+  "title": "智能体首字节超时解耦、连接池自愈与协议合规升级 (v2026.10.16-01)",
   "changelog": [
-    "升级 shared/presets/minimax.json 至 v1.4.0：针对 MiniMax-M3.1-Flash-Preview 强制 adaptive 思考特性，声明 effort_map (none/minimal -> low)、force_adaptive_thinking 与 disallow_reasoning_split_false，彻底消除 Hermes 等客户端后台生成标题传入 reasoning_effort=none 引发的 HTTP 400 (2013) 报错",
-    "通用规则执行器支持声明式 effort_map、force_adaptive_thinking 及 Anthropic /v1/messages 端点下 output_config.effort 的保留与映射",
-    "合并内置最新预设规则与持久化配置规则，确保预设升级无需重建供应商即可自动生效"
+    "废除按模型名猜测思考超时的硬编码逻辑，引入 Agent 模式独立首字节超时配置 agent_first_byte_timeout_sec（默认 120s），彻底解决长思考模型（如 deepseek-v4.1-flash / r1 等）因排队首字节被提前掐断 503 的问题；KB 模式与 Agent 模式超时参数全面解耦",
+    "将闲置/失效连接重试探测窗口从 2.0s 放宽至 5.0s，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连",
+    "出站请求规范化：客户端默认附带 User-Agent: OCRProxy/{version}，流式请求在 build_request 中显式附带 Accept: text/event-stream，避免被上游 CDN 或防火墙误伤",
+    "安全防线加固补丁：SSRF 盲区阻断（强制要求 HTTPS 且阻断内网与云元数据 IP）、金库专钥敏感反显脱敏（掩码保真）、CORS 跨域分层收敛（管理接口隔离跨域头）",
+    "候选节点与模型绑定去重保护：新增或编辑候选节点与模型时杜绝重复挂载与幽灵覆盖"
   ]
 }

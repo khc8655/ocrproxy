@@ -199,11 +199,14 @@ ocrprox (Monorepo)
 - **`latency_based` (最低延迟优先)**：基于近期实测延迟智能路由至响应最快的优质 Key。
 
 ### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget)
-- **`upstream_timeout_sec` (单 Key 响应超时)**：默认 **`30s`**，支持针对长思考模型（o1/o3/DeepSeek-R1）灵活配置（如 120s），单个节点超时立即故障转移。
+- **`agent_first_byte_timeout_sec` (智能体独立首字节超时 · v2026.10.16-01)**：默认 **`120s`**。Agent 模式独立首字节（含 reasoning 思考帧）等待超时，彻底解耦 KB 与 Agent 的超时时钟，废除按模型名猜测思考超时的硬编码逻辑，深度思考长推理模型（如 DeepSeek-R1 / V4.1-Flash）不再被提前掐断。
+- **`upstream_timeout_sec` (KB 对话单次处理超时)**：默认 **`15s`**，专供 KB 模式快速轮询与并发任务调度。
+- **失效连接 5s 探测自愈窗口 (`_STALE_RETRY_WINDOW_SEC` · v2026.10.16-01)**：放宽至 **`5.0s`**，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连，同时避免非幂等请求的盲目重试。
+- **出站请求规范化 (v2026.10.16-01)**：HTTP 客户端默认注入 `User-Agent: OCRProxy/{version}`，流式推理自动注入 `Accept: text/event-stream`，避免被上游 CDN 或防火墙误判。
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
-  - **动态自适应调度**：基于 `upstream_timeout_sec × max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
+  - **动态自适应调度**：基于当前模式单次超时 `× max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
   - **EdgeOne 边缘版**：默认 **`300s`**。EdgeOne `fetch` 通过 `eo.timeoutSetting` 支持最长 300 秒出站超时（默认 15 秒，见腾讯云文档「边缘函数 Runtime APIs · Fetch」），边缘函数已显式设置，长思考模型可直接走 EdgeOne。
-- **`stream_idle_timeout_sec` (流式空闲超时 · v2026.10.09-08)**：默认 **`300s`**。流式请求的**首字节**仍受单 Key 超时约束（超时即 failover），流建立后上游静默（长思考、大段工具参数生成）在该时长内不会被截断。
+- **`stream_idle_timeout_sec` (流式空闲超时 · v2026.10.09-08)**：默认 **`300s`**。流式请求的**首字节**受单 Key 首字节超时约束（超时即 failover），流建立后上游静默（长思考、大段工具参数生成）在该时长内不会被截断。
 - **`cooldown_404_sec` (404 候选冷却 · v2026.10.09-08)**：默认 **`600s`**。某候选返回 404（模型下架/路径不符）时继续 failover 到其它候选并冷却该候选；仅当存在备选候选时生效。
 - **`kb_global_max_concurrency` (KB 全局并发阀 · v2026.10.09-08)**：默认 **`30`**，仅作用于 KB 类请求（KB chat / embedding / rerank / OCR），防大 base64 OOM；Agent 长流不占此阀，只受 `max_concurrency_per_key` 约束。uvicorn 连接上限可用环境变量 `UVICORN_LIMIT_CONCURRENCY`（默认 512）调整。
 - **饱和 Key 智能秒切 (Saturated Key Fast Switch · v2026.10.09-09)**：并发槽已满的 Key 自动稳定排至候选末尾；当后续存在空闲候选时至多等待 1s 即刻尝试下一候选（首选 Key 满载无需白等 10s），仅当全部候选均满载时才等满 10s。

@@ -351,11 +351,59 @@ async function saveCandidate(){
   if(!state.config.candidates) state.config.candidates={};
   if(!state.config.candidates[type]) state.config.candidates[type]=[];
   const editCat=document.getElementById('c_editCat').value, editIdx=document.getElementById('c_editIdx').value;
+
+  const isMatch = (item, p, k, m) =>
+    item &&
+    (item.provider || '').toLowerCase() === (p || '').toLowerCase() &&
+    item.key === k &&
+    (item.model || '') === m;
+
   if(editCat&&editIdx!==''){
-    state.config.candidates[editCat][parseInt(editIdx)]={provider,key:selected[0],model};
-    for(let i=1;i<selected.length;i++) state.config.candidates[editCat].push({provider,key:selected[i],model});
+    const idx = parseInt(editIdx, 10);
+    const targetCat = type;
+    if (!state.config.candidates[targetCat]) state.config.candidates[targetCat] = [];
+
+    // Check if selected[0] already exists in targetCat (excluding current index if editing in same category)
+    const duplicate = state.config.candidates[targetCat].some((c, i) => {
+      if (targetCat === editCat && i === idx) return false;
+      return isMatch(c, provider, selected[0], model);
+    });
+
+    if (duplicate && selected.length === 1) {
+      toast(`候选节点 [${provider}/${selected[0]}/${model}] 已在 [${targetCat}] 中存在，请勿重复添加`, 'err');
+      return;
+    }
+
+    if (targetCat === editCat) {
+      state.config.candidates[editCat][idx] = { provider, key: selected[0], model };
+    } else {
+      state.config.candidates[editCat].splice(idx, 1);
+      if (!duplicate) {
+        state.config.candidates[targetCat].push({ provider, key: selected[0], model });
+      }
+    }
+
+    // Additional selected keys
+    for(let i=1; i<selected.length; i++){
+      const k = selected[i];
+      const exists = state.config.candidates[targetCat].some(c => isMatch(c, provider, k, model));
+      if (!exists) {
+        state.config.candidates[targetCat].push({ provider, key: k, model });
+      }
+    }
   } else {
-    selected.forEach(k=>state.config.candidates[type].push({provider,key:k,model}));
+    const existingList = state.config.candidates[type] || [];
+    const newKeys = selected.filter(k => !existingList.some(c => isMatch(c, provider, k, model)));
+
+    if (newKeys.length === 0) {
+      toast(`候选节点 [${provider}/${model}] 已绑定所选 Key，请勿重复添加`, 'err');
+      return;
+    }
+
+    newKeys.forEach(k => state.config.candidates[type].push({ provider, key: k, model }));
+    if (newKeys.length < selected.length) {
+      toast(`已挂载 ${newKeys.length} 个新节点，自动跳过 ${selected.length - newKeys.length} 个已存在节点`, 'info');
+    }
   }
   closeModal('candidateModal');
   await persistConfig(`候选节点已挂载到 [${type}] 并立即生效`);

@@ -15,8 +15,12 @@ function renderSettings(){
   set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
 
   // Card 3: Timeouts & Budget
-  set('s_chatTimeout', c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 30);
-  const derivedBudget = c.request_total_budget_sec ?? c.schedule_total_budget ?? ((c.upstream_timeout_sec ?? 30) * (c.max_retries ?? 3));
+  const isKbInitial = (c.run_mode || c._run_mode) === 'kb';
+  const agTimeout = c.agent_first_byte_timeout_sec ?? 120;
+  const kbTimeout = c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 15;
+  set('s_chatTimeout', isKbInitial ? kbTimeout : agTimeout);
+  const baseTimeout = isKbInitial ? kbTimeout : agTimeout;
+  const derivedBudget = c.request_total_budget_sec ?? c.schedule_total_budget ?? (baseTimeout * (c.max_retries ?? 3));
   set('s_budget', derivedBudget);
   set('s_maxRetries', c.max_retries ?? 3);
   set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 2);
@@ -88,16 +92,24 @@ function onRunModeChange(){
     if (el) el.style.display = isAgent ? 'none' : 'block';
   });
 
-  // Dynamic labels based on run mode
+  // Dynamic labels and values based on run mode
   const lblChatTimeout = document.getElementById('lbl_chatTimeout');
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
+  const inputChatTimeout = document.getElementById('s_chatTimeout');
   if (lblChatTimeout) {
-    lblChatTimeout.textContent = isKb ? 'KB 对话单次处理超时 (upstream_timeout_sec)' : '智能体单次请求超时 (upstream_timeout_sec)';
+    lblChatTimeout.textContent = isKb ? 'KB 对话单次处理超时 (upstream_timeout_sec)' : '智能体首字节等待超时 (agent_first_byte_timeout_sec)';
   }
   if (hintChatTimeout) {
     hintChatTimeout.textContent = isKb
-      ? 'KB 模式下调用 chat 虚拟模型的超时时限（秒）。总预算将根据候选池自动缩放。'
-      : '向上游发起调用的等待上限（秒）。发生假死或超时立即切换备用 Key；总调度死线由系统自动推导。';
+      ? 'KB 知识库模式下调用 chat 虚拟模型的超时时限（秒）。总预算将根据候选池自动缩放。'
+      : 'Agent 智能体模式下等待上游模型返回首个字节（含思考帧）的等待上限（秒，推荐 120s）。发生超时立即安全切换备用 Key。';
+  }
+  if (inputChatTimeout && state.config) {
+    if (isKb) {
+      inputChatTimeout.value = state.config.upstream_timeout_sec ?? state.config.upstream_timeout_chat ?? 15;
+    } else {
+      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? 120;
+    }
   }
 }
 
@@ -396,11 +408,19 @@ async function saveSettings(silent=false){
   if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value;
 
   // Card 3: Timeouts & Budget
-  c.upstream_timeout_sec = Number(document.getElementById('s_chatTimeout').value) || 30;
-  c.upstream_timeout_chat = c.upstream_timeout_sec; // backward compatibility
+  const isKbMode = c.run_mode === 'kb';
+  const timeoutVal = Number(document.getElementById('s_chatTimeout').value) || (isKbMode ? 15 : 120);
+  if (isKbMode) {
+    c.upstream_timeout_sec = timeoutVal;
+    c.upstream_timeout_chat = timeoutVal;
+  } else {
+    c.agent_first_byte_timeout_sec = timeoutVal;
+    // Keep upstream_timeout_sec safe for fallback
+    if (!c.upstream_timeout_sec) c.upstream_timeout_sec = 15;
+  }
   c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
   // 动态预算自适应：支持深度长思考（如 120s × 3 = 360s），按实际超时与重试次数计算，放宽硬编码上限至 600s
-  c.request_total_budget_sec = Math.min(600, Math.max(60, c.upstream_timeout_sec * c.max_retries));
+  c.request_total_budget_sec = Math.min(600, Math.max(60, timeoutVal * c.max_retries));
   c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
   c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 2;
   const kbTimeoutEl = document.getElementById('s_kbTimeout');

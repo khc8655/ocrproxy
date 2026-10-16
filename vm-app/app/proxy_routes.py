@@ -1044,6 +1044,8 @@ async def chat_completions(request: Request):
         headers = {
             "Content-Type": "application/json",
         }
+        if is_stream:
+            headers["Accept"] = "text/event-stream"
         # 1. Declarative Auth Header (Config-driven, defaults to Authorization: Bearer {key})
         auth_header = rules.get("auth_header") if isinstance(rules, dict) else None
         auth_format = (rules.get("auth_format") if isinstance(rules, dict) else None) or "Bearer {key}"
@@ -1308,6 +1310,8 @@ async def anthropic_messages(request: Request):
             "anthropic-version": anthropic_version,
             "Content-Type": "application/json",
         }
+        if is_stream:
+            headers["Accept"] = "text/event-stream"
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():

@@ -15,6 +15,11 @@ class SecurityHeadersASGIMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
 
+        path = scope.get("path", "")
+        # /v1/* endpoints allow standard cross-origin requests for client tooling.
+        # /api/* admin endpoints strictly do NOT return wildcard Access-Control-Allow-Origin: *.
+        is_client_api = path.startswith("/v1") or path.startswith("/api/v1")
+
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 orig_headers = [
@@ -29,7 +34,14 @@ class SecurityHeadersASGIMiddleware:
                     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
                     (b"server", b"webserver"),
                 ])
+                if is_client_api:
+                    orig_headers.extend([
+                        (b"access-control-allow-origin", b"*"),
+                        (b"access-control-allow-methods", b"GET, POST, OPTIONS"),
+                        (b"access-control-allow-headers", b"*"),
+                    ])
                 message["headers"] = orig_headers
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+

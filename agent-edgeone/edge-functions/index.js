@@ -1206,7 +1206,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.13-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.16-01</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1246,7 +1246,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.13-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.16-01</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -2416,30 +2416,35 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
 
+    const existingModelName = (!oldName && cfg.agent_models)
+      ? Object.keys(cfg.agent_models).find(k => k.toLowerCase() === name.toLowerCase())
+      : null;
+
     // Collision check 1: Adding keys to an existing model during creation
-    if (!oldName && cfg.agent_models[name]) {
-      const existing = cfg.agent_models[name];
-      const existingKeySet = new Set((existing.keys || []).map(k => \`\${k.provider}:\${k.key}\`));
-      const newKeysToAdd = bindings.filter(k => !existingKeySet.has(\`\${k.provider}:\${k.key}\`));
+    if (!oldName && existingModelName) {
+      const existing = cfg.agent_models[existingModelName];
+      const existingKeySet = new Set((existing.keys || []).map(k => \`\${(k.provider || '').toLowerCase()}:\${k.key}\`));
+      const newKeysToAdd = bindings.filter(k => !existingKeySet.has(\`\${(k.provider || '').toLowerCase()}:\${k.key}\`));
 
-      const msg = newKeysToAdd.length > 0
-        ? \`模型 ID「\${name}」已存在！\\n\\n点击【确定】将勾选的 \${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\\n点击【取消】返回修改模型名称。\`
-        : \`模型 ID「\${name}」已存在，且所选 Key 已全部绑定至该模型。\\n\\n点击【确定】保留原有配置并退出；点击【取消】返回修改模型名称。\`;
+      if (newKeysToAdd.length === 0) {
+        _toast(\`模型「\${existingModelName}」已存在且所选 Key 已全部绑定，请勿重复添加\`, 'err');
+        document.getElementById('a_name')?.focus();
+        return;
+      }
 
+      const msg = \`模型 ID「\${existingModelName}」已存在！\\n\\n点击【确定】将勾选的 \${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\\n点击【取消】返回修改模型名称。\`;
       if (!confirm(msg)) {
         document.getElementById('a_name')?.focus();
         return;
       }
 
-      if (newKeysToAdd.length > 0) {
-        existing.keys = (existing.keys || []).concat(newKeysToAdd);
-      }
-      if (upstream && upstream !== name) {
+      existing.keys = (existing.keys || []).concat(newKeysToAdd);
+      if (upstream && upstream !== existingModelName) {
         existing.upstream_model = upstream;
       }
     }
     // Collision check 2: Renaming to another existing model
-    else if (oldName && oldName !== name && cfg.agent_models[name]) {
+    else if (oldName && oldName.toLowerCase() !== name.toLowerCase() && cfg.agent_models && Object.keys(cfg.agent_models).some(k => k.toLowerCase() === name.toLowerCase())) {
       _toast(\`目标模型 ID「\${name}」已存在，不能重命名覆盖已有模型！\`, 'err');
       document.getElementById('a_name')?.focus();
       return;
@@ -2450,13 +2455,20 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       if (oldName && oldName !== name) {
         delete cfg.agent_models[oldName];
       }
-      const entry = { ...existing, keys: bindings };
+      const seenBindings = new Set();
+      const dedupedBindings = bindings.filter(b => {
+        const sig = \`\${(b.provider || '').toLowerCase()}:\${b.key}\`;
+        if (seenBindings.has(sig)) return false;
+        seenBindings.add(sig);
+        return true;
+      });
+      const entry = { ...existing, keys: dedupedBindings };
       if (upstream && upstream !== name) {
         entry.upstream_model = upstream;
       } else {
         delete entry.upstream_model;
       }
-      if (entry.active_key && !bindings.some(b => b.key === entry.active_key)) {
+      if (entry.active_key && !dedupedBindings.some(b => b.key === entry.active_key)) {
         delete entry.active_key;
       }
       cfg.agent_models[name] = entry;
@@ -3026,7 +3038,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.13-01';
+const BUILD_VERSION = 'v2026.10.16-01';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

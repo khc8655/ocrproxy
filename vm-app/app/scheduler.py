@@ -543,6 +543,23 @@ def _sort_candidates_by_latency(candidates: list) -> list:
     )]
 
 
+def _get_default_ua() -> str:
+    """Load current version from version.json for the default User-Agent."""
+    v = "1.0"
+    for candidate_path in [
+        os.path.join(os.path.dirname(__file__), "..", "version.json"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "version.json"),
+    ]:
+        if os.path.exists(candidate_path):
+            try:
+                with open(candidate_path, "r", encoding="utf-8") as f:
+                    v = json.load(f).get("version", v)
+                    break
+            except Exception:
+                pass
+    return f"OCRProxy/{v}"
+
+
 async def get_client() -> httpx.AsyncClient:
     """Get or create the global async HTTP client.
 
@@ -557,6 +574,7 @@ async def get_client() -> httpx.AsyncClient:
         if _client is None:
             _client = httpx.AsyncClient(
                 timeout=httpx.Timeout(300.0, connect=5.0),
+                headers={"User-Agent": _get_default_ua()},
                 limits=httpx.Limits(
                     max_connections=80,
                     # Keep every pooled connection warm: closing idle ones above
@@ -581,7 +599,7 @@ async def get_client() -> httpx.AsyncClient:
 # so one immediate retry on the SAME candidate is safe and must not be counted
 # against the key.
 _STALE_CONN_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
-_STALE_RETRY_WINDOW_SEC = 2.0
+_STALE_RETRY_WINDOW_SEC = 5.0
 
 
 async def _send_with_stale_retry(do_send: Callable[[], Any], cand_id: str):
@@ -1433,12 +1451,10 @@ async def schedule(
             
             if cand_timeout_cfg:
                 cand_timeout_sec = float(cand_timeout_cfg)
+            elif category == "agent":
+                cand_timeout_sec = float(config.get("agent_first_byte_timeout_sec", 120.0))
             else:
-                m_check = f"{req_model_name or ''} {cand_model_name or ''}".lower()
-                if any(k in m_check for k in ("glm-5", "r1", "thinking", "o1", "o3")):
-                    cand_timeout_sec = float(config.get("upstream_timeout_reasoning", 120.0))
-                else:
-                    cand_timeout_sec = upstream_timeout_sec
+                cand_timeout_sec = upstream_timeout_sec
 
             # Hard deadline constraint: candidate timeout never exceeds remaining budget
             cand_timeout_full = max(1.0, cand_timeout_sec)

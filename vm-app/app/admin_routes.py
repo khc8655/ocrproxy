@@ -168,7 +168,7 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
     setting_keys = [
         "proxy_api_key", "proxy_keys",
         "agent_routing_strategy", "kb_routing_strategy",
-        "request_total_budget_sec", "upstream_timeout_sec", "max_attempts_per_provider",
+        "request_total_budget_sec", "upstream_timeout_sec", "agent_first_byte_timeout_sec", "max_attempts_per_provider",
         "fast_failover_provider_down",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
@@ -247,6 +247,12 @@ async def get_config_endpoint(request: Request):
                         else:
                             masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
                     p_data["keys"] = masked_keys
+
+        # 脱敏 EdgeOne 金库专钥 (edgeone_vault.token)，防管理员界面或抓包明文泄漏专钥
+        if isinstance(resp_data.get("edgeone_vault"), dict):
+            v_tok = resp_data["edgeone_vault"].get("token")
+            if v_tok:
+                resp_data["edgeone_vault"]["token"] = "●●●●●●●●"
 
         run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "agent"
         run_mode = run_mode.lower().strip()
@@ -767,6 +773,13 @@ async def save_config_endpoint(request: Request):
             if v_u:
                 body["edgeone_vault"]["url"] = v_u
                 body["edgeone_vault"]["edgeone_url"] = v_u
+            in_v_tok = body["edgeone_vault"].get("token")
+            curr_v_tok = (current_config.get("edgeone_vault") or {}).get("token")
+            if is_masked_secret(in_v_tok):
+                if curr_v_tok and not is_masked_secret(curr_v_tok):
+                    body["edgeone_vault"]["token"] = curr_v_tok
+                else:
+                    body["edgeone_vault"].pop("token", None)
 
         # 2.5 Secret preservation & fail-safe unmasking guard:
         # Front-end receives masked keys (e.g. "●●●●●●●●" or "*******").
@@ -1636,6 +1649,18 @@ async def probe_models_endpoint(request: Request):
         for pt in probe_targets:
             u = pt["url"]
             hdrs = pt["headers"]
+            try:
+                parsed_u = urlparse(u)
+                if parsed_u.scheme != "https":
+                    probe_errors.append(f"[{label}] {u} -> 探针 URL 必须使用 HTTPS 协议")
+                    continue
+                if await _is_blocked_hostname(parsed_u.hostname or ""):
+                    probe_errors.append(f"[{label}] {u} -> 不允许访问内网或本地地址 (SSRF Protection)")
+                    continue
+            except Exception as pe:
+                probe_errors.append(f"[{label}] {u} -> 探针 URL 无效: {pe}")
+                continue
+
             try:
                 async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
                     res = await client.get(u, headers=hdrs)
