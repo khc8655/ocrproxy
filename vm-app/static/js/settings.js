@@ -11,7 +11,7 @@ function renderSettings(){
   if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'agent';
 
   // Card 2: Routing Strategies
-  set('s_agentRouting', c.agent_routing_strategy || 'sticky_failover');
+  set('s_agentRouting', c.agent_routing_strategy === 'manual' ? 'manual' : 'sticky_failover');
   set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
 
   // Card 3: Timeouts & Budget

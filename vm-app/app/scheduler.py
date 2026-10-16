@@ -598,8 +598,26 @@ async def get_client() -> httpx.AsyncClient:
 # of seconds of sending, the request almost certainly never reached the model,
 # so one immediate retry on the SAME candidate is safe and must not be counted
 # against the key.
+# Provider / CDN-level failures (the origin behind the CDN is busy or the edge
+# could not reach it).  Another key of the SAME provider sits behind the same
+# gateway, so in Agent sticky mode we back off and retry the same key first.
+_PROVIDER_LEVEL_STATUSES = frozenset({502, 503, 504, 520, 521, 522, 523, 524, 529})
+_PROVIDER_LEVEL_EXC = (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError,
+                       httpx.RemoteProtocolError, httpx.WriteError, httpx.WriteTimeout,
+                       httpx.PoolTimeout)
+_SAME_KEY_BACKOFF_SEC = (1.0, 2.0)
+
 _STALE_CONN_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
 _STALE_RETRY_WINDOW_SEC = 5.0
+
+
+def _transport_error_status(e: Exception) -> Optional[int]:
+    """Map an httpx transport failure to the gateway status a client retries."""
+    if isinstance(e, httpx.TimeoutException):
+        return 502 if isinstance(e, (httpx.ConnectTimeout, httpx.PoolTimeout)) else 504
+    if isinstance(e, httpx.TransportError):
+        return 502
+    return None
 
 
 async def _send_with_stale_retry(do_send: Callable[[], Any], cand_id: str):
@@ -1137,6 +1155,11 @@ async def schedule(
     # Determine routing strategy based on category
     if category == "agent":
         strategy = config.get("agent_routing_strategy", "sticky_failover")
+        # Agent mode supports only sticky_failover and manual; legacy values
+        # (round_robin / priority_fallback / latency_based / random) fall back
+        # to sticky_failover.
+        if strategy != "manual":
+            strategy = "sticky_failover"
     else:
         strategy = config.get("kb_routing_strategy", "round_robin")
 
@@ -1352,8 +1375,39 @@ async def schedule(
     # passes a longer upstream_timeout via config override) gets more time.
     req_timeout = httpx.Timeout(upstream_timeout_sec, connect=min(5.0, upstream_timeout_sec))
 
+    # Agent sticky mode: same-key retries for provider/CDN-level failures.
+    try:
+        same_key_retries = max(0, int(config.get("agent_same_key_retries", 2)))
+    except (ValueError, TypeError):
+        same_key_retries = 2
+    _same_key_retry_count: Dict[str, int] = {}
+    _same_key_retry_ids: Set[str] = set()
+    last_transport_status: Optional[int] = None
+    _queue: List[Any] = []
+    _qi = 0
+
+    def _maybe_retry_same_key(orig_idx_, cand_, cid_) -> bool:
+        if category != "agent" or strategy != "sticky_failover" or same_key_retries <= 0:
+            return False
+        n = _same_key_retry_count.get(cid_, 0)
+        if n >= same_key_retries:
+            return False
+        backoff = _SAME_KEY_BACKOFF_SEC[min(n, len(_SAME_KEY_BACKOFF_SEC) - 1)]
+        if deadline - time.monotonic() < backoff + 3.0:
+            return False
+        _same_key_retry_count[cid_] = n + 1
+        _same_key_retry_ids.add(cid_)
+        _queue.insert(_qi, (orig_idx_, cand_))
+        logger.info("Agent sticky: provider-level failure on %s, retrying same key in %.0fs (%d/%d)",
+                    cid_, backoff, n + 1, same_key_retries)
+        return True
+
     for loop_idx in range(2):
-        for orig_idx, cand in ordered_items:
+        _queue = list(ordered_items)
+        _qi = 0
+        while _qi < len(_queue):
+            orig_idx, cand = _queue[_qi]
+            _qi += 1
             # Check maximum retry budget
             if attempt_seq >= max_retries:
                 logger.debug("Reached maximum candidate retry limit (%d attempts)", max_retries)
@@ -1377,19 +1431,26 @@ async def schedule(
             key_label = cand["key"]
             cand_model_name = cand.get("model")
 
+            _is_same_key_retry = cand_id in _same_key_retry_ids
+            if _is_same_key_retry:
+                _same_key_retry_ids.discard(cand_id)
+                _n = _same_key_retry_count.get(cand_id, 1)
+                _bo = _SAME_KEY_BACKOFF_SEC[min(_n - 1, len(_SAME_KEY_BACKOFF_SEC) - 1)]
+                await asyncio.sleep(max(0.0, min(_bo, deadline - time.monotonic() - 1.0)))
+
             # Provider down fast failover
-            if fast_failover_provider_down and provider_name in down_providers:
+            if not _is_same_key_retry and fast_failover_provider_down and provider_name in down_providers:
                 logger.debug("Skipping candidate %s — provider %s marked down for this request", cand_id, provider_name)
                 continue
 
             # Per-provider attempt limit
-            if provider_attempts.get(provider_name, 0) >= max_attempts_per_provider:
+            if not _is_same_key_retry and provider_attempts.get(provider_name, 0) >= max_attempts_per_provider:
                 logger.debug("Skipping candidate %s — reached max %d attempts for provider %s", cand_id, max_attempts_per_provider, provider_name)
                 continue
 
             # 2. Cooldown check
             cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
-            if time.time() < cooldown_expiry:
+            if not _is_same_key_retry and time.time() < cooldown_expiry:
                 logger.debug(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
                 continue
 
@@ -1440,8 +1501,11 @@ async def schedule(
                 api_key = str(api_key_raw)
                 base_url = provider.get("base_url", "")
 
-            attempt_seq += 1
-            provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
+            # Same-key retries are bounded by agent_same_key_retries and the
+            # deadline; they do not consume max_retries / per-provider attempts.
+            if not _is_same_key_retry:
+                attempt_seq += 1
+                provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
 
             # 3. Dynamic candidate timeout calculation bounded strictly by remaining monotonic budget
             cand_p_rules = cand.get("adapter_rules") or (providers.get(provider_name, {}).get("adapter_rules") or {})
@@ -1890,7 +1954,11 @@ async def schedule(
                         down_providers.add(provider_name)
                         logger.warning(f"Fast failover (agent): provider {provider_name} returned {status_code}, trying other providers first")
 
+                    if status_code in _PROVIDER_LEVEL_STATUSES:
+                        _maybe_retry_same_key(orig_idx, cand, cand_id)
+
                 except httpx.ReadTimeout as e:
+                    last_transport_status = 504
                     if fast_failover_provider_down and category != "agent":
                         down_providers.add(provider_name)
                     if strategy == "manual":
@@ -1924,6 +1992,7 @@ async def schedule(
                                  cand_model=cand.get("model"))
 
                 except httpx.ConnectTimeout as e:
+                    last_transport_status = 502
                     if fast_failover_provider_down and category != "agent":
                         down_providers.add(provider_name)
                     if strategy == "manual":
@@ -1952,17 +2021,25 @@ async def schedule(
                                  provider=provider_name, key=key_label, error_msg=err_msg,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
                                  cand_model=cand.get("model"))
+                    _maybe_retry_same_key(orig_idx, cand, cand_id)
 
                 except AllCandidatesFailedError:
                     raise
 
                 except Exception as e:
+                    _transport_status = _transport_error_status(e)
+                    if _transport_status is not None:
+                        last_transport_status = _transport_status
                     if strategy == "manual":
-                        raise AllCandidatesFailedError(
+                        # Network-level failures are gateway errors (502/504) so
+                        # clients retry them; 500 is kept for genuine proxy bugs.
+                        _err = AllCandidatesFailedError(
                             f"{cand_id} encountered {type(e).__name__}: {str(e)}",
-                            last_status_code=500,
+                            last_status_code=_transport_status or 500,
                             last_response_body=None,
                         )
+                        _err.internal = _transport_status is None
+                        raise _err
                     now = time.time()
                     last_fail = _last_failure_at.get(cand_id, 0.0)
                     _last_failure_at[cand_id] = now
@@ -2002,6 +2079,8 @@ async def schedule(
                                  provider=provider_name, key=key_label, error_msg=err_msg,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
                                  cand_model=cand.get("model"))
+                    if isinstance(e, _PROVIDER_LEVEL_EXC):
+                        _maybe_retry_same_key(orig_idx, cand, cand_id)
 
             finally:
                 if not lease_transferred:
@@ -2033,6 +2112,8 @@ async def schedule(
             msg = f"All candidates failed: {'; '.join(errors[:5])}{summary}"
         else:
             msg = f"All candidates failed: {'; '.join(errors)}"
+        if last_status_code is None and last_transport_status is not None:
+            last_status_code = last_transport_status
     else:
         # All candidates were skipped (e.g. in cooldown) – no actual request
         # was attempted, so there is no upstream status/body to forward.
