@@ -185,9 +185,11 @@ ocrprox (Monorepo)
 
 为了从根源上杜绝在高峰期或上游拥堵时请求挂起数分钟的问题，OCRProxy 实现了全链路统一的 **Schema v2 全局超时控制与智能熔断体系**：
 
-### 1. 分流策略 (`agent_routing_strategy`)
-在 Agent 智能体直连场景下，系统全面精简并收敛为两大最符合实际开发心智的核心策略：
-- **`sticky_failover` (粘性故障转移 · 智能体推荐)**：
+### 1. 分流策略 (`agent_routing_strategy` & `kb_routing_strategy`)
+在 Agent 智能体直连与 KB 知识库入库场景下，系统全面精简并收敛为最符合实际生产心智的策略组合：
+
+#### Agent 智能体模式 (`agent_routing_strategy`)
+- **`sticky_failover` (粘性故障转移 · 智能体推荐/默认)**：
   - 默认固定使用当前激活的主力 Key；
   - 仅当该 Key 触发 429 限流、5xx 服务端错误或网关连接超时时顺延切换至下一个候选 Key；
   - **切换后长期驻留新 Key**，杜绝多轮对话中的 Key 频繁抖动。
@@ -195,7 +197,17 @@ ocrprox (Monorepo)
   - 由管理员在模型列表中手动指定激活某一个 Key（`active_key`），提供可视化状态与一键切换；
   - **单 Key 独占直通**：绝不自动切 Key、不自动轮询、不熔断；**受 120s 首字节与 300s 空闲超时的网络硬时钟全面保护**，原始状态码（200/400/401/403/429/500/502/504）与响应体 100% 原始透传，绝无死锁或无限挂死风险；
   - 后台设置面板自动灰化禁用重试次数、熔断与冷却参数。
-- *(注：底层保留 `round_robin` 轮询、`priority_fallback` 优先级优先及 `latency_based` 延迟感知供兼容)*
+
+#### KB 知识库模式 (`kb_routing_strategy` · v2026.10.16-03)
+知识库批量入库场景（如 Dify、FastGPT 单次并发分发 50+ 个分块 chunk）与单路 Agent 对话具有本质区别。系统彻底废除造成单点打崩或饥饿的反模式（`sticky_failover` 会将 50 个 chunk 全砸向单 Key 触发 429，`priority_fallback` 导致备用 Key 长期饥饿，`latency_based` 因 chunk 大小抖动而剧烈失真），精简收敛为两大策略：
+- **`round_robin` (轮询并发分流 · 知识库推荐/默认)**：
+  - 原子计数无锁轮询各候选 Key，最大化打散高并发分块入库请求，平摊并充分利用各 Key 的 TPM/RPM 限额；
+  - 遇到 429 或瞬态网络错误时平滑轮换到下一节点。
+- **`manual` (纯手动直通调试 · 锁定首个节点单路直通)**：
+  - 锁定第一个候选节点直接请求，不自动重试、不切换候选节点，原始状态码与错误信息 100% 原样透传；
+  - 专供管理员在调试或排查新接入的 Embedding/Rerank/OCR 上游连通性与原始响应；
+  - 后台设置面板自适应灰化重试与冷却输入。
+- *(注：历史存量旧值 sticky_failover / priority_fallback / latency_based / random 均自动归一化收敛至 round_robin)*
 
 ### 2. 全局硬时钟预算与多层超时控制 (Timeout Budget & Fault Tolerance)
 为保障智能体长思考模型稳定运行、并在遇到异常时实现精准快速恢复，OCRProxy 建立了**四层硬时钟防御体系**：
@@ -207,6 +219,11 @@ ocrprox (Monorepo)
 | **第 3 层** | **流式块间空闲超时** (`stream_idle_timeout_sec`) | **300 秒** | 推流建立后，若上游突发静默中断，连续 300s 无新 token 自动截断并补发标准 SSE 错误帧；推流期间每 15 秒注入 `: keep-alive\n\n` 心跳防止客户端断开。 |
 | **第 4 层** | **单请求全局硬时钟死线** (`total_budget_sec`) | **自适应 (上限 600s)**<br>*(manual 模式约 305s)* | 调度器单调时钟硬死线，无论发生何种重试或挂起，到达死线强行终结请求，彻底杜绝孤儿协程。 |
 
+- **KB 双层极简时钟体系 (2-Tier KB Timeouts · v2026.10.16-03)**：
+  - 彻底终结了历史版本中 7 个幽灵参数（`chat_fast_timeout`, `upstream_timeout_sec`, `upstream_timeout_chat`, `upstream_timeout_kb`, `upstream_timeout_ocr`, `upstream_timeout_embedding`, `upstream_timeout_rerank`）互相竞争覆盖的混乱局面，收敛为两层清晰时钟：
+  - **快速入库处理超时 (`upstream_timeout_sec`)**：默认 **`15s`**。统管高频轻量的 **Chat 对话**、**Embedding 向量化** 和 **Reranker 重排序**，单次入库超时即切下一 Key，杜绝分块长时间卡死。
+  - **大文件/OCR 处理超时 (`upstream_timeout_kb`)**：默认 **`60s`**。专供视觉 OCR 与多模态大图解析，提供充裕的计算时间。
+  - 控制台保存时自动全向同步写入旧键名，保证 100% 向下兼容。
 - **网关级传输错误规范化与自动重试头 (Gateway Statuses & Retry Headers · v2026.10.16-02)**：
   - 将底层网络传输异常（`ConnectTimeout`、`ReadTimeout`、`ConnectError`、`RemoteProtocolError` 等）统一规范化映射为 HTTP **`502 Bad Gateway`** / **`504 Gateway Timeout`**，并显式注入响应头 `x-should-retry: true` 与 `Retry-After: 1`；
   - 彻底改变以往直接抛 500 导致客户端彻底放弃重试的问题，使 Cursor、Claude Code、openai-python 等客户端能准确识别并自动发起无缝重试。
@@ -216,7 +233,6 @@ ocrprox (Monorepo)
 - **失效连接 5s 探测自愈窗口 (`_STALE_RETRY_WINDOW_SEC` · v2026.10.16-01)**：放宽至 **`5.0s`**，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连，同时避免非幂等请求的盲目重试。
 - **出站请求规范化 (v2026.10.16-01)**：HTTP 客户端默认注入 `User-Agent: OCRProxy/{version}`，流式推理自动注入 `Accept: text/event-stream`，避免被上游 CDN 或防火墙误判。
 - **添加模型跨 Key 防重复绑定校验 (Model Binding Deduplication · v2026.10.16-01)**：在控制台添加或编辑模型时，智能检测同一提供商下是否已存在同名上游模型绑定，杜绝重复创建脏节点。
-- **`upstream_timeout_sec` (KB 对话单次处理超时)**：默认 **`15s`**，专供 KB 模式快速轮询与并发任务调度。
 - **`request_total_budget_sec` (单次请求全局硬预算)**：
   - **动态自适应调度**：基于当前模式单次超时 `× max_retries` 智能自适应推导，硬上限全面放宽至 **`600s`**，彻底解除历史硬编码死线限制，完美兼容长思考多轮重试。
   - **EdgeOne 边缘版**：默认 **`300s`**。EdgeOne `fetch` 通过 `eo.timeoutSetting` 支持最长 300 秒出站超时（默认 15 秒，见腾讯云文档「边缘函数 Runtime APIs · Fetch」），边缘函数已显式设置，长思考模型可直接走 EdgeOne。

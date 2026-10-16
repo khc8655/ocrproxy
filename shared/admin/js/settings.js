@@ -12,7 +12,7 @@ function renderSettings(){
 
   // Card 2: Routing Strategies
   set('s_agentRouting', c.agent_routing_strategy === 'manual' ? 'manual' : 'sticky_failover');
-  set('s_kbRouting', c.kb_routing_strategy || 'round_robin');
+  set('s_kbRouting', c.kb_routing_strategy === 'manual' ? 'manual' : 'round_robin');
 
   // Card 3: Timeouts & Budget
   const isKbInitial = (c.run_mode || c._run_mode) === 'kb';
@@ -97,11 +97,11 @@ function onRunModeChange(){
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
   const inputChatTimeout = document.getElementById('s_chatTimeout');
   if (lblChatTimeout) {
-    lblChatTimeout.textContent = isKb ? 'KB 对话单次处理超时 (upstream_timeout_sec)' : '智能体首字节等待超时 (agent_first_byte_timeout_sec)';
+    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '智能体首字节等待超时 (agent_first_byte_timeout_sec)';
   }
   if (hintChatTimeout) {
     hintChatTimeout.textContent = isKb
-      ? 'KB 知识库模式下调用 chat 虚拟模型的超时时限（秒）。总预算将根据候选池自动缩放。'
+      ? 'KB 知识库模式下 Chat / Embedding / Reranker 快速处理超时时限（秒，推荐 15s）。'
       : 'Agent 智能体模式下等待上游模型返回首个字节（含思考帧）的等待上限（秒，推荐 120s）。发生超时立即安全切换备用 Key。';
   }
   if (inputChatTimeout && state.config) {
@@ -111,20 +111,28 @@ function onRunModeChange(){
       inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? 120;
     }
   }
+  updateRoutingSettingsState();
 }
 
 function onAgentRoutingChange(){
   updateRoutingSettingsState();
 }
 
+function onKbRoutingChange(){
+  updateRoutingSettingsState();
+}
+
 function updateRoutingSettingsState(){
+  const modeEl = document.getElementById('s_runMode');
+  const isKb = modeEl && modeEl.value === 'kb';
   const agRouteEl = document.getElementById('s_agentRouting');
-  const isManual = agRouteEl && agRouteEl.value === 'manual';
+  const kbRouteEl = document.getElementById('s_kbRouting');
+  const isManual = isKb ? (kbRouteEl && kbRouteEl.value === 'manual') : (agRouteEl && agRouteEl.value === 'manual');
   
   const tipEl = document.getElementById('manual-routing-tip');
   const hintEl = document.getElementById('agent-routing-hint');
   if(tipEl) tipEl.style.display = isManual ? 'block' : 'none';
-  if(hintEl) hintEl.style.display = isManual ? 'none' : 'block';
+  if(hintEl) hintEl.style.display = (isManual || isKb) ? 'none' : 'block';
 
   const disabledSettingIds = [
     's_chatTimeout', 's_maxRetries', 's_maxAttemptsPerProvider',
@@ -147,9 +155,11 @@ function updateRoutingSettingsState(){
   const chatTimeoutEl = document.getElementById('s_chatTimeout');
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
   if (chatTimeoutEl && isManual) {
-    chatTimeoutEl.placeholder = '纯直通已放宽至 300s';
+    chatTimeoutEl.placeholder = isKb ? '纯直通 (默认 15s)' : '纯直通已放宽至 300s';
     if (hintChatTimeout) {
-      hintChatTimeout.textContent = '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
+      hintChatTimeout.textContent = isKb
+        ? '⚡ 纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
+        : '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
     }
   }
 }
@@ -403,9 +413,9 @@ async function saveSettings(silent=false){
 
   // Card 2: Key Routing Strategies
   const agRouteEl = document.getElementById('s_agentRouting');
-  if (agRouteEl) c.agent_routing_strategy = agRouteEl.value;
+  if (agRouteEl) c.agent_routing_strategy = agRouteEl.value === 'manual' ? 'manual' : 'sticky_failover';
   const kbRouteEl = document.getElementById('s_kbRouting');
-  if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value;
+  if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value === 'manual' ? 'manual' : 'round_robin';
 
   // Card 3: Timeouts & Budget
   const isKbMode = c.run_mode === 'kb';
@@ -413,6 +423,9 @@ async function saveSettings(silent=false){
   if (isKbMode) {
     c.upstream_timeout_sec = timeoutVal;
     c.upstream_timeout_chat = timeoutVal;
+    c.chat_fast_timeout = timeoutVal;
+    c.upstream_timeout_embedding = timeoutVal;
+    c.upstream_timeout_rerank = timeoutVal;
   } else {
     c.agent_first_byte_timeout_sec = timeoutVal;
     // Keep upstream_timeout_sec safe for fallback
@@ -426,8 +439,6 @@ async function saveSettings(silent=false){
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
   c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
   c.upstream_timeout_ocr = c.upstream_timeout_kb;
-  c.upstream_timeout_embedding = c.upstream_timeout_kb;
-  c.upstream_timeout_rerank = Math.min(30, c.upstream_timeout_kb);
   c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 5;
   const ocrInflightEl = document.getElementById('s_ocrMaxInflight');
   if (ocrInflightEl) c.ocr_max_inflight = Math.min(30, Math.max(1, Number(ocrInflightEl.value) || 6));

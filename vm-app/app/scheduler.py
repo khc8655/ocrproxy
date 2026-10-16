@@ -1162,6 +1162,10 @@ async def schedule(
             strategy = "sticky_failover"
     else:
         strategy = config.get("kb_routing_strategy", "round_robin")
+        # KB mode supports only round_robin and manual; legacy values
+        # (sticky_failover / priority_fallback / latency_based) fall back to round_robin.
+        if strategy != "manual":
+            strategy = "round_robin"
 
     # Candidate ordering based on strategy
     num_cands = len(candidates)

@@ -236,13 +236,11 @@
             </div>
             <div class="setting-item" id="st-item-kb-routing" style="grid-column: 1 / -1; max-width:680px;">
               <label class="form-label" for="s_kbRouting">KB 知识库分流策略 (kb_routing_strategy)</label>
-              <select id="s_kbRouting" class="form-control">
-                <option value="round_robin">轮询负载均衡 (round_robin) — 推荐，高并发请求原子轮换分流，充分利用并发与 TPM</option>
-                <option value="sticky_failover">粘性故障转移 (sticky_failover) — 固定当前 Key 直到限流</option>
-                <option value="priority_fallback">主备优先级降级 (priority_fallback) — 始终优先尝试第 1 个 Key</option>
-                <option value="latency_based">最低延迟优先 (latency_based) — 自动路由至延迟最低的 Key</option>
+              <select id="s_kbRouting" class="form-control" onchange="onKbRoutingChange()">
+                <option value="round_robin">轮询负载均衡 (round_robin) — 推荐，高并发请求原子轮换分流，充分利用各 Key 的并发与配额</option>
+                <option value="manual">纯手动直通调试 (manual) — 锁定首个节点单路直通，不重试不切换，方便排查故障</option>
               </select>
-              <span class="hint">知识库无状态批量入库（Embedding / OCR / Rerank）推荐「轮询负载均衡」，可均匀打散流量并大幅提升入库吞吐量。</span>
+              <span class="hint">知识库无状态批量入库（Chat / Embedding / Rerank / OCR）推荐「轮询负载均衡」，平权打散并发压力，杜绝单 Key 429 限流。</span>
             </div>
           </div>
         </div>
@@ -274,9 +272,9 @@
               <span class="hint">单厂商多个 Key 故障时最多尝试次数（默认 2 次），防止单个厂商死等超时</span>
             </div>
             <div class="setting-item" id="st-item-kb-timeout">
-              <label class="form-label" for="s_kbTimeout">KB 入库批处理超时 (upstream_timeout_kb)</label>
+              <label class="form-label" for="s_kbTimeout">KB 大文件/OCR 处理超时 (upstream_timeout_kb)</label>
               <input type="number" id="s_kbTimeout" class="form-control" placeholder="默认 60" min="10" max="300">
-              <span class="hint">Embedding / OCR / Reranker 等大文档批处理耗时计算超时（默认 60s）</span>
+              <span class="hint">大图片 OCR 视觉识别与长文档解析耗时计算的等待时限（默认 60s）</span>
             </div>
             <div class="setting-item" id="st-item-ocr-inflight">
               <label class="form-label" for="s_ocrMaxInflight">OCR 同时处理图片数 (ocr_max_inflight)</label>
@@ -760,12 +758,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.16-02"></script>
-  <script src="/static/js/vault.js?v=2026.10.16-02"></script>
-  <script src="/static/js/providers.js?v=2026.10.16-02"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.16-02"></script>
-  <script src="/static/js/models.js?v=2026.10.16-02"></script>
-  <script src="/static/js/settings.js?v=2026.10.16-02"></script>
-  <script src="/static/js/app.js?v=2026.10.16-02"></script>
+  <script src="/static/js/core.js?v=2026.10.16-03"></script>
+  <script src="/static/js/vault.js?v=2026.10.16-03"></script>
+  <script src="/static/js/providers.js?v=2026.10.16-03"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.16-03"></script>
+  <script src="/static/js/models.js?v=2026.10.16-03"></script>
+  <script src="/static/js/settings.js?v=2026.10.16-03"></script>
+  <script src="/static/js/app.js?v=2026.10.16-03"></script>
 </body>
 </html>

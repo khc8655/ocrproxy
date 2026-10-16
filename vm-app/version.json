@@ -1,12 +1,11 @@
 {
-  "version": "v2026.10.16-02",
+  "version": "v2026.10.16-03",
   "release_date": "2026-10-16",
   "commit": "HEAD",
-  "title": "Agent 网络错误可重试、粘性同 Key 退避重试与分流策略精简 (v2026.10.16-02)",
+  "title": "KB 知识库分流策略精简与双层极简时钟体系 (v2026.10.16-03)",
   "changelog": [
-    "上游网络层错误（连接失败/断连/超时）不再返回 500：连接类返回 502、读超时返回 504，上游原始 500 按网关语义转为 502；500 仅保留给代理自身错误",
-    "错误响应增加 x-should-retry 与 Retry-After：可重试的状态（408/409/429/5xx/52x）标记为 true，其余 4xx 标记为 false，OpenAI/Anthropic SDK 会优先读取这个头",
-    "Agent 粘性模式：提供商/CDN 级故障（502/503/504/52x、建连失败、断连）先在原 Key 上按 1s、2s 退避重试，最多 2 次（agent_same_key_retries），之后再切换提供商；429/401/额度类错误仍立即换 Key；同 Key 重试不占用 max_retries 配额",
-    "Agent 分流策略精简为粘性故障转移和纯手动直通两种，旧配置值（round_robin/priority_fallback/latency_based/random）自动按粘性处理；KB 策略不变"
+    "KB 知识库分流策略收敛精简为两大核心策略：round_robin (轮询并发分流 · 知识库推荐/默认) 与 manual (纯手动直通调试 · 锁定首个节点单路直通)；历史冗余值（sticky_failover/priority_fallback/latency_based）底层自动收敛至 round_robin",
+    "KB 超时时钟收敛为双层极简体系：快速入库超时 upstream_timeout_sec (默认 15s，统管 Chat/Embedding/Rerank) 与大文件/OCR超时 upstream_timeout_kb (默认 60s，专供视觉 OCR 多模态大图)；彻底清理 7 个重叠冲突的幽灵参数",
+    "管理控制台联动适配：KB 手动直通模式下自适应灰化重试与冷却输入并提供纯透传指引，保存配置时自动全向兼容写入旧键名"
   ]
 }
