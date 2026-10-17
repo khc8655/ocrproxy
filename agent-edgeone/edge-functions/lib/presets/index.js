@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-17T10:23:00.237Z",
+  "updated_at": "2026-10-17T15:11:58.223Z",
   "providers": [
     {
       "id": "agnes",
@@ -342,6 +342,7 @@ export const PRESETS = [
     "name": "AMD Radeon Cloud",
     "version": "1.2.0",
     "protocol": "openai",
+    "rpm_per_key": 2,
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",

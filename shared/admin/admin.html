@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.17-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.17-02</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -256,42 +256,42 @@
           <div class="settings-grid">
             <div class="setting-item">
               <label class="form-label" for="s_chatTimeout" id="lbl_chatTimeout">上游请求等待超时 (upstream_timeout_sec)</label>
-              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 30" min="5" max="300">
+              <input type="number" id="s_chatTimeout" class="form-control" placeholder="默认 30" min="5" max="300" onwheel="this.blur()">
               <span class="hint" id="hint_chatTimeout">向上游发起请求的超时等待上限（秒）。故障转移模式下超时立即切换备用 Key；总预算由系统自适应推导。</span>
             </div>
             <!-- request_total_budget_sec auto-derived by gateway scheduler; hidden input preserved for backward compatibility -->
             <input type="hidden" id="s_budget" value="">
-            <div class="setting-item">
+            <div class="setting-item" id="st-item-max-retries">
               <label class="form-label" for="s_maxRetries">单请求最大重试候选数 (max_retries)</label>
-              <input type="number" id="s_maxRetries" class="form-control" placeholder="默认 3" min="1" max="10">
+              <input type="number" id="s_maxRetries" class="form-control" placeholder="默认 3" min="1" max="10" onwheel="this.blur()">
               <span class="hint">单次请求最多允许尝试的候选 Key 数量上限（默认 3 次，避免无限死等）</span>
             </div>
-            <div class="setting-item">
+            <div class="setting-item" id="st-item-max-attempts">
               <label class="form-label" for="s_maxAttemptsPerProvider">单厂商最大尝试次数 (max_attempts_per_provider)</label>
-              <input type="number" id="s_maxAttemptsPerProvider" class="form-control" placeholder="默认 2" min="1" max="5">
+              <input type="number" id="s_maxAttemptsPerProvider" class="form-control" placeholder="默认 2" min="1" max="5" onwheel="this.blur()">
               <span class="hint">单厂商多个 Key 故障时最多尝试次数（默认 2 次），防止单个厂商死等超时</span>
             </div>
             <div class="setting-item" id="st-item-kb-timeout">
               <label class="form-label" for="s_kbTimeout">KB 大文件/OCR 处理超时 (upstream_timeout_kb)</label>
-              <input type="number" id="s_kbTimeout" class="form-control" placeholder="默认 60" min="10" max="300">
+              <input type="number" id="s_kbTimeout" class="form-control" placeholder="默认 60" min="10" max="300" onwheel="this.blur()">
               <span class="hint">大图片 OCR 视觉识别与长文档解析耗时计算的等待时限（默认 60s）</span>
             </div>
             <div class="setting-item" id="st-item-ocr-inflight">
               <label class="form-label" for="s_ocrMaxInflight">OCR 同时处理图片数 (ocr_max_inflight)</label>
-              <input type="number" id="s_ocrMaxInflight" class="form-control" placeholder="默认 6" min="1" max="30">
+              <input type="number" id="s_ocrMaxInflight" class="form-control" placeholder="默认 6" min="1" max="30" onwheel="this.blur()">
               <span class="hint">读入图片之前就限流，超出的请求排队、不占内存；1GB 内存建议 4–6</span>
             </div>
             <div class="setting-item" id="st-item-ocr-queue">
               <label class="form-label" for="s_ocrQueueTimeout">OCR 排队最长等待 (ocr_queue_timeout_sec)</label>
-              <input type="number" id="s_ocrQueueTimeout" class="form-control" placeholder="默认 30" min="0" max="300">
+              <input type="number" id="s_ocrQueueTimeout" class="form-control" placeholder="默认 30" min="0" max="300" onwheel="this.blur()">
               <span class="hint">排队超过这个时间返回 503 + Retry-After（默认 30s；0 = 满了立即拒绝）</span>
             </div>
             <div class="setting-item">
               <label class="form-label" for="s_concurrency">单 Key 最大并发保护 (max_concurrency_per_key)</label>
-              <input type="number" id="s_concurrency" class="form-control" placeholder="默认 5" min="1" max="50">
+              <input type="number" id="s_concurrency" class="form-control" placeholder="默认 5" min="1" max="50" onwheel="this.blur()">
               <span class="hint">每个 API Key 在途最大并发保护，防止瞬间突发打崩配额</span>
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1;">
+            <div class="setting-item" id="st-item-fast-failover" style="grid-column: 1 / -1;">
               <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
                 <input type="checkbox" id="s_fastFailover" checked style="width:16px;height:16px;cursor:pointer;">
                 <label for="s_fastFailover" style="font-weight:600;cursor:pointer;">开启跨厂商快速熔断 (fast_failover_provider_down)</label>
@@ -309,27 +309,30 @@
             </h3>
             <span class="badge badge-primary">容灾运维</span>
           </div>
-          <div class="settings-grid">
+          <div class="settings-grid" id="st-grid-cooldowns">
             <div class="setting-item">
               <label class="form-label" for="s_cooldown429">429 限流冷却时长 (cooldown_429_sec)</label>
-              <input type="number" id="s_cooldown429" class="form-control" placeholder="默认 60" min="5" max="600">
+              <input type="number" id="s_cooldown429" class="form-control" placeholder="默认 60" min="5" max="600" onwheel="this.blur()">
               <span class="hint">命中 RPM / TPM 速率限制时的临时避让时长（秒，默认 60s）</span>
             </div>
             <div class="setting-item">
               <label class="form-label" for="s_cooldown5xx">5xx 服务端故障冷却 (cooldown_5xx_sec)</label>
-              <input type="number" id="s_cooldown5xx" class="form-control" placeholder="默认 30" min="5" max="300">
+              <input type="number" id="s_cooldown5xx" class="form-control" placeholder="默认 30" min="5" max="300" onwheel="this.blur()">
               <span class="hint">上游 500/502/503/504 服务异常时的避让冷却时长（秒，默认 30s）</span>
             </div>
             <div class="setting-item">
               <label class="form-label" for="s_circuitThreshold">连续失败熔断阈值 (circuit_break_threshold)</label>
-              <input type="number" id="s_circuitThreshold" class="form-control" placeholder="默认 3" min="1" max="10">
+              <input type="number" id="s_circuitThreshold" class="form-control" placeholder="默认 3" min="1" max="10" onwheel="this.blur()">
               <span class="hint">连续 5xx / 宕机达到该次数时触发断路器熔断（默认 3 次）</span>
             </div>
             <div class="setting-item">
               <label class="form-label" for="s_cooldown403">403 鉴权失败 / 额度耗尽隔离 (cooldown_403_sec)</label>
-              <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600" min="60" max="3600">
+              <input type="number" id="s_cooldown403" class="form-control" placeholder="默认 600" min="60" max="3600" onwheel="this.blur()">
               <span class="hint">Key 无效或额度用尽时的主动隔离时长（秒，默认 600s / 10分钟）</span>
             </div>
+          </div>
+          <div id="manual-cooldown-tip" style="display:none;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;margin-bottom:16px;">
+            ⚡ 纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
           </div>
 
           <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
@@ -397,10 +400,13 @@
               <input type="text" id="cfg_vault_url" class="form-control" placeholder="https://api.example.com" value="">
             </div>
             <div class="form-group mb-0">
-              <label class="form-label" style="font-size:12px;font-weight:600;">中枢访问 Token</label>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <label class="form-label" style="font-size:12px;font-weight:600;margin-bottom:0;">中枢访问 Token</label>
+                <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:1px 6px;display:none;">已配置凭证</span>
+              </div>
               <div style="position:relative;">
-                <input type="password" id="cfg_vault_token" class="form-control" placeholder="输入中枢访问 Token" style="padding-right:34px;">
-                <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px;color:var(--text-secondary);" title="显示/隐藏密码">
+                <input type="password" id="cfg_vault_token" class="form-control mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:34px;">
+                <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px;color:var(--text-secondary);" title="显示/隐藏输入内容">
                   <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
@@ -483,6 +489,11 @@
           <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
           <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
         </div>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
+        <input type="number" id="p_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
+        <div class="text-secondary text-xs mt-1" style="font-size:11px;">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过，不再请求上游；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
       </div>
       <div id="p_models_wrap" class="form-group" style="display:none;margin-top:14px;">
         <label class="form-label">自动创建推荐模型</label>
@@ -758,12 +769,12 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.17-01"></script>
-  <script src="/static/js/vault.js?v=2026.10.17-01"></script>
-  <script src="/static/js/providers.js?v=2026.10.17-01"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.17-01"></script>
-  <script src="/static/js/models.js?v=2026.10.17-01"></script>
-  <script src="/static/js/settings.js?v=2026.10.17-01"></script>
-  <script src="/static/js/app.js?v=2026.10.17-01"></script>
+  <script src="/static/js/core.js?v=2026.10.17-02"></script>
+  <script src="/static/js/vault.js?v=2026.10.17-02"></script>
+  <script src="/static/js/providers.js?v=2026.10.17-02"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.17-02"></script>
+  <script src="/static/js/models.js?v=2026.10.17-02"></script>
+  <script src="/static/js/settings.js?v=2026.10.17-02"></script>
+  <script src="/static/js/app.js?v=2026.10.17-02"></script>
 </body>
 </html>

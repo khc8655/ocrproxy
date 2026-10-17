@@ -40,7 +40,19 @@ function renderSettings(){
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
   set('cfg_vault_url', vCfg.edgeone_url || vCfg.url || '');
-  set('cfg_vault_token', vCfg.token || '');
+  const vaultTokenInput = document.getElementById('cfg_vault_token');
+  const vaultBadge = document.getElementById('vaultTokenStatusBadge');
+  if (vaultTokenInput) {
+    vaultTokenInput.value = '';
+    const hasToken = Boolean(vCfg.has_token || (vCfg.token && !isMaskedSecret(vCfg.token)));
+    if (hasToken) {
+      vaultTokenInput.placeholder = '•••••••• (已保存，若不修改请留空)';
+      if (vaultBadge) vaultBadge.style.display = 'inline-block';
+    } else {
+      vaultTokenInput.placeholder = '输入中枢 PROXY_API_KEY / 访问 Token';
+      if (vaultBadge) vaultBadge.style.display = 'none';
+    }
+  }
 
   // EdgeOne Environment Adaptations: hide remote vault config
   if (typeof IS_EDGEONE !== 'undefined' && IS_EDGEONE) {
@@ -125,6 +137,7 @@ function onKbRoutingChange(){
 function updateRoutingSettingsState(){
   const modeEl = document.getElementById('s_runMode');
   const isKb = modeEl && modeEl.value === 'kb';
+  const isAgent = modeEl && modeEl.value === 'agent';
   const agRouteEl = document.getElementById('s_agentRouting');
   const kbRouteEl = document.getElementById('s_kbRouting');
   const isManual = isKb ? (kbRouteEl && kbRouteEl.value === 'manual') : (agRouteEl && agRouteEl.value === 'manual');
@@ -134,32 +147,44 @@ function updateRoutingSettingsState(){
   if(tipEl) tipEl.style.display = isManual ? 'block' : 'none';
   if(hintEl) hintEl.style.display = (isManual || isKb) ? 'none' : 'block';
 
-  const disabledSettingIds = [
-    's_chatTimeout', 's_maxRetries', 's_maxAttemptsPerProvider',
-    's_cooldown429', 's_cooldown5xx', 's_cooldown403',
-    's_circuitThreshold', 's_fastFailover'
-  ];
-
-  disabledSettingIds.forEach(id => {
+  // In manual mode, retry counts and attempts are bypassed completely
+  const manualHiddenIds = ['st-item-max-retries', 'st-item-max-attempts'];
+  manualHiddenIds.forEach(id => {
     const el = document.getElementById(id);
-    if(el){
-      el.disabled = isManual;
-      const parent = el.closest('.setting-item') || el.closest('.toggle-card');
-      if(parent){
-        parent.style.opacity = isManual ? '0.45' : '1';
-        parent.style.pointerEvents = isManual ? 'none' : 'auto';
-      }
-    }
+    if (el) el.style.display = isManual ? 'none' : 'block';
   });
 
+  // Fast failover: only applies in KB mode, and never in manual mode
+  const ffItem = document.getElementById('st-item-fast-failover');
+  if (ffItem) {
+    ffItem.style.display = (isAgent || isManual) ? 'none' : 'block';
+  }
+
+  // Card 4: Cooldowns grid vs Manual Mode Tip
+  const cooldownGrid = document.getElementById('st-grid-cooldowns');
+  const cooldownTip = document.getElementById('manual-cooldown-tip');
+  if (cooldownGrid) cooldownGrid.style.display = isManual ? 'none' : 'grid';
+  if (cooldownTip) cooldownTip.style.display = isManual ? 'block' : 'none';
+
+  // Upstream timeout behavior
   const chatTimeoutEl = document.getElementById('s_chatTimeout');
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
-  if (chatTimeoutEl && isManual) {
-    chatTimeoutEl.placeholder = isKb ? '纯直通 (默认 15s)' : '纯直通已放宽至 300s';
-    if (hintChatTimeout) {
-      hintChatTimeout.textContent = isKb
-        ? '⚡ 纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
-        : '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
+  if (chatTimeoutEl) {
+    chatTimeoutEl.disabled = false;
+    if (isManual) {
+      chatTimeoutEl.placeholder = isKb ? '纯直通 (默认 15s)' : '纯直通已放宽至 300s';
+      if (hintChatTimeout) {
+        hintChatTimeout.textContent = isKb
+          ? '⚡ 纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
+          : '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
+      }
+    } else {
+      chatTimeoutEl.placeholder = isKb ? '默认 15' : '默认 120';
+      if (hintChatTimeout) {
+        hintChatTimeout.textContent = isKb
+          ? 'KB 知识库模式下 Chat / Embedding / Reranker 快速处理超时时限（秒，推荐 15s）。'
+          : 'Agent 智能体模式下等待上游模型返回首个字节（含思考帧）的等待上限（秒，推荐 120s）。发生超时立即安全切换备用 Key。';
+      }
     }
   }
 }
@@ -465,11 +490,14 @@ async function saveSettings(silent=false){
   if (vaultUrlEl || vaultTokenEl) {
     const vUrl = (vaultUrlEl ? vaultUrlEl.value.trim() : '');
     const vToken = (vaultTokenEl ? vaultTokenEl.value.trim() : '');
-    c.edgeone_vault = {
-      url: vUrl,
-      edgeone_url: vUrl,
-      token: vToken
-    };
+    c.edgeone_vault = c.edgeone_vault || {};
+    c.edgeone_vault.url = vUrl;
+    c.edgeone_vault.edgeone_url = vUrl;
+    // 只有在用户主动输入了新 Token 时才发送；留空或掩码字符不覆写现有凭证
+    if (vToken && !isMaskedSecret(vToken)) {
+      c.edgeone_vault.token = vToken;
+      c.edgeone_vault.has_token = true;
+    }
   }
 
   await persistConfig(silent ? null : '系统参数已保存并立即生效');

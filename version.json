@@ -1,12 +1,15 @@
 {
-  "version": "v2026.10.17-01",
+  "version": "v2026.10.17-02",
   "release_date": "2026-10-17",
   "commit": "HEAD",
-  "title": "彻底解耦厂商预设超时与重构请求预算伸缩架构 (v2026.10.17-01)",
+  "title": "KB 免费 Key 限流 (rpm_per_key)、UI 深度清洗与凭据中枢保全 (v2026.10.17-02)",
   "changelog": [
-    "架构解耦：彻底清除 shared/presets 及 EdgeOne 边缘预设中所有厂商的 timeout_rules，消除预设 default_timeout_sec: 60 优先级倒挂劫持控制台配置的致命技术债",
-    "纯粹化超时决策：调度器严格以控制台全局配置（Agent 模式下 agent_first_byte_timeout_sec 默认 120s / KB 模式 upstream_timeout_sec）为基准，支持单个模型显式覆盖",
-    "动态预算下限防截断：_scale_budget 与 request_total_budget_sec 底线自动与 120s 对齐，杜绝因剩余总预算过小导致被强行截断为 60s 的问题",
-    "全端回归验证：补充 tests/test_agent_timeout_and_headers.py 针对预设解耦与预算下限的自动化测试，全端测试 100% 绿色通过"
+    "调度器每 Key 限流与零开销保证：新增提供商可选字段 rpm_per_key，为每个 Key 维护 60 秒滑动窗口，达到上限的 Key 直接跳过避免上游 429；全部打满时立即返回 429 + Retry-After；默认留空或为 0 时系统完全零开销、不创建任何队列",
+    "修复致命回归：修复 v2026.10.17-01 清理超时规则时遗漏的 cand_p_rules 定义，彻底解决所有带响应体的上游错误抛出 NameError 击穿冷却判定的缺陷",
+    "预设官方基线自动联动：AMD 等特定严苛限流预设注入推荐官方基线 rpm_per_key: 2，下拉选择即开箱即用，支持随时按需覆盖微调",
+    "中枢凭据防抹除与 ASCII 崩溃防御：彻底废弃前端回显 Unicode 掩码模式，改用业界标准「已配置凭据」状态徽章与留空保全机制；后端自动保留真实密文，根治 'ascii' codec 崩溃与凭据误清空",
+    "彻底禁用数字输入框鼠标滚轮修改：全局拦截所有数字输入框的 wheel 滚轮事件，执行 preventDefault 与主动失焦，配合 CSS 去除上下微调箭头，彻底避免页面滚动时误触窜改数值",
+    "KB 与 Agent 模式 UI 逻辑清洗：Agent 模式下自动隐藏仅 KB 生效的跨厂商快速熔断；纯手动直通模式下彻底隐藏重试次数与 4 组冷却避让输入框，保持界面干净清爽",
+    "自动化与全端测试回归：补充 tests/test_rpm_limiter.py 及 Vault 凭据测试用例，全端回归测试 100% 绿色通过"
   ]
 }

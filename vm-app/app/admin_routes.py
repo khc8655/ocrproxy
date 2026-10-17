@@ -248,11 +248,13 @@ async def get_config_endpoint(request: Request):
                             masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
                     p_data["keys"] = masked_keys
 
-        # 脱敏 EdgeOne 金库专钥 (edgeone_vault.token)，防管理员界面或抓包明文泄漏专钥
+        # 脱敏 EdgeOne 金库专钥 (edgeone_vault.token)：
+        # 遵循标准留空保持模式，绝不回传黑圆点字符（规避 ASCII Header 编码错误及二次覆盖冲毁），
+        # 仅下发 has_token 状态标记供前端呈现已配置占位符
         if isinstance(resp_data.get("edgeone_vault"), dict):
             v_tok = resp_data["edgeone_vault"].get("token")
-            if v_tok:
-                resp_data["edgeone_vault"]["token"] = "●●●●●●●●"
+            resp_data["edgeone_vault"]["has_token"] = bool(v_tok and not is_masked_secret(v_tok))
+            resp_data["edgeone_vault"]["token"] = ""
 
         run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "agent"
         run_mode = run_mode.lower().strip()
@@ -375,15 +377,17 @@ async def get_preset_detail_endpoint(request: Request, id: str = ""):
     if not pid:
         return JSONResponse(status_code=400, content={"error": "Missing preset id"})
 
-    if pid in _PRESET_REMOTE_CACHE:
-        return JSONResponse(content={"ok": True, "source": "cache", "preset": _PRESET_REMOTE_CACHE[pid]})
-
-    urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
-    preset_data = await _fetch_remote_json(urls, timeout=2.5)
-    source = "remote"
-    if not preset_data:
-        preset_data = _get_local_preset(pid)
-        source = "local_fallback"
+    local_preset = _get_local_preset(pid)
+    if local_preset and isinstance(local_preset, dict):
+        preset_data = local_preset
+        source = "local"
+    else:
+        urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
+        preset_data = await _fetch_remote_json(urls, timeout=2.5)
+        source = "remote"
+        if not preset_data:
+            preset_data = local_preset
+            source = "local_fallback"
 
     if not preset_data:
         return JSONResponse(status_code=404, content={"error": f"Preset '{pid}' not found"})
@@ -773,13 +777,15 @@ async def save_config_endpoint(request: Request):
             if v_u:
                 body["edgeone_vault"]["url"] = v_u
                 body["edgeone_vault"]["edgeone_url"] = v_u
-            in_v_tok = body["edgeone_vault"].get("token")
+            in_v_tok = (body["edgeone_vault"].get("token") or "").strip()
             curr_v_tok = (current_config.get("edgeone_vault") or {}).get("token")
-            if is_masked_secret(in_v_tok):
+            if not in_v_tok or is_masked_secret(in_v_tok):
                 if curr_v_tok and not is_masked_secret(curr_v_tok):
                     body["edgeone_vault"]["token"] = curr_v_tok
                 else:
                     body["edgeone_vault"].pop("token", None)
+            else:
+                body["edgeone_vault"]["token"] = in_v_tok
 
         # 2.5 Secret preservation & fail-safe unmasking guard:
         # Front-end receives masked keys (e.g. "●●●●●●●●" or "*******").
@@ -1732,13 +1738,19 @@ async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
         or ""
     ).strip().rstrip("/")
 
+    in_tok = (body.get("token") or "").strip()
+    if is_masked_secret(in_tok):
+        in_tok = ""
+
     token = (
-        body.get("token")
+        in_tok
         or v_cfg.get("token")
         or os.environ.get("EDGEONE_VAULT_TOKEN")
         or os.environ.get("VAULT_ACCESS_TOKEN")
         or ""
     ).strip()
+    if is_masked_secret(token):
+        token = ""
 
     return edgeone_url, token
 
@@ -2100,7 +2112,7 @@ async def vault_config_endpoint(request: Request):
     if edgeone_url:
         v_cfg["url"] = edgeone_url
         v_cfg["edgeone_url"] = edgeone_url
-    if token:
+    if token and not is_masked_secret(token):
         v_cfg["token"] = token
     await save_config(cfg)
 

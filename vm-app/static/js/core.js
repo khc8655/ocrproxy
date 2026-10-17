@@ -1,7 +1,7 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.10.07-01';
+const APP_VERSION = 'v2026.10.17-02';
 const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
 
 // State
@@ -66,6 +66,22 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function isMaskedSecret(val) {
+  if (!val) return false;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    return s.includes('●') || s.includes('•') || s === '********' || s.startsWith('***');
+  }
+  if (typeof val === 'object') {
+    const pk = val.private_key;
+    if (typeof pk === 'string') {
+      const s = pk.trim();
+      return s.includes('●') || s.includes('•') || s === '********' || s.startsWith('***');
+    }
+  }
+  return false;
 }
 
 function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type':'application/json' }; }
@@ -807,4 +823,16 @@ window.doLogin = login;
 window.doLogout = logout;
 window.loadAllData = loadData;
 window.exportConfigJson = exportConfig;
+
+// 全局彻底拦截数字输入框的鼠标滚轮微调行为，防止页面上下滚动误触修改数值
+document.addEventListener('wheel', function(e) {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'number') {
+    e.preventDefault();
+    e.target.blur();
+  }
+  if (document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'number') {
+    document.activeElement.blur();
+  }
+}, { passive: false });
+
 

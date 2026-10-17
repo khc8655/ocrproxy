@@ -272,13 +272,22 @@ async function testVaultConnection(){
 
     // Auto-persist validated credentials so user never encounters state desync
     try {
+      const payload = { edgeone_url: url, url: url };
+      if (token && !isMaskedSecret(token)) {
+        payload.token = token;
+      }
       await fetch('/api/admin/vault/config', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ edgeone_url: url, url: url, token: token })
+        body: JSON.stringify(payload)
       });
       if (!state.config) state.config = {};
-      state.config.edgeone_vault = { url: url, edgeone_url: url, token: token };
+      state.config.edgeone_vault = state.config.edgeone_vault || {};
+      state.config.edgeone_vault.url = url;
+      state.config.edgeone_vault.edgeone_url = url;
+      state.config.edgeone_vault.has_token = true;
+      const badge = document.getElementById('vaultTokenStatusBadge');
+      if (badge) badge.style.display = 'inline-block';
       await fetchVaultManifest(true);
     } catch (_) {}
   } catch(e) {
@@ -299,17 +308,30 @@ async function saveVaultConfig(silent = false){
   const url = (document.getElementById('cfg_vault_url')?.value || '').trim();
   const token = (document.getElementById('cfg_vault_token')?.value || '').trim();
   try {
+    const payload = { edgeone_url: url, url: url };
+    if (token && !isMaskedSecret(token)) {
+      payload.token = token;
+    }
     const res = await fetch('/api/admin/vault/config', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ edgeone_url: url, url: url, token: token })
+      body: JSON.stringify(payload)
     });
     const d = await res.json().catch(() => ({}));
     if(!res.ok || !d.ok){
       throw new Error(d.error || `HTTP ${res.status}`);
     }
     if (!state.config) state.config = {};
-    state.config.edgeone_vault = { url: url, edgeone_url: url, token: token };
+    state.config.edgeone_vault = state.config.edgeone_vault || {};
+    state.config.edgeone_vault.url = url;
+    state.config.edgeone_vault.edgeone_url = url;
+    if (payload.token) {
+      state.config.edgeone_vault.has_token = true;
+    }
+    const badge = document.getElementById('vaultTokenStatusBadge');
+    if (badge && (payload.token || state.config.edgeone_vault.has_token)) {
+      badge.style.display = 'inline-block';
+    }
     if (!silent) toast('EdgeOne 凭据中枢配置已成功保存到本地加密配置 (proxy_config.enc)', 'ok');
     await loadData();
     await fetchVaultManifest(false);
