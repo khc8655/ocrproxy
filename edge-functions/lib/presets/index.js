@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-16T00:37:25.564Z",
+  "updated_at": "2026-10-17T10:23:00.237Z",
   "providers": [
     {
       "id": "agnes",
@@ -47,7 +47,7 @@ export const CATALOG = {
       "id": "bai",
       "name": "B.AI",
       "version": "1.4.0",
-      "rule_hash": "7a4a9eed8e00",
+      "rule_hash": "29fa1b76a913",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
       "anthropic_base_url": "https://api.b.ai/v1",
@@ -132,7 +132,7 @@ export const CATALOG = {
       "id": "nvidia",
       "name": "NVIDIA NIM",
       "version": "2.0.0",
-      "rule_hash": "187af2f5f93d",
+      "rule_hash": "8e640ea75adb",
       "protocol": "openai",
       "base_url": "https://integrate.api.nvidia.com/v1",
       "anthropic_base_url": null,
@@ -166,7 +166,7 @@ export const CATALOG = {
       "id": "opencode",
       "name": "OpenCode Zen",
       "version": "2.0.0",
-      "rule_hash": "e1aa35db8ce1",
+      "rule_hash": "7b700ff3eb3e",
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
       "anthropic_base_url": null,
@@ -183,7 +183,7 @@ export const CATALOG = {
       "id": "openrouter",
       "name": "OpenRouter",
       "version": "1.0.0",
-      "rule_hash": "3aefdebb947c",
+      "rule_hash": "9172f2c3a65f",
       "protocol": "openai",
       "base_url": "https://openrouter.ai/api/v1",
       "anthropic_base_url": "https://openrouter.ai/api/v1",
@@ -450,14 +450,7 @@ export const PRESETS = [
           "cooldown_sec": 1800,
           "failover": true
         }
-      ],
-      "timeout_rules": {
-        "default_timeout_sec": 60,
-        "models": {
-          "glm-5.3-flash": 120,
-          "glm-5.3": 120
-        }
-      }
+      ]
     }
   },
   {
@@ -773,9 +766,6 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       },
-      "timeout_rules": {
-        "default_timeout_sec": 60
-      },
       "tools": {
         "normalize_choice_to_string": true,
         "rescue_from_text": false,
@@ -923,9 +913,6 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       },
-      "timeout_rules": {
-        "default_timeout_sec": 60
-      },
       "tools": {
         "normalize_choice_to_string": false,
         "rescue_from_text": false,
@@ -1039,9 +1026,6 @@ export const PRESETS = [
       },
       "sanitization": {
         "unsupported_params": []
-      },
-      "timeout_rules": {
-        "default_timeout_sec": 60
       },
       "tools": {
         "normalize_choice_to_string": false,

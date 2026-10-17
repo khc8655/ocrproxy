@@ -1,11 +1,12 @@
 {
-  "version": "v2026.10.16-03",
-  "release_date": "2026-10-16",
+  "version": "v2026.10.17-01",
+  "release_date": "2026-10-17",
   "commit": "HEAD",
-  "title": "KB 知识库分流策略精简与双层极简时钟体系 (v2026.10.16-03)",
+  "title": "彻底解耦厂商预设超时与重构请求预算伸缩架构 (v2026.10.17-01)",
   "changelog": [
-    "KB 知识库分流策略收敛精简为两大核心策略：round_robin (轮询并发分流 · 知识库推荐/默认) 与 manual (纯手动直通调试 · 锁定首个节点单路直通)；历史冗余值（sticky_failover/priority_fallback/latency_based）底层自动收敛至 round_robin",
-    "KB 超时时钟收敛为双层极简体系：快速入库超时 upstream_timeout_sec (默认 15s，统管 Chat/Embedding/Rerank) 与大文件/OCR超时 upstream_timeout_kb (默认 60s，专供视觉 OCR 多模态大图)；彻底清理 7 个重叠冲突的幽灵参数",
-    "管理控制台联动适配：KB 手动直通模式下自适应灰化重试与冷却输入并提供纯透传指引，保存配置时自动全向兼容写入旧键名"
+    "架构解耦：彻底清除 shared/presets 及 EdgeOne 边缘预设中所有厂商的 timeout_rules，消除预设 default_timeout_sec: 60 优先级倒挂劫持控制台配置的致命技术债",
+    "纯粹化超时决策：调度器严格以控制台全局配置（Agent 模式下 agent_first_byte_timeout_sec 默认 120s / KB 模式 upstream_timeout_sec）为基准，支持单个模型显式覆盖",
+    "动态预算下限防截断：_scale_budget 与 request_total_budget_sec 底线自动与 120s 对齐，杜绝因剩余总预算过小导致被强行截断为 60s 的问题",
+    "全端回归验证：补充 tests/test_agent_timeout_and_headers.py 针对预设解耦与预算下限的自动化测试，全端测试 100% 绿色通过"
   ]
 }

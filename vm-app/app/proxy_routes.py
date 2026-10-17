@@ -804,7 +804,7 @@ def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
     except (ValueError, TypeError):
         explicit = 0.0
     if explicit > 0:
-        return explicit
+        return max(explicit, timeout)
     return min(600.0, timeout * min(3, max(candidate_count, 1)))
 
 
@@ -1001,9 +1001,9 @@ async def chat_completions(request: Request):
         if not candidates_list:
             return _model_not_found_response(model_name)
         try:
-            chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
+            chat_timeout = max(1.0, float(config.get("agent_first_byte_timeout_sec") or config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 120.0))
         except (ValueError, TypeError):
-            chat_timeout = 60.0
+            chat_timeout = 120.0
     else:
         # KB mode: only accepts model='chat'
         if model_name != "chat":
@@ -1298,9 +1298,9 @@ async def anthropic_messages(request: Request):
         )
 
     try:
-        chat_timeout = max(1.0, float(config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 60.0))
+        chat_timeout = max(1.0, float(config.get("agent_first_byte_timeout_sec") or config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 120.0))
     except (ValueError, TypeError):
-        chat_timeout = 60.0
+        chat_timeout = 120.0
 
     req_config = {
         **config,

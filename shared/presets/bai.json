@@ -55,14 +55,7 @@
         "cooldown_sec": 1800,
         "failover": true
       }
-    ],
-    "timeout_rules": {
-      "default_timeout_sec": 60,
-      "models": {
-        "glm-5.3-flash": 120,
-        "glm-5.3": 120
-      }
-    }
+    ]
   }
 }
 

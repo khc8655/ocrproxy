@@ -214,9 +214,7 @@ export async function onRequestPost(context) {
       const targetUrl = buildMessagesUrl(resolved.baseUrl, provCfg.anthropic_base_url, binding.provider);
 
       const remainingMs = deadline - Date.now();
-      const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
-        || binding.adapterRules?.timeout_rules?.default_timeout_sec
-        || upstreamTimeoutSec;
+      const modelTimeoutSec = binding.timeout_sec || upstreamTimeoutSec;
       const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
       const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
       const customHeaders = binding.adapterRules?.inject_headers || binding.adapterRules?.adapter_rules?.inject_headers;

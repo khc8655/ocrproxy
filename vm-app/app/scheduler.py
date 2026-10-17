@@ -1247,12 +1247,18 @@ async def schedule(
         upstream_timeout_sec = 15.0
 
     try:
+        agent_first_byte_timeout_sec = max(1.0, float(config.get("agent_first_byte_timeout_sec", 120.0)))
+    except (ValueError, TypeError):
+        agent_first_byte_timeout_sec = 120.0
+
+    try:
         total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 60))))
     except (ValueError, TypeError):
         total_budget_sec = 60.0
     # A request budget shorter than a single attempt's timeout would cut the
     # first (and only) attempt short — always allow at least one full attempt.
-    total_budget_sec = max(total_budget_sec, upstream_timeout_sec)
+    min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
+    total_budget_sec = max(total_budget_sec, min_single_attempt)
 
     # Max candidate retries per request
     try:
@@ -1512,15 +1518,14 @@ async def schedule(
                 provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
 
             # 3. Dynamic candidate timeout calculation bounded strictly by remaining monotonic budget
-            cand_p_rules = cand.get("adapter_rules") or (providers.get(provider_name, {}).get("adapter_rules") or {})
-            cand_t_rules = cand_p_rules.get("timeout_rules") or {}
-            cand_m_map = cand_t_rules.get("models") or {}
-            cand_timeout_cfg = cand.get("timeout_sec") or cand_m_map.get(cand_model_name) or cand_t_rules.get("default_timeout_sec")
-            
-            if cand_timeout_cfg:
-                cand_timeout_sec = float(cand_timeout_cfg)
+            explicit_cand_timeout = cand.get("timeout_sec")
+            if explicit_cand_timeout is not None:
+                try:
+                    cand_timeout_sec = max(1.0, float(explicit_cand_timeout))
+                except (ValueError, TypeError):
+                    cand_timeout_sec = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
             elif category == "agent":
-                cand_timeout_sec = float(config.get("agent_first_byte_timeout_sec", 120.0))
+                cand_timeout_sec = agent_first_byte_timeout_sec
             else:
                 cand_timeout_sec = upstream_timeout_sec
 

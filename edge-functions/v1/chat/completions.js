@@ -253,9 +253,7 @@ export async function onRequestPost(context) {
 
     // Calculate dynamic remaining timeout for this attempt
     const remainingMs = deadline - Date.now();
-    const modelTimeoutSec = binding.adapterRules?.timeout_rules?.models?.[binding.upstreamModel]
-      || binding.adapterRules?.timeout_rules?.default_timeout_sec
-      || upstreamTimeoutSec;
+    const modelTimeoutSec = binding.timeout_sec || upstreamTimeoutSec;
     const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
     const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
 

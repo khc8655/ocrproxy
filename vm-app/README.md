@@ -276,12 +276,13 @@ systemctl list-timers ocrproxy-*       # 查看所有定时器
 
 其他调度行为：
 
+- **厂商预设与全局超时彻底解耦 (v2026.10.17-01)**：彻底剔除厂商预设（Presets）中的 `timeout_rules` 历史包袱。调度器严格遵循 `模型独立配置 > 控制台全局模式配置 (Agent 120s / KB 15s) > 底层兜底` 决策优先级。总请求预算与 `_scale_budget` 底线自动与 120s 对齐，杜绝因 `remaining_budget` 不足导致的 60s 强制截断，确保控制台配置 100% 真实生效。
 - **四层超时硬防御 (v2026.10.16-02)**：5s 建连超时 (502) -> 120s 首字节超时 (504, `agent_first_byte_timeout_sec`) -> 300s 空闲超时 (`stream_idle_timeout_sec`) -> 单调时钟全局死线。
 - **网关状态规范化与重试头 (v2026.10.16-02)**：底层网络传输错误映射为 502/504，注入 `x-should-retry: true` 与 `Retry-After: 1` 引导客户端无缝重试。
 - **同 Key 级数退避重试 (v2026.10.16-02)**：遭遇 502/503/504 且无备选 Key 时执行 1s、2s 级数退避重试（最多 2 次）。
 - **全局过载快速失败**：全局并发上限 30 饱和时，新请求最多排队 2s，超限返回 `503 + Retry-After`（`code=server_overloaded`），不会无限排队占用内存。
 - **排队时间计入预算**：在 Key 信号量上的排队等待消耗故障切换总预算，预算耗尽的请求不再发往上游。
-- **预算封顶 600s**：agent 模式的故障切换总预算自适应扩展，硬上限 600s（显式配置的 `schedule_total_budget` 优先）。
+- **预算封顶 600s**：agent 模式的故障切换总预算自适应扩展，硬上限 600s（显式配置的 `schedule_total_budget` 优先，且不得低于单次候选尝试超时）。
 - **embedding / rerank 独立超时**：`upstream_timeout_embedding`（默认 60s）、`upstream_timeout_rerank`（默认 30s），并按候选数扩展预算。
 - **配置热更新即时生效**：管理面板修改 `max_concurrency_per_key` 或增删 Key 后立即生效（无需重启）；配置变化时自动清理已删除 Key 的冷却/熔断/延迟状态。`POST /v1/reload` 会额外清空全部运行时状态。
 

@@ -39,9 +39,6 @@
     "sanitization": {
       "unsupported_params": []
     },
-    "timeout_rules": {
-      "default_timeout_sec": 60
-    },
     "tools": {
       "normalize_choice_to_string": true,
       "rescue_from_text": false,
