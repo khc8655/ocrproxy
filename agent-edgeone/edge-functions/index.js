@@ -1206,7 +1206,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.17-02</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.17-03</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1246,7 +1246,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.17-02</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.17-03</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1517,6 +1517,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <input type="text" id="m_prov_url_responses" class="form-control" placeholder="如 https://api.openai.com/v1">
         <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Responses 协议 (/v1/responses)</div>
       </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
+        <input type="number" id="m_prov_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
+        <div class="text-secondary text-sm mt-1">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
+      </div>
       <!-- 推荐模型预览 -->
       <div id="m_prov_models_wrap" class="form-group" style="display:none;margin-top:14px;">
         <label class="form-label">官方预设推荐模型 (一期)</label>
@@ -1587,6 +1592,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <div class="form-group">
         <label class="form-label">API Key 密钥明文 (sk-...)</label>
         <input type="text" id="m_key_val" class="form-control" placeholder="sk-...">
+      </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>每分钟请求上限 (RPM，可选)</span>
+          <span id="m_key_rpm_inherit_badge" class="badge badge-info" style="display:none;font-size:11px;font-weight:normal;"></span>
+        </label>
+        <input type="number" id="m_key_rpm" class="form-control" min="0" step="1" placeholder="留空 = 继承供应商设置 (0 为不限制)" onwheel="this.blur()">
+        <div id="m_key_rpm_hint" class="text-secondary text-sm mt-1">支持为该 Key 单独指定限流阈值；若留空则自动继承所属供应商的 RPM 设置。</div>
       </div>
       <label class="checkbox"><input type="checkbox" id="m_key_skip"> <span>跳过连通性在线校验</span></label>
       <div id="m_key_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
@@ -3032,7 +3045,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.17-02';
+const BUILD_VERSION = 'v2026.10.17-03';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3189,6 +3202,7 @@ const FALLBACK_PRESETS = {
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
+    rpm_per_key: 2,
     description: 'AMD 官方开发者平台，基于高性能推理集群。网关已全自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶。',
     recommended_models: [
       { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 原生百万上下文大模型 (自动注入 reasoning_effort 开启深度思考)', checked: true },
@@ -3740,11 +3754,20 @@ function renderProviders() {
               : \`<span class="badge badge-error" style="font-size:10px;padding:1px 5px;">\${latInfo.status || 'ERR'}</span>\`;
           }
 
+          let keyRpmBadge = '';
+          const keyRpm = (typeof val === 'object' && val !== null) ? val.rpm : null;
+          if (keyRpm) {
+            keyRpmBadge = \`<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(59,130,246,0.12);color:var(--color-primary);font-weight:600;" title="独立限流: \${keyRpm} 次/分钟">\${keyRpm} RPM</span>\`;
+          } else if (prov.rpm_per_key) {
+            keyRpmBadge = \`<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(107,114,128,0.12);color:var(--color-text-2);" title="继承供应商限流: \${prov.rpm_per_key} 次/分钟">\${prov.rpm_per_key} RPM</span>\`;
+          }
+
           return \`
             <div class="key-chip">
               <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;flex-wrap:wrap;">
                 <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">\${esc(k)}</span>
                 \${gcpBadge}
+                \${keyRpmBadge}
                 <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">\${esc(masked)}</span>
                 <span class="key-lat-slot" style="display:inline-flex;align-items:center;">\${latBadge}</span>
               </div>
@@ -3775,13 +3798,16 @@ function renderProviders() {
       }
       const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">\${ver}</span>\`;
+      const rpmBadge = prov.rpm_per_key
+        ? \`<span class="badge badge-info" style="font-size:11px;padding:2px 7px;" title="每 Key 限流 \${prov.rpm_per_key} 次/分钟">\${prov.rpm_per_key} RPM/Key</span>\`
+        : '';
       const displayName = (prov.name && prov.name !== p)
         ? \`\${esc(prov.name)} <span class="mono text-secondary" style="font-size:12px;font-weight:normal;">(\${esc(p)})</span>\`
         : esc(p);
       card.innerHTML = \`
         <div class="card-head">
           <div>
-            <h3>\${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge}</span></h3>
+            <h3>\${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge} \${rpmBadge}</span></h3>
             <div class="meta mono mt-2">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -4023,6 +4049,8 @@ async function onEdgeOnePresetChange() {
     currentSelectedPreset = null;
     if (descEl) descEl.style.display = 'none';
     if (modelsWrap) modelsWrap.style.display = 'none';
+    const rpmInput = document.getElementById('m_prov_rpm');
+    if (rpmInput) rpmInput.value = '';
     nameInput.disabled = false;
     return;
   }
@@ -4070,6 +4098,11 @@ async function onEdgeOnePresetChange() {
   if (messageInput) messageInput.value = (preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url) ? preset.anthropic_base_url : (preset.protocols?.includes('messages') ? preset.base_url : '');
   if (responsesInput) responsesInput.value = '';
 
+  const rpmInput = document.getElementById('m_prov_rpm');
+  if (rpmInput) {
+    rpmInput.value = preset.rpm_per_key ? String(preset.rpm_per_key) : '';
+  }
+
   // Recommended models preview
   const recModels = preset.recommended_models || [];
   if (modelsWrap && modelsList) {
@@ -4099,7 +4132,8 @@ function openAddProviderModal(presetId) {
   document.getElementById('m_prov_url_openai').value = '';
   document.getElementById('m_prov_url_message').value = '';
   document.getElementById('m_prov_url_responses').value = '';
-
+  const rpmInput = document.getElementById('m_prov_rpm');
+  if (rpmInput) rpmInput.value = '';
 
   const descEl = document.getElementById('m_prov_desc');
   if (descEl) descEl.style.display = 'none';
@@ -4130,6 +4164,8 @@ function openEditProviderModal(name) {
   document.getElementById('m_prov_url_openai').value = prov.openai_base_url || prov.base_url || '';
   document.getElementById('m_prov_url_message').value = prov.message_base_url || prov.anthropic_base_url || '';
   document.getElementById('m_prov_url_responses').value = prov.responses_base_url || '';
+  const rpmInput = document.getElementById('m_prov_rpm');
+  if (rpmInput) rpmInput.value = prov.rpm_per_key ? String(prov.rpm_per_key) : '';
 
   const presetSelect = document.getElementById('m_prov_preset');
   if (presetSelect) {
@@ -4175,6 +4211,17 @@ async function saveProviderModal() {
     return;
   }
 
+  const rpmInput = document.getElementById('m_prov_rpm');
+  let rpmVal = 0;
+  if (rpmInput) {
+    const rpmRaw = rpmInput.value.trim();
+    rpmVal = rpmRaw === '' ? 0 : Math.floor(Number(rpmRaw));
+    if (!Number.isFinite(rpmVal) || rpmVal < 0) {
+      toast('RPM 上限必须是不小于 0 的整数', 'err');
+      return;
+    }
+  }
+
   const selectedProtos = [];
   if (openaiUrl) selectedProtos.push('openai');
   if (messageUrl) selectedProtos.push('message');
@@ -4185,6 +4232,12 @@ async function saveProviderModal() {
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].protocols = selectedProtos;
+
+  if (rpmVal > 0) {
+    cfg.providers[name].rpm_per_key = rpmVal;
+  } else {
+    delete cfg.providers[name].rpm_per_key;
+  }
 
   if (openaiUrl) {
     cfg.providers[name].base_url = openaiUrl;
@@ -4364,6 +4417,31 @@ function openAddKeyModal(prov) {
     vSec.style.display = 'none';
   }
 
+  const provObj = cfg.providers?.[prov] || {};
+  const provRpm = provObj.rpm_per_key;
+  const rpmInput = document.getElementById('m_key_rpm');
+  const rpmBadge = document.getElementById('m_key_rpm_inherit_badge');
+  const rpmHint = document.getElementById('m_key_rpm_hint');
+  if (rpmInput) {
+    rpmInput.value = '';
+    if (provRpm) {
+      rpmInput.placeholder = \`留空 = 继承供应商 (\${provRpm} RPM)\`;
+      if (rpmBadge) {
+        rpmBadge.style.display = 'inline-block';
+        rpmBadge.textContent = \`供应商默认: \${provRpm} RPM\`;
+      }
+      if (rpmHint) {
+        rpmHint.textContent = \`当前所属供应商已配置默认限流 (\${provRpm} 次/分钟)。若留空则自动继承；输入数字可为该 Key 单独覆盖。\`;
+      }
+    } else {
+      rpmInput.placeholder = '留空或 0 = 不限制';
+      if (rpmBadge) rpmBadge.style.display = 'none';
+      if (rpmHint) {
+        rpmHint.textContent = '支持为该 Key 单独指定限流阈值；留空或 0 则不限制。';
+      }
+    }
+  }
+
   openModal('keyModal');
 }
 
@@ -4372,11 +4450,15 @@ function openEditKeyModal(prov, label) {
   let keyVal = '';
   let projVal = '';
   let locVal = 'global';
+  let keyRpmVal = '';
 
   if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
     keyVal = currentKeyObj.key || '';
     projVal = currentKeyObj.project_id || '';
     locVal = currentKeyObj.location || 'global';
+    if (currentKeyObj.rpm !== undefined && currentKeyObj.rpm !== null) {
+      keyRpmVal = String(currentKeyObj.rpm);
+    }
   } else {
     keyVal = String(currentKeyObj || '');
   }
@@ -4404,6 +4486,31 @@ function openEditKeyModal(prov, label) {
     vSec.style.display = 'none';
   }
 
+  const provObj = cfg.providers?.[prov] || {};
+  const provRpm = provObj.rpm_per_key;
+  const rpmInput = document.getElementById('m_key_rpm');
+  const rpmBadge = document.getElementById('m_key_rpm_inherit_badge');
+  const rpmHint = document.getElementById('m_key_rpm_hint');
+  if (rpmInput) {
+    rpmInput.value = keyRpmVal;
+    if (provRpm) {
+      rpmInput.placeholder = \`留空 = 继承供应商 (\${provRpm} RPM)\`;
+      if (rpmBadge) {
+        rpmBadge.style.display = 'inline-block';
+        rpmBadge.textContent = \`供应商默认: \${provRpm} RPM\`;
+      }
+      if (rpmHint) {
+        rpmHint.textContent = \`当前所属供应商已配置默认限流 (\${provRpm} 次/分钟)。若留空则自动继承；输入数字可为该 Key 单独覆盖。\`;
+      }
+    } else {
+      rpmInput.placeholder = '留空或 0 = 不限制';
+      if (rpmBadge) rpmBadge.style.display = 'none';
+      if (rpmHint) {
+        rpmHint.textContent = '支持为该 Key 单独指定限流阈值；留空或 0 则不限制。';
+      }
+    }
+  }
+
   openModal('keyModal');
 }
 
@@ -4417,6 +4524,17 @@ async function saveKeyModal() {
   if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
 
   if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
+
+  const rpmRaw = (document.getElementById('m_key_rpm')?.value || '').trim();
+  let keyRpm = null;
+  if (rpmRaw !== '') {
+    const parsed = Math.floor(Number(rpmRaw));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      toast('RPM 上限必须是不小于 0 的整数', 'err');
+      return;
+    }
+    keyRpm = parsed;
+  }
 
   const isVertex = isVertexProvider(prov);
   let vertexKeyMeta = null;
@@ -4533,7 +4651,19 @@ async function saveKeyModal() {
     }
   }
 
-  cfg.providers[prov].keys[label] = vertexKeyMeta || val;
+  let finalKeyVal;
+  if (vertexKeyMeta) {
+    finalKeyVal = { ...vertexKeyMeta };
+    if (keyRpm !== null && keyRpm > 0) {
+      finalKeyVal.rpm = keyRpm;
+    }
+  } else if (keyRpm !== null && keyRpm > 0) {
+    finalKeyVal = { key: val, rpm: keyRpm };
+  } else {
+    finalKeyVal = val;
+  }
+
+  cfg.providers[prov].keys[label] = finalKeyVal;
   const ok = await persistConfig();
   if (ok) {
     closeModal('keyModal');

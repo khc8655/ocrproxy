@@ -93,6 +93,7 @@ export async function onRequestGet(context) {
       keys: keyLabels,
       models: models,
       adapter_rules: pCfg.adapter_rules || preset?.adapter_rules || {},
+      ...(pCfg.rpm_per_key ? { rpm_per_key: pCfg.rpm_per_key } : (preset?.rpm_per_key ? { rpm_per_key: preset.rpm_per_key } : {})),
     };
   }
 

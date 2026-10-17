@@ -1879,11 +1879,13 @@ async def vault_fetch_key_endpoint(request: Request):
             elif "anthropic_base_url" in local_p and not local_p["anthropic_messages"]:
                 del local_p["anthropic_base_url"]
 
-            # 3. Overwrite adapter rules & cached models
+            # 3. Overwrite adapter rules & cached models & rpm limit
             if prov_cfg.get("adapter_rules") is not None:
                 local_p["adapter_rules"] = prov_cfg["adapter_rules"]
             if prov_cfg.get("cached_models") is not None:
                 local_p["cached_models"] = prov_cfg["cached_models"]
+            if prov_cfg.get("rpm_per_key") is not None:
+                local_p["rpm_per_key"] = prov_cfg["rpm_per_key"]
 
             # 4. Merge keys: Cloud keys overwrite, local-only keys are preserved
             local_keys = local_p.setdefault("keys", {})

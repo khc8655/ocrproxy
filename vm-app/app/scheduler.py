@@ -1592,9 +1592,14 @@ async def schedule(
                 api_key = str(api_key_raw)
                 base_url = provider.get("base_url", "")
 
-            # 2c. Per-key RPM limit (opt-in via provider.rpm_per_key): skip a key
+            # 2c. Per-key RPM limit (opt-in via provider.rpm_per_key or key.rpm): skip a key
             # whose minute budget is used up instead of collecting an upstream 429.
             rpm_limit = _provider_rpm(provider)
+            if isinstance(api_key_raw, dict) and api_key_raw.get("rpm") is not None:
+                try:
+                    rpm_limit = max(0, int(api_key_raw.get("rpm") or 0))
+                except (ValueError, TypeError):
+                    pass
             rpm_key_id = f"{provider_name}:{key_label}"
             if rpm_limit:
                 _rw = _rpm_wait(rpm_key_id, rpm_limit)

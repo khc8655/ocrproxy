@@ -138,6 +138,7 @@ export async function handleVaultFetch(context, options = {}) {
     adapter_rules: pCfg.adapter_rules || preset?.adapter_rules || {},
     cached_models: pCfg.cached_models || preset?.recommended_models?.map(m => m.name || m.upstream_model) || [],
     keys: targetKeys,
+    ...(pCfg.rpm_per_key ? { rpm_per_key: pCfg.rpm_per_key } : (preset?.rpm_per_key ? { rpm_per_key: preset.rpm_per_key } : {})),
   };
 
   return new Response(

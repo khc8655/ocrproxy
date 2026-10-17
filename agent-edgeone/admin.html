@@ -342,6 +342,11 @@
         <input type="text" id="m_prov_url_responses" class="form-control" placeholder="如 https://api.openai.com/v1">
         <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Responses 协议 (/v1/responses)</div>
       </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
+        <input type="number" id="m_prov_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
+        <div class="text-secondary text-sm mt-1">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
+      </div>
       <!-- 推荐模型预览 -->
       <div id="m_prov_models_wrap" class="form-group" style="display:none;margin-top:14px;">
         <label class="form-label">官方预设推荐模型 (一期)</label>
@@ -412,6 +417,14 @@
       <div class="form-group">
         <label class="form-label">API Key 密钥明文 (sk-...)</label>
         <input type="text" id="m_key_val" class="form-control" placeholder="sk-...">
+      </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>每分钟请求上限 (RPM，可选)</span>
+          <span id="m_key_rpm_inherit_badge" class="badge badge-info" style="display:none;font-size:11px;font-weight:normal;"></span>
+        </label>
+        <input type="number" id="m_key_rpm" class="form-control" min="0" step="1" placeholder="留空 = 继承供应商设置 (0 为不限制)" onwheel="this.blur()">
+        <div id="m_key_rpm_hint" class="text-secondary text-sm mt-1">支持为该 Key 单独指定限流阈值；若留空则自动继承所属供应商的 RPM 设置。</div>
       </div>
       <label class="checkbox"><input type="checkbox" id="m_key_skip"> <span>跳过连通性在线校验</span></label>
       <div id="m_key_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
