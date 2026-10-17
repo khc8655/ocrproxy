@@ -1352,7 +1352,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">上游请求等待超时 (upstream_timeout_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="300" step="5" value="120" style="width:140px;">
+                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="300" step="5" value="120" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">秒 (支持 5~300s，长思考模型推荐 120~300s，前置 SSE 心跳自动保活)</span>
               </div>
               <div class="text-secondary text-sm mt-1">向上游发起调用的等待上限（秒）。故障转移模式下超时立即切换备用 Key；总调度死线由系统智能自适应推导。</div>
@@ -1362,7 +1362,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">单请求最大重试次数 (schedule_total_budget)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_schedule_total_budget" class="form-control" min="1" max="5" step="1" value="3" style="width:140px;">
+                <input type="number" id="set_schedule_total_budget" class="form-control" min="1" max="5" step="1" value="3" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">次 (默认 3 次)</span>
               </div>
               <div class="text-secondary text-sm mt-1">单次请求最多允许尝试的候选 Key 数量上限</div>
@@ -1376,7 +1376,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">单厂商尝试次数上限 (max_attempts_per_provider)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_max_attempts_per_provider" class="form-control" min="1" max="5" step="1" value="2" style="width:140px;">
+                <input type="number" id="set_max_attempts_per_provider" class="form-control" min="1" max="5" step="1" value="2" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">次 (默认 2 次)</span>
               </div>
               <div class="text-secondary text-sm mt-1">防止同一厂商（如7个商汤Key）源站宕机时在同一厂商上死等7次超时</div>
@@ -1394,7 +1394,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">429 限流冷却时长 (cooldown_429_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_429_sec" class="form-control" min="10" max="600" step="1" value="60" style="width:140px;">
+                <input type="number" id="set_cooldown_429_sec" class="form-control" min="10" max="600" step="1" value="60" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">秒 (默认 60s)</span>
               </div>
               <div class="text-secondary text-sm mt-1">命中 RPM / TPM 限流时的临时避让冷却时长</div>
@@ -1402,7 +1402,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">5xx 故障冷却时长 (cooldown_5xx_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_5xx_sec" class="form-control" min="5" max="300" step="1" value="30" style="width:140px;">
+                <input type="number" id="set_cooldown_5xx_sec" class="form-control" min="5" max="300" step="1" value="30" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">秒 (默认 30s)</span>
               </div>
               <div class="text-secondary text-sm mt-1">上游源站抛出 500/502/503/504 错误时的避让冷却时长</div>
@@ -1410,7 +1410,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">连续失败熔断阈值 (circuit_break_threshold)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_circuit_break_threshold" class="form-control" min="1" max="10" step="1" value="3" style="width:140px;">
+                <input type="number" id="set_circuit_break_threshold" class="form-control" min="1" max="10" step="1" value="3" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">次 (默认 3 次)</span>
               </div>
               <div class="text-secondary text-sm mt-1">某个 Key 连续失败达到该次数后触发断路器熔断</div>
@@ -1418,7 +1418,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="form-group">
               <label class="form-label">403 鉴权失败隔离时长 (cooldown_403_sec)</label>
               <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_403_sec" class="form-control" min="60" max="3600" step="1" value="600" style="width:140px;">
+                <input type="number" id="set_cooldown_403_sec" class="form-control" min="60" max="3600" step="1" value="600" style="width:140px;" onwheel="this.blur()">
                 <span class="text-secondary">秒 (默认 600s)</span>
               </div>
               <div class="text-secondary text-sm mt-1">Key 无效或欠费被拒时的主动隔离时间</div>
@@ -2820,6 +2820,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     const orderInputHtml = \`<input type="number" min="1" max="\${totalCount}" value="\${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+        onwheel="this.blur()"
         data-action="reorder-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="修改数字直接调整顺序">\`;
 
     const { cfg, stats: fullStats } = getCtx();
@@ -4860,6 +4861,13 @@ async function persistConfig() {
   }
 }
 
+// ---- Global Wheel Protection for Number Inputs ---------------------------
+document.addEventListener('wheel', function(e) {
+  if (e.target && e.target.type === 'number') {
+    e.target.blur();
+  }
+}, { passive: true });
+
 // ---- Init ----------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   if (getKey()) {
@@ -4868,6 +4876,7 @@ window.addEventListener('DOMContentLoaded', () => {
     showLoginOverlay();
   }
 });
+
 
 </script>
 </body>

@@ -1826,6 +1826,13 @@ async function persistConfig() {
   }
 }
 
+// ---- Global Wheel Protection for Number Inputs ---------------------------
+document.addEventListener('wheel', function(e) {
+  if (e.target && e.target.type === 'number') {
+    e.target.blur();
+  }
+}, { passive: true });
+
 // ---- Init ----------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   if (getKey()) {
@@ -1834,3 +1841,4 @@ window.addEventListener('DOMContentLoaded', () => {
     showLoginOverlay();
   }
 });
+

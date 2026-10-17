@@ -1108,6 +1108,7 @@
 
     const orderInputHtml = `<input type="number" min="1" max="${totalCount}" value="${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+        onwheel="this.blur()"
         data-action="reorder-key" data-model="${_esc(modelName)}" data-index="${i}" title="修改数字直接调整顺序">`;
 
     const { cfg, stats: fullStats } = getCtx();
