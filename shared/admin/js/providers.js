@@ -518,6 +518,8 @@ async function onProviderPresetChange(){
     document.getElementById('p_anthropic_url').value = '';
   }
 
+  document.getElementById('p_rpm').value = preset.rpm_per_key ? String(preset.rpm_per_key) : '';
+
   modelsList.innerHTML = '';
   const recModels = preset.recommended_models || [];
   if(recModels.length > 0){
@@ -558,6 +560,7 @@ function openProviderModal(sourceModal){
   document.getElementById('p_custom_url_toggle').checked = false;
   document.getElementById('p_custom_url_section').style.display = 'none';
   document.getElementById('p_anthropic_url').value = '';
+  document.getElementById('p_rpm').value = '';
   document.getElementById('p_models_wrap').style.display = 'none';
   document.getElementById('p_models_list').innerHTML = '';
   loadPresetsCatalog();
@@ -588,6 +591,7 @@ function editProvider(name){
     document.getElementById('p_custom_url_section').style.display = 'none';
     document.getElementById('p_anthropic_url').value = '';
   }
+  document.getElementById('p_rpm').value = p.rpm_per_key ? String(p.rpm_per_key) : '';
 
   document.getElementById('p_models_wrap').style.display = 'none';
   openModal('providerModal');
@@ -609,6 +613,10 @@ function saveProvider(){
   const customUrlOpen = document.getElementById('p_custom_url_toggle').checked;
   const anthropicUrl = customUrlOpen ? document.getElementById('p_anthropic_url').value.trim() : '';
 
+  const rpmRaw = document.getElementById('p_rpm').value.trim();
+  const rpmVal = rpmRaw === '' ? 0 : Math.floor(Number(rpmRaw));
+  if(!Number.isFinite(rpmVal) || rpmVal < 0){ toast('RPM 上限必须是不小于 0 的整数', 'err'); return; }
+
   if(!isEdit && state.config.providers && state.config.providers[name]){ toast('供应商已存在', 'err'); return; }
   if(!state.config.providers) state.config.providers = {};
 
@@ -621,6 +629,8 @@ function saveProvider(){
     } else {
       delete state.config.providers[name].anthropic_base_url;
     }
+    if(rpmVal > 0) state.config.providers[name].rpm_per_key = rpmVal;
+    else delete state.config.providers[name].rpm_per_key;
   } else {
     state.config.providers[name] = { 
       base_url: url, 
@@ -631,6 +641,7 @@ function saveProvider(){
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
     }
+    if(rpmVal > 0) state.config.providers[name].rpm_per_key = rpmVal;
 
     // Attach preset metadata and rules if created from preset
     if(state.currentSelectedPreset && (state.currentSelectedPreset.id === name || !state.config.providers[name].preset_id)){

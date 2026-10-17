@@ -1,12 +1,13 @@
 {
-  "version": "v2026.10.17-01",
+  "version": "v2026.10.17-02",
   "release_date": "2026-10-17",
   "commit": "HEAD",
-  "title": "彻底解耦厂商预设超时与重构请求预算伸缩架构 (v2026.10.17-01)",
+  "title": "KB 免费 Key 每分钟限流（rpm_per_key）与错误分类回归修复 (v2026.10.17-02)",
   "changelog": [
-    "架构解耦：彻底清除 shared/presets 及 EdgeOne 边缘预设中所有厂商的 timeout_rules，消除预设 default_timeout_sec: 60 优先级倒挂劫持控制台配置的致命技术债",
-    "纯粹化超时决策：调度器严格以控制台全局配置（Agent 模式下 agent_first_byte_timeout_sec 默认 120s / KB 模式 upstream_timeout_sec）为基准，支持单个模型显式覆盖",
-    "动态预算下限防截断：_scale_budget 与 request_total_budget_sec 底线自动与 120s 对齐，杜绝因剩余总预算过小导致被强行截断为 60s 的问题",
-    "全端回归验证：补充 tests/test_agent_timeout_and_headers.py 针对预设解耦与预算下限的自动化测试，全端测试 100% 绿色通过"
+    "新增提供商可选字段 rpm_per_key（管理页「编辑供应商」可填）：调度器为每个 Key 维护 60 秒滑动窗口，达到上限的 Key 直接跳过，不再请求上游吃 429；不填则行为完全不变",
+    "所有 Key 都满时立即返回 429 + Retry-After（最早空位释放时间），不排队；若空位在 5 秒内释放，沿用现有的短暂等待",
+    "配置了 RPM 仍收到上游 429 时，按窗口对齐封禁该 Key（覆盖其全部模型），替代固定 15 秒冷却",
+    "修复回归：v2026.10.17-01 删除超时规则时一并删掉了 cand_p_rules 定义，导致所有带响应体的上游错误（429/401/403/5xx）抛 NameError，跳过冷却与欠费判定",
+    "新增 tests_local/test_rpm_limiter.py（22 项，含并发突发、内存与 CPU 开销）"
   ]
 }

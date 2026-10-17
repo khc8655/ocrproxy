@@ -12,7 +12,8 @@ import gc
 import ctypes
 import ctypes.util
 import httpx
-from typing import Optional, Any, Callable, Dict, Set, Tuple, List
+from collections import deque
+from typing import Optional, Any, Callable, Dict, Set, Tuple, List, Deque
 from dataclasses import dataclass
 
 from . import stats
@@ -202,6 +203,80 @@ _gone_models: Dict[str, float] = {}
 DEFAULT_COOLDOWN_410_SEC = 86400.0
 _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
+
+# Optional per-key RPM limiter (provider field `rpm_per_key`; absent/0 = off).
+# "provider:key" -> monotonic timestamps of upstream dispatches in the last
+# 60 s.  Each deque holds at most `rpm_per_key` entries, so memory is bounded
+# by keys x rpm.  In-memory only: a restart forgets the counts (worst case one
+# upstream 429, which then re-syncs the window).  Deliberately survives
+# reset_runtime_state(): /v1/reload does not reset the upstream's own counter.
+# Check-and-record happens synchronously (no await in between), so asyncio's
+# single thread makes it race-free without locks.
+RPM_WINDOW_SEC = 60.0
+_rpm_windows: Dict[str, Deque[float]] = {}
+
+
+def _provider_rpm(provider: Optional[dict]) -> int:
+    if not isinstance(provider, dict):
+        return 0
+    try:
+        return max(0, int(provider.get("rpm_per_key") or 0))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _rpm_window(key_id: str, now: float) -> Deque[float]:
+    w = _rpm_windows.get(key_id)
+    if w is None:
+        w = deque()
+        _rpm_windows[key_id] = w
+    cutoff = now - RPM_WINDOW_SEC
+    while w and w[0] <= cutoff:
+        w.popleft()
+    return w
+
+
+def _rpm_wait(key_id: str, limit: int, now: Optional[float] = None) -> float:
+    """Seconds until `key_id` has a free RPM slot (0 = free now / no limit)."""
+    if limit <= 0:
+        return 0.0
+    now = time.monotonic() if now is None else now
+    w = _rpm_window(key_id, now)
+    if len(w) < limit:
+        return 0.0
+    # The slot frees when the (len-limit)-th oldest entry leaves the window.
+    return max(0.0, w[len(w) - limit] + RPM_WINDOW_SEC - now)
+
+
+def _rpm_try_acquire(key_id: str, limit: int) -> bool:
+    """Record one upstream dispatch if a slot is free.  Synchronous on purpose."""
+    if limit <= 0:
+        return True
+    now = time.monotonic()
+    w = _rpm_window(key_id, now)
+    if len(w) >= limit:
+        return False
+    w.append(now)
+    return True
+
+
+def _rpm_mark_exhausted(key_id: str, limit: int):
+    """Upstream said 429 although our window had room (restart, key shared
+    elsewhere, limit set too high): treat the key as full until the oldest
+    request we know of leaves the window (60 s from now if we know none)."""
+    if limit <= 0:
+        return
+    now = time.monotonic()
+    w = _rpm_window(key_id, now)
+    pad = w[0] if w else now
+    while len(w) < limit:
+        w.appendleft(pad)
+
+
+def get_rpm_usage() -> Dict[str, int]:
+    """Requests counted in the current 60 s window per provider:key."""
+    now = time.monotonic()
+    return {k: len(_rpm_window(k, now)) for k in list(_rpm_windows.keys()) if _rpm_windows.get(k)}
 _sem_lock = asyncio.Lock()
 
 # Failure collapse window: merges burst disconnects/5xx within 3 seconds into a single failure event
@@ -736,6 +811,9 @@ def _prune_runtime_state(config: dict):
         if k not in valid_key_ids:
             del _semaphores[k]
             _semaphore_limits.pop(k, None)
+    for k in list(_rpm_windows.keys()):
+        if k not in valid_key_ids:
+            del _rpm_windows[k]
     for m in list(_sticky_agent_active_keys.keys()):
         if m not in valid_agent_models:
             del _sticky_agent_active_keys[m]
@@ -1395,6 +1473,9 @@ async def schedule(
     last_transport_status: Optional[int] = None
     _queue: List[Any] = []
     _qi = 0
+    # Candidates skipped because their key hit rpm_per_key: cand_id -> wall-clock
+    # time when a slot frees.  Kept out of `errors` (no upstream was tried).
+    _rpm_blocked: Dict[str, float] = {}
 
     def _maybe_retry_same_key(orig_idx_, cand_, cid_) -> bool:
         if category != "agent" or strategy != "sticky_failover" or same_key_retries <= 0:
@@ -1511,11 +1592,30 @@ async def schedule(
                 api_key = str(api_key_raw)
                 base_url = provider.get("base_url", "")
 
+            # 2c. Per-key RPM limit (opt-in via provider.rpm_per_key): skip a key
+            # whose minute budget is used up instead of collecting an upstream 429.
+            rpm_limit = _provider_rpm(provider)
+            rpm_key_id = f"{provider_name}:{key_label}"
+            if rpm_limit:
+                _rw = _rpm_wait(rpm_key_id, rpm_limit)
+                if _rw > 0:
+                    _rpm_blocked[cand_id] = time.time() + _rw
+                    _trail_add(provider_name, key_label, "rpm")
+                    logger.debug("Skipping candidate %s - rpm_per_key=%d reached, slot frees in %.1fs",
+                                 cand_id, rpm_limit, _rw)
+                    continue
+
             # Same-key retries are bounded by agent_same_key_retries and the
             # deadline; they do not consume max_retries / per-provider attempts.
             if not _is_same_key_retry:
                 attempt_seq += 1
                 provider_attempts[provider_name] = provider_attempts.get(provider_name, 0) + 1
+
+            # Provider adapter rules (quota_keywords / error_rules), read by the
+            # failure classifier below.  Its definition was dropped together with
+            # the preset timeout_rules in 602a9db, so every upstream error body
+            # raised NameError and skipped cooldown/quota evaluation.
+            cand_p_rules = cand.get("adapter_rules") or (provider.get("adapter_rules") or {})
 
             # 3. Dynamic candidate timeout calculation bounded strictly by remaining monotonic budget
             explicit_cand_timeout = cand.get("timeout_sec")
@@ -1585,6 +1685,16 @@ async def schedule(
                 if time.monotonic() >= deadline:
                     errors.append(f"budget_exhausted_after_{time.monotonic() - start_monotonic:.2f}s (queue wait)")
                     break
+                # Count this dispatch against the key's RPM window.  Re-checked
+                # here (after the awaits above) and recorded in the same
+                # synchronous step, so concurrent requests cannot overshoot.
+                if rpm_limit and not _rpm_try_acquire(rpm_key_id, rpm_limit):
+                    _rpm_blocked[cand_id] = time.time() + _rpm_wait(rpm_key_id, rpm_limit)
+                    _trail_add(provider_name, key_label, "rpm")
+                    if not _is_same_key_retry:
+                        attempt_seq -= 1
+                        provider_attempts[provider_name] = max(0, provider_attempts.get(provider_name, 1) - 1)
+                    continue
                 try:
                     # Build request arguments (method, url, headers, json_body / raw_bytes)
                     method, url, headers, req_body = build_request(cand, api_key, base_url)
@@ -1944,6 +2054,15 @@ async def schedule(
                     else:
                         _cooldown_until.pop(cand_id, None)
 
+                    # Key with rpm_per_key still got a 429: block the key (all its
+                    # models) until our window frees, instead of the fixed
+                    # 429 cooldown that expires mid-window and hits again.
+                    # An explicit Retry-After or a hard quota keeps its cooldown.
+                    if (rpm_limit and status_code == 429 and not eval_res.is_quota
+                            and not _retry_after):
+                        _rpm_mark_exhausted(rpm_key_id, rpm_limit)
+                        _cooldown_until.pop(cand_id, None)
+
                     if eval_res.is_quota:
                         _quota_exhausted_cands.add(cand_id)
                         logger.warning(f"[VM:CircuitBreaker] {status_code} Quota limit on {cand_id} (欠费/超额) — cool down {eval_res.cooldown_sec:.0f}s")
@@ -2103,7 +2222,8 @@ async def schedule(
         if not errors and loop_idx == 0:
             now_mono = time.monotonic()
             remaining_mono = deadline - now_mono
-            expiries = [_cooldown_until.get(get_candidate_id(c), 0.0) for _, c in ordered_items]
+            expiries = [max(_cooldown_until.get(get_candidate_id(c), 0.0),
+                            _rpm_blocked.get(get_candidate_id(c), 0.0)) for _, c in ordered_items]
             if expiries:
                 min_expiry = min(expiries)
                 wait_time = min_expiry - time.time()
@@ -2133,6 +2253,12 @@ async def schedule(
             msg = (f"Model for {model_type} has been retired by every configured upstream "
                    f"(HTTP 410 Gone). Remove or replace it in the model config.")
             last_status_code = 410
+        elif _rpm_blocked:
+            # Every usable key spent its per-minute budget: answer 429 right
+            # away (no queueing) with Retry-After set to the earliest free slot.
+            msg = (f"All keys for {model_type} reached their per-minute request limit "
+                   f"(rpm_per_key). Please retry after the Retry-After interval.")
+            last_status_code = 429
         else:
             msg = (f"No available candidates for {model_type} – all are in cooldown. "
                    f"Please retry in a few seconds.")
@@ -2140,7 +2266,8 @@ async def schedule(
         last_err_body = json.dumps({"detail": msg})
     # Soonest cooldown expiry among this request's candidates -> Retry-After.
     _now = time.time()
-    _exp = [_cooldown_until.get(get_candidate_id(c), 0.0) - _now for _, c in ordered_items]
+    _exp = [max(_cooldown_until.get(get_candidate_id(c), 0.0),
+                _rpm_blocked.get(get_candidate_id(c), 0.0)) - _now for _, c in ordered_items]
     _exp = [x for x in _exp if x > 0]
     raise AllCandidatesFailedError(
         msg,
