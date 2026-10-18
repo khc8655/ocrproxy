@@ -1,10 +1,16 @@
 /**
- * api/presets.js — Return available provider presets and handle remote updates.
+ * api/presets.js — Return available provider presets and handle remote updates via PresetHub.
  */
 
-import { PRESETS, PRESET_MAP, CATALOG, getPreset } from '../lib/presets/index.js';
-import { requireAuth, loadConfig, saveConfig, resolveKvBinding } from '../lib/config.js';
-
+import {
+  getCatalog,
+  getPresetDetail,
+  checkConfiguredUpdates,
+  updateConfiguredRules,
+  PRESETS,
+  PRESET_MAP
+} from '../lib/presets/hub.js';
+import { requireAuth, resolveKvBinding } from '../lib/config.js';
 
 export async function onRequestGet(context) {
   try {
@@ -13,14 +19,13 @@ export async function onRequestGet(context) {
 
     const url = new URL(context.request.url);
     const action = url.searchParams.get('action') || '';
+    const force = url.searchParams.get('force') === 'true';
 
     if (action === 'catalog') {
-      return new Response(JSON.stringify({
-        ok: true,
-        catalog: CATALOG,
-      }), {
+      const res = await getCatalog(context, force);
+      return new Response(JSON.stringify(res), {
         status: 200,
-        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' },
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=60' },
       });
     }
 
@@ -29,29 +34,28 @@ export async function onRequestGet(context) {
       if (!id) {
         return new Response(JSON.stringify({ error: 'Missing preset id' }), { status: 400, headers: { 'content-type': 'application/json' } });
       }
-      const presetData = getPreset(id);
-      if (!presetData) {
+      const res = await getPresetDetail(context, id, force);
+      if (!res || !res.preset) {
         return new Response(JSON.stringify({ error: `Preset '${id}' not found` }), { status: 404, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({
-        ok: true,
-        preset: presetData,
-      }), {
+      return new Response(JSON.stringify(res), {
         status: 200,
-        headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' },
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=60' },
       });
     }
 
+    const catalogRes = await getCatalog(context, force);
     return new Response(JSON.stringify({
       ok: true,
-      catalog: CATALOG,
+      source: catalogRes?.source || 'hub',
+      catalog: catalogRes?.catalog || {},
       presets: PRESETS,
       map: PRESET_MAP,
     }), {
       status: 200,
       headers: {
-        'content-type': 'application/json',
-        'cache-control': 'public, max-age=3600',
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=60',
       },
     });
   } catch (err) {
@@ -82,128 +86,31 @@ export async function onRequestPost(context) {
     const kv = kvRes?.kv;
 
     if (action === 'check-updates') {
-      const catalogData = CATALOG;
-      const catalogMap = Object.fromEntries(((catalogData && catalogData.providers) || []).map((p) => [p.id, p]));
-
-      let providersToCheck = Array.isArray(body?.providers) ? body.providers : null;
-      if (!providersToCheck && Array.isArray(body?.installed)) {
-        providersToCheck = body.installed;
-      }
-      if (!providersToCheck) {
-        let config = {};
-        try {
-          config = await loadConfig(context.env, kv) || {};
-        } catch {}
-        providersToCheck = Object.entries(config.providers || {}).map(([pid, pdata]) => ({
-          provider_id: pid,
-          preset_id: (pdata && pdata.preset_id) || pid,
-          current_version: (pdata && pdata.preset_version) || '1.0.0',
-          rule_hash: pdata && pdata.rule_hash,
-        }));
-      }
-
-      const updates = [];
-      const upToDate = [];
-
-      for (const item of providersToCheck) {
-        if (!item) continue;
-        const provId = item.provider_id || item.id;
-        const presId = item.preset_id || provId;
-        const currVer = item.current_version || item.version || '1.0.0';
-
-        const remotePreset = catalogMap[presId];
-        if (!remotePreset) continue;
-
-        const latestVer = remotePreset.version || '1.0.0';
-        const hasUpdate = latestVer !== currVer;
-
-        const resItem = {
-          provider_id: provId,
-          preset_id: presId,
-          name: remotePreset.name || provId,
-          current_version: currVer,
-          latest_version: latestVer,
-          remote_version: latestVer,
-          has_update: hasUpdate,
-        };
-
-        if (hasUpdate) {
-          updates.push(resItem);
-        } else {
-          upToDate.push(resItem);
-        }
-      }
-
-      return new Response(JSON.stringify({
-        ok: true,
-        updates,
-        up_to_date: upToDate,
-        catalog_version: (catalogData && catalogData.version) || '1.1.0',
-      }), {
+      const providersToCheck = Array.isArray(body?.providers) ? body.providers : (Array.isArray(body?.installed) ? body.installed : null);
+      const res = await checkConfiguredUpdates(context, providersToCheck);
+      return new Response(JSON.stringify(res), {
         status: 200,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json; charset=utf-8' },
       });
     }
 
-  if (action === 'update-rules') {
-    const targetIds = Array.isArray(body.provider_ids) ? body.provider_ids : (body.provider_ids ? [body.provider_ids] : []);
-    if (targetIds.length === 0) {
-      return new Response(JSON.stringify({ error: 'No provider_ids specified' }), { status: 400, headers: { 'content-type': 'application/json' } });
-    }
-
-    const config = await loadConfig(context.env, kv);
-    const providers = config.providers || {};
-    const updated = [];
-    const failed = [];
-
-    for (const pid of targetIds) {
-      if (!providers[pid]) {
-        failed.push({ provider_id: pid, error: 'Provider not found in current config' });
-        continue;
-      }
-      const pdata = providers[pid];
-      const presId = pdata.preset_id || pid;
-
-      const presetData = getPreset(presId);
-
-      if (!presetData) {
-        failed.push({ provider_id: pid, error: `Failed to fetch rules for preset '${presId}'` });
-        continue;
+    if (action === 'update-rules') {
+      const targetIds = Array.isArray(body.provider_ids) ? body.provider_ids : (body.provider_ids ? [body.provider_ids] : []);
+      if (targetIds.length === 0) {
+        return new Response(JSON.stringify({ error: 'No provider_ids specified' }), { status: 400, headers: { 'content-type': 'application/json' } });
       }
 
-      pdata.adapter_rules = presetData.adapter_rules || {};
-      pdata.preset_version = presetData.version || '1.1.0';
-      if (presetData.recommended_models) {
-        pdata.recommended_models = presetData.recommended_models;
-      }
-      if (presetData.features) {
-        pdata.features = presetData.features;
-      }
-
-      updated.push({
-        provider_id: pid,
-        preset_id: presId,
-        new_version: pdata.preset_version,
+      const res = await updateConfiguredRules(context, targetIds, kv);
+      return new Response(JSON.stringify(res), {
+        status: res.ok ? 200 : 400,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
       });
     }
 
-    if (updated.length > 0 && kv) {
-      await saveConfig(config, kv);
-    }
-
-
-    return new Response(JSON.stringify({
-      ok: true,
-      updated,
-      failed,
-      message: `Successfully updated rules for ${updated.length} provider(s).`,
-    }), {
-      status: 200,
+    return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
+      status: 400,
       headers: { 'content-type': 'application/json' },
     });
-  }
-
-    return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400, headers: { 'content-type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({
       error: 'internal_error',
@@ -214,5 +121,3 @@ export async function onRequestPost(context) {
     });
   }
 }
-
-export default onRequestGet;

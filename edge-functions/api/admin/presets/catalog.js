@@ -1,21 +1,22 @@
 /**
- * api/admin/presets/catalog.js — Return presets catalog for EdgeOne admin panel.
+ * api/admin/presets/catalog.js — Return dynamic presets catalog via PresetHub.
  */
-import { CATALOG } from '../../../lib/presets/index.js';
+import { getCatalog } from '../../../lib/presets/hub.js';
 import { requireAuth } from '../../../lib/config.js';
 
 export async function onRequestGet(context) {
   const authErr = requireAuth(context);
   if (authErr) return authErr;
 
-  return new Response(JSON.stringify({
-    ok: true,
-    catalog: CATALOG,
-  }), {
+  const url = new URL(context.request.url);
+  const force = url.searchParams.get('force') === 'true';
+  const res = await getCatalog(context, force);
+
+  return new Response(JSON.stringify(res), {
     status: 200,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'public, max-age=3600'
+      'cache-control': 'public, max-age=60'
     },
   });
 }

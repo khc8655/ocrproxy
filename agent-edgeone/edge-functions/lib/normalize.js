@@ -130,6 +130,16 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
       }
     }
   }
+
+  // Sanitize illegal reasoning.enabled (e.g. AMD and OpenAI rejects reasoning.enabled with 400)
+  if (body.reasoning && typeof body.reasoning === 'object') {
+    if ('enabled' in body.reasoning) {
+      delete body.reasoning.enabled;
+    }
+    if (Object.keys(body.reasoning).length === 0) {
+      delete body.reasoning;
+    }
+  }
   const maxTokensCeil = rules.sanitization?.max_tokens_ceiling;
   if (typeof maxTokensCeil === 'number' && maxTokensCeil > 0) {
     if (typeof body.max_tokens === 'number' && body.max_tokens > maxTokensCeil) {
@@ -397,10 +407,10 @@ function resolveEffectiveRules(presetRules, overrideRules) {
   if (!overrideRules || typeof overrideRules !== 'object' || Object.keys(overrideRules).length === 0) {
     return presetRules;
   }
-  const merged = { ...overrideRules, ...presetRules };
+  const merged = { ...presetRules, ...overrideRules };
   for (const subKey of ['reasoning', 'case_sensitive_models', 'sanitization', 'tools', 'messages']) {
-    if (overrideRules[subKey] || presetRules[subKey]) {
-      merged[subKey] = { ...(overrideRules[subKey] || {}), ...(presetRules[subKey] || {}) };
+    if (presetRules[subKey] || overrideRules[subKey]) {
+      merged[subKey] = { ...(presetRules[subKey] || {}), ...(overrideRules[subKey] || {}) };
     }
   }
   return merged;

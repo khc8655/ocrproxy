@@ -235,7 +235,7 @@ def _get_preset_rules(provider_id: str) -> dict:
 
 
 def _resolve_adapter_rules(provider_id: str, p_info: Optional[dict] = None) -> dict:
-    """Resolve effective adapter_rules by merging latest preset rules over stored provider rules."""
+    """Resolve effective adapter_rules by merging stored provider rules over baseline preset rules."""
     p_cfg = p_info if isinstance(p_info, dict) else {}
     preset_r = _get_preset_rules(p_cfg.get("preset_id") or provider_id)
     stored_r = p_cfg.get("adapter_rules") if isinstance(p_cfg.get("adapter_rules"), dict) else {}
@@ -243,10 +243,10 @@ def _resolve_adapter_rules(provider_id: str, p_info: Optional[dict] = None) -> d
         return stored_r
     if not stored_r:
         return dict(preset_r)
-    merged = {**stored_r, **preset_r}
+    merged = {**preset_r, **stored_r}
     for sub_key in ("reasoning", "case_sensitive_models", "sanitization", "tools", "messages"):
-        if isinstance(stored_r.get(sub_key), dict) or isinstance(preset_r.get(sub_key), dict):
-            merged[sub_key] = {**(stored_r.get(sub_key) or {}), **(preset_r.get(sub_key) or {})}
+        if isinstance(preset_r.get(sub_key), dict) or isinstance(stored_r.get(sub_key), dict):
+            merged[sub_key] = {**(preset_r.get(sub_key) or {}), **(stored_r.get(sub_key) or {})}
     return merged
 
 
@@ -337,6 +337,13 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
                 out.pop("output_config", None)
         else:
             out.pop(sp, None)
+
+    # Sanitize illegal reasoning.enabled (e.g. AMD rejects reasoning.enabled with 400)
+    if isinstance(out.get("reasoning"), dict):
+        out["reasoning"].pop("enabled", None)
+        if not out["reasoning"]:
+            out.pop("reasoning", None)
+
     max_tokens_ceil = rules.get("sanitization", {}).get("max_tokens_ceiling")
     if isinstance(max_tokens_ceil, int) and max_tokens_ceil > 0:
         if isinstance(out.get("max_tokens"), int) and out["max_tokens"] > max_tokens_ceil:

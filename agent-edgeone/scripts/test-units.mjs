@@ -27,7 +27,7 @@ import {
   DEFAULT_SETTINGS,
   checkAuth,
 } from '../edge-functions/lib/config.js';
-import { normaliseForProvider, normaliseMessagesForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream } from '../edge-functions/lib/normalize.js';
+import { normaliseForProvider, normaliseMessagesForProvider, rescueToolCallsFromText, applyAdapterRules, createKeepAliveStream, normalizeResponseReasoning } from '../edge-functions/lib/normalize.js';
 import {
   getCooldown,
   setCooldown,
@@ -43,6 +43,11 @@ import {
   CIRCUIT_BREAKER_THRESHOLD,
 } from '../edge-functions/lib/cooldowns.js';
 import { PRESETS, PRESET_MAP, getPreset } from '../edge-functions/lib/presets/index.js';
+import { getCatalog, getPresetDetail, checkConfiguredUpdates, updateConfiguredRules, PRESET_REMOTE_MIRRORS } from '../edge-functions/lib/presets/hub.js';
+import { onRequestGet as adminCatalogGet } from '../edge-functions/api/admin/presets/catalog.js';
+import { onRequestGet as adminDetailGet } from '../edge-functions/api/admin/presets/detail.js';
+import { onRequestPost as adminCheckUpdatesPost } from '../edge-functions/api/admin/presets/check-updates.js';
+import { onRequestPost as adminUpdateRulesPost } from '../edge-functions/api/admin/presets/update-rules.js';
 import { onRequestGet as vaultManifestGet } from '../edge-functions/api/vault/manifest.js';
 import { onRequestPost as vaultFetchPost } from '../edge-functions/api/vault/fetch.js';
 import { onRequestPost as vaultCredentialsPost } from '../edge-functions/api/vault/credentials.js';
@@ -568,6 +573,50 @@ test('normalize: amd sanitizes messages (developer -> system, multiple systems m
   eq(body.messages[0].content, 'system instruction 1\n\nsystem instruction 2');
   eq(body.messages[1].role, 'user');
   eq(body.messages[2].role, 'assistant');
+});
+
+test('normalize: amd cleans illegal reasoning.enabled while keeping effort', () => {
+  const body = { model: 'DeepSeek-V4.1-Flash', reasoning: { enabled: true, effort: 'medium' } };
+  normaliseForProvider(body, 'amd');
+  eq(body.reasoning.enabled, undefined);
+  eq(body.reasoning.effort, 'medium');
+});
+
+test('normalize: dynamic KV override rules take precedence over static baseline preset rules', () => {
+  const body = { model: 'Qwen3.8-Flash-Next', reasoning_effort: 'high', foo: 'bar' };
+  const dynamicOverride = {
+    adapter_rules: {
+      reasoning: {
+        effort_map: { high: 'low' }
+      },
+      sanitization: {
+        strip_params: ['foo']
+      }
+    }
+  };
+  normaliseForProvider(body, 'amd', dynamicOverride);
+  eq(body.foo, undefined);
+  eq(body.reasoning_effort, 'low');
+});
+
+test('preset: amd official 2026-10-17 spec alignment (20 RPM, 4 models, reasoning mapping)', () => {
+  const p = getPreset('amd');
+  eq(p.rpm_per_key, 20);
+  eq(p.recommended_models.length, 4);
+  const upstreamModels = p.recommended_models.map(m => m.upstream_model);
+  truthy(upstreamModels.includes('DeepSeek-V4-Flash'));
+  truthy(upstreamModels.includes('DeepSeek-V4.1-Flash'));
+  truthy(upstreamModels.includes('Qwen3.8-Flash-Next'));
+  truthy(upstreamModels.includes('GLM-5.3-Flash'));
+
+  // Test response reasoning field normalization
+  const mockResp = {
+    choices: [{ message: { role: 'assistant', content: 'test', reasoning: 'chain of thought' } }],
+    usage: { completion_tokens_details: { reasoning_tokens: 50 } }
+  };
+  const norm = normalizeResponseReasoning(mockResp, p.adapter_rules);
+  eq(norm.choices[0].message.reasoning_content, 'chain of thought');
+  eq(norm.usage.reasoning_tokens, 50);
 });
 
 // normaliseForProvider — B.AI (Gemini-Only Transformation Rule)
@@ -1558,6 +1607,69 @@ test('buildChatUrl: correctly preserves Vertex openapi endpoint path', () => {
 
   const regionalUrl = 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/endpoints/openapi';
   eq(buildChatUrl(regionalUrl), 'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/endpoints/openapi/chat/completions');
+});
+
+test('PresetHub: PRESET_REMOTE_MIRRORS contains valid CDN and raw endpoints', () => {
+  truthy(PRESET_REMOTE_MIRRORS.length >= 2);
+  truthy(PRESET_REMOTE_MIRRORS[0].includes('cdn.jsdelivr.net'));
+});
+
+test('PresetHub: getCatalog returns catalog with providers array', async () => {
+  const res = await getCatalog({});
+  truthy(res);
+  eq(res.ok, true);
+  truthy(Array.isArray(res.providers));
+  truthy(res.providers.length >= 8);
+});
+
+test('PresetHub: getPresetDetail returns specific provider detail on demand', async () => {
+  const res = await getPresetDetail({}, 'amd');
+  truthy(res);
+  eq(res.ok, true);
+  eq(res.preset.id, 'amd');
+  eq(res.preset.rpm_per_key, 20);
+  truthy(res.preset.recommended_models.length >= 2);
+});
+
+test('PresetHub: checkConfiguredUpdates strictly checks only configured providers', async () => {
+  // Scenario 1: User has only 'amd' configured at version 1.0.0
+  const configured = [{ provider_id: 'amd', preset_id: 'amd', current_version: '1.0.0', rule_hash: 'old' }];
+  const res = await checkConfiguredUpdates({}, configured);
+  eq(res.ok, true);
+  eq(res.updates.length, 1);
+  eq(res.updates[0].provider_id, 'amd');
+  eq(res.up_to_date.length, 0);
+
+  // Scenario 2: User has empty providers list
+  const resEmpty = await checkConfiguredUpdates({}, []);
+  eq(resEmpty.ok, true);
+  eq(resEmpty.updates.length, 0);
+});
+
+test('PresetHub: updateConfiguredRules preserves user keys and updates rules', async () => {
+  const fakeStore = {};
+  const mockKv = {
+    async get(k, t) {
+      if (k === 'config') return JSON.stringify({
+        providers: {
+          amd: { base_url: 'https://my-custom.amd.com', keys: { k1: 'sk-123' }, preset_version: '1.0.0' }
+        }
+      });
+      return fakeStore[k] || null;
+    },
+    async put(k, v) { fakeStore[k] = v; }
+  };
+
+  const res = await updateConfiguredRules({ env: { agent_kv: mockKv } }, ['amd'], mockKv);
+  eq(res.ok, true);
+  eq(res.updated.length, 1);
+  eq(res.updated[0].provider_id, 'amd');
+
+  // Verify KV saved config has updated adapter_rules and preserved keys
+  const savedCfg = JSON.parse(fakeStore['config']);
+  truthy(savedCfg.providers.amd.adapter_rules);
+  eq(savedCfg.providers.amd.base_url, 'https://my-custom.amd.com');
+  eq(savedCfg.providers.amd.keys.k1, 'sk-123');
 });
 
 // ============================================================================

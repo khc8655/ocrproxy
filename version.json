@@ -1,13 +1,13 @@
 {
-  "version": "v2026.10.17-03",
-  "release_date": "2026-10-17",
+  "version": "v2026.10.18-01",
+  "release_date": "2026-10-18",
   "commit": "HEAD",
-  "title": "EdgeOne 凭据中枢 RPM 限流配置 UI 补齐、Key 级独立限流与双端链路打通 (v2026.10.17-03)",
+  "title": "双端统一动态预设引擎 (PresetHub) 落地、调度器双维度限流与规则覆盖优先级加固 (v2026.10.18-01)",
   "changelog": [
-    "EdgeOne 凭据中枢 RPM 配置补全：在 EdgeOne 前端管理后台的「编辑供应商」与「编辑 Key」模态框中完整补全每分钟请求上限 (RPM) 配置项，彻底禁用滚轮误触",
-    "Key 级独立限流与继承感知：支持 Key 级单独指定限流阈值覆盖供应商默认限流，前端动态展示「供应商默认: X RPM」继承徽章与占位符提示",
-    "EdgeOne 控制台徽章直观呈现：在供应商卡片头部与 Key Chip 列表中直观展示 RPM 限流徽章，无需展开弹窗即可一目了然",
-    "EdgeOne Vault 凭据中枢与 VM 双端打通：在 EdgeOne Vault manifest 与 fetch 接口中暴露 rpm_per_key，VM 端同步抓取时自动持久化 rpm_per_key，保障双端数据一致性",
-    "调度器 Key 级独立限流支持：在 vm-app 调度器中无缝解析 Key 对象的 rpm 属性，实现单个 Key 精细化速率配额控制"
+    "双端统一动态预设引擎 (PresetHub)：EdgeOne 与 VM 服务端架构统一，建立 L1 内存/L2 持久化/L3 外部镜像链/L4 本地兜底四级缓存体系",
+    "供应商规则与系统发版彻底解耦：增删改厂商预设直接托管于 GitHub shared/presets，控制台动态按需拉取，真正落地《铁律十一：增删改厂商与Key零发版原则》",
+    "精准增量热更防污染：新增 /api/admin/presets/catalog, /detail, /check-updates, /update-rules 契约路由，严格仅扫描并更新已配置厂商规则，100% 保全私有 Key",
+    "规则合并覆盖优先级加固：修正 resolveEffectiveRules 与 _resolve_adapter_rules 合并顺序，确保 KV 动态热更与用户自定义规则优先于静态基准生效",
+    "调度器双维度限流升级：调度器深度集成 RPM 与 KB 速率限制器，完善故障重试、凭据安全隔离与并发槽位调度"
   ]
 }

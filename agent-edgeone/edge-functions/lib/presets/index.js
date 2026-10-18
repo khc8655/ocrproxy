@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "1.1.0",
-  "updated_at": "2026-10-17T16:02:13.815Z",
+  "updated_at": "2026-10-18T00:38:03.184Z",
   "providers": [
     {
       "id": "agnes",
@@ -28,20 +28,20 @@ export const CATALOG = {
     {
       "id": "amd",
       "name": "AMD Radeon Cloud",
-      "version": "1.2.0",
-      "rule_hash": "147db7965508",
+      "version": "1.3.0",
+      "rule_hash": "23fbdf92a43f",
       "protocol": "openai",
       "base_url": "https://developer.amd.com.cn/radeon/api/v1",
       "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
       "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
-      "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整",
+      "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整与 reasoning 思考字段映射",
       "features": {
         "native_thinking": true,
         "multimodal": false,
         "tools": true,
         "anthropic_messages": true
       },
-      "recommended_models_count": 2
+      "recommended_models_count": 4
     },
     {
       "id": "bai",
@@ -340,13 +340,13 @@ export const PRESETS = [
   {
     "id": "amd",
     "name": "AMD Radeon Cloud",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "protocol": "openai",
-    "rpm_per_key": 2,
+    "rpm_per_key": 20,
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
-    "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整",
+    "description": "AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整与 reasoning 思考字段映射",
     "features": {
       "native_thinking": true,
       "multimodal": false,
@@ -357,17 +357,32 @@ export const PRESETS = [
       {
         "name": "deepseek-v4-flash",
         "upstream_model": "DeepSeek-V4-Flash",
-        "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (原生深度思考)"
+        "description": "DeepSeek V4 Flash 百万原生上下文智能体大模型 (默认不思考，需指定 reasoning_effort)"
+      },
+      {
+        "name": "deepseek-v4.1-flash",
+        "upstream_model": "DeepSeek-V4.1-Flash",
+        "description": "DeepSeek V4.1 Flash 最新版百万原生上下文智能体大模型 (默认不思考，需指定 reasoning_effort)"
       },
       {
         "name": "qwen3.8-flash-next",
         "upstream_model": "Qwen3.8-Flash-Next",
-        "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，网关已自动适配 system 消息置顶)"
+        "description": "千问全新 QSA 稀疏注意力大模型 (26.2万上下文，默认深度思考 xhigh，网关已自动适配 system 消息置顶)"
+      },
+      {
+        "name": "glm-5.3-flash",
+        "upstream_model": "GLM-5.3-Flash",
+        "description": "智谱全新旗舰轻量模型 (默认深度思考，网关已自动适配 system 消息置顶)"
       }
     ],
     "adapter_rules": {
       "reasoning": {
         "strategy": "openai_passthrough"
+      },
+      "response": {
+        "reasoning_fields": [
+          "reasoning"
+        ]
       },
       "tools": {
         "normalize_choice_to_string": false,

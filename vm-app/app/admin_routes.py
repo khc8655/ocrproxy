@@ -279,11 +279,13 @@ _PRESET_REMOTE_CACHE: dict = {}
 _CDN_CATALOG_URLS = [
     "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json",
     "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json",
+    "https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets/catalog.json",
 ]
 
 _CDN_PRESET_BASE_URLS = [
     "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets",
     "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets",
+    "https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets",
 ]
 
 
@@ -342,22 +344,18 @@ async def get_presets_catalog_endpoint(request: Request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     now = time.time()
-    if _CATALOG_CACHE["data"] and _CATALOG_CACHE["expires_at"] > now:
+    force = request.query_params.get("force") == "true"
+    if not force and _CATALOG_CACHE["data"] and _CATALOG_CACHE["expires_at"] > now:
         return JSONResponse(content={"ok": True, "source": "cache", "catalog": _CATALOG_CACHE["data"]})
 
-    local_catalog = _get_local_catalog()
-    if local_catalog and isinstance(local_catalog, dict) and local_catalog.get("providers"):
-        catalog_data = local_catalog
-        source = "local"
-    else:
-        catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
-        source = "remote"
-        if not catalog_data:
-            catalog_data = local_catalog
-            source = "local_fallback"
+    catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
+    source = "remote"
+    if not catalog_data:
+        catalog_data = _get_local_catalog()
+        source = "local_fallback"
 
     _CATALOG_CACHE["data"] = catalog_data
-    _CATALOG_CACHE["expires_at"] = now + 60.0
+    _CATALOG_CACHE["expires_at"] = now + 600.0
     catalog_providers = catalog_data.get("providers", []) if isinstance(catalog_data, dict) else []
     return JSONResponse(content={
         "ok": True,
@@ -377,17 +375,17 @@ async def get_preset_detail_endpoint(request: Request, id: str = ""):
     if not pid:
         return JSONResponse(status_code=400, content={"error": "Missing preset id"})
 
-    local_preset = _get_local_preset(pid)
-    if local_preset and isinstance(local_preset, dict):
-        preset_data = local_preset
-        source = "local"
-    else:
-        urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
-        preset_data = await _fetch_remote_json(urls, timeout=2.5)
-        source = "remote"
-        if not preset_data:
-            preset_data = local_preset
-            source = "local_fallback"
+    force = request.query_params.get("force") == "true"
+    cached = _PRESET_REMOTE_CACHE.get(pid)
+    if not force and cached:
+        return JSONResponse(content={"ok": True, "source": "cache", "preset": cached})
+
+    urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
+    preset_data = await _fetch_remote_json(urls, timeout=2.0)
+    source = "remote"
+    if not preset_data:
+        preset_data = _get_local_preset(pid)
+        source = "local_fallback"
 
     if not preset_data:
         return JSONResponse(status_code=404, content={"error": f"Preset '{pid}' not found"})
