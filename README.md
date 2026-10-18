@@ -546,260 +546,45 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ---
 
-## 规范体系、迭代发版与安全质量红线
+## 📚 文档规划体系与开发规范 (Documentation Index)
 
-所有版本发布、特性迭代与安装脚本修改必须严格遵守官方四大核心规范体系：
-1. **[《OCRProxy 核心架构规范与开发铁律》](ARCHITECTURE_STANDARDS.md)**：包含生产环境三套拓扑分工、单真理源 UI 开发铁律、核心服务与厂商规则绝对物理隔离铁律等十二大开发铁律；
-2. **[《OCRProxy 官方安全架构规范与红线标准》](docs/SECURITY_SPEC.md)**：确立物理级三权分立鉴权矩阵、Fail-Closed 默认拒绝、SSRF 深度防御、恒定时间比对、反脱敏保真与代码库零秘钥铁律；
-3. **[《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)**：执行版本号 6 处全网联动、安装脚本 100% 零漂移、以及包含安全测试在内的全量自动化测试 100% 守门发版 Checklist；
-4. **[《OCRProxy EdgeOne 官方运行时与超时架构规范》](docs/EDGEONE_RUNTIME_SPEC.md)**：严格对照腾讯云 EdgeOne 官方规范（81897 / 127389 / 127415），确立 edgeone.json 官方标准字段与通配符路径匹配规范、出站 fetch redirect: 'manual' 防降级铁律、全链路超时配置闭环与并发度硬限制治理标准。
+OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规划体系，拒绝信息噪音与内容混乱：
+
+| 文档路径 | 核心职责说明 | 维护与发版原则 |
+|---|---|---|
+| **[`README.md`](README.md)** | **项目门面与速查**：系统架构、快速上手、双端部署、常用运维命令速查。 | 纯文档更新，**严禁触发发版** |
+| **[`CHANGELOG.md`](CHANGELOG.md)** | **全量发版日志档案**：全历史版本发布说明、缺陷修复、破坏性变更清单。 | 随系统正式发版更新 |
+| **[`docs/SYSTEM_DESIGN_SPEC.md`](docs/SYSTEM_DESIGN_SPEC.md)** | **系统核心设计规格书**：双端架构、调度算法、流式预提交心跳、凭据判定机制、配置与主程序解耦设计。 | 架构演进时更新 |
+| **[`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md)** | **生产运维与部署指南**：Caddy/Nginx 反代配置、端口规划、日常排错与服务监控。 | 运维方案更新时维护 |
+| **[`docs/SECURITY_SPEC.md`](docs/SECURITY_SPEC.md)** | **安全架构与红线标准**：三权分立鉴权矩阵、SSRF 防御白名单、Fail-Closed 基线。 | 安全机制变更时更新 |
+| **[`docs/EDGEONE_RUNTIME_SPEC.md`](docs/EDGEONE_RUNTIME_SPEC.md)** | **EdgeOne 官方运行时规范**：腾讯云 EdgeOne 官方 Fetch 规范、超时闭环与并发硬限制治理。 | 边缘运行时升级时维护 |
+| **[`docs/RELEASE_SPEC.md`](docs/RELEASE_SPEC.md)** | **发版准入与版本升级纪律**：明确发版红线与全自动化测试 Checklist。 | 发版流程升级时维护 |
 
 ---
 
-## 最新版本更新记录 (Release Notes)
+## ⚙️ 核心架构原则：配置与主程序解耦 (Decoupling Policy)
 
-### `v2026.10.18-12` (2026-10-18)
-- **PR #11 管理端凭据归属统一、SSRF 守卫加固与实时推理验收**：
-  - 提取 [`resolveKeySource`](shared/admin/js/agent-models-ui.js) 判定算法并在供应商列表、模型配置弹窗与列表行统一复用，彻底消灭钥匙徽章的历史显示漂移；
-  - 在 `admin_routes.py` 构筑 `_admin_upstream_block_reason` SSRF 守卫，公网 HTTPS 永远放行、已保存私有 HTTP 放行，**绝对阻断实例元数据（`169.254.169.254`）**；
-  - 管理后台新增「实测 1+1」(`live-test`) 按钮，直接以真实客户端身份发起模型推理验收；
-  - 引入 `tests/test_vm_static_sync.py` 强门禁，确保 `vm-app/static/` 与 `shared/admin/` 逐字节强一致。
-- **PR #12 流式首包前预提交心跳保活、客户端早停取消与出站连接池保护**：
-  - 首包前流式预提交心跳保活（`_stream_with_precommit`）：大模型深思超过静默宽限期（VM 45s、EdgeOne 20s）时，先预提交 200 并以 15s 间隔下发 `: keep-alive` 心跳保活，首包到达后无缝拼接流，根除中间网关超时断开（N3 问题）；
-  - 客户端断开主动取消：当客户端中止连接时主动取消调度 Task，原子释放信号量与出站连接；
-  - 出站连接池耗尽防御与健康 Key 零误罚：连接池等待锁定为 10s（`UPSTREAM_POOL_WAIT_SEC`），连接池满抛出 `PoolTimeout` 时转为 `503 GlobalOverloadError`，**绝不扣分惩罚健康的 Key**；连接池上限提升至 256。
-- **双端全量测试套件 100% 验收通过**：
-  - 包含 198 项 EdgeOne 单测、安全基线、SSRF 白名单守卫、静态镜像强同步与 11 项流式心跳门禁。
+为杜绝版本号泛滥与无谓的发版开销，OCRProxy 严格执行**「配置与主程序分离」**的迭代原则：
 
-### `v2026.10.18-11` (2026-10-18)
-- **EdgeOne 探活系统（“测”按钮）彻底修复**：
-  - 修复 `agent-edgeone/edge-functions/api/test.js` 中 `bindings` 未定义即切片引发的 `ReferenceError: bindings is not defined`（HTTP 500 崩溃）；
-  - 严格解耦单 Key 快速探测与整模型并发探测分支：当请求包含 `provider` 和 `key` 时，精准分流至单 Key 探针，并优先对上游模型发起轻量握手验证，获取真实连通延迟；
-  - 在 `agent-edgeone/scripts/test-units.mjs` 中追加单 Key 探活与整模型探活的双重回归门禁。
-- **「中枢」vs「本地」概念与 UI 胶囊绝对统一**：
-  - 明确统一定义：在「模型提供商」页面中录入的所有 Key 属于【中枢 (Vault)】凭据，面向所有节点同步分发，模型配置弹窗中统一渲染 `[中枢]` 徽章且禁删；
-  - 只有在模型列表/弹窗中点击「+ 添加本地 Key」临时录入的专属 Key 才标记为 `[本地]`，且仅有此类 Key 具备红色 `×` 删除按钮；
-  - 修复 EdgeOne 丢失 `findVaultProvider` 导致所有 Key 错误降级为本地的问题，两端行为 100% 同构对齐。
-- **路由分流策略两端严格收敛为两大模式**：
-  - 废除 EdgeOne 遗留的轮询、优先级、随机散列等旧选项，与 VM 端完全统一为符合智能体编程心智的两大选项：
-    1. `sticky_failover`：**粘性故障转移 (默认推荐)** —— 保持连接与 KV Cache 稳定，遇 429 顺延并长期驻留新 Key；
-    2. `manual`：**纯手动直通** —— 锁定当前激活 Key，绝不自动切换，上游状态纯透传。
-- **客户端 Key 状态统一与冗余交互精简**：
-  - 去除系统设置中冗余的「复制 Key」按钮（首页顶部卡片已有一键复制入口，设置区回归纯粹配置输入职责）；
-  - 在 EdgeOne 侧将 `PROXY_API_KEY` 输入框设为禁用灰掉（`disabled`），并标注 `由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)`，彻底消除在 Web 配置是否生效的认知混乱；VM 侧保留直接配置能力。
+1. **厂商适配独立更新（零发版）**：
+   - 厂商适配规则均采用声明式 JSON 维护于 [`shared/presets/`](shared/presets/)（如 `minimax.json`, `bai.json`, `deepseek.json` 等）；
+   - 后端通过动态引擎自动热加载，**日常微调厂商字段映射、新增厂商适配或修改模型请求头，直接提交代码生效，绝不触发系统发版（不升级版本号）**。
+2. **说明文档独立演进（零发版）**：
+   - 任何 `README.md`、`docs/` 手册、接口说明或代码注释的优化修改，均属纯文本维护，**绝不触发系统发版**。
+3. **版本升级边界判定**：
+   - 🟢 **普通迭代（不发版）**：厂商适配增删改、说明文档维护、测试用例补充；
+   - 🔴 **正式发版（升级 `version.json`）**：核心网络协议突破、流式首包心跳等关键调度算法变更、系统配置 Schema 字段扩展、系统级安全防线加固。
 
-### `v2026.10.18-10` (2026-10-18)
-- **系统配置界面紧凑化与信息密度提升**：
-  - 彻底精简冗长说明文字，消除重复低效的长段描述，采用高信噪比短语提示；
-  - 输入框高度统一标准化为 `32px` 紧凑尺寸（`.form-control-compact`），数字框限制宽度并与单位内联；
-  - 重构为紧凑协调的双列 Key-Value 网格布局（`.settings-grid` / `.settings-row`），去除底部冗余按钮行，将纵向高度压缩 60% 以上，在一屏内协调展现；
-- **彻底根除 404 规则源镜像死链**：
-  - 将 `agent-edgeone/admin.js` 中的预设规则源镜像地址由早已失效的 `xsk/ocrprox` 修正为权威仓库 `khc8655/ocrproxy`；
-- **拔除幽灵 25 秒与重试预算对齐**：
-  - 彻底删除 `admin.html` 中遗留的隐藏 `value="25"` 幽灵超时字段，开放显式 `request_total_budget_sec` 配置（默认 300 秒）；
-  - 全面规范化重试字段为 `max_retries: 3`，杜绝导出导入时将 VM 调度预算压缩至 3 秒；
-  - `max_attempts_per_provider` 默认值与重置默认值对齐为 3（与后端一致）；
-- **结构化 Key 元数据防覆盖**：
-  - 修复 `saveKeyModal` 在编辑普通 Key 保存时浅拷贝保留原有对象扩展属性（`is_local`、`created_at`、`rpm` 等），防止被降级为纯文本；
-- **发版门禁强断言追加**：
-  - 在 `build-admin.mjs` 与 `tests/test_phase3_phase4_audit.py` 中强断言禁止出现 `xsk/ocrprox` 与 `value="25"`，必须具备 `set_max_retries`。
+---
 
-### `v2026.10.18-09` (2026-10-18)
-- **架构正本清源：彻底厘清“UI 组件共用”与“页面骨架复用”边界**：
-  - 严格遵守《架构规范》铁律一，恢复 EdgeOne 专属控制台骨架资产（`agent-edgeone/admin.html`、`admin.css`、`admin.js`），保证 EdgeOne 作为【云端真理源凭据中枢（Vault Hub）】的独立控制台地位；
-  - 彻底杜绝用 VM 骨架覆盖 EdgeOne，消除 EdgeOne 页面被误标为「Agent 智能体直连」与空状态问题；
-- **子组件标准化共用 (Shared UI Components)**：
-  - 通用模型卡片与路由组件（`shared/admin/js/agent-models-ui.js`）在打包阶段内联并入 EdgeOne 单文件 Bundle，两端 100% 共享胶囊选择器、Key 探活、1+1 实机测速与模糊搜索逻辑；
-- **历史硬编码清零与版本动态注入**：
-  - 彻底清除 `core.js` 与 `admin.js` 中的旧版本常量（`APP_VERSION = 'v2026.10.17-02'`），对齐 `IS_EDGEONE` 宿主环境判断逻辑；
-  - `build-admin.mjs` 统一从 `version.json` 读取权威版本号动态注入至顶部 `#topVersionBadge` 与运行时常量；
-- **发版门禁强制焊死（物理级不可绕过）**：
-  - 将 `tests/test_phase3_phase4_audit.py` 强制并入 `package.json` 的 `build:admin` 与 `test` 命令；
-  - 增加 EdgeOne 专属控制台与产物防污染强断言（断言必须包含“OCRProxy EdgeOne 控制台”、“EdgeOne 边缘版”、“已纳管供应商”，严禁包含 VM 专注文案），违规立即退出中断发版。
+## 📌 当前最新版本概览 (`v2026.10.18-12`)
 
-### `v2026.10.18-08` (2026-10-18)
-- **E1: `edgeone.json` 官方规范化与路径匹配合规化**：
-  - 清除所有非官方标准字段（`build`、`functions`、`routes`、`kv`、`env`），全面合规声明 `cloudFunctions.python.maxDuration: 120` 与 `mainlandRegions: ["ap-guangzhou"]`；
-  - 彻底移除 `headers.source` 中的正则写法，采用官方支持的单通配符（`/v1/*`、`/api/*`、`/admin`、`/admin/*`、`/*.html`），确保 CDN 边缘层 `Cache-Control: no-store` 与 `X-Accel-Buffering: no` 真实生效；
-  - KV 命名空间绑定与环境变量配置指引完整收敛至控制台操作手册与 README 说明；
-- **E2: 出站请求防重定向降级 (`redirect: 'manual'`)**：
-  - 代理转发与关键探测链路（`completions`、`messages`、`verify-key`、`probe-models`、`config`、`test`）出站 fetch 统一显式设置 `redirect: 'manual'`；
-  - 杜绝 WHATWG 默认跟随重定向导致 POST 请求体丢失并被静默降级为空 GET；遭遇 3xx 时即刻诊断为 Base URL 配置错误并返回 HTTP 502 明确指引，严格阻断 failover 与误冷却；
-- **E3: 超时设置全链路官方闭环**：
-  - 依据官方 Fetch 81897 文档，在 `probe-models.js` 与 `presets/hub.js` 出站请求中显式注入 `eo.timeoutSetting`，防止未配置时被 EdgeOne 平台 15 秒默认截断；
-  - `cloud-functions/v1.py` 兜底超时提升至 120 秒，对齐云函数规格上限；
-- **E4: Fetch 并发与次数硬限制治理**：
-  - 针对 EdgeOne 单次运行 64 次 fetch 与最多 8 并发限制，在 `api/test.js` 中实现并发度为 6 的 Worker Pool 调度器；
-  - 单次批量探测入参严格截断至最多 60 个候选；单次探测耗时改为在 fetch 真正发出瞬间打点，剔除排队等待延迟；
-- **官方运行时与超时架构规范确立**：
-  - 新建 `docs/EDGEONE_RUNTIME_SPEC.md`，彻底清除所有历史遗留的“25 秒断开限制”过时记忆与误导文案，明确出站 fetch 原生支持最长 300 秒等待，20 秒保活心跳的唯一职责是保障下游客户端、移动网络 NAT 与反代 TCP 连接的活跃。
+- **管理端凭据归属统一与 SSRF 白名单防御 (PR #11)**：提取 [`resolveKeySource`](shared/admin/js/agent-models-ui.js) 算法彻底消灭钥匙徽章历史漂移；实现 `_admin_upstream_block_reason` 阻断实例元数据与内网未保存节点；上线实时推理验收 (`live-test`) 按钮；静态强同步门禁加固；
+- **流式首包前预提交心跳保活与连接池保护 (PR #12)**：实现 `_stream_with_precommit` 机制，大模型深思超过宽限期先行预提交 200 并以 15s 间隔发送 keep-alive 心跳保活，根除中间网关超时断连；客户端中断主动取消释放连接；出站连接池满超时转 503 且绝不误罚健康 Key；
+- **双端全自动化测试全绿**：198 项 EdgeOne 单元测试与 VM 核心调度套件 100% 验收通过。
 
-### `v2026.10.18-07` (2026-10-18)
-- **EdgeOne SSE 带内错误精准侦测与保活行规避**：
-  - 重构流式带内错误解析器，严格支持标准 OpenAI SSE 格式 (`data: {"error": ...}`)，自动跳过 EdgeOne 20 秒保活心跳注释行（`: ping`），彻底解决流式首包 429/500 带内错误穿透或解析失败的问题；
-- **400 故障精确短语匹配与 Key 误封根除**：
-  - 收敛 400 错误码的 Key 级冻结词表为完整精确短语（如 `invalid api key`、`no active subscription`），杜绝因请求体携带 `plan`、`insufficient` 等常规参数校验错误导致正常 Key 被误封 30 分钟；
-- **403 地区与模型级权限解耦**：
-  - 精准识别 `region`、`location`、`permission to access model` 等地区与模型级权限限制错误，将其严格隔离为模型级候选冷却，不再连带冻结整个 Key 名下的其他可用模型；
-- **RPM 调度细节彻底闭环与中枢同步增强**：
-  - 调度器懒加载提供商完整补全 `rpm_per_key` 约束，彻底废弃已失效的 `keys[*].rpm`；中枢管理端清空 RPM 时显式保存 `rpm_per_key: 0`，后端原子更新并重置本地滑动窗口；
-- **预算运行时残留彻底清除 (方案 A 契约加固)**：
-  - 彻底清除 `proxy_routes.py` 中 5 处 `schedule_total_budget` 覆盖与 `_scale_budget` 历史遗留，统一由调度器按候选剩余预算自主分配；VM 端保持强 HTTP 契约，首包前不提前发送 200，确保 429/502 能正常触发客户端重试；
-- **Agent 429 短冷却保护与全冷却等待时间完善**：
-  - 针对上游未提供 `Retry-After` 头的 429 响应，赋予 10 秒默认保守退避冷却；当全部候选均处于冷却时，候选等待时间完整纳入 `_key_cooldown_until`，杜绝未等待即重入导致的死循环或连续 429；
-- **Sticky 会话切 Key 条件精准约束**：
-  - 严格限制 `sticky_failover` 顺延指针的触发时机，仅在 429、401/403 认证错误及配额耗尽等关键凭据故障时顺延指针，普通可重试网络抖动优先就地重试，杜绝偶发波动误切主力 Key；
-- **EdgeOne 平台性能与准入加固**：
-  - 采用 `TextEncoder().encode(bodyText).byteLength` 计算真实 UTF-8 字节数，严密拦截超限请求；采用 `structuredClone` 消除循环内 JSON 序列化性能开销；`messages.js` 默认最大重试次数对齐为 3；边缘 KV 冷却写入接入 `safeWaitUntil`；
-- **管理控制台复合键高亮兼容**：
-  - `agent-models-ui.js` 的 `isActive` 判定全面兼容原生 Key 标识与 `provider:key` 复合键格式，确保正在调度生效的主力 Key 标签在界面上精准点亮高亮。
-
-### `v2026.10.18-06` (2026-10-18)
-- **前端单一真理源 (Single Source of Truth) 重构彻底落地**：
-  - 前端源代码（HTML、CSS、JS）统一收敛至 `shared/admin/`，彻底废除 `agent-edgeone/admin.*` 多重冗余副本维护，彻底根除多端代码漂移与重复修复的历史隐患；
-  - 引入规范化编译构建管线 `npm run build:admin`，通过 AST / 模板处理自动生成 EdgeOne 内联单体边缘函数 (`edge-functions/index.js`, `admin.js`) 并精准同步 VM 静态资源 (`vm-app/static/`)；
-- **配置声明化与 Host 宿主适配器架构**：
-  - 引入 `shared/config/settings.schema.json`（全局配置 Schema 真理源）与 `host.js`（宿主适配器环境感知），通过 `settings-form.js` 实现设置面板的声明式动态渲染，前端功能与 VM / EdgeOne 差异化参数彻底解耦；
-  - 统一重试与超时模型参数命名，全端支持 `max_retries` 与 `request_total_budget_sec`；
-- **后端调度器预算解耦与多候选防饿死保障**：
-  - 重构端点调用预算模型，将整体请求总超时与单次候选超时彻底解耦，针对 OCR 等长耗时任务，首选候选超时（如 60s）失败后自动为备选候选 2 保留充裕时间继续尝试，彻底杜绝单次超时饿死备选候选的问题；
-- **三级精准故障冷却体系与 Key 级熔断**：
-  - 引入 `_key_cooldown_until` 三级冷却机制，将 401（未授权）、403（凭据禁用）、余额欠费、模型配额耗尽等错误精准锁定在具体 Key 级别，杜绝单个 Key 故障导致全提供商被误熔断；
-  - EdgeOne 端无缝接入 `classifyFailure` 与 `isKeyLevelFailure`，将 Key 级冷却持久化写入边缘 KV；
-- **Sticky 会话复合键一致性与智能顺延避让**：
-  - 针对 `sticky_failover` 模式，将绑定状态升级为 `provider:key` 复合键，杜绝跨提供商同名 Key 导致的调度漂移；当遭遇 429 或节点故障时，自动顺延避让至下一个健康候选并持久锁定；
-- **400 跨厂商参数容错与配额短语防误杀**：
-  - 当配置了多个不同上游厂商候选时，针对某厂商特有格式报错的 HTTP 400，调度器不再直接中断，而是自动尝试 failover 至备选厂商；
-  - 严格收敛 Quota 耗尽判定正则表达式，彻底杜绝包含数字 `0` 的常规错误信息被误杀为 Quota 耗尽的问题；
-- **RPM 滑动窗口安全退避与中枢规则完整保留**：
-  - 遭遇上游 429 时实施不少于 15 秒的保守安全退避，防止突发流量引发雪崩重试；中枢同步时完整合并保留 `rpm_per_key`、`adapter_rules` 与 `protocols` 等高级字段；
-- **向量与重排响应零拷贝 (Zero-Copy Pass-Through)**：
-  - `/v1/embeddings` 与 `/v1/rerank` 接口采用字节流零拷贝直通，消除海量浮点数组解析对 Python 堆内存的严重碎片化污染与 GC 停顿；
-- **EdgeOne 平台硬限制安全防护与带内错误侦测**：
-  - 入口强置 900KB 请求体安全准入拦截，防止超限触发边缘运行平台硬性崩溃；流式响应首包极速侦测带内 JSON 错误（如 `{"error": ...}`），遇错秒级切 Key。
-
-### `v2026.10.18-05` (2026-10-18)
-- **RPM 速率限制统一收敛至供应商级别**：
-  - 统一在供应商级别配置每分钟请求上限 (`rpm_per_key`)，作为该提供商名下所有 Key 的统一约束源，彻底告别单 Key 重复配置的混乱；
-  - 界面彻底移除 Key 弹窗与 Key 芯片上的冗余限流输入，禁用鼠标滚轮误触；
-- **移除过时预设推荐模型与选用体验优化**：
-  - 供应商弹窗彻底删除静态过时的官方预设推荐模型列表，统一改由「模型及路由」面板实时探测上游可用模型一键选用。
-
-### `v2026.10.18-04` (2026-10-18)
-- **Web 控制台 URL 免密直连 (`?token=` / `?key=`)**：
-  - 访问后台 URL 支持在尾部附加 `?token=<ADMIN_PASSWORD>` 或 `?key=<ADMIN_PASSWORD>`，直接完成自动鉴权并加载控制台，彻底免去手动输入管理员密码的繁琐流程；
-  - **地址栏防泄漏无刷新秒级擦除**：鉴权成功后立即通过 HTML5 `history.replaceState` 自动清除 URL 中的敏感凭据参数，地址栏秒级还原为纯净的 `/admin`，彻底杜绝凭据遗留在浏览器历史记录、书签或录屏中；
-  - **后端全链路与 EdgeOne 同构兼容**：`vm-app` 与 EdgeOne 鉴权底层同步支持从 Query 参数中兜底提取凭据，双端体验 100% 统一。
-
-### `v2026.10.16-02` (2026-10-16)
-- **网关级传输错误规范化与自动重试头 (PR #9)**：
-  - 将底层网络传输异常（`httpx.ConnectTimeout`、`httpx.ReadTimeout`、`ConnectError`、`RemoteProtocolError` 等）统一规范化映射为 HTTP **`502 Bad Gateway`** 与 **`504 Gateway Timeout`**，并自动注入响应头 `x-should-retry: true` 与 `Retry-After: 1`；
-  - 彻底改变以往直接抛 500 导致客户端（Cursor、Claude Code、openai-python 等）放弃重试的问题，使客户端能够按标准进行无缝重试；
-- **智能体粘性同 Key 级数退避重试 (Sticky Same-Key Backoff Retry)**：
-  - 在 `sticky_failover` 模式下，当遭遇网关级瞬态错误（502/503/504/连接重置）且当前无其他备选 Key 时，在原 Key 上先执行 1s、2s 级数退避重试（受 `agent_same_key_retries` 约束，默认最多 2 次），平滑应对跨国链路轻微抖动，避免直接向客户端抛错；
-- **Agent 路由策略全面收敛精简**：
-  - 管理后台与调度器将 Agent 路由策略全面精简为两大最符合实际心智的选项：`sticky_failover` (粘性故障转移 · 智能体推荐) 与 `manual` (纯手动直通模式 · 锁定 Key / 纯透传)；
-  - 澄清 `manual` 直通模式行为：单 Key 独占直通，不切 Key、不重试、不熔断，但受 120s 首字节与 300s 空闲超时的网络硬时钟全面保护，绝无无限挂起风险。
-
-### `v2026.10.16-01` (2026-10-16)
-- **解耦 Agent 首字节超时与 KB 超时**：
-  - 新增 `agent_first_byte_timeout_sec`（默认 120s），彻底废除按模型名猜测思考超时的硬编码逻辑，深度思考长推理模型（如 DeepSeek-R1、V4.1-Flash）首包不再被提前掐断；
-  - 彻底解耦 KB 入库短超时（`upstream_timeout_sec` 15s）与 Agent 推理长超时，两者互不影响；
-- **失效连接 5.0s 探测自愈窗口**：
-  - 将 `_STALE_RETRY_WINDOW_SEC` 放宽至 5.0s，完美适配跨国链路 TCP RST 与 Cloudflare 偶发静默关闭时的自动重连，同时避免非幂等 POST 请求的盲目重试；
-- **出站请求标准化**：
-  - HTTP 客户端默认注入 `User-Agent: OCRProxy/{version}`，流式请求默认注入 `Accept: text/event-stream`，避免被上游 CDN 或防火墙误拦截；
-- **模型跨 Key 防重复绑定校验**：
-  - 控制台新增或编辑模型时，智能检测同一提供商下是否已存在同名上游模型绑定，杜绝重复创建脏节点。
-
-### `v2026.10.13-01` (2026-10-13)
-- **MiniMax 预设升级至 v1.4.0**：
-  - 新增声明式 `effort_map` (将不支持的 `"none"` 映射为 `"low"`)；
-  - 引入双协议自适应思考规则，完美兼容 Anthropic (`/v1/messages`) 与 OpenAI 思考参数，保障长上下文生成稳定性。
-
-### `v2026.10.12-02` (2026-10-12)
-- **上游 410 模型下线识别（借鉴 freellmapi #1421/#1423）**：上游返回 HTTP 410 Gone 时，VM 调度器把 `provider:model` 标记为永久下线（默认 24 小时，设置项 `cooldown_410_sec`，设为 0 关闭），同一厂商下所有 Key 一并跳过，客户端点名该模型也不再撞上游；Agent / KB 模式与 manual 策略均生效；
-- **重载不复活**：下线标记在 `/v1/reload` 和配置热重载后保留，只有该厂商模型从配置中移除或到期才清除；冷却列表新增 `is_gone` 字段；
-- **全部下线直接 410**：某模型全部候选都已下线时直接返回 410 与明确提示，替代原先误导性的 “请几秒后重试” 503；
-- **EdgeOne 对称对齐**：410 时把同厂商同上游模型的所有 Key 写入 24 小时 KV 冷却，并返回 410 中文提示；
-- 新增 `vm-app/scripts/scheduler_410_test.py` 回归测试与 EdgeOne 单元测试。
-
-### `v2026.10.12-01` (2026-10-12)
-- **上游非 JSON / HTML 报错智能清洗与 OpenAI 规范对齐**：彻底解决上游服务商（如 OpenAgents、Cloudflare、Nginx）在遇到 413 请求体超限或 502/504 网关异常时直接返回原始 HTML 网页导致客户端 AI 插件（Cursor、Cline 等）反序列化崩溃的问题；通过 `clean_upstream_error_text` 智能提取 `<title>` 与核心错误语义，自动清洗 HTML 标签，返回符合 OpenAI 标准规范的 JSON 错误体（`error.type="invalid_request_error"`, `error.code="request_too_large"`）；
-- **413 Payload 超限快速熔断机制 (Fast Failover Short-Circuit)**：在调度器中针对 413（请求体过大）这一不可通过换 Key 恢复的错误进行特化处理，自动将该 provider 标记为 down 并跳过同 provider 其他 Key 的无意义重复尝试，无其他可用跨厂商节点时快速熔断返回客户端，大幅缩减超时等待时间；
-- **调度报错结构化净化**：清洗后的错误描述统一写入 `stats.error_logs` 与控制台日志，杜绝原始 HTML 源码污染后台仪表盘与 journald 系统日志；
-- **EdgeOne 边缘函数错误响应对称对齐**：同步升级 EdgeOne 端的非 JSON 错误清洗与 413 描述规范，确保多端体验完全一致。
-
-### `v2026.10.11-06` (2026-10-11)
-- **EdgeOne 客户端凭据与管理员密码物理隔离**：彻底根除 EdgeOne 首页「接入网关与可用模型」卡片误读 `getKey()` 导致客户端 API Key 读成 Web 登录密码的缺陷；重构为独立 `getClientKey()` 函数，后端 `/api/config` 自动回填 EdgeOne 环境变量 `PROXY_API_KEY`，在全局设置面板新增 `PROXY_API_KEY` 可视化配置与一键复制，彻底隔离后台管理密码与客户端凭据；
-- **紧急修复登录界面函数丢失致命 Bug**：彻底根除 `TypeError: loginErr is not a function`，在 `shared/admin/js/core.js` 补回防御式健壮的 `function loginErr(m)`，彻底解决 DOM `<div id="loginErr">` 挂载为 `window.loginErr` 导致的函数覆盖与登录阻断缺陷；
-- **全流程三重机械化发版门禁 (Release Quality Gates)**：
-  - **Gate 1 (静态符号契约扫描)**：引入 `agent-edgeone/scripts/verify-frontend-symbols.mjs`，通过 Node `node:vm` 硬编译全量 JS，严密扫描所有核心交互函数契约，未声明符号立即阻断构建；
-  - **Gate 2 (运行时 DOM 冒烟门禁)**：引入 `agent-edgeone/scripts/test-ui-smoke.mjs`，构建具有真实浏览器属性（含 DOM ID 全局挂载特性）的沙箱环境，真实运行并冒烟验证登录、错误提示、凭据清理全生命周期；
-  - **Gate 3 (构建与测试强阻断)**：将上述门禁强制绑定进 `npm run build:admin` 与 `npm test`，任何语法错误或符号缺失直接 `exit 1` 阻断打包与 CI；
-- **日志与中间件性能深度优化 (贯彻日志审查意见)**：
-  - 彻底移除定时重启移除后遗留的无用 `in_flight_tracking_middleware`；
-  - 新建 `vm-app/app/middleware.py` 将安全响应头改写为纯 ASGI 中间件，消除 `BaseHTTPMiddleware` 开销，SSE 延迟降至 2.4ms 级原生性能；
-  - 修复 KB 错误折叠时候选节点状态与延迟更新被跳过的缺陷，并在前端日志卡片如实渲染折叠计数徽章 (`repeat_count`)；
-  - 引入 Key 错误滑动窗口聚合折叠，防止 `round_robin` 下多 Key 交替报错刷爆 100 条日志上限；
-  - 将调度器内部候选尝试、冷却跳过等高频流转日志统一降级为 `DEBUG` 级别。
-
-### `v2026.10.11-05` (2026-10-11)
-- **根除探活假阳性放行 Bug**：彻底重构 EdgeOne 与 VM 端的 `probeKey` 及 `verify-key` 探活判定逻辑，严格限定仅 HTTP 2xx 返回为通过，严禁将 HTTP 400 (Bad Request) 或 404 (Not Found) 误判为鉴权成功；当上游返回非正常状态时如实呈现状态码与具体失败原因；
-- **前端加载与渲染容错死锁防护**：为 `renderAll` 各子面板包裹异常安全边界，防止任一局部脏数据阻断主应用启动；登录遮罩层新增「清除本地登录缓存并刷新」一键重置按钮，彻底消除凭据失效导致的遮罩死锁；
-- **边缘端配置持久化自愈与孤立绑定清理**：在 `saveConfig` 中新增孤立绑定自动修剪机制，当删除供应商凭据时自动从 `agent_models` 中剥离孤立关联，防止校验冲突或页面异常。
-
-### `v2026.10.11-04` (2026-10-11)
-- **控制台设置面板 DOM 闭合与卡片规范对齐**：修复 Card 4 (容灾运维) 网格容器闭合标签缺失导致的层级塌陷缺陷，彻底根治 OTA 升级与重启横栏被挤压为两列网格以及 Card 5、Card 6 被错误吞噬嵌套进 Card 4 的排版异常；
-- **各设置卡片独立容器层级恢复**：恢复 Card 1~Card 6 单卡同级独立规范，使控制台布局回归标准扁平、清晰规范的视觉呈现；
-- **自动化 HTML 标签平衡语法门禁**：新增 `test_admin_html_tag_nesting_and_balance` 单元测试，在每次构建和单测执行时自动检验全站 HTML 标签开闭配对，杜绝标签错位流向生产。
-
-### `v2026.10.11-03` (2026-10-11)
-- **PR #7 合并 (OCR 上游请求体异步流式零拷贝)**：采用 JSON 外壳占位符预序列化 + 图片 Base64 字符串按 256KB 切片异步流式发送机制 (`_ReplayableBody`)，显式携带 `Content-Length` 保持标准 HTTP 传输协议（非 chunked），彻底免去大图 data URL 组装与 `httpx` `json.dumps/encode` 两份巨型内存拷贝。遇到故障切换 (Failover) 或重试时可多次安全复用，并发压测峰值内存再降 33%；
-- **入站 JSON 字节直读优化**：`_parse_json_body` 直接使用 `json.loads(body_bytes)` 反序列化入站请求体，跳过冗余 `bytes()` 转换与临时解码字符串，入口立减一份 body 级堆缓冲；
-- **管理端 OCR 准入参数可视化配置**：系统设置新增「OCR 同时处理图片数 (`ocr_max_inflight`, 默认 6)」与「OCR 排队最长等待 (`ocr_queue_timeout_sec`, 默认 30s)」，支持可视化灵活调节限流并发与排队超时时长；
-- **模式自适应界面隔离**：OCR 准入参数控件仅在 KB 知识库模式下自适应展现，Agent 智能体模式保持纯净隐藏；
-- **完备的转义与重写安全兜底**：若图片 Base64 包含需 JSON 转义字符或上游适配规则变更占位符位置，平滑退回原生 dict 格式发送，100% 确保请求正确性。
-
-### `v2026.10.11-02` (2026-10-11)
-- **PR #6 合并 (httpx 响应流环状引用彻底解除)**：针对 httpx 将 `BoundAsyncStream` 反向绑定回自身导致 `request._content` (10~20MB Base64 大图或超长文本) 滞留于第 2 代 (Generation 2) 循环垃圾池的问题，实现 `release_httpx_response(resp)` 在响应消费后立即解构流绑定，使巨型请求体对象直接由 Python 引用计数即刻物理归还系统，彻底解决长时间大图/长文本推理内存居高不下的真凶；
-- **大图 OCR 解析并发准入控制**：新增 `_ocr_semaphore` (默认 6 并发)，在读取 Request Body 前对入站 OCR 请求进行信号量限流，将并发请求缓冲在 uvicorn 网络层 (仅占 64KB socket 缓冲)，彻底消除并发上传导致的上 G 级堆内存冲顶，超限提供 503 + Retry-After 优雅排队保护；
-- **固定 glibc mmap 阈值为 128KB**：启动时调用 `mallopt(M_MMAP_THRESHOLD, 128KB)` 锁定分配阈值，强制所有 >=128KB 的图像与字符缓冲区由系统独立 `mmap` 分配，在解引用时直接通过 `munmap` 将物理内存页秒级归还 Linux 内核，杜绝堆内存碎片；
-- **OCR 上游响应零拷贝直接透传**：上游识别结果直接以 `raw_content` 透传，移除冗余的 `json.loads` 反序列化与二次 `JSONResponse` 包装，节约两份大内存拷贝；
-- **全面废除定时重启功能 (KB 与 Agent 彻底取消)**：鉴于内存泄漏与碎片已在底层物理根治，系统长时间运行内存平稳归零，彻底移除 KB 与 Agent 模式下的每日定时重启进程、配置项及前端控制台面板，保持业务会话与入库长久连续稳定。
-
-### `v2026.10.11-01` (2026-10-11)
-- **定时平滑重启时间自定义配置**：系统设置支持任意指定每日自动重启的具体时间点 (`auto_restart_time`, HH:MM 格式)，并在前端控制台提供原生时间选择器与开关动态联动；
-- **按需轻量调度 (零常驻开销)**：未开启或未配置定时重启时，绝对不启动任何后台定时协程与工作任务，彻底杜绝无用常驻进程对 CPU 和内存的无端占用；
-- **智能优雅平滑退避重启**：到达设定重启时刻后，系统自动检测在途 (in-flight) `/v1` 代理长连接，优先等待正在进行的代码补全与长文本生成完毕（最长缓冲等待 30 秒）再安全释放进程，彻底避免在 Agent 工作正酣时强行掐断会话；
-- **进程与 Systemd 联动自愈**：优雅退出后由宿主机 systemd (`Restart=always`) 秒级拉起全新纯净进程，彻底清零堆内存碎片，实现无感平滑自愈。
-
-### `v2026.10.10-01` (2026-10-10)
-- **调度器首包真内容判定 (First-Payload Detection)**：流式响应自动缓冲前导帧 (role-only delta, `: keep-alive`, usage-only 帧, Anthropic message_start / ping) 直至首个真实有效负载到达才向客户端提交。捕获上游 200 in-band 错误帧并自动透明 failover 至下一个候选节点，彻底根除上游返回 200 包含错误内容导致客户端崩溃的假 200 缺陷；
-- **空回复与断流自动切换**：流式响应未产生任何实际内容即结束时自动触发故障转移；非流式 2xx 但仅包含 error 对象的响应同样自动切换至备用节点；
-- **Agent 阶梯冷却与同网关熔断**：首包超时耗尽或连接失败按 30s -> 2min -> 10min 阶梯冷却（请求成功一次立即清零），遇到 502/503/504 网关故障时自动优先跳过同厂商其他 Key 尝试其他可用厂商；
-- **免费提供商生态扩充与更新**：
-  - 新增 **OpenRouter** (`openrouter.json`) 官方预设：收录 7 大热门免费模型 (`:free`) 与 OpenAI/Anthropic 双端点，支持 429 故障转移与 402 余额耗尽识别；
-  - 升级 **NVIDIA NIM** (`nvidia.json` v2.0.0)：更新至最新免费模型矩阵，完善未激活 (404) 与免费配额超限 (403/429) 的自动切换策略；
-  - 升级 **OpenCode Zen** (`opencode.json` v2.0.0)：精简免费模型集合，适配免费层级 403/429 判定规则；
-- **可观测性与标准协议增强**：所有代理请求增加 `X-Fallback-Trail` 诊断追踪响应头；全节点冷却时返回标准 HTTP `Retry-After` 头部。
-
-### `v2026.10.09-14` (2026-10-09)
-- **Gemini 思考签名与工具调用支持**：在 VM 执行器中集成 `gemini_compat.py`，通过在 `tool_call_id` 中以 `{id}:::{signature}` 无状态携带与还原 `thought_signature`，并配合 LRU 缓存与 `skip_thought_signature_validator` 双重兜底，彻底解决 Gemini 3 在 Cursor / Cline 等 OpenAI 客户端中多轮工具调用报 400 崩溃的缺陷；
-- **Vertex AI 思考标签流式分离**：实现 `_ThoughtSplitter` 跨 chunk 状态机与非流式拆分，将 Vertex AI 返回的 `<thought>...</thought>` 抽取至 `reasoning_content`，正文保留在 `content`，与客户端思考折叠无缝贴合；
-- **官方预设规则对齐**：补齐 MiniMax-M3.1-Flash-Preview 预设与大小写映射；商汤日日新 / Agnes 启用 Anthropic Messages 直通；更新 Google 推荐模型为 3.8 Flash / 3.5 Flash / 3.1 Pro / 2.5 系列；
-- **严格厂商隔离与零拷贝保护**：Gemini 执行器仅对 `reasoning.strategy == "gemini_thinking_matrix"` 候选生效，非 Gemini 候选节点与零拷贝 fast-path 保持 100% 原始透传，EdgeOne 与 KB 模式保持纯净零影响。
-
-### `v2026.10.09-13` (2026-10-09)
-- **修复 systemd-run 非法参数**：彻底移除 `install.sh` 生成 CLI 中的 `--remain-after-exit=no` 非法参数并引入 `--collect` 机制，根治在服务器执行 `ocrproxy upgrade` 时报 `systemd-run: option '--remain-after-exit' doesn't allow an argument` 导致升级中断退出的缺陷；
-- **交互式终端直连优化**：在交互式终端 (TTY) 下执行 `ocrproxy upgrade` 时直接前台运行并实时回显下载与部署进度，不再误转入后台单元；
-- **国内极速下载链路重构**：`prepare_source_code` 在默认无 Token 场景下优先轮询国内高速镜像源 (`ghfast.top` / `gh-proxy.com` / `mirror.ghproxy.com`) 并将连接超时缩短至 5 秒，彻底解决国内服务器在官方 GitHub 累计等待 75 秒超限导致的 Web 后台 OTA 升级探测超时；
-- **后台 OTA 升级指令增强**：向升级单元自动透传 `OCRPROXY_RUNNING_IN_OTA_UNIT=1` 环境变量，并增加国内镜像直接拉取兜底。
-
-### `v2026.10.09-12` (2026-10-09)
-- **客户端 Key 占位符根治**：`vm-app/app/admin_routes.py` 的 `get_config_endpoint` 增加 `PROXY_API_KEY` 环境变量自动兜底，确保在 KB 模式及任何默认未持久化场景下，首页仪表盘「接入网关与可用模型」均能正确展示真实的客户端 API Key，杜绝 `<CLIENT_KEY>` 占位符残留；
-- **KB 模式 Key 胶囊交互解耦**：`shared/admin/js/models.js` 实现独立的 `toggleCandidateKeyCapsule(el)` 切换函数，彻底解耦 Candidate 弹窗与 Agent 弹窗内部闭包状态 (`modalBindings` / `a_selectedBindingsSummary`)，消除跨弹窗状态污染；
-- **操作按钮精简与全局去重**：收敛「同步中枢规则」入口至弹窗内部（「① 选择提供商」右上角）与「系统设置」面板中，移除 Agent 模式与 KB 模式主界面标题栏多余/重复的外部同步按钮，移除 KB 模式顶部与下方卡片重复的 `[+ 挂载节点]` 按钮，消除界面元素堆叠。
+> 📖 **查阅完整历史版本明细？**  
+> 请点击查阅全量发版档案：👉 **[CHANGELOG.md (完整历史更新记录)](CHANGELOG.md)**
 
 
 

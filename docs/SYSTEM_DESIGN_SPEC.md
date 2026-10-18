@@ -9,6 +9,8 @@
 
 ## 目录 (Table of Contents)
 1. [系统定位与两大产品形态 (Software Flavors)](#1-系统定位与两大产品形态-software-flavors)
+   - 1.1 [形态对比与技术规格](#11-形态对比与技术规格)
+   - 1.2 [核心解耦架构：配置与主程序分离原则 (零发版迭代)](#12-核心解耦架构配置与主程序分离原则-零发版迭代)
 2. [软件运行模式规格 (Runtime Modes)](#2-软件运行模式规格-runtime-modes)
 3. [核心凭据架构与生命周期 (Vault Hub vs Local Key)](#3-核心凭据架构与生命周期-vault-hub-vs-local-key)
 4. [路由调度算法与频控状态机 (Scheduler & Rate Limiting)](#4-路由调度算法与频控状态机-scheduler--rate-limiting)
@@ -51,6 +53,20 @@ graph TD
 | **核心定位** | **【云端凭据金库中枢 (Vault Hub)】** + 纯 Agent 高可用网关 | **【生产算力执行工作节点 (Worker)】** + 知识库高并发调度器 |
 | **超时预算** | 硬性最大预算 **300 秒** (避免长连接挂死) | 可自主配置超时 (默认 30~120 秒，支持长轮询) |
 | **协议支持** | OpenAI Chat、Anthropic Messages、Google Gemini 原生 | OpenAI Chat、Claude、Gemini、Embedding、Reranker、OCR |
+
+### 1.2 核心解耦架构：配置与主程序分离原则 (零发版迭代)
+
+为避免频繁发版造成版本号通胀与生产系统运维疲劳，OCRProxy 严格执行**「配置与主程序物理分离」**的设计原则：
+
+1. **厂商适配与主程序引擎解耦**：
+   - 厂商适配规则（请求头改写、模型参数映射、思考链提取策略等）全部收敛在 `shared/presets/*.json` 声明式数据文件中；
+   - 引擎代码（`scheduler.py`、`proxy_routes.py`、`completions.js`）为通用调度器，不硬编码特定厂商专有业务逻辑；
+   - **日常增加厂商预设、调整厂商 Base URL、微调模型字段映射，直接提交预设文件或热加载，绝不触发系统发版（不递增 `version.json`）**。
+2. **说明文档与主程序生命周期解耦**：
+   - `README.md`、`docs/` 技术文档、注释及排版调整，属于纯文档演进，**严禁触发系统发版**；
+3. **系统发版准入边界 (SemVer 铁律)**：
+   - 🔴 **必须发版（升级 `version.json` 并走全流水线门禁）**：核心调度算法重构（如流式首包心跳、连接池保护）、网络协议底层改造、系统配置 Schema 字段变更、关键安全防线加固；
+   - 🟢 **严禁发版（零发版热更新/常规提交）**：厂商 presets 预设增删改、说明文档与操作手册维护、测试用例扩充。
 
 ---
 
@@ -500,3 +516,5 @@ vm-app/static/        agent-edgeone/
    - 未通过自动化回归断言的代码绝对禁止发版或交付。
 3. **私密信息绝不外溢**：
    本文档不包含任何私有主机 IP、密码或密钥，所有私密拓扑与测试环境账号密码严格锁定于本地私有配置文件 `LOCAL_ENV_SECRETS.md`。
+4. **发版边界与零发版更新纪律 (Zero-Release Policy)**：
+   严禁随意递增版本号。修改厂商适配（`shared/presets/`）、调整模型参数映射、修改使用说明或文档（`README.md`、`docs/`），属于数据与文档日常维护，直接提交生效，**绝对不触发系统发版**。仅在核心引擎、流式架构、安全底座升级时，方可按 SemVer 规范升级版本号并更新 [`CHANGELOG.md`](file:///Users/xk/Documents/ocrprox/CHANGELOG.md)。
