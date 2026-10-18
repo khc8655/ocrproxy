@@ -1206,7 +1206,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-02</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1246,7 +1246,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-02</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1303,9 +1303,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
           <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()">🔄 检查规则更新</button>
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
+        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:14px;"></div>
         <div class="providers-layout">
           <div id="providersBox" class="providers-list-col"></div>
           <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
@@ -1627,12 +1629,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
-          <div style="display:flex;gap:6px;">
-            <button type="button" class="btn btn-sm btn-secondary" onclick="openAddProviderModal()" style="display:inline-flex;align-items:center;gap:4px;" title="新增供应商">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>新建供应商</span>
-            </button>
-          </div>
         </div>
         <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
           <optgroup label="已配置供应商" id="a_optgroup_local"></optgroup>
@@ -1644,6 +1640,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <div class="form-group mb-3" id="a_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromAgentModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ 添加本地 Key</span>
+          </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);min-height:46px;"></div>
       </div>
@@ -1657,18 +1657,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <span>探测上游可用模型</span>
           </button>
         </div>
-        <!-- 推荐模型快捷标签 -->
-        <div id="a_quickModels" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1" style="font-size:11px;color:var(--color-text-3);margin-bottom:6px;">官方推荐模型快捷填入：</div>
-          <div id="a_quickTags" class="capsule-row"></div>
-        </div>
       </div>
 
       <!-- 详细参数 (由标签或探测弹窗点选自动填充) -->
       <div style="background:var(--color-bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
-          <input type="text" id="a_name" class="form-control" placeholder="点击推荐标签或探测弹窗选择，例如 deepseek-v4-flash">
+          <input type="text" id="a_name" class="form-control" placeholder="点击探测弹窗选择或手动输入，例如 deepseek-v4-flash">
         </div>
         <div class="form-group mb-0">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>
@@ -2144,6 +2139,18 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     summaryEl.style.display = 'block';
   }
 
+  function _formatProviderOptionLabel(p) {
+    const rawProtos = p.protoStr || (Array.isArray(p.protocols) ? p.protocols.join(', ') : '');
+    const parts = (rawProtos || 'chat').split(/[,+\\s/]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    const normalized = [];
+    if (parts.some(x => x.includes('openai') || x.includes('chat'))) normalized.push('openai');
+    if (parts.some(x => x.includes('anthropic') || x.includes('message'))) normalized.push('message');
+    if (parts.some(x => x.includes('response'))) normalized.push('responses');
+    const protoStr = (normalized.length ? normalized.join('+') : 'openai');
+    const name = p.label || p.name || p.id;
+    return \`\${name} (\${protoStr})\`;
+  }
+
   // 4. Populate and Handle Provider Selection in Agent Modal
   function populateAgentProviderSelect(selectedId) {
     const sel = document.getElementById('a_providerSelect');
@@ -2164,8 +2171,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (optLocal) {
       if (localList.length > 0) {
         optLocal.innerHTML = localList.map(p => {
-          const protoSuffix = p.protoStr ? \` · \${_esc(p.protoStr)}\` : '';
-          return \`<option value="\${_esc(p.id)}">\${_esc(p.label)}\${protoSuffix}</option>\`;
+          const optLabel = _formatProviderOptionLabel(p);
+          return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
         }).join('');
       } else {
         optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
@@ -2173,17 +2180,17 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     } else {
       sel.innerHTML = providers.length
         ? providers.map(p => {
-            const protoSuffix = p.protoStr ? \` · \${_esc(p.protoStr)}\` : '';
-            return \`<option value="\${_esc(p.id)}">\${_esc(p.label)}\${protoSuffix}</option>\`;
+            const optLabel = _formatProviderOptionLabel(p);
+            return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
           }).join('')
-        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
+        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请在供应商Tab中配置) --</option>';
     }
 
     if (optVault) {
       optVault.innerHTML = vaultList.length
         ? vaultList.map(p => {
-            const protoSuffix = p.protoStr ? \` · \${_esc(p.protoStr)}\` : '';
-            return \`<option value="\${_esc(p.id)}">\${_esc(p.label)}\${protoSuffix}</option>\`;
+            const optLabel = _formatProviderOptionLabel(p);
+            return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
           }).join('')
         : '<option disabled>暂无中枢托管供应商</option>';
     }
@@ -2217,13 +2224,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         const providers = _getAllProvidersList();
         if (!providers || providers.length === 0) {
           protoInfoEl.innerHTML = \`
-            <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
-              <div style="font-size:12px;color:var(--text);line-height:1.5;">
-                <strong>尚未添加供应商</strong>：请先新建供应商（支持选用 AMD、DeepSeek 等 11 家官方厂商并秒级自动填充规则与模型）
+            <div style="background:var(--bg-subtle);border:1px dashed var(--border);border-radius:6px;padding:10px 14px;margin:6px 0;width:100%;">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">
+                尚未添加供应商，请前往「供应商」界面进行添加与配置。
               </div>
-              <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('agent')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
-                + 立即新建供应商
-              </button>
             </div>\`;
         } else {
           protoInfoEl.innerHTML = '请先选择上方供应商。';
@@ -2265,8 +2269,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       let actionBtnHtml = '';
       if (localProv && remoteProv) {
         actionBtnHtml = \`<button type="button" class="btn btn-sm btn-secondary" data-action="switch-provider-vault" data-prov="\${_esc(prov)}" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>\`;
-      } else if (localProv) {
-        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-ghost" data-action="delete-local-provider" data-prov="\${_esc(prov)}" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>\`;
       }
       protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
     }
@@ -2285,7 +2287,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
 
     if (allKeyLabels.length === 0) {
-      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方添加本地 Key 或同步中枢规则</div>';
+      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方「+ 添加本地 Key」直接录入</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const isPublic = (k === 'public' || k === '__public__');
@@ -2314,27 +2316,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       }).join('');
     }
 
-    // Render quick model capsules
-    let recModels = [];
-    if (typeof PRESET_DEFINITIONS !== 'undefined' && PRESET_DEFINITIONS[prov.toLowerCase()]) {
-      recModels = PRESET_DEFINITIONS[prov.toLowerCase()].recommended_models || [];
-    } else if (typeof CACHED_PRESETS !== 'undefined' && CACHED_PRESETS[prov.toLowerCase()]) {
-      recModels = CACHED_PRESETS[prov.toLowerCase()].recommended_models || [];
-    } else if (remoteProv && remoteProv.recommended_models) {
-      recModels = remoteProv.recommended_models || [];
-    }
-
-    if (recModels.length > 0 && quickBox && quickTags) {
-      quickTags.innerHTML = recModels.map(rm => {
-        const mName = typeof rm === 'string' ? rm : (rm.name || rm.id);
-        const mUpstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
-        return \`<div class="model-capsule" data-action="apply-quick-model" data-name="\${_esc(mName)}" data-upstream="\${_esc(mUpstream)}">
-          <span>\${_esc(mName)}</span>
-        </div>\`;
-      }).join('');
-      quickBox.style.display = 'block';
-    } else if (quickBox) {
+    // 建议模型全部去除，全面依托上游探活与自适应探测
+    if (quickBox) {
       quickBox.style.display = 'none';
+      if (quickTags) quickTags.innerHTML = '';
     }
 
     _renderSelectedBindingsSummary();
@@ -2772,29 +2757,47 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
   }
 
-  // 8. Render Single Binding Row in Key Table
-  function renderAgentBindingRow(idx, binding, modelName, i, status, totalCount) {
-    if (!binding || typeof binding !== 'object') return '';
-    const prov = binding.provider || 'unknown';
-    const key = binding.key || 'unknown';
-    const { probingKeys } = getCtx();
-    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
-    let ns = status[nk] || status[prov + ':' + key + ':agent:' + modelName];
-
-    const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
-    if (!ns && latCache) {
-      const cacheKey = \`model:\${modelName}:\${prov}:\${key}\`;
-      const latInfo = latCache[cacheKey];
-      if (latInfo) {
-        ns = {
-          status: latInfo.status || (latInfo.ok ? 200 : 500),
-          latency_ms: latInfo.latency_ms,
-          time: Date.now()
-        };
-      }
+  // 8. Helper to resolve Key source badge (Local vs Vault Hub)
+  function _getKeySourceBadge(prov, key, binding) {
+    if (binding && (binding.is_local === true || binding.source === 'local')) {
+      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
     }
+    if (binding && (binding.is_vault === true || binding.source === 'vault')) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    const { cfg } = getCtx();
+    const localProv = cfg && cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
+    const rawKeyObj = localProv && localProv.keys && localProv.keys[key];
+    const isLocalKey = !!rawKeyObj;
+    const isLocalFlag = typeof rawKeyObj === 'object' && rawKeyObj !== null && rawKeyObj.is_local === true;
 
+    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
+    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
+
+    if (isLocalFlag) {
+      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
+    }
+    if (isVaultKey) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    if (isLocalKey) {
+      const isVm = (typeof state !== 'undefined' && state && state.config);
+      return isVm 
+        ? '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>'
+        : '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+  }
+
+  // 9. Render Single Binding Row in Key Table
+
+  function renderAgentBindingRow(idx, b, modelName, i, candStatus, totalKeys) {
+    const prov = b.provider;
+    const key = b.key;
+    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
+    const ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
     let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
+
     if (ns) {
       if (ns.is_quota || ns.status === 'quota') {
         badge = \`<span class="badge badge-error" style="font-weight:700;">欠费</span>\`;
@@ -2808,17 +2811,17 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           badge = \`<span class="badge badge-success" style="font-weight:700;">正常</span>\`;
         }
       } else {
-        badge = \`<span class="badge badge-error">\${ns.status} 异常</span>\`;
+        badge = \`<span class="badge badge-error">\${_esc(ns.status)} 异常</span>\`;
       }
-      time = _fmtTime(ns.time);
+      time = (typeof fmtTime === 'function') ? fmtTime(ns.time) : (ns.time || '—');
     }
 
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
+    const { probingKeys } = getCtx();
     const isProbing = probingKeys.has(probeKeyId);
-
     const keyBadgeHtml = \`<span class="badge badge-neutral">\${_esc(key)}</span>\`;
 
-    const orderInputHtml = \`<input type="number" min="1" max="\${totalCount}" value="\${idx}" 
+    const orderInputHtml = \`<input type="number" min="1" max="\${totalKeys}" value="\${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
         onwheel="this.blur()"
         data-action="reorder-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="修改数字直接调整顺序">\`;
@@ -2841,10 +2844,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <button class="btn btn-icon btn-sm btn-secondary-danger" data-action="delete-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="删除绑定">×</button>
     \`;
 
+    const sourceBadge = _getKeySourceBadge(prov, key, b);
+
     return \`<tr>
       <td>\${orderInputHtml}</td>
       <td><b>\${_esc(prov)}</b></td>
       <td>\${keyBadgeHtml}</td>
+      <td>\${sourceBadge}</td>
       <td>\${badge}</td>
       <td class="text-sm text-secondary">\${time}</td>
       <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">\${actions}</div></td>
@@ -2861,7 +2867,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const names = Object.keys(models);
 
     if (!names.length) {
-      box.innerHTML = '<div class="hint-box">尚未配置 Agent 模型。点击右上角「新增模型」添加您的第一个模型。</div>';
+      box.innerHTML = '<div class="hint-box">尚未配置 Agent 模型。点击右上角「新增 Agent 模型」添加您的第一个模型。</div>';
       return;
     }
 
@@ -2904,8 +2910,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
-            <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
+            <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>来源</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+            <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
         <div id="liveTestRes-\${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
@@ -3017,6 +3023,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   global.renderAgentKeyChecks = renderAgentKeyChecks;
   global.initAgentModelsDelegation = initAgentModelsDelegation;
   global.initModalDelegation = initModalDelegation;
+  global._formatProviderOptionLabel = _formatProviderOptionLabel;
+  global._getKeySourceBadge = _getKeySourceBadge;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') {
@@ -3046,7 +3054,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.18-01';
+const BUILD_VERSION = 'v2026.10.18-02';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3095,7 +3103,7 @@ const FALLBACK_PRESETS = {
   minimax: {
     id: 'minimax',
     name: 'MiniMax',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
     protocols: ['chat', 'messages'],
@@ -3107,7 +3115,7 @@ const FALLBACK_PRESETS = {
   bai: {
     id: 'bai',
     name: 'B.AI',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
     protocols: ['chat', 'messages'],
@@ -3122,7 +3130,7 @@ const FALLBACK_PRESETS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
-    version: '1.2.0',
+    version: '2026.10.18',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
     description: 'Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型 (512K 上下文)',
@@ -3135,7 +3143,7 @@ const FALLBACK_PRESETS = {
   google: {
     id: 'google',
     name: 'Google AI Studio',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
     protocols: ['chat'],
     description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射',
@@ -3149,7 +3157,7 @@ const FALLBACK_PRESETS = {
   sensenova: {
     id: 'sensenova',
     name: 'SenseNova',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://token.sensenova.cn/v1',
     protocols: ['chat'],
     description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
@@ -3162,7 +3170,7 @@ const FALLBACK_PRESETS = {
   stepfun: {
     id: 'stepfun',
     name: 'StepFun',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.stepfun.com/v1',
     protocols: ['chat'],
     description: '阶跃星辰 StepFun 大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek 思考格式注入',
@@ -3174,7 +3182,7 @@ const FALLBACK_PRESETS = {
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.siliconflow.cn/v1',
     protocols: ['chat'],
     description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型',
@@ -3187,7 +3195,7 @@ const FALLBACK_PRESETS = {
   tokenrhythm: {
     id: 'tokenrhythm',
     name: 'TokenRhythm',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.tokenrhythm.com/v1',
     protocols: ['chat'],
     description: 'TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换',
@@ -3199,7 +3207,7 @@ const FALLBACK_PRESETS = {
   amd: {
     id: 'amd',
     name: 'AMD Radeon Cloud',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
@@ -3213,7 +3221,7 @@ const FALLBACK_PRESETS = {
   vertex: {
     id: 'vertex',
     name: 'Google Vertex AI',
-    version: '1.0.0',
+    version: '2026.10.18',
     base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
     description: 'Google Cloud Vertex AI 官方大模型端点。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
@@ -3763,10 +3771,16 @@ function renderProviders() {
             keyRpmBadge = \`<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(107,114,128,0.12);color:var(--color-text-2);" title="继承供应商限流: \${prov.rpm_per_key} 次/分钟">\${prov.rpm_per_key} RPM</span>\`;
           }
 
+          const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
+          const sourceBadge = isLocalKey
+            ? \`<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>\`
+            : \`<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>\`;
+
           return \`
             <div class="key-chip">
               <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;flex-wrap:wrap;">
                 <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">\${esc(k)}</span>
+                \${sourceBadge}
                 \${gcpBadge}
                 \${keyRpmBadge}
                 <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">\${esc(masked)}</span>
@@ -3797,7 +3811,8 @@ function renderProviders() {
           messagesUrlPart = \` · Messages: \${esc(msgUrl || prov.base_url || '')} (默认)\`;
         }
       }
-      const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
+      const rawVer = prov.preset_version ? String(prov.preset_version).replace(/^v/, '') : '';
+      const ver = rawVer ? \`规则 \${rawVer}\` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">\${ver}</span>\`;
       const rpmBadge = prov.rpm_per_key
         ? \`<span class="badge badge-info" style="font-size:11px;padding:2px 7px;" title="每 Key 限流 \${prov.rpm_per_key} 次/分钟">\${prov.rpm_per_key} RPM/Key</span>\`
@@ -3812,6 +3827,7 @@ function renderProviders() {
             <div class="meta mono mt-2">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-secondary btn-sm" onclick="updateEdgeOneSingleProviderRule('\${esc(p)}')">\${icon('refresh', 12)} 更新规则</button>
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${esc(p)}')">\${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${esc(p)}')">\${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('\${esc(p)}')">\${icon('trash')} 删除供应商</button>
@@ -4389,13 +4405,32 @@ function deleteProvider(name) {
   openModal('deleteConfirmModal');
 }
 
+let _onKeySavedCallback = null;
+let _isLocalKeyMode = false;
+
 function isVertexProvider(prov) {
   const p = cfg.providers?.[prov];
   return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
 }
 
-function openAddKeyModal(prov) {
-  document.getElementById('keyModalTitle').textContent = \`为 \${prov} 新增 Key\`;
+function openKeyModalFromAgentModal() {
+  const prov = document.getElementById('a_provider')?.value;
+  if (!prov) {
+    toast('请先在上方选择一个有效提供商', 'err');
+    return;
+  }
+  openAddKeyModal(prov, () => {
+    if (typeof renderAgentKeyChecks === 'function') {
+      renderAgentKeyChecks();
+    }
+  }, true);
+}
+window.openKeyModalFromAgentModal = openKeyModalFromAgentModal;
+
+function openAddKeyModal(prov, onSavedCallback = null, isLocal = false) {
+  _onKeySavedCallback = onSavedCallback;
+  _isLocalKeyMode = Boolean(isLocal);
+  document.getElementById('keyModalTitle').textContent = isLocal ? \`为 \${prov} 录入本地 Key (不分发至中枢)\` : \`为 \${prov} 新增 Key\`;
   document.getElementById('m_key_prov').value = prov;
   document.getElementById('m_key_old_label').value = '';
   document.getElementById('m_key_label').value = '';
@@ -4664,10 +4699,24 @@ async function saveKeyModal() {
     finalKeyVal = val;
   }
 
+  if (_isLocalKeyMode) {
+    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
+      finalKeyVal.is_local = true;
+    } else {
+      finalKeyVal = { key: finalKeyVal, is_local: true };
+    }
+    _isLocalKeyMode = false;
+  }
+
   cfg.providers[prov].keys[label] = finalKeyVal;
   const ok = await persistConfig();
   if (ok) {
     closeModal('keyModal');
+    if (typeof _onKeySavedCallback === 'function') {
+      const cb = _onKeySavedCallback;
+      _onKeySavedCallback = null;
+      cb(prov, label);
+    }
   } else {
     cfg = backupCfg;
     renderAll();
@@ -4860,6 +4909,156 @@ async function persistConfig() {
     return false;
   }
 }
+
+// ---- EdgeOne GitHub Dynamic Presets & Rule Updates ------------------------
+const PRESET_CATALOG_URLS = [
+  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets/catalog.json',
+  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets/catalog.json',
+  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets/catalog.json'
+];
+
+const PRESET_RULE_BASE_URLS = [
+  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets',
+  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets',
+  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets'
+];
+
+async function _fetchEdgeOneRemoteJson(urls, timeoutMs = 3000) {
+  for (const u of urls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(u, { signal: controller.signal, cache: 'no-cache' });
+      clearTimeout(timer);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      // try next mirror
+    }
+  }
+  return null;
+}
+
+let _pendingRuleUpdates = {};
+
+async function checkEdgeOneRuleUpdates(manual = true) {
+  const btn = document.getElementById('btnEdgeOneCheckUpdates');
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 检查规则更新...';
+  }
+  try {
+    const catalogData = await _fetchEdgeOneRemoteJson(PRESET_CATALOG_URLS, 3500);
+    const catalogMap = (catalogData && catalogData.providers) || {};
+    const configuredProvs = cfg.providers || {};
+    const outOfDate = [];
+
+    for (const [pId, pData] of Object.entries(configuredProvs)) {
+      const presId = pData.preset_id || pId;
+      const remoteInfo = catalogMap[presId] || catalogMap[presId.toLowerCase()];
+      if (!remoteInfo) continue;
+      const currVer = String(pData.preset_version || '2026.10.18').replace(/^v/, '');
+      const remoteVer = String(remoteInfo.version || '').replace(/^v/, '');
+      if (remoteVer && remoteVer !== currVer) {
+        outOfDate.push({
+          provider_id: pId,
+          preset_id: presId,
+          name: remoteInfo.name || pId,
+          current_version: currVer,
+          latest_version: remoteVer
+        });
+      }
+    }
+
+    _pendingRuleUpdates = {};
+    outOfDate.forEach(item => { _pendingRuleUpdates[item.provider_id] = item; });
+
+    if (alertEl) {
+      if (outOfDate.length > 0) {
+        alertEl.style.display = 'block';
+        alertEl.innerHTML = \`
+          <div style="background:var(--color-bg-page);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+              <strong style="color:var(--color-warning);font-size:13px;">🔄 发现 \${outOfDate.length} 家供应商有新适配规则可更新：</strong>
+              <div style="font-size:12px;color:var(--color-text-2);margin-top:4px;">
+                \${outOfDate.map(x => \`<span class="badge badge-warning" style="font-size:11px;margin-right:6px;">\${esc(x.name)} (\${esc(x.current_version)} → \${esc(x.latest_version)})</span>\`).join('')}
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="applyAllEdgeOneProviderRuleUpdates()">一键更新全部规则</button>
+          </div>
+        \`;
+        if (manual) toast(\`发现 \${outOfDate.length} 家供应商规则可更新\`, 'info');
+      } else {
+        alertEl.style.display = 'block';
+        alertEl.innerHTML = \`
+          <div style="background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--color-text-2);display:flex;align-items:center;justify-content:space-between;">
+            <span>✅ 当前所有已配置供应商的适配规则均为最新版本 (\${catalogData?.version || '2026.10.18'})</span>
+            <button type="button" class="btn-ghost" onclick="document.getElementById('ruleUpdatesAlert').style.display='none'" style="font-size:14px;cursor:pointer;">×</button>
+          </div>
+        \`;
+        if (manual) toast('所有已配置供应商规则已是最新版本', 'ok');
+      }
+    }
+  } catch (e) {
+    if (manual) toast('检查规则更新异常: ' + e.message, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 检查规则更新';
+    }
+  }
+}
+
+async function updateEdgeOneSingleProviderRule(provId) {
+  if (!cfg.providers || !cfg.providers[provId]) return;
+  const pData = cfg.providers[provId];
+  const presId = pData.preset_id || provId;
+  toast(\`正在拉取供应商 [\${provId}] 最新适配规则...\`, 'info');
+
+  const ruleUrls = PRESET_RULE_BASE_URLS.map(base => \`\${base}/\${presId}.json\`);
+  let ruleData = await _fetchEdgeOneRemoteJson(ruleUrls, 3000);
+  if (!ruleData && FALLBACK_PRESETS[presId]) {
+    ruleData = FALLBACK_PRESETS[presId];
+  }
+
+  if (!ruleData) {
+    toast(\`未能获取到供应商 [\${provId}] 的规则文件\`, 'err');
+    return;
+  }
+
+  pData.adapter_rules = ruleData.adapter_rules || {};
+  pData.preset_version = ruleData.version || '2026.10.18';
+  if (ruleData.recommended_models) pData.recommended_models = ruleData.recommended_models;
+  if (ruleData.features) pData.features = ruleData.features;
+
+  const ok = await persistConfig();
+  if (ok) {
+    toast(\`供应商 [\${provId}] 规则已更新至 \${pData.preset_version}\`, 'ok');
+    delete _pendingRuleUpdates[provId];
+    renderProviders();
+  }
+}
+
+async function applyAllEdgeOneProviderRuleUpdates() {
+  const provIds = Object.keys(_pendingRuleUpdates);
+  if (!provIds.length) {
+    toast('当前暂无待更新规则', 'info');
+    return;
+  }
+  toast(\`正在更新 \${provIds.length} 家供应商规则...\`, 'info');
+  for (const pid of provIds) {
+    await updateEdgeOneSingleProviderRule(pid);
+  }
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (alertEl) alertEl.style.display = 'none';
+  toast(\`全部 \${provIds.length} 家供应商规则已更新完成！\`, 'ok');
+}
+
+window.checkEdgeOneRuleUpdates = checkEdgeOneRuleUpdates;
+window.updateEdgeOneSingleProviderRule = updateEdgeOneSingleProviderRule;
+window.applyAllEdgeOneProviderRuleUpdates = applyAllEdgeOneProviderRuleUpdates;
 
 // ---- Global Wheel Protection for Number Inputs ---------------------------
 document.addEventListener('wheel', function(e) {

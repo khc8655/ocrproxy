@@ -62,8 +62,10 @@ export async function onRequestGet(context) {
     const preset = getPreset(pId);
     const isSpecialized = Boolean(preset && (preset.adapter_rules || preset.features?.native_thinking));
 
-    // Extract key labels (never expose secrets in manifest)
-    const keyLabels = Object.keys(pCfg.keys || {});
+    // Extract key labels (never expose secrets in manifest, filter out local temporary keys)
+    const keyLabels = Object.entries(pCfg.keys || {})
+      .filter(([_, val]) => !(typeof val === 'object' && val !== null && val.is_local === true))
+      .map(([k]) => k);
 
     // Models: from preset, or probe_models cache, or recommended_models
     let models = [];

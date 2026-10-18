@@ -31,8 +31,8 @@ function renderKbModels(){
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>上游实际模型 ID</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
-          <tbody>${rows.length ? rows.join('') : '<tr><td colspan="7" class="empty">暂无候选节点</td></tr>'}</tbody>
+          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>来源</th><th>上游实际模型 ID</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody>${rows.length ? rows.join('') : '<tr><td colspan="8" class="empty">暂无候选节点</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -79,10 +79,15 @@ function renderKbBindingRow(idx, binding, type, i, status){
     </button>
     <button class="btn btn-icon btn-sm btn-secondary-danger" onclick="deleteCandidate('${type}',${i})" title="删除">×</button>`;
 
+  const sourceBadge = (typeof _getKeySourceBadge === 'function')
+    ? _getKeySourceBadge(binding.provider, binding.key, binding)
+    : '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;">本地</span>';
+
   return `<tr>
     <td>${orderInputHtml}</td>
     <td><b>${esc(binding.provider)}</b></td>
     <td>${keyBadgeHtml}</td>
+    <td>${sourceBadge}</td>
     ${modelCell}
     <td>${badge}</td>
     <td class="text-sm text-secondary">${time}</td>
@@ -117,20 +122,24 @@ function populateCandidateProviderSelect(selectedId){
   if (optLocal) {
     if (localList.length > 0) {
       optLocal.innerHTML = localList.map(p => {
-        const protoSuffix = p.protoStr ? ` · ${esc(p.protoStr)}` : '';
-        return `<option value="${esc(p.id)}">${esc(p.label)}${protoSuffix}</option>`;
+        const optLabel = (typeof _formatProviderOptionLabel === 'function') 
+          ? _formatProviderOptionLabel(p) 
+          : `${p.label} (${p.protoStr || 'openai'})`;
+        return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
       }).join('');
     } else if (vaultList.length > 0) {
       optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
     } else {
-      optLocal.innerHTML = '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
+      optLocal.innerHTML = '<option value="" disabled selected>-- 当前暂无可用供应商 (请在供应商Tab中配置) --</option>';
     }
   }
   if (optVault) {
     optVault.innerHTML = vaultList.length
       ? vaultList.map(p => {
-          const protoSuffix = p.protoStr ? ` · ${esc(p.protoStr)}` : '';
-          return `<option value="${esc(p.id)}">${esc(p.label)}${protoSuffix}</option>`;
+          const optLabel = (typeof _formatProviderOptionLabel === 'function') 
+            ? _formatProviderOptionLabel(p) 
+            : `${p.label} (${p.protoStr || 'openai'})`;
+          return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
         }).join('')
       : '<option disabled>暂无中枢托管供应商</option>';
   }
@@ -156,13 +165,10 @@ function onCandidateProviderSelectChange(val){
       const providers = getAllAvailableProviders();
       if (!providers || providers.length === 0) {
         protoInfoEl.innerHTML = `
-          <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
-            <div style="font-size:12px;color:var(--text);line-height:1.5;">
-              <strong>尚未添加供应商</strong>：请先新建供应商节点
+          <div style="background:var(--bg-subtle);border:1px dashed var(--border);border-radius:6px;padding:10px 14px;margin:6px 0;width:100%;">
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">
+              尚未添加供应商，请前往「供应商」界面进行添加与配置。
             </div>
-            <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('candidate')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
-              + 立即新建供应商
-            </button>
           </div>`;
       } else {
         protoInfoEl.innerHTML = '';
@@ -178,8 +184,6 @@ function onCandidateProviderSelectChange(val){
       let actionBtnHtml = '';
       if (localProv && remoteProv) {
         actionBtnHtml = `<button type="button" class="btn btn-sm btn-secondary" onclick="switchLocalProviderToVault('${esc(val)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>`;
-      } else if (localProv) {
-        actionBtnHtml = `<button type="button" class="btn btn-sm btn-ghost" onclick="deleteLocalProviderFromModal('${esc(val)}')" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>`;
       }
       protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
     }
@@ -196,38 +200,17 @@ function applyCandidateQuickModel(model, el){
 }
 
 function renderCandidateQuickModels(){
-  const prov = document.getElementById('c_provider').value;
-  const type = document.getElementById('c_type').value || 'chat';
   const quickBox = document.getElementById('c_quickModels');
   const quickTags = document.getElementById('c_quickTags');
-
-  if(!prov || !quickBox || !quickTags){
-    if(quickBox) quickBox.style.display = 'none';
-    return;
-  }
-
-  const preset = PRESET_DEFINITIONS[prov.toLowerCase()];
-  const remoteProv = findVaultProvider(prov);
-  const recModels = preset?.recommended_models || remoteProv?.recommended_models || remoteProv?.models || [];
-  if(recModels.length > 0){
-    const matching = recModels.filter(rm => !rm.kb_type || rm.kb_type === type);
-    const listToRender = matching.length > 0 ? matching : recModels;
-    quickTags.innerHTML = listToRender.map(rm => {
-      const name = typeof rm === 'string' ? rm : (rm.name || rm.id);
-      const upstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
-      return `<div class="model-capsule" onclick="applyCandidateQuickModel('${esc(upstream)}', this)">
-        <span>${esc(name)}</span>
-      </div>`;
-    }).join('');
-    quickBox.style.display = 'block';
-  } else {
-    quickBox.style.display = 'none';
-  }
+  if(quickBox) quickBox.style.display = 'none';
+  if(quickTags) quickTags.innerHTML = '';
 }
 
 async function openCandidateModal(type){
   const curType = type || 'chat';
-  document.getElementById('candidateModalTitle').textContent='挂载候选节点';
+  const typeLabel = (typeof KB_LABELS !== 'undefined' && KB_LABELS[curType]) ? KB_LABELS[curType] : curType;
+  const titleEl = document.getElementById('candidateModalTitle');
+  if (titleEl) titleEl.textContent = `挂载 ${typeLabel} 节点`;
   document.getElementById('c_editCat').value=''; 
   document.getElementById('c_editIdx').value='';
   document.getElementById('c_type').value = curType;
@@ -314,7 +297,8 @@ async function removeLocalKeyFromModal(prov, label, event){
 
 async function editCandidate(type,i){
   const c=state.config.candidates[type][i];
-  document.getElementById('candidateModalTitle').textContent='编辑候选节点';
+  const typeLabel = (typeof KB_LABELS !== 'undefined' && KB_LABELS[type]) ? KB_LABELS[type] : type;
+  document.getElementById('candidateModalTitle').textContent = `编辑 ${typeLabel} 节点`;
   document.getElementById('c_editCat').value=type; 
   document.getElementById('c_editIdx').value=i;
   document.getElementById('c_type').value=type;

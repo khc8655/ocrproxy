@@ -1,7 +1,7 @@
 {
   "id": "siliconflow",
   "name": "硅基流动",
-  "version": "1.2.0",
+  "version": "2026.10.18",
   "protocol": "openai",
   "base_url": "https://api.siliconflow.cn/v1",
   "doc_url": "https://docs.siliconflow.cn",
@@ -30,7 +30,12 @@
   "adapter_rules": {
     "reasoning": {
       "strategy": "openai_passthrough",
-      "supported_levels": ["none", "low", "medium", "high"]
+      "supported_levels": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ]
     },
     "tools": {
       "normalize_choice_to_string": false,

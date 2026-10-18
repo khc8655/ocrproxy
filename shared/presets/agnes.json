@@ -1,7 +1,7 @@
 {
   "id": "agnes",
   "name": "Agnes AI",
-  "version": "1.4.0",
+  "version": "2026.10.18",
   "protocol": "openai",
   "base_url": "https://apihub.agnes-ai.com/v1",
   "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",

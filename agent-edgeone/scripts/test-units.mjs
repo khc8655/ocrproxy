@@ -1572,11 +1572,11 @@ test('getPreset: finds openrouter with :free models and dual OpenAI/Anthropic en
   eq(p.adapter_rules?.inject_headers?.['X-Title'], 'OCRProxy');
 });
 
-test('getPreset: nvidia v2.0.0 with current free models and per-account activation failover', () => {
+test('getPreset: nvidia with current free models and per-account activation failover', () => {
   const p = getPreset('nvidia');
   truthy(p);
   eq(p.id, 'nvidia');
-  eq(p.version, '2.0.0');
+  eq(p.version, '2026.10.18');
   const upstreamNames = p.recommended_models.map(m => m.upstream_model);
   truthy(upstreamNames.includes('nvidia/nemotron-3-super-120b-a12b'));
   truthy(upstreamNames.includes('moonshotai/kimi-k3'));
@@ -1586,12 +1586,12 @@ test('getPreset: nvidia v2.0.0 with current free models and per-account activati
   eq(notActivated.match_status, 404);
 });
 
-test('getPreset: opencode v2.0.0 Zen free models with free-tier error rules', () => {
+test('getPreset: opencode Zen free models with free-tier error rules', () => {
   const p = getPreset('opencode');
   truthy(p);
   eq(p.id, 'opencode');
   eq(p.name, 'OpenCode Zen');
-  eq(p.version, '2.0.0');
+  eq(p.version, '2026.10.18');
   eq(p.base_url, 'https://opencode.ai/zen/v1');
   const modelNames = p.recommended_models.map(m => m.name);
   truthy(modelNames.includes('big-pickle'));

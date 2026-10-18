@@ -60,7 +60,7 @@ const FALLBACK_PRESETS = {
   minimax: {
     id: 'minimax',
     name: 'MiniMax',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.minimaxi.com/v1',
     anthropic_base_url: 'https://api.minimax.cn/anthropic',
     protocols: ['chat', 'messages'],
@@ -72,7 +72,7 @@ const FALLBACK_PRESETS = {
   bai: {
     id: 'bai',
     name: 'B.AI',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.b.ai/v1',
     anthropic_base_url: 'https://api.b.ai/v1',
     protocols: ['chat', 'messages'],
@@ -87,7 +87,7 @@ const FALLBACK_PRESETS = {
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
-    version: '1.2.0',
+    version: '2026.10.18',
     base_url: 'https://apihub.agnes-ai.com/v1',
     protocols: ['chat'],
     description: 'Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型 (512K 上下文)',
@@ -100,7 +100,7 @@ const FALLBACK_PRESETS = {
   google: {
     id: 'google',
     name: 'Google AI Studio',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
     protocols: ['chat'],
     description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，已内置 Thinking Config 思考等级映射',
@@ -114,7 +114,7 @@ const FALLBACK_PRESETS = {
   sensenova: {
     id: 'sensenova',
     name: 'SenseNova',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://token.sensenova.cn/v1',
     protocols: ['chat'],
     description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1 等，原生支持 reasoning_effort 思考控制',
@@ -127,7 +127,7 @@ const FALLBACK_PRESETS = {
   stepfun: {
     id: 'stepfun',
     name: 'StepFun',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.stepfun.com/v1',
     protocols: ['chat'],
     description: '阶跃星辰 StepFun 大模型平台，已自动适配 reasoning_effort none->low 降级与 deepseek 思考格式注入',
@@ -139,7 +139,7 @@ const FALLBACK_PRESETS = {
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.siliconflow.cn/v1',
     protocols: ['chat'],
     description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型',
@@ -152,7 +152,7 @@ const FALLBACK_PRESETS = {
   tokenrhythm: {
     id: 'tokenrhythm',
     name: 'TokenRhythm',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://api.tokenrhythm.com/v1',
     protocols: ['chat'],
     description: 'TokenRhythm 聚合大模型路由网关，已自动适配 tool_choice 格式转换',
@@ -164,7 +164,7 @@ const FALLBACK_PRESETS = {
   amd: {
     id: 'amd',
     name: 'AMD Radeon Cloud',
-    version: '1.1.0',
+    version: '2026.10.18',
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
@@ -178,7 +178,7 @@ const FALLBACK_PRESETS = {
   vertex: {
     id: 'vertex',
     name: 'Google Vertex AI',
-    version: '1.0.0',
+    version: '2026.10.18',
     base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
     description: 'Google Cloud Vertex AI 官方大模型端点。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
@@ -728,10 +728,16 @@ function renderProviders() {
             keyRpmBadge = `<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(107,114,128,0.12);color:var(--color-text-2);" title="继承供应商限流: ${prov.rpm_per_key} 次/分钟">${prov.rpm_per_key} RPM</span>`;
           }
 
+          const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
+          const sourceBadge = isLocalKey
+            ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
+            : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
+
           return `
             <div class="key-chip">
               <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;flex-wrap:wrap;">
                 <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">${esc(k)}</span>
+                ${sourceBadge}
                 ${gcpBadge}
                 ${keyRpmBadge}
                 <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">${esc(masked)}</span>
@@ -762,7 +768,8 @@ function renderProviders() {
           messagesUrlPart = ` · Messages: ${esc(msgUrl || prov.base_url || '')} (默认)`;
         }
       }
-      const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
+      const rawVer = prov.preset_version ? String(prov.preset_version).replace(/^v/, '') : '';
+      const ver = rawVer ? `规则 ${rawVer}` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="规则版本">${ver}</span>`;
       const rpmBadge = prov.rpm_per_key
         ? `<span class="badge badge-info" style="font-size:11px;padding:2px 7px;" title="每 Key 限流 ${prov.rpm_per_key} 次/分钟">${prov.rpm_per_key} RPM/Key</span>`
@@ -777,6 +784,7 @@ function renderProviders() {
             <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-secondary btn-sm" onclick="updateEdgeOneSingleProviderRule('${esc(p)}')">${icon('refresh', 12)} 更新规则</button>
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
@@ -1354,13 +1362,32 @@ function deleteProvider(name) {
   openModal('deleteConfirmModal');
 }
 
+let _onKeySavedCallback = null;
+let _isLocalKeyMode = false;
+
 function isVertexProvider(prov) {
   const p = cfg.providers?.[prov];
   return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
 }
 
-function openAddKeyModal(prov) {
-  document.getElementById('keyModalTitle').textContent = `为 ${prov} 新增 Key`;
+function openKeyModalFromAgentModal() {
+  const prov = document.getElementById('a_provider')?.value;
+  if (!prov) {
+    toast('请先在上方选择一个有效提供商', 'err');
+    return;
+  }
+  openAddKeyModal(prov, () => {
+    if (typeof renderAgentKeyChecks === 'function') {
+      renderAgentKeyChecks();
+    }
+  }, true);
+}
+window.openKeyModalFromAgentModal = openKeyModalFromAgentModal;
+
+function openAddKeyModal(prov, onSavedCallback = null, isLocal = false) {
+  _onKeySavedCallback = onSavedCallback;
+  _isLocalKeyMode = Boolean(isLocal);
+  document.getElementById('keyModalTitle').textContent = isLocal ? `为 ${prov} 录入本地 Key (不分发至中枢)` : `为 ${prov} 新增 Key`;
   document.getElementById('m_key_prov').value = prov;
   document.getElementById('m_key_old_label').value = '';
   document.getElementById('m_key_label').value = '';
@@ -1629,10 +1656,24 @@ async function saveKeyModal() {
     finalKeyVal = val;
   }
 
+  if (_isLocalKeyMode) {
+    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
+      finalKeyVal.is_local = true;
+    } else {
+      finalKeyVal = { key: finalKeyVal, is_local: true };
+    }
+    _isLocalKeyMode = false;
+  }
+
   cfg.providers[prov].keys[label] = finalKeyVal;
   const ok = await persistConfig();
   if (ok) {
     closeModal('keyModal');
+    if (typeof _onKeySavedCallback === 'function') {
+      const cb = _onKeySavedCallback;
+      _onKeySavedCallback = null;
+      cb(prov, label);
+    }
   } else {
     cfg = backupCfg;
     renderAll();
@@ -1825,6 +1866,156 @@ async function persistConfig() {
     return false;
   }
 }
+
+// ---- EdgeOne GitHub Dynamic Presets & Rule Updates ------------------------
+const PRESET_CATALOG_URLS = [
+  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets/catalog.json',
+  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets/catalog.json',
+  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets/catalog.json'
+];
+
+const PRESET_RULE_BASE_URLS = [
+  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets',
+  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets',
+  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets'
+];
+
+async function _fetchEdgeOneRemoteJson(urls, timeoutMs = 3000) {
+  for (const u of urls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(u, { signal: controller.signal, cache: 'no-cache' });
+      clearTimeout(timer);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      // try next mirror
+    }
+  }
+  return null;
+}
+
+let _pendingRuleUpdates = {};
+
+async function checkEdgeOneRuleUpdates(manual = true) {
+  const btn = document.getElementById('btnEdgeOneCheckUpdates');
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 检查规则更新...';
+  }
+  try {
+    const catalogData = await _fetchEdgeOneRemoteJson(PRESET_CATALOG_URLS, 3500);
+    const catalogMap = (catalogData && catalogData.providers) || {};
+    const configuredProvs = cfg.providers || {};
+    const outOfDate = [];
+
+    for (const [pId, pData] of Object.entries(configuredProvs)) {
+      const presId = pData.preset_id || pId;
+      const remoteInfo = catalogMap[presId] || catalogMap[presId.toLowerCase()];
+      if (!remoteInfo) continue;
+      const currVer = String(pData.preset_version || '2026.10.18').replace(/^v/, '');
+      const remoteVer = String(remoteInfo.version || '').replace(/^v/, '');
+      if (remoteVer && remoteVer !== currVer) {
+        outOfDate.push({
+          provider_id: pId,
+          preset_id: presId,
+          name: remoteInfo.name || pId,
+          current_version: currVer,
+          latest_version: remoteVer
+        });
+      }
+    }
+
+    _pendingRuleUpdates = {};
+    outOfDate.forEach(item => { _pendingRuleUpdates[item.provider_id] = item; });
+
+    if (alertEl) {
+      if (outOfDate.length > 0) {
+        alertEl.style.display = 'block';
+        alertEl.innerHTML = `
+          <div style="background:var(--color-bg-page);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+              <strong style="color:var(--color-warning);font-size:13px;">🔄 发现 ${outOfDate.length} 家供应商有新适配规则可更新：</strong>
+              <div style="font-size:12px;color:var(--color-text-2);margin-top:4px;">
+                ${outOfDate.map(x => `<span class="badge badge-warning" style="font-size:11px;margin-right:6px;">${esc(x.name)} (${esc(x.current_version)} → ${esc(x.latest_version)})</span>`).join('')}
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="applyAllEdgeOneProviderRuleUpdates()">一键更新全部规则</button>
+          </div>
+        `;
+        if (manual) toast(`发现 ${outOfDate.length} 家供应商规则可更新`, 'info');
+      } else {
+        alertEl.style.display = 'block';
+        alertEl.innerHTML = `
+          <div style="background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--color-text-2);display:flex;align-items:center;justify-content:space-between;">
+            <span>✅ 当前所有已配置供应商的适配规则均为最新版本 (${catalogData?.version || '2026.10.18'})</span>
+            <button type="button" class="btn-ghost" onclick="document.getElementById('ruleUpdatesAlert').style.display='none'" style="font-size:14px;cursor:pointer;">×</button>
+          </div>
+        `;
+        if (manual) toast('所有已配置供应商规则已是最新版本', 'ok');
+      }
+    }
+  } catch (e) {
+    if (manual) toast('检查规则更新异常: ' + e.message, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 检查规则更新';
+    }
+  }
+}
+
+async function updateEdgeOneSingleProviderRule(provId) {
+  if (!cfg.providers || !cfg.providers[provId]) return;
+  const pData = cfg.providers[provId];
+  const presId = pData.preset_id || provId;
+  toast(`正在拉取供应商 [${provId}] 最新适配规则...`, 'info');
+
+  const ruleUrls = PRESET_RULE_BASE_URLS.map(base => `${base}/${presId}.json`);
+  let ruleData = await _fetchEdgeOneRemoteJson(ruleUrls, 3000);
+  if (!ruleData && FALLBACK_PRESETS[presId]) {
+    ruleData = FALLBACK_PRESETS[presId];
+  }
+
+  if (!ruleData) {
+    toast(`未能获取到供应商 [${provId}] 的规则文件`, 'err');
+    return;
+  }
+
+  pData.adapter_rules = ruleData.adapter_rules || {};
+  pData.preset_version = ruleData.version || '2026.10.18';
+  if (ruleData.recommended_models) pData.recommended_models = ruleData.recommended_models;
+  if (ruleData.features) pData.features = ruleData.features;
+
+  const ok = await persistConfig();
+  if (ok) {
+    toast(`供应商 [${provId}] 规则已更新至 ${pData.preset_version}`, 'ok');
+    delete _pendingRuleUpdates[provId];
+    renderProviders();
+  }
+}
+
+async function applyAllEdgeOneProviderRuleUpdates() {
+  const provIds = Object.keys(_pendingRuleUpdates);
+  if (!provIds.length) {
+    toast('当前暂无待更新规则', 'info');
+    return;
+  }
+  toast(`正在更新 ${provIds.length} 家供应商规则...`, 'info');
+  for (const pid of provIds) {
+    await updateEdgeOneSingleProviderRule(pid);
+  }
+  const alertEl = document.getElementById('ruleUpdatesAlert');
+  if (alertEl) alertEl.style.display = 'none';
+  toast(`全部 ${provIds.length} 家供应商规则已更新完成！`, 'ok');
+}
+
+window.checkEdgeOneRuleUpdates = checkEdgeOneRuleUpdates;
+window.updateEdgeOneSingleProviderRule = updateEdgeOneSingleProviderRule;
+window.applyAllEdgeOneProviderRuleUpdates = applyAllEdgeOneProviderRuleUpdates;
 
 // ---- Global Wheel Protection for Number Inputs ---------------------------
 document.addEventListener('wheel', function(e) {

@@ -426,6 +426,59 @@ async function upgradeSystem(targetVer, currVer){
   }
 }
 
+async function updateConfiguredPresetsFromSettings() {
+  const btn = document.getElementById('btnUpdateConfiguredPresets');
+  const infoBox = document.getElementById('presetsUpdateInfoBox');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 正在增量更新已添加预设...';
+  }
+  try {
+    const provs = state.config && state.config.providers ? Object.keys(state.config.providers) : [];
+    if (!provs.length) {
+      toast('当前本地尚未配置任何供应商，无需更新预设', 'info');
+      if (infoBox) {
+        infoBox.style.display = 'block';
+        infoBox.innerHTML = '<div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--text-secondary);">当前未配置任何供应商，无需更新预设。</div>';
+      }
+      return;
+    }
+    const r = await fetch('/api/admin/presets/update-rules', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ provider_ids: provs })
+    });
+    if (!r.ok) throw new Error('接口响应异常 (' + r.status + ')');
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || '更新失败');
+
+    const updated = data.updated || [];
+    const failed = data.failed || [];
+    if (infoBox) {
+      infoBox.style.display = 'block';
+      const updatedTags = updated.map(u => `<span class="badge badge-success" style="font-size:11px;margin-right:4px;">${esc(u.provider_id)} (规则 ${esc(u.new_version || '最新')})</span>`).join(' ');
+      const failedTags = failed.length ? `<div style="color:var(--error);font-size:11px;margin-top:6px;">失败: ${failed.map(f => esc(f.provider_id)).join(', ')}</div>` : '';
+      infoBox.innerHTML = `
+        <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;">
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px;">✅ 已增量更新 ${updated.length} 家供应商规则：</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${updatedTags || '<span class="text-secondary">无变动</span>'}</div>
+          ${failedTags}
+        </div>
+      `;
+    }
+    toast(`成功更新 ${updated.length} 家已配置供应商的适配预设！`, 'ok');
+    if (typeof loadConfig === 'function') await loadConfig();
+    if (typeof renderProviders === 'function') renderProviders();
+  } catch(e) {
+    toast('增量更新预设失败: ' + e.message, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> 一键增量更新已添加预设`;
+    }
+  }
+}
+window.updateConfiguredPresetsFromSettings = updateConfiguredPresetsFromSettings;
 
 async function saveSettings(silent=false){
   const c=state.config||{};

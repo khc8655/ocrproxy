@@ -1,7 +1,7 @@
 {
   "id": "cline",
   "name": "Cline",
-  "version": "1.1.0",
+  "version": "2026.10.18",
   "protocol": "openai",
   "base_url": "https://api.cline.bot/api/v1",
   "doc_url": "https://docs.cline.bot/api/overview",

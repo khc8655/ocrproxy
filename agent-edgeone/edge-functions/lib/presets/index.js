@@ -4,13 +4,13 @@
  */
 
 export const CATALOG = {
-  "version": "1.1.0",
-  "updated_at": "2026-10-18T00:38:03.184Z",
+  "version": "2026.10.18",
+  "updated_at": "2026-10-18T02:15:54.692Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI",
-      "version": "1.4.0",
+      "version": "2026.10.18",
       "rule_hash": "fefc72d3505b",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
@@ -28,7 +28,7 @@ export const CATALOG = {
     {
       "id": "amd",
       "name": "AMD Radeon Cloud",
-      "version": "1.3.0",
+      "version": "2026.10.18",
       "rule_hash": "23fbdf92a43f",
       "protocol": "openai",
       "base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -46,7 +46,7 @@ export const CATALOG = {
     {
       "id": "bai",
       "name": "B.AI",
-      "version": "1.4.0",
+      "version": "2026.10.18",
       "rule_hash": "29fa1b76a913",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
@@ -63,7 +63,7 @@ export const CATALOG = {
     {
       "id": "cline",
       "name": "Cline",
-      "version": "1.1.0",
+      "version": "2026.10.18",
       "rule_hash": "287adac94c15",
       "protocol": "openai",
       "base_url": "https://api.cline.bot/api/v1",
@@ -80,7 +80,7 @@ export const CATALOG = {
     {
       "id": "deepseek",
       "name": "DeepSeek 官方开放平台",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.deepseek.com/v1",
@@ -96,7 +96,7 @@ export const CATALOG = {
     {
       "id": "google",
       "name": "Google AI Studio",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "f87bea8c1551",
       "protocol": "google_openai",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -113,7 +113,7 @@ export const CATALOG = {
     {
       "id": "minimax",
       "name": "MiniMax",
-      "version": "1.4.0",
+      "version": "2026.10.18",
       "rule_hash": "e5cff916701c",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
@@ -131,7 +131,7 @@ export const CATALOG = {
     {
       "id": "nvidia",
       "name": "NVIDIA NIM",
-      "version": "2.0.0",
+      "version": "2026.10.18",
       "rule_hash": "8e640ea75adb",
       "protocol": "openai",
       "base_url": "https://integrate.api.nvidia.com/v1",
@@ -148,7 +148,7 @@ export const CATALOG = {
     {
       "id": "openai",
       "name": "OpenAI 官方",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.openai.com/v1",
@@ -165,7 +165,7 @@ export const CATALOG = {
     {
       "id": "opencode",
       "name": "OpenCode Zen",
-      "version": "2.0.0",
+      "version": "2026.10.18",
       "rule_hash": "7b700ff3eb3e",
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
@@ -182,7 +182,7 @@ export const CATALOG = {
     {
       "id": "openrouter",
       "name": "OpenRouter",
-      "version": "1.0.0",
+      "version": "2026.10.18",
       "rule_hash": "9172f2c3a65f",
       "protocol": "openai",
       "base_url": "https://openrouter.ai/api/v1",
@@ -200,7 +200,7 @@ export const CATALOG = {
     {
       "id": "sensenova",
       "name": "商汤日日新",
-      "version": "1.3.0",
+      "version": "2026.10.18",
       "rule_hash": "0cf60ddb3bd5",
       "protocol": "openai",
       "base_url": "https://token.sensenova.cn/v1",
@@ -218,7 +218,7 @@ export const CATALOG = {
     {
       "id": "siliconflow",
       "name": "硅基流动",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.siliconflow.cn/v1",
@@ -234,7 +234,7 @@ export const CATALOG = {
     {
       "id": "stepfun",
       "name": "阶跃星辰",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "ff735ef0f91a",
       "protocol": "openai",
       "base_url": "https://api.stepfun.com/step_plan",
@@ -251,7 +251,7 @@ export const CATALOG = {
     {
       "id": "tokenrhythm",
       "name": "TokenRhythm",
-      "version": "1.2.0",
+      "version": "2026.10.18",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://tokenrhythm.studio/v1",
@@ -267,7 +267,7 @@ export const CATALOG = {
     {
       "id": "vertex",
       "name": "Google Vertex AI",
-      "version": "1.1.0",
+      "version": "2026.10.18",
       "rule_hash": "1128b7ad5ca0",
       "protocol": "vertex_openai",
       "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
@@ -290,7 +290,7 @@ export const PRESETS = [
   {
     "id": "agnes",
     "name": "Agnes AI",
-    "version": "1.4.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
     "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",
@@ -340,7 +340,7 @@ export const PRESETS = [
   {
     "id": "amd",
     "name": "AMD Radeon Cloud",
-    "version": "1.3.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "rpm_per_key": 20,
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -406,7 +406,7 @@ export const PRESETS = [
   {
     "id": "bai",
     "name": "B.AI",
-    "version": "1.4.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.b.ai/v1",
     "anthropic_base_url": "https://api.b.ai/v1",
@@ -472,7 +472,7 @@ export const PRESETS = [
   {
     "id": "cline",
     "name": "Cline",
-    "version": "1.1.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.cline.bot/api/v1",
     "doc_url": "https://docs.cline.bot/api/overview",
@@ -564,7 +564,7 @@ export const PRESETS = [
   {
     "id": "deepseek",
     "name": "DeepSeek 官方开放平台",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.deepseek.com/v1",
     "doc_url": "https://api-docs.deepseek.com",
@@ -611,7 +611,7 @@ export const PRESETS = [
   {
     "id": "google",
     "name": "Google AI Studio",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "google_openai",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
     "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
@@ -684,7 +684,7 @@ export const PRESETS = [
   {
     "id": "minimax",
     "name": "MiniMax",
-    "version": "1.4.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -835,12 +835,12 @@ export const PRESETS = [
         "upstream_model": "meta/llama-3.2-11b-vision-instruct"
       }
     ],
-    "version": "2.0.0"
+    "version": "2026.10.18"
   },
   {
     "id": "openai",
     "name": "OpenAI 官方",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.openai.com/v1",
     "doc_url": "https://platform.openai.com/docs",
@@ -991,7 +991,7 @@ export const PRESETS = [
         "upstream_model": "nemotron-3.5-lightning-free"
       }
     ],
-    "version": "2.0.0"
+    "version": "2026.10.18"
   },
   {
     "adapter_rules": {
@@ -1102,12 +1102,12 @@ export const PRESETS = [
         "upstream_model": "openrouter/free"
       }
     ],
-    "version": "1.0.0"
+    "version": "2026.10.18"
   },
   {
     "id": "sensenova",
     "name": "商汤日日新",
-    "version": "1.3.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://token.sensenova.cn/v1",
     "doc_url": "https://platform.sensenova.cn/docs",
@@ -1163,7 +1163,7 @@ export const PRESETS = [
   {
     "id": "siliconflow",
     "name": "硅基流动",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.siliconflow.cn/v1",
     "doc_url": "https://docs.siliconflow.cn",
@@ -1215,7 +1215,7 @@ export const PRESETS = [
   {
     "id": "stepfun",
     "name": "阶跃星辰",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://api.stepfun.com/step_plan",
     "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
@@ -1257,7 +1257,7 @@ export const PRESETS = [
   {
     "id": "tokenrhythm",
     "name": "TokenRhythm",
-    "version": "1.2.0",
+    "version": "2026.10.18",
     "protocol": "openai",
     "base_url": "https://tokenrhythm.studio/v1",
     "doc_url": "https://tokenrhythm.studio/docs/api-integration",
@@ -1309,7 +1309,7 @@ export const PRESETS = [
   {
     "id": "vertex",
     "name": "Google Vertex AI",
-    "version": "1.1.0",
+    "version": "2026.10.18",
     "protocol": "vertex_openai",
     "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
     "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",

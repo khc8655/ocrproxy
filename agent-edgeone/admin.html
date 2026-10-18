@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-02</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -128,9 +128,11 @@
             <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
           <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()">🔄 检查规则更新</button>
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
+        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:14px;"></div>
         <div class="providers-layout">
           <div id="providersBox" class="providers-list-col"></div>
           <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
@@ -452,12 +454,6 @@
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
-          <div style="display:flex;gap:6px;">
-            <button type="button" class="btn btn-sm btn-secondary" onclick="openAddProviderModal()" style="display:inline-flex;align-items:center;gap:4px;" title="新增供应商">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>新建供应商</span>
-            </button>
-          </div>
         </div>
         <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
           <optgroup label="已配置供应商" id="a_optgroup_local"></optgroup>
@@ -469,6 +465,10 @@
       <div class="form-group mb-3" id="a_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromAgentModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ 添加本地 Key</span>
+          </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);min-height:46px;"></div>
       </div>
@@ -482,18 +482,13 @@
             <span>探测上游可用模型</span>
           </button>
         </div>
-        <!-- 推荐模型快捷标签 -->
-        <div id="a_quickModels" class="mb-2" style="display:none;">
-          <div class="text-xs text-secondary mb-1" style="font-size:11px;color:var(--color-text-3);margin-bottom:6px;">官方推荐模型快捷填入：</div>
-          <div id="a_quickTags" class="capsule-row"></div>
-        </div>
       </div>
 
       <!-- 详细参数 (由标签或探测弹窗点选自动填充) -->
       <div style="background:var(--color-bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
-          <input type="text" id="a_name" class="form-control" placeholder="点击推荐标签或探测弹窗选择，例如 deepseek-v4-flash">
+          <input type="text" id="a_name" class="form-control" placeholder="点击探测弹窗选择或手动输入，例如 deepseek-v4-flash">
         </div>
         <div class="form-group mb-0">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>

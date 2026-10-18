@@ -432,6 +432,18 @@
     summaryEl.style.display = 'block';
   }
 
+  function _formatProviderOptionLabel(p) {
+    const rawProtos = p.protoStr || (Array.isArray(p.protocols) ? p.protocols.join(', ') : '');
+    const parts = (rawProtos || 'chat').split(/[,+\s/]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    const normalized = [];
+    if (parts.some(x => x.includes('openai') || x.includes('chat'))) normalized.push('openai');
+    if (parts.some(x => x.includes('anthropic') || x.includes('message'))) normalized.push('message');
+    if (parts.some(x => x.includes('response'))) normalized.push('responses');
+    const protoStr = (normalized.length ? normalized.join('+') : 'openai');
+    const name = p.label || p.name || p.id;
+    return `${name} (${protoStr})`;
+  }
+
   // 4. Populate and Handle Provider Selection in Agent Modal
   function populateAgentProviderSelect(selectedId) {
     const sel = document.getElementById('a_providerSelect');
@@ -452,8 +464,8 @@
     if (optLocal) {
       if (localList.length > 0) {
         optLocal.innerHTML = localList.map(p => {
-          const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
-          return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
+          const optLabel = _formatProviderOptionLabel(p);
+          return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
         }).join('');
       } else {
         optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
@@ -461,17 +473,17 @@
     } else {
       sel.innerHTML = providers.length
         ? providers.map(p => {
-            const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
-            return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
+            const optLabel = _formatProviderOptionLabel(p);
+            return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
           }).join('')
-        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请先新建供应商) --</option>';
+        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请在供应商Tab中配置) --</option>';
     }
 
     if (optVault) {
       optVault.innerHTML = vaultList.length
         ? vaultList.map(p => {
-            const protoSuffix = p.protoStr ? ` · ${_esc(p.protoStr)}` : '';
-            return `<option value="${_esc(p.id)}">${_esc(p.label)}${protoSuffix}</option>`;
+            const optLabel = _formatProviderOptionLabel(p);
+            return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
           }).join('')
         : '<option disabled>暂无中枢托管供应商</option>';
     }
@@ -505,13 +517,10 @@
         const providers = _getAllProvidersList();
         if (!providers || providers.length === 0) {
           protoInfoEl.innerHTML = `
-            <div style="background:var(--bg-subtle);border:1px dashed var(--primary);border-radius:6px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin:6px 0;width:100%;">
-              <div style="font-size:12px;color:var(--text);line-height:1.5;">
-                <strong>尚未添加供应商</strong>：请先新建供应商（支持选用 AMD、DeepSeek 等 11 家官方厂商并秒级自动填充规则与模型）
+            <div style="background:var(--bg-subtle);border:1px dashed var(--border);border-radius:6px;padding:10px 14px;margin:6px 0;width:100%;">
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">
+                尚未添加供应商，请前往「供应商」界面进行添加与配置。
               </div>
-              <button type="button" class="btn btn-sm btn-primary" onclick="openProviderModal('agent')" style="font-size:12px;padding:3px 10px;white-space:nowrap;margin-left:12px;">
-                + 立即新建供应商
-              </button>
             </div>`;
         } else {
           protoInfoEl.innerHTML = '请先选择上方供应商。';
@@ -553,8 +562,6 @@
       let actionBtnHtml = '';
       if (localProv && remoteProv) {
         actionBtnHtml = `<button type="button" class="btn btn-sm btn-secondary" data-action="switch-provider-vault" data-prov="${_esc(prov)}" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>`;
-      } else if (localProv) {
-        actionBtnHtml = `<button type="button" class="btn btn-sm btn-ghost" data-action="delete-local-provider" data-prov="${_esc(prov)}" style="color:var(--error);font-size:11px;padding:2px 6px;margin-left:auto;" title="彻底删除此本地自建供应商">🗑️ 删除此本地供应商</button>`;
       }
       protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
     }
@@ -573,7 +580,7 @@
     }
 
     if (allKeyLabels.length === 0) {
-      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方添加本地 Key 或同步中枢规则</div>';
+      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方「+ 添加本地 Key」直接录入</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const isPublic = (k === 'public' || k === '__public__');
@@ -602,27 +609,10 @@
       }).join('');
     }
 
-    // Render quick model capsules
-    let recModels = [];
-    if (typeof PRESET_DEFINITIONS !== 'undefined' && PRESET_DEFINITIONS[prov.toLowerCase()]) {
-      recModels = PRESET_DEFINITIONS[prov.toLowerCase()].recommended_models || [];
-    } else if (typeof CACHED_PRESETS !== 'undefined' && CACHED_PRESETS[prov.toLowerCase()]) {
-      recModels = CACHED_PRESETS[prov.toLowerCase()].recommended_models || [];
-    } else if (remoteProv && remoteProv.recommended_models) {
-      recModels = remoteProv.recommended_models || [];
-    }
-
-    if (recModels.length > 0 && quickBox && quickTags) {
-      quickTags.innerHTML = recModels.map(rm => {
-        const mName = typeof rm === 'string' ? rm : (rm.name || rm.id);
-        const mUpstream = typeof rm === 'string' ? rm : (rm.upstream || rm.name || rm.id);
-        return `<div class="model-capsule" data-action="apply-quick-model" data-name="${_esc(mName)}" data-upstream="${_esc(mUpstream)}">
-          <span>${_esc(mName)}</span>
-        </div>`;
-      }).join('');
-      quickBox.style.display = 'block';
-    } else if (quickBox) {
+    // 建议模型全部去除，全面依托上游探活与自适应探测
+    if (quickBox) {
       quickBox.style.display = 'none';
+      if (quickTags) quickTags.innerHTML = '';
     }
 
     _renderSelectedBindingsSummary();
@@ -1060,29 +1050,47 @@
     }
   }
 
-  // 8. Render Single Binding Row in Key Table
-  function renderAgentBindingRow(idx, binding, modelName, i, status, totalCount) {
-    if (!binding || typeof binding !== 'object') return '';
-    const prov = binding.provider || 'unknown';
-    const key = binding.key || 'unknown';
-    const { probingKeys } = getCtx();
-    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
-    let ns = status[nk] || status[prov + ':' + key + ':agent:' + modelName];
-
-    const latCache = (typeof window !== 'undefined' && window.modelLatencyCache) ? window.modelLatencyCache : null;
-    if (!ns && latCache) {
-      const cacheKey = `model:${modelName}:${prov}:${key}`;
-      const latInfo = latCache[cacheKey];
-      if (latInfo) {
-        ns = {
-          status: latInfo.status || (latInfo.ok ? 200 : 500),
-          latency_ms: latInfo.latency_ms,
-          time: Date.now()
-        };
-      }
+  // 8. Helper to resolve Key source badge (Local vs Vault Hub)
+  function _getKeySourceBadge(prov, key, binding) {
+    if (binding && (binding.is_local === true || binding.source === 'local')) {
+      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
     }
+    if (binding && (binding.is_vault === true || binding.source === 'vault')) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    const { cfg } = getCtx();
+    const localProv = cfg && cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
+    const rawKeyObj = localProv && localProv.keys && localProv.keys[key];
+    const isLocalKey = !!rawKeyObj;
+    const isLocalFlag = typeof rawKeyObj === 'object' && rawKeyObj !== null && rawKeyObj.is_local === true;
 
+    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
+    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
+
+    if (isLocalFlag) {
+      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
+    }
+    if (isVaultKey) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    if (isLocalKey) {
+      const isVm = (typeof state !== 'undefined' && state && state.config);
+      return isVm 
+        ? '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>'
+        : '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    }
+    return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+  }
+
+  // 9. Render Single Binding Row in Key Table
+
+  function renderAgentBindingRow(idx, b, modelName, i, candStatus, totalKeys) {
+    const prov = b.provider;
+    const key = b.key;
+    const nk = 'agent:' + modelName + ':' + prov + ':' + key;
+    const ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
     let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
+
     if (ns) {
       if (ns.is_quota || ns.status === 'quota') {
         badge = `<span class="badge badge-error" style="font-weight:700;">欠费</span>`;
@@ -1096,17 +1104,17 @@
           badge = `<span class="badge badge-success" style="font-weight:700;">正常</span>`;
         }
       } else {
-        badge = `<span class="badge badge-error">${ns.status} 异常</span>`;
+        badge = `<span class="badge badge-error">${_esc(ns.status)} 异常</span>`;
       }
-      time = _fmtTime(ns.time);
+      time = (typeof fmtTime === 'function') ? fmtTime(ns.time) : (ns.time || '—');
     }
 
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
+    const { probingKeys } = getCtx();
     const isProbing = probingKeys.has(probeKeyId);
-
     const keyBadgeHtml = `<span class="badge badge-neutral">${_esc(key)}</span>`;
 
-    const orderInputHtml = `<input type="number" min="1" max="${totalCount}" value="${idx}" 
+    const orderInputHtml = `<input type="number" min="1" max="${totalKeys}" value="${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
         onwheel="this.blur()"
         data-action="reorder-key" data-model="${_esc(modelName)}" data-index="${i}" title="修改数字直接调整顺序">`;
@@ -1129,10 +1137,13 @@
       <button class="btn btn-icon btn-sm btn-secondary-danger" data-action="delete-key" data-model="${_esc(modelName)}" data-index="${i}" title="删除绑定">×</button>
     `;
 
+    const sourceBadge = _getKeySourceBadge(prov, key, b);
+
     return `<tr>
       <td>${orderInputHtml}</td>
       <td><b>${_esc(prov)}</b></td>
       <td>${keyBadgeHtml}</td>
+      <td>${sourceBadge}</td>
       <td>${badge}</td>
       <td class="text-sm text-secondary">${time}</td>
       <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
@@ -1149,7 +1160,7 @@
     const names = Object.keys(models);
 
     if (!names.length) {
-      box.innerHTML = '<div class="hint-box">尚未配置 Agent 模型。点击右上角「新增模型」添加您的第一个模型。</div>';
+      box.innerHTML = '<div class="hint-box">尚未配置 Agent 模型。点击右上角「新增 Agent 模型」添加您的第一个模型。</div>';
       return;
     }
 
@@ -1192,8 +1203,8 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
-            <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="6" class="empty">暂无绑定 Key</td></tr>'}</tbody>
+            <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>来源</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+            <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
         <div id="liveTestRes-${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
@@ -1305,6 +1316,8 @@
   global.renderAgentKeyChecks = renderAgentKeyChecks;
   global.initAgentModelsDelegation = initAgentModelsDelegation;
   global.initModalDelegation = initModalDelegation;
+  global._formatProviderOptionLabel = _formatProviderOptionLabel;
+  global._getKeySourceBadge = _getKeySourceBadge;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') {

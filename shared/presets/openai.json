@@ -1,7 +1,7 @@
 {
   "id": "openai",
   "name": "OpenAI 官方",
-  "version": "1.2.0",
+  "version": "2026.10.18",
   "protocol": "openai",
   "base_url": "https://api.openai.com/v1",
   "doc_url": "https://platform.openai.com/docs",

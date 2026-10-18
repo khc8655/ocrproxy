@@ -1,7 +1,7 @@
 {
   "id": "bai",
   "name": "B.AI",
-  "version": "1.4.0",
+  "version": "2026.10.18",
   "protocol": "openai",
   "base_url": "https://api.b.ai/v1",
   "anthropic_base_url": "https://api.b.ai/v1",
@@ -50,7 +50,13 @@
       {
         "name": "credit_insufficient_balance",
         "match_status": 400,
-        "match_keywords": ["credit", "balance", "insufficient", "欠费", "余额不足"],
+        "match_keywords": [
+          "credit",
+          "balance",
+          "insufficient",
+          "欠费",
+          "余额不足"
+        ],
         "action": "quota_exhausted",
         "cooldown_sec": 1800,
         "failover": true
@@ -58,4 +64,3 @@
     ]
   }
 }
-

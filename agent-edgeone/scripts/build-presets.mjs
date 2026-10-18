@@ -18,7 +18,7 @@ const presets = presetFiles.map((file) => {
 
 // Build catalog
 const catalog = {
-  version: '1.1.0',
+  version: '2026.10.18',
   updated_at: new Date().toISOString(),
   providers: presets.map((p) => {
     const rulesStr = JSON.stringify(p.adapter_rules || {});
