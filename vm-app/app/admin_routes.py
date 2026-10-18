@@ -277,15 +277,15 @@ _CATALOG_CACHE: dict = {"data": None, "expires_at": 0}
 _PRESET_REMOTE_CACHE: dict = {}
 
 _CDN_CATALOG_URLS = [
-    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json",
     "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json",
     "https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets/catalog.json",
+    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json",
 ]
 
 _CDN_PRESET_BASE_URLS = [
-    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets",
     "https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets",
     "https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets",
+    "https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets",
 ]
 
 

@@ -12,9 +12,9 @@ import {
 import { loadConfig, saveConfig } from '../config.js';
 
 export const PRESET_REMOTE_MIRRORS = [
-  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets',
   'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets',
   'https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets',
+  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets',
 ];
 
 // L1 In-memory cache (survives within EdgeOne worker isolate life cycle)

@@ -1611,7 +1611,8 @@ test('buildChatUrl: correctly preserves Vertex openapi endpoint path', () => {
 
 test('PresetHub: PRESET_REMOTE_MIRRORS contains valid CDN and raw endpoints', () => {
   truthy(PRESET_REMOTE_MIRRORS.length >= 2);
-  truthy(PRESET_REMOTE_MIRRORS[0].includes('cdn.jsdelivr.net'));
+  truthy(PRESET_REMOTE_MIRRORS.some(m => m.includes('cdn.jsdelivr.net')));
+  truthy(PRESET_REMOTE_MIRRORS[0].includes('raw.githubusercontent.com'));
 });
 
 test('PresetHub: getCatalog returns catalog with providers array', async () => {

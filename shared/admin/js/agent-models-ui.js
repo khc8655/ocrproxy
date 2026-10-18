@@ -1160,7 +1160,11 @@
     const names = Object.keys(models);
 
     if (!names.length) {
-      box.innerHTML = '<div class="hint-box">尚未配置 Agent 模型。点击右上角「新增 Agent 模型」添加您的第一个模型。</div>';
+      box.innerHTML = `<div class="hint-box" style="text-align:center;padding:36px 16px;background:var(--bg-subtle, var(--color-bg-page));border:1px dashed var(--border, var(--color-border));border-radius:var(--radius-md, 8px);">
+        <div style="font-size:14px;font-weight:600;color:var(--text, var(--color-text-1));margin-bottom:6px;">尚未配置 Agent 路由模型</div>
+        <div style="font-size:12px;color:var(--text-secondary, var(--color-text-3));margin-bottom:14px;">支持绑定多个供应商与多密钥负载轮询/故障转移</div>
+        <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 立即新增 Agent 模型</button>
+      </div>`;
       return;
     }
 

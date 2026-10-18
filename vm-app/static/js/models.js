@@ -206,9 +206,16 @@ function renderCandidateQuickModels(){
   if(quickTags) quickTags.innerHTML = '';
 }
 
+const KB_MODAL_ROLE_TITLES = {
+  chat: '对话与摘要 (Chat)',
+  ocr: '图文多模态识别 (OCR)',
+  embedding: '向量嵌入 (Embedding)',
+  reranker: '语义重排 (Reranker)'
+};
+
 async function openCandidateModal(type){
   const curType = type || 'chat';
-  const typeLabel = (typeof KB_LABELS !== 'undefined' && KB_LABELS[curType]) ? KB_LABELS[curType] : curType;
+  const typeLabel = KB_MODAL_ROLE_TITLES[curType] || ((typeof KB_LABELS !== 'undefined' && KB_LABELS[curType]) ? KB_LABELS[curType] : curType);
   const titleEl = document.getElementById('candidateModalTitle');
   if (titleEl) titleEl.textContent = `挂载 ${typeLabel} 节点`;
   document.getElementById('c_editCat').value=''; 
