@@ -1812,7 +1812,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
  *  - renderAgentBindingRow()
  *  - openAgentModal() / editAgentModel() / saveAgentModel() / deleteAgentModel()
  *  - reorderAgentKey() / setActiveAgentKey() / deleteAgentKey()
- *  - testAgentKey() / testAgentModelAll() / runLiveTest()
+ *  - testAgentKey() / testAgentModelAll()
  *  - executeProbe() / filterProbedModels() / selectProbedModel()
  */
 
@@ -1841,8 +1841,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         deleteAgentModel(model);
       } else if (action === 'probe-model-all') {
         testAgentModelAll(model);
-      } else if (action === 'live-test') {
-        runLiveTest(model);
       } else if (action === 'set-active-key') {
         const key = btn.dataset.key;
         setActiveAgentKey(model, key);
@@ -2294,21 +2292,21 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (optVault) optVault.style.display = (cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url)) ? '' : 'none';
 
     const providers = _getAllProvidersList();
-    const localList = providers.filter(p => !p.isVault);
-    const vaultList = providers.filter(p => p.isVault);
+    const configuredList = providers.filter(p => p.isConfigured !== false);
+    const unconfiguredVaultList = providers.filter(p => !p.isConfigured && p.isVault);
 
     if (optLocal) {
-      if (localList.length > 0) {
-        optLocal.innerHTML = localList.map(p => {
+      if (configuredList.length > 0) {
+        optLocal.innerHTML = configuredList.map(p => {
           const optLabel = _formatProviderOptionLabel(p);
           return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
         }).join('');
       } else {
-        optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
+        optLocal.innerHTML = '<option value="" disabled>-- 暂无已配置供应商 (可从下方选用或点击右上角新增) --</option>';
       }
     } else {
-      sel.innerHTML = providers.length
-        ? providers.map(p => {
+      sel.innerHTML = configuredList.length
+        ? configuredList.map(p => {
             const optLabel = _formatProviderOptionLabel(p);
             return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
           }).join('')
@@ -2316,12 +2314,17 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
 
     if (optVault) {
-      optVault.innerHTML = vaultList.length
-        ? vaultList.map(p => {
-            const optLabel = _formatProviderOptionLabel(p);
-            return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
-          }).join('')
-        : '<option disabled>暂无中枢托管供应商</option>';
+      const hasVault = Boolean(cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url));
+      if (!hasVault || unconfiguredVaultList.length === 0) {
+        optVault.style.display = 'none';
+        optVault.innerHTML = '';
+      } else {
+        optVault.style.display = '';
+        optVault.innerHTML = unconfiguredVaultList.map(p => {
+          const optLabel = _formatProviderOptionLabel(p) + ' (中枢按需拉取)';
+          return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
+        }).join('');
+      }
     }
 
     const curId = (selectedId && providers.some(p => p.id === selectedId)) 
@@ -2604,9 +2607,54 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   async function deleteAgentModel(name) {
     if (!confirm(\`确定要删除 Agent 模型 "\${name}" 吗？\`)) return;
     const { cfg } = getCtx();
+    const targetModel = cfg.agent_models?.[name];
+    const usedProviders = new Set((targetModel?.keys || []).map(k => k.provider).filter(Boolean));
+
     delete cfg.agent_models[name];
-    await _persist(\`Agent 模型「\${name}」已删除并立即生效\`);
+
+    // 检查是否有供应商变成孤立供应商（本地已无任何模型或候选模型引用）
+    const orphanedProviders = [];
+    for (const provId of usedProviders) {
+      if (!cfg.providers?.[provId]) continue;
+      let stillUsed = false;
+      // 检查其他 Agent 模型
+      for (const mName of Object.keys(cfg.agent_models || {})) {
+        if ((cfg.agent_models[mName]?.keys || []).some(k => k.provider === provId)) {
+          stillUsed = true;
+          break;
+        }
+      }
+      // 检查 candidates 候选模型
+      if (!stillUsed && cfg.candidates) {
+        for (const t of Object.keys(cfg.candidates)) {
+          if (Array.isArray(cfg.candidates[t]) && cfg.candidates[t].some(x => x.provider === provId)) {
+            stillUsed = true;
+            break;
+          }
+        }
+      }
+      if (!stillUsed) {
+        orphanedProviders.push(provId);
+      }
+    }
+
+    let extraMsg = '';
+    if (orphanedProviders.length > 0) {
+      const provListStr = orphanedProviders.join(', ');
+      if (confirm(\`删除模型「\${name}」后，供应商 [\${provListStr}] 本地已无任何模型引用。\\n是否同时从本地清理该供应商及其凭据？\`)) {
+        for (const p of orphanedProviders) {
+          delete cfg.providers[p];
+          if (typeof state !== 'undefined' && state.ruleUpdatesMap && state.ruleUpdatesMap[p]) {
+            delete state.ruleUpdatesMap[p];
+          }
+        }
+        extraMsg = \`，并已同步清理孤立供应商 [\${provListStr}]\`;
+      }
+    }
+
+    await _persist(\`Agent 模型「\${name}」已删除\${extraMsg}并立即生效\`);
     renderAgentModels();
+    if (typeof renderProviders === 'function') renderProviders();
   }
 
   // 6. Key Operations: Reorder, Set Active, Delete
@@ -2793,95 +2841,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
   }
 
-  async function runLiveTest(modelName) {
-    const resBox = document.getElementById('liveTestRes-' + modelName);
-    const btn = document.getElementById('liveTestBtn-' + modelName);
-    if (!resBox) return;
 
-    resBox.style.display = 'block';
-    resBox.innerHTML = \`
-      <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
-        <span class="spinner"></span>
-        <span>正在向生产端点发起真实测试请求 (POST /v1/chat/completions)...</span>
-      </div>
-    \`;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 测试中'; }
-
-    const start = Date.now();
-    try {
-      const apiKey = _getAuthKeyForChat();
-      const resp = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [{ role: 'user', content: '1+1等于几？请仅回复一个数字。' }],
-          max_tokens: 15,
-          stream: false
-        })
-      });
-
-      const elapsed = Date.now() - start;
-      const rawRouted = resp.headers.get('X-Routed-Via') || '';
-      let routedVia = rawRouted;
-      try { routedVia = decodeURIComponent(rawRouted); } catch(e) {}
-      const fallbacks = resp.headers.get('X-Fallback-Attempts') || '0';
-
-      if (resp.ok) {
-        const data = await resp.json();
-        const content = data?.choices?.[0]?.message?.content || '(无返回文本)';
-        resBox.innerHTML = \`
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span class="badge badge-success" style="font-weight:700;">HTTP 200 OK</span>
-                <span style="font-weight:600;color:var(--text, var(--color-text-1));">实际调用节点:</span>
-                <span class="badge badge-primary" style="font-family:monospace;font-size:12px;padding:2px 8px;">\${_esc(routedVia || '默认节点')}</span>
-                <span style="color:var(--text-secondary);font-size:12px;">往返耗时: <b>\${elapsed}ms</b></span>
-                \${Number(fallbacks) > 0 ? \`<span class="badge badge-warning">故障转移重试: \${fallbacks}次</span>\` : ''}
-              </div>
-              <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
-            </div>
-            <div style="font-size:12px;background:var(--bg, var(--color-bg-page));padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border, var(--color-border));color:var(--text, var(--color-text-1));">
-              <span style="color:var(--text-secondary);">模型输出：</span>\${_esc(content.trim())}
-            </div>
-          </div>
-        \`;
-        _toast(\`[\${modelName}] 实测验证成功！命中: \${routedVia} (\${elapsed}ms)\`, 'ok');
-      } else {
-        let errText = '';
-        try {
-          const errJson = await resp.json();
-          errText = errJson?.error?.message || JSON.stringify(errJson);
-        } catch(e) {
-          errText = await resp.text();
-        }
-        resBox.innerHTML = \`
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span class="badge badge-error" style="font-weight:700;">HTTP \${resp.status}</span>
-              <span style="color:var(--error, #f53f3f);font-size:12px;">\${_esc(errText)}</span>
-            </div>
-            <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
-          </div>
-        \`;
-        _toast(\`[\${modelName}] 实测失败: HTTP \${resp.status}\`, 'err');
-      }
-    } catch(e) {
-      resBox.innerHTML = \`
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <span style="color:var(--error, #f53f3f);font-size:12px;">实测网络异常: \${_esc(e.message)}</span>
-          <button class="btn btn-sm" data-action="collapse-panel" style="font-size:11px;padding:2px 6px;">收起</button>
-        </div>
-      \`;
-      _toast(\`实测异常: \${e.message}\`, 'err');
-    } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = '实测 1+1'; }
-    }
-  }
 
   // 8. Helper to resolve Key source badge (Local vs Vault Hub)
   function _getKeySourceBadge(prov, key, binding) {
@@ -3009,7 +2969,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <button class="btn btn-secondary btn-sm" id="probeAllBtn-\${_esc(name)}" data-action="probe-model-all" data-model="\${_esc(name)}" \${isProbingAll ? 'disabled' : ''}>
               \${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
             </button>
-            <button class="btn btn-secondary btn-sm" id="liveTestBtn-\${_esc(name)}" data-action="live-test" data-model="\${_esc(name)}" title="以客户端身份真实调用 /v1/chat/completions，验证完整路由链路">实测 1+1</button>
             <button class="btn btn-secondary btn-sm" data-action="edit-model" data-model="\${_esc(name)}">编辑</button>
             <button class="btn btn-secondary-danger btn-sm" data-action="delete-model" data-model="\${_esc(name)}">删除</button>
           </div>
@@ -3020,7 +2979,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
-        <div id="liveTestRes-\${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
         <div id="agentProbe-\${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
       </div>\`;
     }).join('');
@@ -3084,7 +3042,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   global.deleteAgentKey = deleteAgentKey;
   global.testAgentKey = testAgentKey;
   global.testAgentModelAll = testAgentModelAll;
-  global.runLiveTest = runLiveTest;
   global.executeProbe = executeProbe;
   global.renderProbedModelsList = renderProbedModelsList;
   global.filterProbedModels = filterProbedModels;
