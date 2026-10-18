@@ -18,8 +18,18 @@ function renderKbModels(){
         <button class="btn btn-sm btn-primary" onclick="openCandidateModal('${type}')">+ 挂载节点</button>
       </div>
       <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>来源</th><th>上游实际模型 ID</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+        <table style="table-layout: fixed; width: 100%;">
+          <colgroup>
+            <col style="width: 52px;">
+            <col style="width: 130px;">
+            <col style="width: 140px;">
+            <col style="width: 80px;">
+            <col style="width: 170px;">
+            <col style="width: 130px;">
+            <col style="width: 140px;">
+            <col style="width: 120px;">
+          </colgroup>
+          <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:130px;">供应商</th><th style="width:140px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:170px;">上游实际模型 ID</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:120px;text-align:right;">操作</th></tr></thead>
           <tbody>${rows.length ? rows.join('') : '<tr><td colspan="8" class="empty">暂无候选节点</td></tr>'}</tbody>
         </table>
       </div>
@@ -48,7 +58,7 @@ function renderKbBindingRow(idx, binding, type, i, status){
     }
     time = fmtTime(ns.time); 
   }
-  const modelCell = `<td class="mono truncate" title="${esc(binding.model)}"><b>${esc(binding.model)}</b></td>`;
+  const modelCell = `<td style="width:170px;" class="mono truncate" title="${esc(binding.model)}"><b>${esc(binding.model)}</b></td>`;
   
   const probeKeyId = 'kb:' + type + (binding.model ? ':' + binding.model : '') + ':' + binding.provider + ':' + binding.key;
   const isProbing = state.probingKeys.has(probeKeyId);
@@ -72,14 +82,14 @@ function renderKbBindingRow(idx, binding, type, i, status){
     : '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;">本地</span>';
 
   return `<tr>
-    <td>${orderInputHtml}</td>
-    <td><b>${esc(binding.provider)}</b></td>
-    <td>${keyBadgeHtml}</td>
-    <td>${sourceBadge}</td>
+    <td style="width:52px;text-align:center;">${orderInputHtml}</td>
+    <td style="width:130px;" class="truncate" title="${esc(binding.provider)}"><b>${esc(binding.provider)}</b></td>
+    <td style="width:140px;" class="truncate" title="${esc(binding.key)}">${keyBadgeHtml}</td>
+    <td style="width:80px;text-align:center;">${sourceBadge}</td>
     ${modelCell}
-    <td>${badge}</td>
-    <td class="text-sm text-secondary">${time}</td>
-    <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
+    <td style="width:130px;text-align:center;">${badge}</td>
+    <td style="width:140px;text-align:center;" class="text-sm text-secondary">${time}</td>
+    <td style="width:120px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
   </tr>`;
 }
 
