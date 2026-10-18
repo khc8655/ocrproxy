@@ -121,7 +121,7 @@ python3 tests/test_messages_pipeline.py
 
 ## VM Agent 控制台端到端测试 (`test_vm_agent_ui_e2e.py`)
 
-不做字符串断言，而是起真实 VM 服务 + OpenAI 兼容 Mock 上游，用 Chromium 真实点击完成：登录 → 新增供应商 → 新增 Key (在线校验 / 坏 Key 拦截 / 跳过校验) → 新增 Agent 模型 (探测上游并点选) → 单 Key 测 / 全部探活 / 实测 1+1 → 追加第二个 Key → `/v1/chat/completions` 真实调用 → 概览统计。全程任何 JS 异常或非预期 4xx/5xx 即失败。
+不做字符串断言，而是起真实 VM 服务 + OpenAI 兼容 Mock 上游，用 Chromium 真实点击完成：登录 → 新增供应商 → 新增 Key (在线校验 / 坏 Key 拦截 / 跳过校验) → 新增 Agent 模型 (探测上游并点选) → 单 Key 测 / 全部探活 → 追加第二个 Key → `/v1/chat/completions` 真实调用 → 概览统计。全程任何 JS 异常或非预期 4xx/5xx 即失败。
 
 ```bash
 pip install -r vm-app/requirements.txt playwright
