@@ -687,6 +687,125 @@ async def _stream_with_keepalive(
 
 
 
+# ── Streaming pre-commit keep-alive ─────────────────────────────────
+# schedule() holds a streaming request until the first real upstream payload
+# (agent first byte may take up to agent_first_byte_timeout_sec, 120 s by
+# default) so that 429 / in-band errors can still fail over to another key.
+# During that window the client used to receive *nothing* — not even headers —
+# and Nginx (proxy_read_timeout 60 s), Cloudflare (100 s) or IDE clients would
+# drop the connection.  Now: wait a short grace window with a normal response
+# (fast failures keep their real HTTP status); if scheduling is still running,
+# commit 200 + SSE keep-alive comments every 15 s and finish with the stream or
+# an SSE error event.  If the client disconnects, scheduling is cancelled so it
+# stops holding upstream connections and key semaphores.
+_STREAM_PRECOMMIT_GRACE_SEC = 8.0
+_STREAM_KEEPALIVE_SEC = 15.0
+
+
+def _precommit_grace(config: dict) -> float:
+    try:
+        v = float(config.get("stream_precommit_grace_sec", _STREAM_PRECOMMIT_GRACE_SEC))
+    except (TypeError, ValueError):
+        v = _STREAM_PRECOMMIT_GRACE_SEC
+    return max(0.5, min(60.0, v))
+
+
+def _schedule_error_as_sse(exc: Exception, error_format: str) -> bytes:
+    if isinstance(exc, GlobalOverloadError):
+        resp = _overloaded_response(exc)
+    else:
+        resp = _error_response(exc)
+    try:
+        body = json.loads(resp.body)
+    except Exception:
+        body = {"error": {"message": str(exc)[:500], "type": "api_error"}}
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict):
+        err = {"message": str(err or exc)[:500], "type": "api_error"}
+    err.setdefault("code", str(resp.status_code))
+    if error_format == "anthropic":
+        payload = {"type": "error", "error": {"type": err.get("type") or "api_error", "message": err.get("message", "")}}
+        return b"event: error\ndata: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+    return (b"data: " + json.dumps({"error": err}, ensure_ascii=False).encode() + b"\n\n"
+            + b"data: [DONE]\n\n")
+
+
+async def _close_unstarted_stream(sr) -> None:
+    """Release a ScheduleResult whose stream body was never iterated.
+    An async generator that never started does not run its `finally` on
+    aclose(), so step it once (the first chunk is already buffered, no network
+    wait) and then close it; that releases the upstream response and lease."""
+    agen = getattr(getattr(sr, "stream_resp", None), "body_iterator", None)
+    try:
+        if agen is not None:
+            try:
+                await agen.__anext__()
+            except StopAsyncIteration:
+                pass
+            await agen.aclose()
+    except Exception:
+        pass
+    finally:
+        lease = getattr(sr, "lease", None)
+        if lease is not None:
+            lease.release()
+
+
+async def _stream_with_precommit(schedule_coro, finalize, config: dict, error_format: str = "openai"):
+    """Run a streaming schedule(); see the block comment above.
+
+    finalize(sr) -> Response is called when scheduling finishes inside the
+    grace window (normal path, headers like X-Routed-Via preserved).  Errors in
+    that window are returned as regular JSON error responses.
+    """
+    task = asyncio.ensure_future(schedule_coro)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=_precommit_grace(config))
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    if done:
+        try:
+            return finalize(task.result())
+        except GlobalOverloadError as e:
+            return _overloaded_response(e)
+        except Exception as e:
+            return _error_response(e)
+
+    async def committed():
+        inner = None
+        try:
+            yield b": keep-alive\n\n"  # flush headers + first byte through buffering proxies now
+            while not task.done():
+                done_, _ = await asyncio.wait({task}, timeout=_STREAM_KEEPALIVE_SEC)
+                if not done_:
+                    yield b": keep-alive\n\n"
+            try:
+                sr = task.result()
+            except Exception as e:  # scheduling failed after we committed 200
+                yield _schedule_error_as_sse(e, error_format)
+                return
+            inner = sr.stream_resp.body_iterator
+            async for chunk in inner:
+                yield chunk
+        finally:
+            if not task.done():
+                task.cancel()  # client gone mid-scheduling: free semaphores / upstream sockets
+            elif inner is not None:
+                try:
+                    await inner.aclose()
+                except Exception:
+                    pass
+            elif not task.cancelled() and task.exception() is None:
+                await _close_unstarted_stream(task.result())
+
+    return StreamingResponse(
+        committed(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache", "X-Proxy-Precommitted": "1"},
+    )
+
+
 # Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
 # This is a backstop against malicious / accidental oversized payloads that
 # would otherwise accumulate on the Python heap and risk OOM under concurrency.
@@ -1129,14 +1248,7 @@ async def chat_completions(request: Request):
                 headers={"X-Accel-Buffering": "no"},
             )
 
-        try:
-            sr = await schedule(
-                req_config, "chat", build_request,
-                handle_stream=handle_stream,
-                is_stream=True,
-                category=req_category,
-                request_model=req_model_name,
-            )
+        def _finalize_stream(sr):
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -1144,12 +1256,19 @@ async def chat_completions(request: Request):
                 sr.stream_resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
             sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
-        except AllCandidatesFailedError as e:
-            return _error_response(e)
-        except GlobalOverloadError as e:
-            return _overloaded_response(e)
-        except Exception as e:
-            return _error_response(e)
+
+        return await _stream_with_precommit(
+            schedule(
+                req_config, "chat", build_request,
+                handle_stream=handle_stream,
+                is_stream=True,
+                category=req_category,
+                request_model=req_model_name,
+            ),
+            _finalize_stream,
+            req_config,
+            error_format="openai",
+        )
 
     try:
         sr = await schedule(
@@ -1347,14 +1466,7 @@ async def anthropic_messages(request: Request):
                 headers={"X-Accel-Buffering": "no"},
             )
 
-        try:
-            sr = await schedule(
-                req_config, "messages", build_request,
-                handle_stream=handle_stream,
-                is_stream=True,
-                category=req_category,
-                request_model=req_model_name,
-            )
+        def _finalize_stream(sr):
             sr.stream_resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Proxy-Routed-Via"] = urllib.parse.quote(sr.routed_via)
             sr.stream_resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
@@ -1362,12 +1474,19 @@ async def anthropic_messages(request: Request):
                 sr.stream_resp.headers["X-Fallback-Trail"] = urllib.parse.quote(sr.trail, safe="/=; ")
             sr.stream_resp.headers["X-Proxy-Attempts"] = str(sr.fallback_attempts + 1)
             return sr.stream_resp
-        except AllCandidatesFailedError as e:
-            return _error_response(e)
-        except GlobalOverloadError as e:
-            return _overloaded_response(e)
-        except Exception as e:
-            return _error_response(e)
+
+        return await _stream_with_precommit(
+            schedule(
+                req_config, "messages", build_request,
+                handle_stream=handle_stream,
+                is_stream=True,
+                category=req_category,
+                request_model=req_model_name,
+            ),
+            _finalize_stream,
+            req_config,
+            error_format="anthropic",
+        )
 
     try:
         sr = await schedule(

@@ -179,11 +179,13 @@ class GlobalOverloadError(Exception):
     """Raised when the global concurrency cap is saturated and the bounded
     queue wait timed out.  The proxy layer converts this to 503 +
     Retry-After so burst clients back off instead of hanging."""
-    def __init__(self, retry_after: float = _GLOBAL_QUEUE_TIMEOUT_SEC):
+    def __init__(self, retry_after: float = _GLOBAL_QUEUE_TIMEOUT_SEC, message: Optional[str] = None):
         super().__init__(
-            f"The proxy is at its global concurrency limit "
-            f"({_global_semaphore_limit} in-flight upstream requests). "
-            f"Retry after {retry_after:.0f}s."
+            message or (
+                f"The proxy is at its global concurrency limit "
+                f"({_global_semaphore_limit} in-flight upstream requests). "
+                f"Retry after {retry_after:.0f}s."
+            )
         )
         self.retry_after = retry_after
 
@@ -674,6 +676,25 @@ def _get_default_ua() -> str:
     return f"OCRProxy/{v}"
 
 
+def _env_int(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(os.environ.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+_POOL_MAX_CONNECTIONS = _env_int("UPSTREAM_MAX_CONNECTIONS", 256, 16, 4096)
+# How long a request may wait for a free pooled connection.  httpx defaults the
+# pool wait to the *read* timeout (up to 120-600 s here), so a saturated pool
+# looked like a hung upstream and was booked against a healthy key.
+_POOL_WAIT_SEC = float(_env_int("UPSTREAM_POOL_WAIT_SEC", 10, 1, 120))
+
+
+def _req_timeout(total_sec: float) -> httpx.Timeout:
+    total_sec = max(1.0, float(total_sec))
+    return httpx.Timeout(total_sec, connect=min(5.0, total_sec), pool=min(_POOL_WAIT_SEC, total_sec))
+
+
 async def get_client() -> httpx.AsyncClient:
     """Get or create the global async HTTP client.
 
@@ -690,11 +711,14 @@ async def get_client() -> httpx.AsyncClient:
                 timeout=httpx.Timeout(300.0, connect=5.0),
                 headers={"User-Agent": _get_default_ua()},
                 limits=httpx.Limits(
-                    max_connections=80,
+                    # Long Agent SSE streams pin one pooled connection each for
+                    # minutes; 80 was reachable with a few IDE agents, after which
+                    # every new request queued silently.  Override per VM size.
+                    max_connections=_POOL_MAX_CONNECTIONS,
                     # Keep every pooled connection warm: closing idle ones above
                     # 20 forced a fresh TCP+TLS handshake (200-600 ms cross-border)
                     # on the next burst.
-                    max_keepalive_connections=80,
+                    max_keepalive_connections=_POOL_MAX_CONNECTIONS,
                     # Many upstreams / CDNs drop idle keep-alive sockets after
                     # 5-15 s.  Re-using one of those yields RemoteProtocolError,
                     # which used to be booked as a 5xx against a healthy key.
@@ -1523,7 +1547,7 @@ async def schedule(
     client = await get_client()
     # Per-request timeout: use a separate httpx.Timeout so that OCR (which
     # passes a longer upstream_timeout via config override) gets more time.
-    req_timeout = httpx.Timeout(upstream_timeout_sec, connect=min(5.0, upstream_timeout_sec))
+    req_timeout = _req_timeout(upstream_timeout_sec)
 
     # Agent sticky mode: same-key retries for provider/CDN-level failures.
     try:
@@ -1701,7 +1725,7 @@ async def schedule(
             # Hard deadline constraint: candidate timeout never exceeds remaining budget
             cand_timeout_full = max(1.0, cand_timeout_sec)
             cand_timeout_sec = max(1.0, min(cand_timeout_sec, remaining_budget))
-            cand_req_timeout = httpx.Timeout(cand_timeout_sec, connect=min(5.0, cand_timeout_sec))
+            cand_req_timeout = _req_timeout(cand_timeout_sec)
 
             # 4. Concurrency Semaphore acquisition per key with bounded wait
             sem_id = f"{provider_name}:{key_label}"
@@ -2227,6 +2251,18 @@ async def schedule(
                                  provider=provider_name, key=key_label, error_msg=err_msg,
                                  category=category, request_model=req_model_name, is_fallback=(attempt_seq > 1),
                                  cand_model=cand.get("model"))
+
+                except httpx.PoolTimeout:
+                    # Local outbound pool saturated: do NOT cool down / count a
+                    # failure against this key (it never reached the upstream),
+                    # and trying other keys would only queue on the same pool.
+                    logger.warning(f"{cand_id}: local upstream connection pool exhausted "
+                                   f"({_POOL_MAX_CONNECTIONS} conns, waited {_POOL_WAIT_SEC:.0f}s)")
+                    raise GlobalOverloadError(
+                        retry_after=5.0,
+                        message=(f"The proxy's upstream connection pool is full ({_POOL_MAX_CONNECTIONS} "
+                                 f"connections). Retry shortly, or raise UPSTREAM_MAX_CONNECTIONS."),
+                    )
 
                 except httpx.ConnectTimeout as e:
                     last_transport_status = 502

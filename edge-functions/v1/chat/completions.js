@@ -517,13 +517,18 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       }
       const reader = upstreamResp.body.getReader();
 
-      // Fast Race Peek Window (1500ms):
-      // If the upstream produces the first chunk or fails within 1.5s, peek detects empty stream or fast errors
+      // Fast Race Peek Window (8000ms):
+      // If the upstream produces the first chunk or fails within 8s, peek detects empty stream or fast errors
       // and triggers key failover or normal streaming.
-      // If 1.5s passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
+      // If 8s passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
       // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
       // keeping client TCP active during long prefill while allowing up to 300s upstream inference!
-      const PEEK_WINDOW_MS = 1500;
+      // 8s (was 1.5s): thinking models routinely need >1.5s for the first byte, and
+      // committing 200 that early made every later 429 / in-band error un-failover-able.
+      // 8s covers the vast majority of fast failures while staying far below the
+      // 60s idle timeout of common reverse proxies; after it we still commit 200
+      // with keep-alive so long prefill (up to 300s) keeps working.
+      const PEEK_WINDOW_MS = 8000;
       let readPromise = reader.read();
       let peekTimer = null;
       const timeoutPromise = new Promise((resolve) => {
