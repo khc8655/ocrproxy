@@ -66,8 +66,10 @@ export async function onRequestPost(context) {
     throw e;
   }
 
-  // --- Path A: Model-level parallel probe (matches VM's /api/admin/test-agent-model) ---
-  if (modelName) {
+  const isSingleKeyProbe = Boolean(providerName && keyLabel);
+
+  // --- Path A: Model-level parallel probe (when ONLY modelName is provided without specific key) ---
+  if (modelName && !isSingleKeyProbe) {
     const entry = config.agent_models?.[modelName];
     if (!entry) {
       return new Response(
@@ -75,6 +77,7 @@ export async function onRequestPost(context) {
         { status: 404, headers: { 'content-type': 'application/json' } }
       );
     }
+    const bindings = entry.keys || [];
     const MAX_PROBE_BATCH = 60; // Stay under EdgeOne 64 fetch-per-invocation hard limit
     const PROBE_CONCURRENCY = 6; // Stay under EdgeOne 8 concurrent fetch hard limit
     const bindingsToProbe = bindings.slice(0, MAX_PROBE_BATCH);
@@ -222,6 +225,38 @@ export async function onRequestPost(context) {
       JSON.stringify({ error: { type: 'config_error', message: `Provider "${providerName}" has no base_url.` } }),
       { status: 500, headers: { 'content-type': 'application/json' } }
     );
+  }
+
+  // If a target model is specified, try probing chat completions directly first for accurate model latency
+  const targetModel = String(body?.model || body?.target_model || '').trim();
+  if (targetModel) {
+    const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+    try {
+      const chatStart = Date.now();
+      const chatResp = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'authorization': `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 4,
+        }),
+        redirect: 'manual',
+        eo: { timeoutSetting: { connectTimeout: 8_000, readTimeout: 12_000, writeTimeout: 4_000 } },
+      });
+      if (chatResp && chatResp.status >= 200 && chatResp.status < 300) {
+        return new Response(JSON.stringify({
+          ok: true,
+          verdict: `model ${targetModel} verified`,
+          upstream: baseUrl,
+          status: chatResp.status,
+          latency_ms: Date.now() - chatStart,
+        }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+      }
+    } catch (_) {}
   }
 
   // Probe upstream models endpoint

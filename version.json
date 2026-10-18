@@ -1,14 +1,13 @@
 {
-  "version": "v2026.10.18-10",
+  "version": "v2026.10.18-11",
   "release_date": "2026-10-18",
   "commit": "HEAD",
-  "title": "系统配置界面紧凑化与历史代码遗毒彻底根除 (v2026.10.18-10)",
+  "title": "EdgeOne 探活彻底修复、中枢与本地归属一致性、分流策略收敛为两大模式及客户端 Key 状态统一 (v2026.10.18-11)",
   "changelog": [
-    "系统配置界面紧凑化重构：精简冗余废话说明，输入框标准化为 32px 紧凑尺寸，重构为结构协调的双列 Key-Value 紧凑栅格，大幅收敛垂直高度",
-    "根除 404 镜像死链：将 agent-edgeone/admin.js 中的预设规则源镜像由失效的 xsk/ocrprox 彻底纠正为权威仓库 khc8655/ocrproxy",
-    "彻底拔除幽灵 25 秒：移除 admin.html 中隐藏的 value='25' 幽灵字段，开放显式 request_total_budget_sec 配置，默认 300 秒",
-    "重试字段规范化：将 schedule_total_budget 全面规范化为 max_retries: 3，并安全保留别名兼容，杜绝导出时 VM 调度预算被压缩为 3 秒",
-    "Key 结构体元数据防覆盖：修复编辑普通 Key 保存时浅拷贝保留原有对象扩展属性与元数据",
-    "门禁红线强化：在 build-admin.mjs 与 test_phase3_phase4_audit.py 中增加幽灵 25s、xsk/ocrprox 与 max_retries 强断言"
+    "EdgeOne 探测功能彻底修复：修复 api/test.js 中 bindings 未定义导致的 500 崩溃，严格解耦单 Key 探针与整模型批量探测，支持上游模型直通探针",
+    "中枢 vs 本地凭据归属统一：明确 EdgeOne 供应商列表录入的 Key 属于中枢凭据，统一渲染 [中枢] 徽章且禁删；仅在模型弹窗临时新增的 Key 标记为 [本地] 并允许删除",
+    "分流调度策略两端统一：EdgeOne 路由策略下拉框彻底废除轮询、优先级、随机散列等冗余项，严格收敛为 sticky_failover (粘性故障转移) 与 manual (纯手动直通) 两大模式",
+    "客户端 Key 状态统一：移除系统设置中冗余的复制按钮，EdgeOne 输入框设为禁用灰掉并标注只读由控制台环境变量注入，消除在 Web 配置是否生效的困惑",
+    "端到端门禁加固：在 test-units.mjs 中追加 api/test.js 探测路由测试与 UI 策略限制、Key 禁用状态的强制断言"
   ]
 }

@@ -2239,6 +2239,87 @@ test('edgeone.json: complies with official EdgeOne schema and avoids regex in he
   }
 });
 
+test('api/test.js: single key probe and batch model probe routes work correctly without crash', async () => {
+  const { onRequestPost } = await import('../edge-functions/api/test.js');
+  const kv = makeMockKV();
+  const testConfig = {
+    providers: {
+      test_prov: {
+        base_url: 'https://api.example.com/v1',
+        keys: { 'k1': 'sk-test-123' },
+      },
+    },
+    agent_models: {
+      'my-agent-model': {
+        upstream_model: 'real-upstream-model',
+        keys: [{ provider: 'test_prov', key: 'k1' }],
+      },
+    },
+  };
+  await kv.put('config', JSON.stringify(testConfig));
+
+  const env = { ADMIN_PASSWORD: 'adminpass123', agent_kv: kv };
+
+  // 1. Single key probe with { provider, key, model } must not crash with bindings is not defined
+  const singleKeyReq = new Request('http://localhost/api/test', {
+    method: 'POST',
+    headers: {
+      'authorization': 'Bearer adminpass123',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      provider: 'test_prov',
+      key: 'k1',
+      model: 'real-upstream-model',
+    }),
+  });
+  const res1 = await onRequestPost({ request: singleKeyReq, env });
+  eq(res1.status, 200);
+  const data1 = await res1.json();
+  truthy('ok' in data1, 'Single key response must have ok property');
+
+  // 2. Batch model probe with { model: "my-agent-model" } must not crash with bindings is not defined
+  const batchModelReq = new Request('http://localhost/api/test', {
+    method: 'POST',
+    headers: {
+      'authorization': 'Bearer adminpass123',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'my-agent-model',
+    }),
+  });
+  const res2 = await onRequestPost({ request: batchModelReq, env });
+  eq(res2.status, 200);
+  const data2 = await res2.json();
+  truthy('results' in data2, 'Batch model probe must return results array');
+  eq(data2.total, 1);
+});
+
+test('admin UI alignment: routing strategy restricted to 2 options, proxy key disabled on EdgeOne, and copy button removed', () => {
+  const adminHtml = readFileSync(new URL('../admin.html', import.meta.url), 'utf8');
+
+  // 1. Check routing strategy has only sticky_failover and manual
+  const stratMatch = adminHtml.match(/<select id="set_routing_strategy"[\s\S]*?<\/select>/);
+  truthy(stratMatch, 'Must find set_routing_strategy select element');
+  const options = stratMatch[0].match(/<option\b[^>]*value="([^"]+)"/g) || [];
+  eq(options.length, 2, 'Routing strategy must have exactly 2 options');
+  truthy(stratMatch[0].includes('value="sticky_failover"'));
+  truthy(stratMatch[0].includes('value="manual"'));
+  truthy(!stratMatch[0].includes('value="round_robin"'), 'round_robin must be removed');
+  truthy(!stratMatch[0].includes('value="priority_fallback"'), 'priority_fallback must be removed');
+  truthy(!stratMatch[0].includes('value="random"'), 'random must be removed');
+
+  // 2. Check set_proxy_api_key is disabled on EdgeOne
+  const keyInputMatch = adminHtml.match(/<input\b[^>]*id="set_proxy_api_key"[^>]*>/);
+  truthy(keyInputMatch, 'Must find set_proxy_api_key input');
+  truthy(keyInputMatch[0].includes('disabled'), 'set_proxy_api_key must be disabled on EdgeOne');
+
+  // 3. Check redundant copy button removed in settings
+  const copyBtnInSettings = adminHtml.match(/id="set_proxy_api_key"[\s\S]*?<button\b[^>]*copyProxyKey/);
+  eq(copyBtnInSettings, null, 'No copy button next to set_proxy_api_key');
+});
+
 console.log('\n----');
 console.log(`PASS: ${passed}`);
 console.log(`FAIL: ${failed}`);

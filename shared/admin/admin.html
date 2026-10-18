@@ -198,7 +198,6 @@
               <label class="form-label" for="s_proxyApiKey">客户端调用密钥 (PROXY_API_KEY)</label>
               <div style="display:flex;gap:8px;">
                 <input type="text" id="s_proxyApiKey" class="form-control mono" placeholder="sk-..." style="flex:1;">
-                <button class="btn btn-sm" onclick="copyProxyKey()">复制 Key</button>
                 <button class="btn btn-sm" onclick="generateRandomKey()">随机生成</button>
               </div>
               <span class="hint">客户端（Cursor / Cline / Dify / OpenAI SDK 等）调用 /v1/* 接口时请求头 <code>Authorization: Bearer &lt;KEY&gt;</code> 传入的密钥。保存在加密配置中，修改立即生效。</span>
@@ -451,6 +450,8 @@
             <span>保存设置并生效</span>
           </button>
         </div>
+      </div>
+    </div>
 
     <!-- Panel: Access & Guides -->
     <div id="panel-access" class="panel">

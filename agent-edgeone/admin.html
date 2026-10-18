@@ -163,11 +163,10 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint">用于外部客户端 Bearer 鉴权；留空则使用管理员密码</span>
+                <span class="settings-row-hint">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl" style="flex:1;max-width:420px;">
-                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="sk-... (留空默认使用管理员凭证)" style="flex:1;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()" style="height:32px;white-space:nowrap;">复制</button>
+                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="flex:1;background:var(--bg-subtle, #f6f8fa);color:var(--text-secondary, #57606a);cursor:not-allowed;">
               </div>
             </div>
             <div class="settings-row">
@@ -178,9 +177,7 @@
               <div class="settings-row-ctrl">
                 <select id="set_routing_strategy" class="form-control form-control-compact" style="width:230px;">
                   <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
-                  <option value="round_robin">原子轮询 (均衡负载)</option>
-                  <option value="priority_fallback">优先级优先 (按序尝试)</option>
-                  <option value="random">随机散列 (纯随机)</option>
+                  <option value="manual">纯手动直通 (锁定当前 Key)</option>
                 </select>
               </div>
             </div>
@@ -554,6 +551,7 @@
 <!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
 
+<script>window.HOST = { isEdgeOne: true, isVm: false };</script>
 <script src="/admin.js"></script>
 </body>
 </html>

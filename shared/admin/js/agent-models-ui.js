@@ -564,8 +564,15 @@
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const isPublic = (k === 'public' || k === '__public__');
-        const isVault = !isPublic && remoteKeys.includes(k);
-        const isLocal = !isPublic && localKeys.includes(k);
+        const keyObj = localProv?.keys?.[k];
+        const isExplicitLocal = (typeof keyObj === 'object' && keyObj !== null && keyObj.is_local === true);
+        const isEdgeOne = Boolean(global.HOST ? global.HOST.isEdgeOne : (typeof state === 'undefined' || !state || !state.config));
+        const isVault = !isPublic && (
+          isEdgeOne 
+            ? !isExplicitLocal 
+            : (!isExplicitLocal && (remoteKeys.includes(k) || (localProv && localProv.origin === 'vault')))
+        );
+        const isLocal = !isPublic && !isVault;
         const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
         const tag = isPublic
           ? `<span class="badge badge-warning" style="font-size:10px;padding:0 6px;">免Key兜底</span>`
@@ -573,8 +580,7 @@
               ? `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>`
               : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>`);
 
-        const isRealLocalKey = localProv && localProv.keys && (k in localProv.keys);
-        const deleteBtn = (!isVault && (isLocal || isRealLocalKey))
+        const deleteBtn = isLocal
           ? `<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="${_esc(prov)}" data-key="${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>`
           : '';
 

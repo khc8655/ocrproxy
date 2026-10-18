@@ -1,7 +1,4 @@
-/**
- * admin.js — OCRProxy EdgeOne Admin UI Controller (VM-grade parity + Presets & Export/Import)
- */
-
+window.HOST = window.HOST || { isEdgeOne: true, isVm: false };
 let cfg = { providers: {}, agent_models: {} };
 let cfgMeta = {};
 let healthData = {};
@@ -465,7 +462,7 @@ async function saveSettings() {
     cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
   };
   const proxyKeyInput = document.getElementById('set_proxy_api_key');
-  if (proxyKeyInput) {
+  if (proxyKeyInput && !proxyKeyInput.disabled) {
     const val = proxyKeyInput.value.trim();
     if (val) {
       cfg.proxy_api_key = val;

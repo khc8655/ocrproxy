@@ -1281,7 +1281,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-10</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-11</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1321,7 +1321,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-10</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-11</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1413,11 +1413,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint">用于外部客户端 Bearer 鉴权；留空则使用管理员密码</span>
+                <span class="settings-row-hint">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl" style="flex:1;max-width:420px;">
-                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="sk-... (留空默认使用管理员凭证)" style="flex:1;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()" style="height:32px;white-space:nowrap;">复制</button>
+                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="flex:1;background:var(--bg-subtle, #f6f8fa);color:var(--text-secondary, #57606a);cursor:not-allowed;">
               </div>
             </div>
             <div class="settings-row">
@@ -1428,9 +1427,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               <div class="settings-row-ctrl">
                 <select id="set_routing_strategy" class="form-control form-control-compact" style="width:230px;">
                   <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
-                  <option value="round_robin">原子轮询 (均衡负载)</option>
-                  <option value="priority_fallback">优先级优先 (按序尝试)</option>
-                  <option value="random">随机散列 (纯随机)</option>
+                  <option value="manual">纯手动直通 (锁定当前 Key)</option>
                 </select>
               </div>
             </div>
@@ -1804,6 +1801,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 <!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
 
+<script>window.HOST = { isEdgeOne: true, isVm: false };</script>
 <script>
 /**
  * agent-models-ui.js — Unified Agent Models Management Component
@@ -2371,8 +2369,15 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const isPublic = (k === 'public' || k === '__public__');
-        const isVault = !isPublic && remoteKeys.includes(k);
-        const isLocal = !isPublic && localKeys.includes(k);
+        const keyObj = localProv?.keys?.[k];
+        const isExplicitLocal = (typeof keyObj === 'object' && keyObj !== null && keyObj.is_local === true);
+        const isEdgeOne = Boolean(global.HOST ? global.HOST.isEdgeOne : (typeof state === 'undefined' || !state || !state.config));
+        const isVault = !isPublic && (
+          isEdgeOne 
+            ? !isExplicitLocal 
+            : (!isExplicitLocal && (remoteKeys.includes(k) || (localProv && localProv.origin === 'vault')))
+        );
+        const isLocal = !isPublic && !isVault;
         const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
         const tag = isPublic
           ? \`<span class="badge badge-warning" style="font-size:10px;padding:0 6px;">免Key兜底</span>\`
@@ -2380,8 +2385,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
               ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
               : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`);
 
-        const isRealLocalKey = localProv && localProv.keys && (k in localProv.keys);
-        const deleteBtn = (!isVault && (isLocal || isRealLocalKey))
+        const deleteBtn = isLocal
           ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
           : '';
 
@@ -3085,10 +3089,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 })(typeof window !== 'undefined' ? window : globalThis);
 
 
-/**
- * admin.js — OCRProxy EdgeOne Admin UI Controller (VM-grade parity + Presets & Export/Import)
- */
-
+window.HOST = window.HOST || { isEdgeOne: true, isVm: false };
 let cfg = { providers: {}, agent_models: {} };
 let cfgMeta = {};
 let healthData = {};
@@ -3098,7 +3099,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.18-10';
+const BUILD_VERSION = 'v2026.10.18-11';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3552,7 +3553,7 @@ async function saveSettings() {
     cooldown_403_sec: Number(document.getElementById('set_cooldown_403_sec').value) || 600,
   };
   const proxyKeyInput = document.getElementById('set_proxy_api_key');
-  if (proxyKeyInput) {
+  if (proxyKeyInput && !proxyKeyInput.disabled) {
     const val = proxyKeyInput.value.trim();
     if (val) {
       cfg.proxy_api_key = val;

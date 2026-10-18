@@ -27,8 +27,7 @@ FEASIBILITY-REPORT.md
 # Local personal site & workspace assets (STRICTLY LOCAL)
 index.html
 
-# Local test suites & scratch tools (STRICTLY LOCAL, NEVER PUSH TO GITHUB)
-tests/
+# Scratch directory for transient debug tools & config dumps (NEVER PUSH)
 scratch/
 
 # OS
