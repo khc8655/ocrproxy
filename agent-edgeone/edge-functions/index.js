@@ -732,8 +732,11 @@ tr:hover td, .tbl tbody tr:hover td {
   justify-content: center;
   background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(4px);
-  z-index: 1000;
   padding: 16px;
+}
+
+#keyModal, #probedListModal, #deleteConfirmModal {
+  z-index: 1200;
 }
 
 .modal.show, .login-overlay.show {
@@ -1821,23 +1824,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         }
       });
     }
-
-    const protoInfo = document.getElementById('a_model_proto_info');
-    if (protoInfo && !protoInfo._hasDelegated) {
-      protoInfo._hasDelegated = true;
-      protoInfo.addEventListener('click', (e) => {
-        const switchBtn = e.target.closest('[data-action="switch-provider-vault"]');
-        if (switchBtn) {
-          switchLocalProviderToVault(switchBtn.dataset.prov);
-          return;
-        }
-        const delProvBtn = e.target.closest('[data-action="delete-local-provider"]');
-        if (delProvBtn) {
-          deleteLocalProviderFromModal(delProvBtn.dataset.prov);
-          return;
-        }
-      });
-    }
   }
 
   // 1. Internal Context Resolution & Fallbacks
@@ -2159,10 +2145,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (!sel) return;
 
     const { cfg } = getCtx();
-    const hasVault = !!(cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url));
-    const syncBtn = document.getElementById('btnSyncVaultInAgentModal');
-    if (syncBtn) syncBtn.style.display = hasVault ? 'inline-flex' : 'none';
-    if (optVault) optVault.style.display = hasVault ? '' : 'none';
+    if (optVault) optVault.style.display = (cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url)) ? '' : 'none';
 
     const providers = _getAllProvidersList();
     const localList = providers.filter(p => !p.isVault);
@@ -2266,11 +2249,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     if (protoInfoEl) {
       const badgeHtml = _renderProtocolBadges(provProtos);
-      let actionBtnHtml = '';
-      if (localProv && remoteProv) {
-        actionBtnHtml = \`<button type="button" class="btn btn-sm btn-secondary" data-action="switch-provider-vault" data-prov="\${_esc(prov)}" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>\`;
-      }
-      protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}\${actionBtnHtml}</div>\`;
+      protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}</div>\`;
     }
 
     let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];
@@ -2926,47 +2905,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     initAgentModelsDelegation();
   }
 
-  async function switchLocalProviderToVault(provId) {
-    if (!provId) return;
-    if (!confirm(\`确定要清理本地自建的供应商 [\${provId}] 并切换为使用 EdgeOne 中枢托管吗？\\n\\n清理后将自动切换为中枢统一分发的密钥与规则。\`)) {
-      return;
-    }
-    const { cfg } = getCtx();
-    if (cfg && cfg.providers && cfg.providers[provId]) {
-      delete cfg.providers[provId];
-      await _persist(\`已清理本地自建供应商 [\${provId}]，现已切换为中枢托管\`);
-      _toast(\`已成功切换为 EdgeOne 中枢托管 [\${provId}]\`, 'ok');
-      populateAgentProviderSelect(provId);
-      if (typeof renderProviders === 'function') renderProviders();
-    }
-  }
-
-  async function deleteLocalProviderFromModal(provId) {
-    if (!provId) return;
-    if (!confirm(\`确定要彻底删除本地自建供应商 [\${provId}] 吗？\`)) {
-      return;
-    }
-    const { cfg } = getCtx();
-    if (cfg && cfg.providers) {
-      const targetKey = Object.keys(cfg.providers).find(k => k.toLowerCase() === provId.toLowerCase()) || provId;
-      if (cfg.providers[targetKey]) {
-        delete cfg.providers[targetKey];
-      }
-      if (cfg.providers[provId]) {
-        delete cfg.providers[provId];
-      }
-      if (cfg.agent_models) {
-        Object.values(cfg.agent_models).forEach(m => {
-          m.keys = (m.keys || []).filter(x => x.provider.toLowerCase() !== provId.toLowerCase());
-        });
-      }
-      await _persist(\`本地供应商 [\${provId}] 已删除并立即生效\`);
-      _toast(\`供应商 [\${provId}] 已删除\`, 'ok');
-      populateAgentProviderSelect('');
-      if (typeof renderProviders === 'function') renderProviders();
-    }
-  }
-
   async function removeLocalKeyFromModal(prov, label, event) {
     if (event) event.stopPropagation();
     if (!confirm(\`确定要从本地存储中彻底删除 Key「\${label}」吗？\`)) return;
@@ -3000,8 +2938,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   // 10. Exports to Window Scope
-  global.switchLocalProviderToVault = switchLocalProviderToVault;
-  global.deleteLocalProviderFromModal = deleteLocalProviderFromModal;
   global.removeLocalKeyFromModal = removeLocalKeyFromModal;
   global.renderAgentModels = renderAgentModels;
   global.renderAgentBindingRow = renderAgentBindingRow;
@@ -3831,7 +3767,6 @@ function renderProviders() {
             <div class="meta mono mt-2">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button class="btn btn-secondary btn-sm" onclick="updateEdgeOneSingleProviderRule('\${esc(p)}')">\${icon('refresh', 12)} 更新规则</button>
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${esc(p)}')">\${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${esc(p)}')">\${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('\${esc(p)}')">\${icon('trash')} 删除供应商</button>
@@ -3969,11 +3904,25 @@ async function testSingleKey(provider, key) {
 }
 
 // ---- Modals & Actions ----------------------------------------------------
+let _edgeoneModalZIndex = 1000;
 function openModal(id) {
-  document.getElementById(id).classList.add('show');
+  const el = document.getElementById(id);
+  if (!el) return;
+  _edgeoneModalZIndex += 10;
+  el.style.zIndex = _edgeoneModalZIndex;
+  el.classList.add('show');
+  document.body.classList.add('modal-open');
 }
 function closeModal(id) {
-  document.getElementById(id).classList.remove('show');
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.remove('show');
+    el.style.zIndex = '';
+  }
+  if (!document.querySelector('.modal.show')) {
+    document.body.classList.remove('modal-open');
+    _edgeoneModalZIndex = 1000;
+  }
 }
 
 // ---- Custom Provider & Preset Management ---------------------------------

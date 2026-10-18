@@ -1,7 +1,7 @@
 {
   "id": "deepseek",
   "name": "DeepSeek 官方开放平台",
-  "version": "2026.10.18",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.deepseek.com/v1",
   "doc_url": "https://api-docs.deepseek.com",

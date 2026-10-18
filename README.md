@@ -69,9 +69,9 @@ ocrprox (Monorepo)
 - **按需无感拉取与云端绝对权威覆盖 (Cloud Authority & Local Key Sovereignty)**：
   - **云端作为绝对真理源**：当从 EdgeOne Vault Hub 拉取凭据或执行同步时，云端配置无条件覆盖本地同名供应商的协议 (`protocol`/`protocols`)、思考开关 (`anthropic_messages`)、端点 (`base_url`/`anthropic_base_url`) 及适配规则 (`adapter_rules`)，彻底根治协议识别冲突；
   - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁；
-- **免代码发版·中枢全量穿透写入与运行时自愈机制 (Data-Driven Zero-Release Sync)**：
-  - **全量免发版穿透写入 (`POST /api/admin/vault/sync`)**：无论是标准 OpenAI 还是自定义提供商，无需编写任何适配预设文件（`presets/*.json`）或提交 GitHub 发版，一键将中枢上所有新增提供商、端点与 Key 字典全量落库写入 VM 本地加密存储 (`proxy_config.enc`)；
-  - **运行时动态自愈 (Lazy Vault Fallback)**：在调度候选节点执行上游请求时，若本地尚未配置该厂商或缺少对应 Key，调度器自动向 EdgeOne 中枢热拉取补全，并在后台异步加密持久化，确保请求零感知平滑通过。
+- **精准增量同步与本地凭据最高优先级保护 (Incremental Vault Sync & Local Key Sandboxing)**：
+  - **精准增量落库 (`POST /api/admin/vault/sync`)**：杜绝全量强塞污染本地数据库。同步时严格仅增量同步当前本地已添加或已绑定模型/KB 的供应商，未配置的远端提供商绝不落库；
+  - **本地自建 Key 绝对隔离与保护**：无论在 EdgeOne 还是 VM 端，在模型弹窗中点击「+ 添加本地 Key」录入的密钥均显式打上 `is_local: true` 标记。EdgeOne 中枢对外接口严格过滤防泄露；VM 执行中枢同步时，本地带有 `is_local: true` 的凭据享有最高保护，绝对不被中枢覆盖或清空。
 
 ### 2. 精准每 Key 速率限制与零开销保障 (Per-Key RPM Rate Limiter)
 - **多 Key 免费额度精准压榨**：针对 AMD、InternLM（书生·浦语）等提供商的严苛 RPM 限制（如免费 Key 仅 2 次/分），在供应商及具体 Key 级别支持配置每分钟请求上限 (`rpm_per_key` / `rpm`)。

@@ -1,7 +1,7 @@
 {
   "id": "minimax",
   "name": "MiniMax",
-  "version": "2026.10.18",
+  "version": "1.4.0",
   "protocol": "openai",
   "base_url": "https://api.minimaxi.com/v1",
   "anthropic_base_url": "https://api.minimaxi.com/anthropic",

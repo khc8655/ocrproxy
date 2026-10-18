@@ -1,7 +1,7 @@
 {
   "id": "bai",
   "name": "B.AI",
-  "version": "2026.10.18",
+  "version": "1.4.0",
   "protocol": "openai",
   "base_url": "https://api.b.ai/v1",
   "anthropic_base_url": "https://api.b.ai/v1",

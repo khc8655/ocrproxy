@@ -111,8 +111,6 @@ function populateCandidateProviderSelect(selectedId){
   if(!sel) return;
 
   const hasVault = !!(state.config?.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url));
-  const syncCandidateBtn = document.getElementById('btnSyncVaultInCandidateModal');
-  if (syncCandidateBtn) syncCandidateBtn.style.display = hasVault ? 'inline-flex' : 'none';
   if (optVault) optVault.style.display = hasVault ? '' : 'none';
 
   const providers = getAllAvailableProviders();
@@ -181,11 +179,7 @@ function onCandidateProviderSelectChange(val){
     const provProtos = localProv ? getProviderProtocols(val) : (remoteProv?.protocols || ['chat']);
     if(protoInfoEl) {
       const badgeHtml = renderProtocolBadges(provProtos);
-      let actionBtnHtml = '';
-      if (localProv && remoteProv) {
-        actionBtnHtml = `<button type="button" class="btn btn-sm btn-secondary" onclick="switchLocalProviderToVault('${esc(val)}')" style="font-size:11px;padding:2px 8px;margin-left:auto;display:inline-flex;align-items:center;gap:4px;" title="清理本地自建配置，切换使用 EdgeOne 中枢统一托管"><svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span>切换为中枢托管 (清理本地自建)</span></button>`;
-      }
-      protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}${actionBtnHtml}</div>`;
+      protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}</div>`;
     }
     renderCandidateKeyChecks();
     renderCandidateQuickModels();
@@ -565,47 +559,4 @@ async function runLiveTest(modelName){
 
 // Access Guide -> Handled by renderDashboardGateway directly in dashboard
 
-if (typeof window.switchLocalProviderToVault !== 'function') {
-  window.switchLocalProviderToVault = async function(provId) {
-    if (!provId) return;
-    if (!confirm(`确定要清理本地自建的供应商 [${provId}] 并切换为使用 EdgeOne 中枢托管吗？\n\n清理后将自动切换为中枢统一分发的密钥与规则。`)) {
-      return;
-    }
-    if (state.config && state.config.providers && state.config.providers[provId]) {
-      delete state.config.providers[provId];
-      await persistConfig(`已清理本地自建供应商 [${provId}]，现已切换为中枢托管`);
-      toast(`已成功切换为 EdgeOne 中枢托管 [${provId}]`, 'ok');
-      if (typeof populateAgentProviderSelect === 'function') populateAgentProviderSelect(provId);
-      if (typeof populateCandidateProviderSelect === 'function') populateCandidateProviderSelect(provId);
-      if (typeof renderProviders === 'function') renderProviders();
-    }
-  };
-}
 
-if (typeof window.deleteLocalProviderFromModal !== 'function') {
-  window.deleteLocalProviderFromModal = async function(provId) {
-    if (!provId) return;
-    if (!confirm(`确定要彻底删除本地自建供应商 [${provId}] 吗？`)) {
-      return;
-    }
-    if (state.config && state.config.providers) {
-      const targetKey = Object.keys(state.config.providers).find(k => k.toLowerCase() === provId.toLowerCase()) || provId;
-      if (state.config.providers[targetKey]) {
-        delete state.config.providers[targetKey];
-      }
-      if (state.config.providers[provId]) {
-        delete state.config.providers[provId];
-      }
-      if (state.config.agent_models) {
-        Object.values(state.config.agent_models).forEach(m => {
-          m.keys = (m.keys || []).filter(x => x.provider.toLowerCase() !== provId.toLowerCase());
-        });
-      }
-      await persistConfig(`本地供应商 [${provId}] 已删除并立即生效`);
-      toast(`供应商 [${provId}] 已删除`, 'ok');
-      if (typeof populateAgentProviderSelect === 'function') populateAgentProviderSelect('');
-      if (typeof populateCandidateProviderSelect === 'function') populateCandidateProviderSelect('');
-      if (typeof renderProviders === 'function') renderProviders();
-    }
-  };
-}

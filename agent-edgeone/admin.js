@@ -784,7 +784,6 @@ function renderProviders() {
             <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button class="btn btn-secondary btn-sm" onclick="updateEdgeOneSingleProviderRule('${esc(p)}')">${icon('refresh', 12)} 更新规则</button>
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
@@ -922,11 +921,25 @@ async function testSingleKey(provider, key) {
 }
 
 // ---- Modals & Actions ----------------------------------------------------
+let _edgeoneModalZIndex = 1000;
 function openModal(id) {
-  document.getElementById(id).classList.add('show');
+  const el = document.getElementById(id);
+  if (!el) return;
+  _edgeoneModalZIndex += 10;
+  el.style.zIndex = _edgeoneModalZIndex;
+  el.classList.add('show');
+  document.body.classList.add('modal-open');
 }
 function closeModal(id) {
-  document.getElementById(id).classList.remove('show');
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.remove('show');
+    el.style.zIndex = '';
+  }
+  if (!document.querySelector('.modal.show')) {
+    document.body.classList.remove('modal-open');
+    _edgeoneModalZIndex = 1000;
+  }
 }
 
 // ---- Custom Provider & Preset Management ---------------------------------

@@ -141,6 +141,7 @@ if (/Math\.min\(\s*30\s*,\s*upTimeout\s*\)/.test(bundledJs)) {
 }
 
 // 5. Emit edge functions
+writeFileSync(join(root, 'admin.bundled.html'), htmlBundled, 'utf8');
 const safe = htmlBundled.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
 const banner =

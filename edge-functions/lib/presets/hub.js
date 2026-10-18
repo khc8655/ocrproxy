@@ -186,10 +186,15 @@ export async function checkConfiguredUpdates(context, providersToCheck = null) {
     if (!remotePreset) continue;
 
     const latestVer = remotePreset.version || '1.0.0';
-    const latestHash = remotePreset.rule_hash;
-    const currHash = item.rule_hash;
+    const latestHash = remotePreset.rule_hash || '';
+    const currHash = item.rule_hash || '';
 
-    const hasUpdate = (latestVer !== currVer) || (Boolean(latestHash && currHash && latestHash !== currHash));
+    let hasUpdate = false;
+    if (latestHash && currHash && latestHash === currHash) {
+      hasUpdate = false;
+    } else {
+      hasUpdate = (latestVer !== currVer) || Boolean(latestHash && currHash && latestHash !== currHash);
+    }
 
     const resItem = {
       provider_id: provId,
@@ -224,6 +229,10 @@ export async function updateConfiguredRules(context, targetIds, kv) {
     return { ok: false, error: 'No provider_ids specified', updated: [], failed: [] };
   }
 
+  const catalogRes = await getCatalog(context, false);
+  const catalogList = catalogRes?.providers || [];
+  const catalogMap = Object.fromEntries(catalogList.map((p) => [p.id, p]));
+
   const config = await loadConfig(context?.env, kv);
   const providers = config.providers || {};
   const updated = [];
@@ -249,9 +258,7 @@ export async function updateConfiguredRules(context, targetIds, kv) {
 
     pdata.adapter_rules = presetData.adapter_rules || {};
     pdata.preset_version = presetData.version || '1.1.0';
-    if (presetData.rule_hash) {
-      pdata.rule_hash = presetData.rule_hash;
-    }
+    pdata.rule_hash = catalogMap[presId]?.rule_hash || presetData.rule_hash || '';
     if (presetData.recommended_models) {
       pdata.recommended_models = presetData.recommended_models;
     }

@@ -137,10 +137,22 @@ function renderProviders(){
       const keys = Object.keys(prov.keys || {});
       const keyChips = keys.map(k => {
         const val = prov.keys[k];
+        const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
         const gcpBadge = (typeof val === 'object' && val !== null && (val.project_id || val.location))
           ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
           : '';
-        const actions = isVaultManaged
+        let keyRpmBadge = '';
+        const keyRpm = (typeof val === 'object' && val !== null) ? val.rpm : null;
+        if (keyRpm) {
+          keyRpmBadge = `<span class="badge" style="font-size:10px;padding:1px 5px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="独立限流: ${keyRpm} 次/分钟">${keyRpm} RPM</span>`;
+        } else if (prov.rpm || prov.rpm_per_key) {
+          const provRpmVal = prov.rpm || prov.rpm_per_key;
+          keyRpmBadge = `<span class="badge" style="font-size:10px;padding:1px 5px;background:rgba(107,114,128,0.12);color:var(--text-secondary);" title="继承供应商限流: ${provRpmVal} 次/分钟">${provRpmVal} RPM</span>`;
+        }
+        const sourceBadge = isLocalKey
+          ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
+          : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
+        const actions = (isVaultManaged && !isLocalKey)
           ? `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;">中枢只读</span>`
           : `
             <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
@@ -149,7 +161,9 @@ function renderProviders(){
         return `
           <span class="key-chip">
             <b>${esc(k)}</b>
+            ${sourceBadge}
             ${gcpBadge}
+            ${keyRpmBadge}
             ${actions}
           </span>
         `;
@@ -832,22 +846,48 @@ async function applyRuleUpdates(providerIds){
   }
 }
 
+let _onKeySavedCallback = null;
+let _isLocalKeyMode = false;
+
 function isVertexProvider(prov){
   const p = state.config?.providers?.[prov];
   return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
 }
 
-function openKeyModal(prov, onSavedCallback){ 
+function openKeyModal(prov, onSavedCallback = null, isLocal = false){ 
   _onKeySavedCallback = onSavedCallback || null;
-  document.getElementById('keyModalTitle').textContent='新增 Key 凭证 - '+prov; 
-  document.getElementById('k_provider').value=prov; 
-  document.getElementById('k_oldLabel').value=''; 
-  document.getElementById('k_label').value=''; 
-  document.getElementById('k_label').disabled=false; 
-  document.getElementById('k_value').value=''; 
-  document.getElementById('k_skip').checked=false; 
+  _isLocalKeyMode = Boolean(isLocal);
+  document.getElementById('keyModalTitle').textContent = isLocal
+    ? `为 ${prov} 录入本地 Key (仅保存在本地)`
+    : `为 ${prov} 新增 Key 凭证`; 
+  document.getElementById('k_provider').value = prov; 
+  document.getElementById('k_oldLabel').value = ''; 
+  document.getElementById('k_label').value = ''; 
+  document.getElementById('k_label').disabled = false; 
+  document.getElementById('k_value').value = ''; 
+  document.getElementById('k_skip').checked = false; 
   const diagBox = document.getElementById('k_diag_box');
-  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+  if(diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
+
+  const rpmInput = document.getElementById('k_rpm');
+  const inheritBadge = document.getElementById('k_rpm_inherit_badge');
+  const rpmHint = document.getElementById('k_rpm_hint');
+  const p = (state.config && state.config.providers && state.config.providers[prov]) || (typeof findVaultProvider === 'function' ? findVaultProvider(prov) : null);
+  const provRpm = p?.rpm || p?.rpm_per_key;
+  if (rpmInput) {
+    rpmInput.value = '';
+    if (provRpm && Number(provRpm) > 0) {
+      if (inheritBadge) {
+        inheritBadge.textContent = `供应商默认: ${provRpm} RPM`;
+        inheritBadge.style.display = 'inline-block';
+      }
+      if (rpmHint) rpmHint.textContent = `若留空，将自动继承供应商级限流 (${provRpm} RPM)；填写具体数字可单独覆盖此 Key。`;
+    } else {
+      if (inheritBadge) inheritBadge.style.display = 'none';
+      if (rpmHint) rpmHint.textContent = `支持为该 Key 单独指定限流阈值；若留空则自动继承所属供应商的 RPM 设置 (当前供应商未限制)。`;
+    }
+  }
+
   const hintEl = document.getElementById('k_proto_hint');
   if(hintEl) {
     const protos = getProviderProtocols(prov);
@@ -866,30 +906,57 @@ function openKeyModal(prov, onSavedCallback){
 
   openModal('keyModal'); 
 }
-function editKey(prov,label){ 
-  const p=state.config.providers[prov]||{}; 
+
+function editKey(prov, label){ 
+  const p = (state.config && state.config.providers && state.config.providers[prov]) || {}; 
   const currentKeyObj = p.keys && p.keys[label];
   let keyVal = '';
   let projVal = '';
   let locVal = 'global';
+  let rpmVal = '';
+  let isLocal = false;
 
   if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
     keyVal = currentKeyObj.key || '';
     projVal = currentKeyObj.project_id || '';
     locVal = currentKeyObj.location || 'global';
+    rpmVal = (currentKeyObj.rpm !== undefined && currentKeyObj.rpm !== null) ? currentKeyObj.rpm : '';
+    isLocal = Boolean(currentKeyObj.is_local);
   } else {
     keyVal = String(currentKeyObj || '');
   }
 
-  document.getElementById('keyModalTitle').textContent='编辑 Key 凭证 - '+prov; 
-  document.getElementById('k_provider').value=prov; 
-  document.getElementById('k_oldLabel').value=label; 
-  document.getElementById('k_label').value=label; 
-  document.getElementById('k_label').disabled=false; 
-  document.getElementById('k_value').value=keyVal; 
-  document.getElementById('k_skip').checked=true; 
+  _isLocalKeyMode = isLocal;
+  document.getElementById('keyModalTitle').textContent = isLocal
+    ? `编辑本地 Key 凭证 - ${prov} (${label})`
+    : `编辑 Key 凭证 - ${prov} (${label})`; 
+  document.getElementById('k_provider').value = prov; 
+  document.getElementById('k_oldLabel').value = label; 
+  document.getElementById('k_label').value = label; 
+  document.getElementById('k_label').disabled = false; 
+  document.getElementById('k_value').value = keyVal; 
+  document.getElementById('k_skip').checked = true; 
+
+  const rpmInput = document.getElementById('k_rpm');
+  const inheritBadge = document.getElementById('k_rpm_inherit_badge');
+  const rpmHint = document.getElementById('k_rpm_hint');
+  const provRpm = p?.rpm || p?.rpm_per_key;
+  if (rpmInput) {
+    rpmInput.value = rpmVal !== '' ? rpmVal : '';
+    if (provRpm && Number(provRpm) > 0) {
+      if (inheritBadge) {
+        inheritBadge.textContent = `供应商默认: ${provRpm} RPM`;
+        inheritBadge.style.display = 'inline-block';
+      }
+      if (rpmHint) rpmHint.textContent = `若留空，将自动继承供应商级限流 (${provRpm} RPM)；填写具体数字可单独覆盖此 Key。`;
+    } else {
+      if (inheritBadge) inheritBadge.style.display = 'none';
+      if (rpmHint) rpmHint.textContent = `支持为该 Key 单独指定限流阈值；若留空则自动继承所属供应商的 RPM 设置 (当前供应商未限制)。`;
+    }
+  }
+
   const diagBox = document.getElementById('k_diag_box');
-  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+  if(diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
   const hintEl = document.getElementById('k_proto_hint');
   if(hintEl) {
     const protos = getProviderProtocols(prov);
@@ -908,6 +975,7 @@ function editKey(prov,label){
 
   openModal('keyModal'); 
 }
+
 async function deleteKey(prov,label){ 
   if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
@@ -919,14 +987,15 @@ async function deleteKey(prov,label){
   renderProviders();
   renderModels();
 }
+
 async function saveKey(){
-  const prov=document.getElementById('k_provider').value;
-  const oldLabel=(document.getElementById('k_oldLabel').value||'').trim();
-  const label=document.getElementById('k_label').value.trim();
-  const val=document.getElementById('k_value').value.trim();
-  const skip=document.getElementById('k_skip').checked;
-  const diagBox=document.getElementById('k_diag_box');
-  if(diagBox) { diagBox.style.display='none'; diagBox.innerHTML=''; }
+  const prov = document.getElementById('k_provider').value;
+  const oldLabel = (document.getElementById('k_oldLabel').value||'').trim();
+  const label = document.getElementById('k_label').value.trim();
+  const val = document.getElementById('k_value').value.trim();
+  const skip = document.getElementById('k_skip').checked;
+  const diagBox = document.getElementById('k_diag_box');
+  if(diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
 
   if(!label||!val){ toast('Key 别名和密钥值不能为空','err'); return; }
 
@@ -956,8 +1025,37 @@ async function saveKey(){
     };
   }
 
-  const finalKeyVal = vertexKeyMeta || val;
-  if(skip){ commitKey(prov,label,finalKeyVal); return; }
+  const keyRpmInput = document.getElementById('k_rpm');
+  let keyRpm = null;
+  if (keyRpmInput && keyRpmInput.value.trim() !== '') {
+    const parsed = parseInt(keyRpmInput.value.trim(), 10);
+    if (!isNaN(parsed) && parsed >= 0) {
+      keyRpm = parsed;
+    }
+  }
+
+  let finalKeyVal;
+  if (vertexKeyMeta) {
+    finalKeyVal = { ...vertexKeyMeta };
+    if (keyRpm !== null && keyRpm > 0) {
+      finalKeyVal.rpm = keyRpm;
+    }
+  } else if (keyRpm !== null && keyRpm > 0) {
+    finalKeyVal = { key: val, rpm: keyRpm };
+  } else {
+    finalKeyVal = val;
+  }
+
+  if (_isLocalKeyMode) {
+    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
+      finalKeyVal.is_local = true;
+    } else {
+      finalKeyVal = { key: finalKeyVal, is_local: true };
+    }
+    _isLocalKeyMode = false;
+  }
+
+  if(skip){ commitKey(prov, label, finalKeyVal); return; }
 
   const pObj = (state.config.providers && state.config.providers[prov]) || {};
   const protos = getProviderProtocols(prov, pObj);
@@ -995,7 +1093,7 @@ async function saveKey(){
         if(res && res.latency_ms) latList.push(`${PROTOCOLS[pr]?.short || pr} ${res.latency_ms}ms`);
       }
       toast(`Key 校验全部通过 (${latList.join(' / ') || '成功'})`, 'ok');
-      commitKey(prov,label,finalKeyVal);
+      commitKey(prov, label, finalKeyVal);
     } else {
       // Scheme A: strict block with detailed per-protocol diagnostics
       if(diagBox){
@@ -1027,8 +1125,9 @@ async function saveKey(){
     document.getElementById('k_spinner').style.display='none';
   }
 }
-function commitKey(prov,label,val){ 
-  const oldLabel=(document.getElementById('k_oldLabel').value||'').trim();
+
+function commitKey(prov, label, val){ 
+  const oldLabel = (document.getElementById('k_oldLabel').value||'').trim();
   if(!state.config.providers) state.config.providers={};
   if(!state.config.providers[prov]) {
     const vaultProv = findVaultProvider(prov);
@@ -1086,7 +1185,7 @@ function openKeyModalFromAgentModal(){
   }
   openKeyModal(prov, () => {
     renderAgentKeyChecks();
-  });
+  }, true);
 }
 
 function openKeyModalFromCandidateModal(){
@@ -1097,6 +1196,6 @@ function openKeyModalFromCandidateModal(){
   }
   openKeyModal(prov, () => {
     renderCandidateKeyChecks();
-  });
+  }, true);
 }
 

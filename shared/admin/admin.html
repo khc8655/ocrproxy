@@ -429,11 +429,17 @@
             </div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()" style="display:flex;align-items:center;gap:6px;">
-              <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <span>测试中枢连通性</span>
-            </button>
-            <span class="text-secondary" style="font-size:11px;">提示：连通测试成功后将自动保存；亦可直接点击顶部「保存设置」统一持久化。</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()" style="display:flex;align-items:center;gap:6px;">
+                <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>测试中枢连通性</span>
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()" style="display:flex;align-items:center;gap:6px;">
+                <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                <span>增量同步中枢凭据与规则 (已添加项)</span>
+              </button>
+            </div>
+            <span class="text-secondary" style="font-size:11px;">提示：增量同步仅更新当前本地已添加的模型与提供商，不会拉取未配置项，不会覆盖本地临时凭据。</span>
           </div>
           <div id="vault_diag_box" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
         </div>
@@ -552,6 +558,14 @@
         </div>
       </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
+      <div class="form-group" style="margin-top:12px;">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>每分钟请求上限 (RPM，可选)</span>
+          <span id="k_rpm_inherit_badge" class="badge badge-info" style="display:none;font-size:11px;font-weight:normal;"></span>
+        </label>
+        <input type="number" id="k_rpm" class="form-control" min="0" step="1" placeholder="留空 = 继承供应商设置 (0 为不限制)" onwheel="this.blur()">
+        <div id="k_rpm_hint" class="text-secondary text-sm mt-1" style="font-size:11px;">支持为该 Key 单独指定限流阈值；若留空则自动继承所属供应商的 RPM 设置。</div>
+      </div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
       <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
       <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
@@ -577,12 +591,6 @@
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
-          <div style="display:flex;gap:6px;">
-            <button type="button" id="btnSyncVaultInAgentModal" class="btn btn-sm btn-secondary" onclick="refreshVaultManifestInModal()" style="display:none;align-items:center;gap:4px;" title="从 EdgeOne 中枢拉取最新供应商与凭据">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-              <span>同步中枢</span>
-            </button>
-          </div>
         </div>
         <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
           <optgroup label="本地已配置供应商" id="a_optgroup_local"></optgroup>
@@ -650,12 +658,6 @@
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
-          <div style="display:flex;gap:6px;">
-            <button type="button" id="btnSyncVaultInCandidateModal" class="btn btn-sm btn-secondary" onclick="refreshVaultManifestInModal()" style="display:none;align-items:center;gap:4px;" title="从 EdgeOne 中枢拉取最新供应商与凭据">
-              <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-              <span>同步中枢</span>
-            </button>
-          </div>
         </div>
         <select id="c_providerSelect" class="form-control" onchange="onCandidateProviderSelectChange(this.value)">
           <optgroup label="本地已配置供应商" id="c_optgroup_local"></optgroup>

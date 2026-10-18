@@ -88,7 +88,12 @@ export async function handleVaultFetch(context, options = {}) {
 
   for (const label of requestedLabels) {
     if (pCfg.keys && pCfg.keys[label]) {
-      targetKeys[label] = pCfg.keys[label];
+      const keyObj = pCfg.keys[label];
+      // 严格安全隔离：绝不对外分发或泄露标记为本地临时凭据 (is_local: true) 的 Key
+      if (typeof keyObj === 'object' && keyObj !== null && keyObj.is_local === true) {
+        continue;
+      }
+      targetKeys[label] = keyObj;
     }
   }
 

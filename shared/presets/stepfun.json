@@ -1,7 +1,7 @@
 {
   "id": "stepfun",
   "name": "阶跃星辰",
-  "version": "2026.10.18",
+  "version": "1.2.0",
   "protocol": "openai",
   "base_url": "https://api.stepfun.com/step_plan",
   "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",

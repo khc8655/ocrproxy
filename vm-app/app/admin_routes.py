@@ -434,10 +434,23 @@ async def check_preset_updates_endpoint(request: Request):
             continue
 
         latest_ver = remote_preset.get("version", "1.0.0")
-        latest_hash = remote_preset.get("rule_hash")
-        curr_hash = item.get("rule_hash")
+        latest_hash = remote_preset.get("rule_hash") or ""
+        curr_rules = item.get("adapter_rules")
+        if curr_rules is None:
+            curr_rules = (curr_cfg.get("providers") or {}).get(prov_id, {}).get("adapter_rules")
 
-        has_update = (latest_ver != curr_ver) or (bool(latest_hash and curr_hash and latest_hash != curr_hash))
+        curr_hash = item.get("rule_hash") or ""
+        if not curr_hash and curr_rules is not None:
+            try:
+                curr_hash = hashlib.sha256(json.dumps(curr_rules or {}, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+            except Exception:
+                curr_hash = ""
+
+        # 核心判据：只要内容 Hash 完全一致，数学证明规则无任何变动，绝对判定无更新！
+        if latest_hash and curr_hash and latest_hash == curr_hash:
+            has_update = False
+        else:
+            has_update = (latest_ver != curr_ver) or bool(latest_hash and curr_hash and latest_hash != curr_hash)
 
         res_item = {
             "provider_id": prov_id,
@@ -502,6 +515,12 @@ async def update_preset_rules_endpoint(request: Request):
 
         pdata["adapter_rules"] = preset_data.get("adapter_rules", {})
         pdata["preset_version"] = preset_data.get("version", "1.1.0")
+        try:
+            r_str = json.dumps(pdata["adapter_rules"], sort_keys=True)
+            pdata["rule_hash"] = hashlib.sha256(r_str.encode("utf-8")).hexdigest()[:12]
+        except Exception:
+            pdata["rule_hash"] = ""
+
         if "recommended_models" in preset_data:
             pdata["recommended_models"] = preset_data["recommended_models"]
         if "features" in preset_data:
@@ -1942,13 +1961,35 @@ async def vault_sync_endpoint(request: Request):
             cfg = await get_config()
             local_providers = cfg.setdefault("providers", {})
             updated = 0
-            created = 0
 
-            # 全量遍历中枢所有提供商，无论本地是否存在、无论是否有预设文件，均直接落库
-            for p_id, r_p in remote_providers.items():
+            # 严格精准增量同步：仅同步当前本地已添加/使用的提供商配置，绝不强塞未配置的中枢提供商
+            active_pids = set(local_providers.keys())
+            for m in (cfg.get("agent_models") or {}).values():
+                for b in (m.get("keys") or []):
+                    if isinstance(b, dict) and b.get("provider"):
+                        active_pids.add(b["provider"])
+            for c_list in (cfg.get("candidates") or {}).values():
+                for c in (c_list or []):
+                    if isinstance(c, dict) and c.get("provider"):
+                        active_pids.add(c["provider"])
+
+            target_pids = [
+                p_id for p_id in remote_providers.keys()
+                if p_id in active_pids or p_id.lower() in [x.lower() for x in active_pids]
+            ]
+
+            if not target_pids:
+                return JSONResponse(content={
+                    "ok": True,
+                    "updated": 0,
+                    "created": 0,
+                    "message": "当前本地尚未添加任何对应中枢提供商，无需同步。如需使用中枢供应商，请在模型路由中添加。"
+                })
+
+            for p_id in target_pids:
+                r_p = remote_providers[p_id]
                 if not isinstance(r_p, dict):
                     continue
-                is_new = p_id not in local_providers
                 p_cfg = local_providers.setdefault(p_id, {})
                 p_cfg["origin"] = "vault"
 
@@ -1976,12 +2017,24 @@ async def vault_sync_endpoint(request: Request):
                 if r_p.get("models"):
                     p_cfg["cached_models"] = r_p["models"]
 
-                # 2. 自动拉取并合并中枢该提供商的所有密钥字典
+                # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key）
                 remote_key_labels = r_p.get("keys") or []
                 local_keys = p_cfg.setdefault("keys", {})
-                missing_labels = [kl for kl in remote_key_labels if isinstance(kl, str) and (kl not in local_keys or not local_keys[kl])]
+                missing_labels = [
+                    kl for kl in remote_key_labels
+                    if isinstance(kl, str) and (
+                        kl not in local_keys or
+                        not local_keys[kl] or
+                        (isinstance(local_keys[kl], dict) and not local_keys[kl].get("is_local"))
+                    )
+                ]
 
                 for kl in missing_labels:
+                    # 如果本地同名 Key 已经被标记为本地自建 (is_local=True)，绝对不被中枢覆盖
+                    existing_key_obj = local_keys.get(kl)
+                    if isinstance(existing_key_obj, dict) and existing_key_obj.get("is_local"):
+                        continue
+
                     try:
                         fk_res = await client.post(
                             f"{edgeone_url}/api/vault/fetch",
@@ -1997,15 +2050,12 @@ async def vault_sync_endpoint(request: Request):
                     except Exception as fe:
                         logger.warning(f"Failed to fetch key {kl} for provider {p_id} during sync: {fe}")
 
-                if is_new:
-                    created += 1
-                else:
-                    updated += 1
+                updated += 1
 
-            if created > 0 or updated > 0:
+            if updated > 0:
                 await save_config(cfg)
 
-            msg = f"同步完成：已自动新增 {created} 个中枢供应商，更新 {updated} 个供应商的最新端点与密钥"
+            msg = f"中枢同步完成：已精准增量更新 {updated} 个已配置供应商的最新中枢端点与密钥"
             return JSONResponse(content={
                 "ok": True,
                 "message": msg,

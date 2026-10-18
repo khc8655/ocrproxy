@@ -716,8 +716,11 @@ tr:hover td, .tbl tbody tr:hover td {
   justify-content: center;
   background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(4px);
-  z-index: 1000;
   padding: 16px;
+}
+
+#keyModal, #probedListModal, #deleteConfirmModal {
+  z-index: 1200;
 }
 
 .modal.show, .login-overlay.show {

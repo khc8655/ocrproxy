@@ -340,3 +340,60 @@ async function saveVaultConfig(silent = false){
   }
 }
 
+async function syncVaultFromSettings(){
+  const btn = document.getElementById('btnSyncVaultFromSettings');
+  const box = document.getElementById('vault_diag_box');
+  const url = (document.getElementById('cfg_vault_url')?.value || '').trim();
+  const token = (document.getElementById('cfg_vault_token')?.value || '').trim();
+
+  if(!url){
+    toast('请先在上方输入 EdgeOne 中枢服务地址', 'err');
+    return;
+  }
+
+  if(btn){
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 正在精准增量同步...';
+  }
+  if(box){
+    box.style.display = 'block';
+    box.innerHTML = `<span style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">${icon('refresh', 14)} 正在从中枢拉取已配置供应商的最新凭据与规则...</span>`;
+  }
+
+  try {
+    const res = await fetch('/api/admin/vault/sync', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ edgeone_url: url, token: token })
+    });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok){
+      throw new Error(d.error || `HTTP ${res.status}: 同步失败`);
+    }
+
+    if(box){
+      box.innerHTML = `
+        <div style="color:var(--accent-green);font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+          ${icon('check', 14)} ${esc(d.message || '中枢增量同步成功')}
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);">
+          本次仅增量同步了当前本地已使用的供应商（更新: ${d.updated || 0} 个），未引入任何未配置的冗余项，所有本地临时凭据 100% 保持无损。
+        </div>`;
+    }
+    toast(d.message || '中枢凭据增量同步成功！', 'ok');
+    await loadData();
+    if(typeof fetchVaultManifest === 'function') await fetchVaultManifest(true);
+  } catch(e) {
+    if(box){
+      box.innerHTML = `<div style="color:var(--accent-red);font-size:12px;display:flex;align-items:center;gap:6px;">${icon('alert', 14)} 同步失败: ${esc(e.message)}</div>`;
+    }
+    toast('中枢同步失败: ' + e.message, 'err');
+  } finally {
+    if(btn){
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> <span>增量同步中枢凭据与规则 (已添加项)</span>`;
+    }
+  }
+}
+window.syncVaultFromSettings = syncVaultFromSettings;
+
