@@ -1,23 +1,26 @@
 #!/usr/bin/env node
 /**
- * build-admin.mjs — bundle single-source shared/admin into self-contained
- * EdgeOne edge functions and sync static assets to vm-app/static:
+ * build-admin.mjs — bundle EdgeOne dedicated admin UI ({html,css,js}) and shared
+ * components (shared/admin/js/agent-models-ui.js) into self-contained EdgeOne edge functions:
  *   - edge-functions/index.js (serves GET / directly as admin dashboard)
  *   - edge-functions/admin.js (serves GET /admin or 301 redirects)
  *
- * Single Source of Truth: shared/admin/ ONLY.
+ * Also syncs VM modular admin sources (shared/admin/) to vm-app/static/.
+ *
+ * Architecture Rule 1: EdgeOne has its dedicated console skeleton (Vault Hub)
+ * while sharing sub-components (agent-models-ui.js).
  */
-import { readFileSync, writeFileSync, existsSync, cpSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const sharedRoot = join(root, '..', 'shared', 'admin');
-const configRoot = join(root, '..', 'shared', 'config');
+const projectRoot = join(root, '..');
+const sharedRoot = join(projectRoot, 'shared', 'admin');
 
 // 0. Read dynamic version from root version.json (Single Source of Truth)
-const versionJsonPath = join(root, '..', 'version.json');
+const versionJsonPath = join(projectRoot, 'version.json');
 let appVersion = 'latest';
 if (existsSync(versionJsonPath)) {
   try {
@@ -28,81 +31,61 @@ if (existsSync(versionJsonPath)) {
   }
 }
 
-// 1. Sync shared/admin to vm-app/static (NEVER overwrite source shared/admin!)
+// 1. Sync shared/admin to vm-app/static ONLY (NEVER overwrite agent-edgeone!)
 if (existsSync(sharedRoot)) {
   const sharedHtml = join(sharedRoot, 'admin.html');
   const sharedCss = join(sharedRoot, 'admin.css');
   const sharedJsDir = join(sharedRoot, 'js');
 
-  const vmStatic = join(root, '..', 'vm-app', 'static');
+  const vmStatic = join(projectRoot, 'vm-app', 'static');
   if (existsSync(vmStatic)) {
     if (existsSync(sharedHtml)) {
       let vmHtml = readFileSync(sharedHtml, 'utf8');
-      // Auto-inject version into script tags in target artifact only
       vmHtml = vmHtml.replace(/(\.js\?v=)[^"']+/g, `$1${appVersion}`);
+      vmHtml = vmHtml.replace(/(id="topVersionBadge"[^>]*>)[^<]+(<\/span>)/g, `$1v${appVersion}$2`);
       writeFileSync(join(vmStatic, 'admin.html'), vmHtml, 'utf8');
     }
     if (existsSync(sharedCss)) cpSync(sharedCss, join(vmStatic, 'admin.css'));
     if (existsSync(sharedJsDir)) cpSync(sharedJsDir, join(vmStatic, 'js'), { recursive: true });
-    console.log(`Synced shared/admin to vm-app/static with version ${appVersion}: ${vmStatic}`);
+    console.log(`[Sync] Synced shared/admin to vm-app/static with version ${appVersion}: ${vmStatic}`);
   }
 }
 
-// 2. Read Single Source of Truth: shared/admin/admin.html and admin.css
-const htmlPath = join(sharedRoot, 'admin.html');
-const cssPath = join(sharedRoot, 'admin.css');
-const sharedJsDir = join(sharedRoot, 'js');
+// 2. Read EdgeOne Dedicated Sources: agent-edgeone/admin.{html,css,js}
+const htmlPath = join(root, 'admin.html');
+const cssPath = join(root, 'admin.css');
+const jsPath = join(root, 'admin.js');
 
-const indexPath = join(root, 'edge-functions', 'index.js');
-const adminPath = join(root, 'edge-functions', 'admin.js');
+const edgeFuncDir = join(root, 'edge-functions');
+const indexPath = join(edgeFuncDir, 'index.js');
+const adminPath = join(edgeFuncDir, 'admin.js');
 
-if (!existsSync(htmlPath) || !existsSync(cssPath)) {
-  console.error(`Missing single source of truth input: ${htmlPath} or ${cssPath}`);
+if (!existsSync(htmlPath) || !existsSync(cssPath) || !existsSync(jsPath)) {
+  console.error(`FATAL: Missing EdgeOne dedicated source input: ${htmlPath}, ${cssPath}, or ${jsPath}`);
   process.exit(1);
 }
 
 const html = readFileSync(htmlPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 
-// 3. Load Schema JSON & Bundle JS in Dependency Order
-const schemaPath = join(configRoot, 'settings.schema.json');
-let schemaJsonStr = '{}';
-if (existsSync(schemaPath)) {
-  schemaJsonStr = readFileSync(schemaPath, 'utf8');
+// 3. Read EdgeOne standalone JS & Bundle Shared Component: agent-models-ui.js
+const agentModelsUiPath = join(sharedRoot, 'js', 'agent-models-ui.js');
+let bundledJs = '';
+if (existsSync(agentModelsUiPath)) {
+  bundledJs += readFileSync(agentModelsUiPath, 'utf8') + '\n\n';
+  console.log(`[Component] Bundled shared agent-models-ui component: ${agentModelsUiPath}`);
 }
-
-let bundledJs = `// Injected Host Runtime & Schema Metadata\nwindow.__HOST_KIND__ = 'edgeone';\nwindow.SETTINGS_SCHEMA = ${schemaJsonStr};\n\n`;
-
-const jsLoadOrder = [
-  'host.js',
-  'settings-form.js',
-  'core.js',
-  'vault.js',
-  'providers.js',
-  'agent-models-ui.js',
-  'models.js',
-  'settings.js',
-  'app.js'
-];
-
-for (const jsFile of jsLoadOrder) {
-  const p = join(sharedJsDir, jsFile);
-  if (existsSync(p)) {
-    bundledJs += `\n/* --- ${jsFile} --- */\n` + readFileSync(p, 'utf8') + '\n';
-  } else {
-    console.warn(`Warning: shared JS file not found: ${p}`);
-  }
-}
+bundledJs += readFileSync(jsPath, 'utf8');
 
 // 4. Inline CSS: replace <link ...admin.css...> with <style>
 const cssLinkRegex = /<link\b[^>]*href=["'][^"']*admin\.css[^"']*["'][^>]*\/?>/i;
 if (!cssLinkRegex.test(html)) {
-  console.error('FATAL BUILD ERROR: Could not find admin.css link tag in HTML!');
+  console.error('FATAL BUILD ERROR: Could not find admin.css link tag in EdgeOne HTML!');
   process.exit(1);
 }
 const htmlInlinedCss = html.replace(cssLinkRegex, () => `<style>\n${css}\n</style>`);
 
-// 5. Inline JS: replace modular <script src="/static/js/..."></script> with single <script>
+// 5. Inline JS: replace modular or standalone <script src="...admin.js"> with single <script>
 let htmlBundled = htmlInlinedCss;
 const modularScriptRegex = /(?:<!--\s*Modular Scripts[^\n]*-->\s*)?(?:<script\b[^>]*src=["'][^"']*(?:\/static)?\/js\/[^"']+["'][^>]*>(?:\s*<\/script>)?\s*)+/i;
 const singleScriptRegex = /<script\b[^>]*src=["'][^"']*admin\.js[^"']*["'][^>]*>(?:\s*<\/script>)?/i;
@@ -115,7 +98,7 @@ if (modularScriptRegex.test(htmlBundled)) {
   htmlBundled = htmlBundled.replace('</body>', `<script>\n${bundledJs}\n</script>\n</body>`);
 }
 
-// 5.1 Auto-inject dynamic version into bundled HTML and JS constants
+// 6. Auto-inject dynamic version into bundled HTML and JS constants
 if (appVersion && appVersion !== 'latest') {
   htmlBundled = htmlBundled.replace(/(id="topVersionBadge"[^>]*>)[^<]+(<\/span>)/g, `$1v${appVersion}$2`);
   htmlBundled = htmlBundled.replace(/(id="statVersion"[^>]*>)[^<]+(<\/div>)/g, `$1v${appVersion}$2`);
@@ -135,12 +118,40 @@ if (/<script\b[^>]*src=["'][^"']*(?:admin\.js|\/js\/)/i.test(htmlBundled)) {
   console.error('FATAL BUILD ERROR: Residual external <script src> detected in bundled HTML!');
   process.exit(1);
 }
-if (!htmlBundled.includes('renderAgentModels') || !htmlBundled.includes('renderProviders')) {
-  console.error('FATAL BUILD ERROR: Core functions missing from bundle!');
+
+// 架构规范铁律断言：必须是 EdgeOne 专属控制台，严禁被 VM 骨架污染
+if (!htmlBundled.includes('OCRProxy EdgeOne 控制台') || !htmlBundled.includes('EdgeOne 边缘版')) {
+  console.error('FATAL BUILD ERROR: EdgeOne dedicated console identity missing! ARCHITECTURE_STANDARDS Rule 1 violated.');
+  process.exit(1);
+}
+if (!htmlBundled.includes('已纳管供应商') || !htmlBundled.includes('id="panel-providers"')) {
+  console.error('FATAL BUILD ERROR: EdgeOne Vault Hub (Providers panel) missing! ARCHITECTURE_STANDARDS Rule 1 violated.');
+  process.exit(1);
+}
+if (htmlBundled.includes('Agent 智能体直连') || htmlBundled.includes('KB 知识库入库')) {
+  console.error('FATAL BUILD ERROR: VM-specific labels detected in EdgeOne bundle! Contamination detected.');
+  process.exit(1);
+}
+if (!htmlBundled.includes('renderAgentModels') || !htmlBundled.includes('saveAgentModel')) {
+  console.error('FATAL BUILD ERROR: Shared agent-models-ui component functions missing from bundle!');
   process.exit(1);
 }
 
-// 6. Emit edge functions
+// 超时能力一致性红线断言
+if (htmlBundled.includes('EdgeOne 建议 20~25s') || htmlBundled.includes('20~25s')) {
+  console.error('FATAL BUILD ERROR: Obsolete "EdgeOne 建议 20~25s" detected in admin HTML! Red Line 2 violated.');
+  process.exit(1);
+}
+if (!/id="set_upstream_timeout_sec"[^>]*max="300"/i.test(htmlBundled)) {
+  console.error('FATAL BUILD ERROR: set_upstream_timeout_sec must have max="300"! Red Line 2 violated.');
+  process.exit(1);
+}
+if (/Math\.min\(\s*30\s*,\s*upTimeout\s*\)/.test(bundledJs)) {
+  console.error('FATAL BUILD ERROR: Obsolete Math.min(30, upTimeout) budget truncation detected in admin.js! Red Line 2 violated.');
+  process.exit(1);
+}
+
+// 7. Emit EdgeOne edge functions
 writeFileSync(join(root, 'admin.bundled.html'), htmlBundled, 'utf8');
 const safe = htmlBundled.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
@@ -148,7 +159,7 @@ const banner =
   '/**\n' +
   ' * Self-contained admin UI for OCRProxy EdgeOne.\n' +
   ' *\n' +
-  ' *   Generated by scripts/build-admin.mjs from shared/admin sources\n' +
+  ' *   Generated by scripts/build-admin.mjs from agent-edgeone/admin.* + shared components\n' +
   ' *   Do not edit this file directly.\n' +
   ' */\n\n';
 
@@ -174,17 +185,16 @@ const functionCode =
   '  return onRequestGet(context);\n' +
   '}\n';
 
-const rootProject = join(root, '..');
-const rootIndexPath = join(rootProject, 'edge-functions', 'index.js');
-const rootAdminPath = join(rootProject, 'edge-functions', 'admin.js');
-
 writeFileSync(indexPath, functionCode, 'utf8');
 writeFileSync(adminPath, functionCode, 'utf8');
-console.log(`Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of HTML bundled from shared/admin)`);
+console.log(`[EdgeFunctions] Built ${indexPath} and ${adminPath} (${htmlBundled.length} bytes of HTML bundled)`);
 
-if (existsSync(join(rootProject, 'edge-functions'))) {
-  writeFileSync(rootIndexPath, functionCode, 'utf8');
-  writeFileSync(rootAdminPath, functionCode, 'utf8');
-  cpSync(join(root, 'edge-functions'), join(rootProject, 'edge-functions'), { recursive: true });
-  console.log(`Synced all edge-functions to root: ${join(rootProject, 'edge-functions')}`);
+const rootEdgeFuncDir = join(projectRoot, 'edge-functions');
+if (existsSync(rootEdgeFuncDir)) {
+  writeFileSync(join(rootEdgeFuncDir, 'index.js'), functionCode, 'utf8');
+  writeFileSync(join(rootEdgeFuncDir, 'admin.js'), functionCode, 'utf8');
+  cpSync(edgeFuncDir, rootEdgeFuncDir, { recursive: true });
+  console.log(`[Sync] Synced all edge-functions to root: ${rootEdgeFuncDir}`);
 }
+
+console.log('=== EdgeOne admin build completed successfully ===\n');

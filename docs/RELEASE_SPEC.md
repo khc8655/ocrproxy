@@ -17,7 +17,7 @@
 
 ## 1. 版本号全网联动矩阵
 
-每次版本迭代（格式：`vYYYY.MM.DD-NN`，如 `v2026.10.07-01`），**必须同时同步修改以下 6 处文件**，禁止出现单边滞后：
+每次版本迭代（格式：`vYYYY.MM.DD-NN`，如 `v2026.10.07-01`），**必须同时同步修改以下 7 处文件**，禁止出现单边滞后：
 
 | 序号 | 文件路径 | 对应字段 / 标签 | 作用说明 |
 | :--- | :--- | :--- | :--- |
@@ -27,6 +27,7 @@
 | **4** | `vm-app/install.sh` | `SCRIPT_VERSION="vYYYY.MM.DD-NN"` | VM 子目录离线安装脚本内置版本（与根目录严格一致） |
 | **5** | `vm-app/static/admin.html` | ① 顶部 `#topVersionBadge`<br>② 底部所有 `<script src="/static/js/*.js?v=...">` | 保证浏览器加载最新前端逻辑，强行击穿客户端 HTTP 脚本强缓存 |
 | **6** | `shared/admin/admin.html` | ① 顶部 `#topVersionBadge`<br>② 底部所有 `<script src="/static/js/*.js?v=...">` | 保证多环境共享前端版本完全统一 |
+| **7** | `agent-edgeone/admin.html` | ① 顶部 `#topVersionBadge`<br>② `#statVersion` | 保证 EdgeOne 专属控制台与真理源凭据中枢版本强一致 |
 
 ---
 

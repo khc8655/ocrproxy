@@ -1,13 +1,12 @@
 {
-  "version": "v2026.10.18-08",
+  "version": "v2026.10.18-09",
   "release_date": "2026-10-18",
   "commit": "HEAD",
-  "title": "EdgeOne 官方规范深度对齐与边缘运行时加固 (E1~E4) (v2026.10.18-08)",
+  "title": "EdgeOne 专属控制台与组件化共用架构恢复及发版门禁强制焊死 (v2026.10.18-09)",
   "changelog": [
-    "E1: edgeone.json 官方规范化与路径匹配合规：清除非标字段，配置 cloudFunctions.python 120s 与广州区域，headers.source 移除正则改用单通配符确保 no-store 与 X-Accel-Buffering 真实生效",
-    "E2: 出站请求防重定向降级 (redirect: 'manual')：出站 fetch 统一声明 manual，杜绝 301/302 将 POST 静默降级为空 GET；遭遇 3xx 诊断为 Base URL 配置错误，阻断 failover 与误冷却",
-    "E3: 超时设置全链路官方闭环：依据官方 Fetch 81897 文档，在 probe-models 与 presets/hub 补全 eo.timeoutSetting 防止被平台 15s 默认截断；Cloud Functions 兜底超时升级至 120s",
-    "E4: Fetch 并发与次数硬限制治理：针对 64 次 fetch 与 8 并发限制，api/test.js 引入并发度为 6 的 Worker Pool，探测数量截断至 60 项，单次耗时从真正发出 fetch 时打点",
-    "官方运行时与超时架构规范确立：新建 docs/EDGEONE_RUNTIME_SPEC.md，彻底清除历史遗留的 25 秒断开限制过时记忆，明确 20 秒保活心跳与出站 300 秒等待的职责边界"
+    "架构正本清源：彻底理清'UI 组件共用'与'整页代码复用'的边界，恢复 EdgeOne 专属控制台骨架（Vault Hub 凭据中枢、常驻 A-Z 字母轨、Anycast 面板与独立登录浮层），严禁使用 VM 骨架覆盖 EdgeOne",
+    "共享组件内联：通用模型卡片与路由组件 (shared/admin/js/agent-models-ui.js) 在构建时内联并入 EdgeOne，实现组件业务逻辑 100% 复用",
+    "历史硬编码清零：彻底清除 core.js 与 admin.js 中的 APP_VERSION 旧版本硬编码，对齐 IS_EDGEONE 宿主环境判断，统一由流水线从 version.json 动态注入",
+    "发版门禁机械化焊死：将 tests/test_phase3_phase4_audit.py 强制串联写入 package.json 的 build:admin 与 test 命令，增加 EdgeOne 专属控制台与产物防污染强断言，物理级杜绝任何漏检"
   ]
 }

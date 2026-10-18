@@ -555,6 +555,19 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.18-09` (2026-10-18)
+- **架构正本清源：彻底厘清“UI 组件共用”与“页面骨架复用”边界**：
+  - 严格遵守《架构规范》铁律一，恢复 EdgeOne 专属控制台骨架资产（`agent-edgeone/admin.html`、`admin.css`、`admin.js`），保证 EdgeOne 作为【云端真理源凭据中枢（Vault Hub）】的独立控制台地位；
+  - 彻底杜绝用 VM 骨架覆盖 EdgeOne，消除 EdgeOne 页面被误标为「Agent 智能体直连」与空状态问题；
+- **子组件标准化共用 (Shared UI Components)**：
+  - 通用模型卡片与路由组件（`shared/admin/js/agent-models-ui.js`）在打包阶段内联并入 EdgeOne 单文件 Bundle，两端 100% 共享胶囊选择器、Key 探活、1+1 实机测速与模糊搜索逻辑；
+- **历史硬编码清零与版本动态注入**：
+  - 彻底清除 `core.js` 与 `admin.js` 中的旧版本常量（`APP_VERSION = 'v2026.10.17-02'`），对齐 `IS_EDGEONE` 宿主环境判断逻辑；
+  - `build-admin.mjs` 统一从 `version.json` 读取权威版本号动态注入至顶部 `#topVersionBadge` 与运行时常量；
+- **发版门禁强制焊死（物理级不可绕过）**：
+  - 将 `tests/test_phase3_phase4_audit.py` 强制并入 `package.json` 的 `build:admin` 与 `test` 命令；
+  - 增加 EdgeOne 专属控制台与产物防污染强断言（断言必须包含“OCRProxy EdgeOne 控制台”、“EdgeOne 边缘版”、“已纳管供应商”，严禁包含 VM 专注文案），违规立即退出中断发版。
+
 ### `v2026.10.18-08` (2026-10-18)
 - **E1: `edgeone.json` 官方规范化与路径匹配合规化**：
   - 清除所有非官方标准字段（`build`、`functions`、`routes`、`kv`、`env`），全面合规声明 `cloudFunctions.python.maxDuration: 120` 与 `mainlandRegions: ["ap-guangzhou"]`；

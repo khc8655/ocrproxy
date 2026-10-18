@@ -1,8 +1,9 @@
 /**
  * OCRProxy Admin - Core Framework & UI Foundation
  */
-const APP_VERSION = 'v2026.10.17-02';
-const IS_EDGEONE = typeof window.__ENV_TARGET__ !== 'undefined' ? window.__ENV_TARGET__ === 'edgeone' : false;
+const IS_EDGEONE = (typeof window.__HOST_KIND__ !== 'undefined' && window.__HOST_KIND__ === 'edgeone') ||
+  (typeof window.__ENV_TARGET__ !== 'undefined' && window.__ENV_TARGET__ === 'edgeone') ||
+  (typeof window.HOST !== 'undefined' && Boolean(window.HOST.isEdgeOne));
 
 // State
 const state = { 
@@ -376,8 +377,8 @@ function render(){
 
   // Top header badges
   const vBadge = document.getElementById('topVersionBadge');
-  if (vBadge) {
-    vBadge.textContent = state.serverVersion || APP_VERSION;
+  if (vBadge && state.serverVersion) {
+    vBadge.textContent = state.serverVersion;
   }
   const badge = document.getElementById('topModeBadge');
   if (badge) {

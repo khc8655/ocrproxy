@@ -20,13 +20,13 @@ const sharedJsDir = join(root, '..', 'shared', 'admin', 'js');
 
 console.log('🔍 [Gate 1/2] 正在执行前端代码静态语法与符号完整性检查...');
 
-// 0. 架构纯洁度门禁：严禁 EdgeOne 目录出现散落的前端副本
-const forbiddenFiles = ['admin.html', 'admin.css', 'admin.js'];
-for (const f of forbiddenFiles) {
+// 0. 架构规范门禁：确保 EdgeOne 专属控制台骨架完好存在且为 Vault Hub 专属控制台
+const requiredEdgeOneFiles = ['admin.html', 'admin.css', 'admin.js'];
+for (const f of requiredEdgeOneFiles) {
   const p = join(root, f);
-  if (existsSync(p)) {
-    console.error(`❌ [SingleSourceViolation] 发现残留的独立前端文件: ${p}`);
-    console.error(`   👉 所有 UI 逻辑必须统一存放在 shared/admin/ 中！`);
+  if (!existsSync(p)) {
+    console.error(`❌ [ArchitectureViolation] 缺失 EdgeOne 专属控制台文件: ${p}`);
+    console.error(`   👉 必须遵循 ARCHITECTURE_STANDARDS 铁律一：EdgeOne 拥有专属中枢控制台，严禁被 VM 骨架覆盖！`);
     process.exit(1);
   }
 }
