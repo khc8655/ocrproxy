@@ -2,6 +2,9 @@
 
 本项目采用 **Monorepo** 架构，统一维护一套全功能的 VM 服务端应用 (`vm-app`) 与一套无服务器 EdgeOne 边缘函数版本 (`agent-edgeone`)。所有 VM 模式共用一套通用加密配置 Schema，在保持 100% 完整功能特性的同时，通过 **`RUN_MODE`** 实现界面与路由的动态自适应。
 
+> 📘 **核心系统设计与业务规格真理源**：请参阅 [docs/SYSTEM_DESIGN_SPEC.md](docs/SYSTEM_DESIGN_SPEC.md) 获取系统定位、中枢凭据架构、调度状态机与 UI 契约的完整规格定义。
+> 🔐 **私有环境与本地密钥配置**：具体的生产与测试机器 IP、SSH 密钥及运维密码严格维护在本地私有文件 `LOCAL_ENV_SECRETS.md` 中（已入 `.gitignore`，严禁上传公共仓库）。
+
 ---
 
 ## 架构概览 (Architecture Overview)

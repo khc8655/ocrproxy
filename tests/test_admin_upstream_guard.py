@@ -5,6 +5,21 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "vm-app"))
+
+# Mock web frameworks if running under standalone python without deps
+from unittest.mock import MagicMock
+if "httpx" not in sys.modules:
+    try:
+        import httpx
+    except ImportError:
+        sys.modules["httpx"] = MagicMock()
+for mod in ["fastapi", "fastapi.responses"]:
+    if mod not in sys.modules:
+        try:
+            __import__(mod)
+        except ImportError:
+            sys.modules[mod] = MagicMock()
+
 from app.admin_routes import _admin_upstream_block_reason  # noqa: E402
 
 CFG = {"providers": {

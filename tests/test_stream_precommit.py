@@ -16,6 +16,82 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "vm-app"))
 
+# Mock web frameworks if running under standalone python without deps
+from unittest.mock import MagicMock
+if "starlette" not in sys.modules or "starlette.responses" not in sys.modules:
+    try:
+        from starlette.responses import StreamingResponse
+    except ImportError:
+        class StreamingResponse:
+            def __init__(self, content, status_code=200, headers=None, media_type=None):
+                self.status_code = status_code
+                self.headers = headers or {}
+                self.media_type = media_type
+                self.body_iterator = content
+        class JSONResponse:
+            def __init__(self, content, status_code=200, headers=None):
+                self.status_code = status_code
+                self.headers = headers or {}
+                self.content = content
+        class Response:
+            def __init__(self, content=b"", status_code=200, headers=None, media_type=None):
+                self.status_code = status_code
+                self.headers = headers or {}
+                self.content = content
+                self.media_type = media_type
+
+        mock_starlette = MagicMock()
+        mock_starlette_responses = MagicMock()
+        mock_starlette_responses.StreamingResponse = StreamingResponse
+        mock_starlette_responses.JSONResponse = JSONResponse
+        mock_starlette_responses.Response = Response
+        sys.modules["starlette"] = mock_starlette
+        sys.modules["starlette.responses"] = mock_starlette_responses
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi
+    except ImportError:
+        mock_fastapi = MagicMock()
+        mock_fastapi_responses = MagicMock()
+        mock_fastapi_responses.StreamingResponse = sys.modules["starlette.responses"].StreamingResponse
+        mock_fastapi_responses.JSONResponse = sys.modules["starlette.responses"].JSONResponse
+        mock_fastapi_responses.Response = sys.modules["starlette.responses"].Response
+        sys.modules["fastapi"] = mock_fastapi
+        sys.modules["fastapi.responses"] = mock_fastapi_responses
+
+if "httpx" not in sys.modules:
+    try:
+        import httpx
+    except ImportError:
+        mock_httpx = MagicMock()
+        class HTTPError(Exception): pass
+        class RequestError(HTTPError): pass
+        class TransportError(HTTPError): pass
+        class TimeoutException(HTTPError): pass
+        class ConnectTimeout(TimeoutException): pass
+        class ReadTimeout(TimeoutException): pass
+        class WriteTimeout(TimeoutException): pass
+        class PoolTimeout(TimeoutException): pass
+        class ConnectError(TransportError): pass
+        class ReadError(TransportError): pass
+        class WriteError(TransportError): pass
+        class RemoteProtocolError(HTTPError): pass
+
+        mock_httpx.HTTPError = HTTPError
+        mock_httpx.RequestError = RequestError
+        mock_httpx.TransportError = TransportError
+        mock_httpx.TimeoutException = TimeoutException
+        mock_httpx.ConnectTimeout = ConnectTimeout
+        mock_httpx.ReadTimeout = ReadTimeout
+        mock_httpx.WriteTimeout = WriteTimeout
+        mock_httpx.PoolTimeout = PoolTimeout
+        mock_httpx.ConnectError = ConnectError
+        mock_httpx.ReadError = ReadError
+        mock_httpx.WriteError = WriteError
+        mock_httpx.RemoteProtocolError = RemoteProtocolError
+        sys.modules["httpx"] = mock_httpx
+
 from starlette.responses import StreamingResponse  # noqa: E402
 
 import app.proxy_routes as pr  # noqa: E402
