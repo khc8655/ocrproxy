@@ -2,8 +2,11 @@
   "id": "google",
   "name": "Google AI Studio",
   "version": "1.2.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "Google Gemini 3.5 / 2.5 系列 Thinking Config 思考等级 (low/medium/high) 自动适配映射",
   "protocol": "google_openai",
   "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "doc_url": "https://ai.google.dev/gemini-api/docs/openai",
   "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
   "features": {
     "native_thinking": true,
@@ -68,6 +71,5 @@
     "sanitization": {
       "unsupported_params": []
     }
-  },
-  "doc_url": "https://ai.google.dev/gemini-api/docs/openai"
+  }
 }

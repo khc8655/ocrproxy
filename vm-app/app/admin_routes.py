@@ -526,6 +526,7 @@ async def check_preset_updates_endpoint(request: Request):
     except Exception:
         body = {}
 
+    curr_cfg = None
     providers_to_check = body.get("providers")
     if not providers_to_check:
         curr_cfg = await get_config()
@@ -554,7 +555,7 @@ async def check_preset_updates_endpoint(request: Request):
         latest_ver = remote_preset.get("version", "1.0.0")
         latest_hash = remote_preset.get("rule_hash") or ""
         curr_rules = item.get("adapter_rules")
-        if curr_rules is None:
+        if curr_rules is None and curr_cfg is not None:
             curr_rules = (curr_cfg.get("providers") or {}).get(prov_id, {}).get("adapter_rules")
 
         curr_hash = item.get("rule_hash") or ""
@@ -577,6 +578,8 @@ async def check_preset_updates_endpoint(request: Request):
             "current_version": curr_ver,
             "latest_version": latest_ver,
             "remote_version": latest_ver,
+            "updated_at": remote_preset.get("updated_at", ""),
+            "update_notes": remote_preset.get("update_notes", ""),
             "has_update": has_update,
         }
 
@@ -595,7 +598,7 @@ async def check_preset_updates_endpoint(request: Request):
 
 @router.post("/presets/update-rules")
 async def update_preset_rules_endpoint(request: Request):
-    """Incremental rule update: Fetch latest adapter_rules and update specified local providers."""
+    """Incremental rule update: Fetch latest adapter_rules and update specified local providers strictly on-demand."""
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
@@ -613,14 +616,19 @@ async def update_preset_rules_endpoint(request: Request):
 
     curr_cfg = await get_config()
     providers = curr_cfg.get("providers") or {}
+
+    # 物理级按需过滤：只能更新本地配置中已存在的供应商，坚决拦截全量注入与未存厂商拉取！
+    valid_target_ids = [pid for pid in target_ids if pid in providers]
+    if not valid_target_ids:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "None of the specified providers exist in local configuration"}
+        )
+
     updated = []
     failed = []
 
-    for pid in target_ids:
-        if pid not in providers:
-            failed.append({"provider_id": pid, "error": "Provider not found in current config"})
-            continue
-
+    for pid in valid_target_ids:
         pdata = providers[pid]
         pres_id = pdata.get("preset_id", pid)
 
@@ -633,6 +641,10 @@ async def update_preset_rules_endpoint(request: Request):
 
         pdata["adapter_rules"] = preset_data.get("adapter_rules", {})
         pdata["preset_version"] = preset_data.get("version", "1.1.0")
+        if "updated_at" in preset_data:
+            pdata["preset_updated_at"] = preset_data["updated_at"]
+        if "update_notes" in preset_data:
+            pdata["preset_update_notes"] = preset_data["update_notes"]
         try:
             r_str = json.dumps(pdata["adapter_rules"], sort_keys=True)
             pdata["rule_hash"] = hashlib.sha256(r_str.encode("utf-8")).hexdigest()[:12]
@@ -648,6 +660,8 @@ async def update_preset_rules_endpoint(request: Request):
             "provider_id": pid,
             "preset_id": pres_id,
             "new_version": pdata["preset_version"],
+            "updated_at": preset_data.get("updated_at", ""),
+            "update_notes": preset_data.get("update_notes", ""),
         })
 
     if updated:

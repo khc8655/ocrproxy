@@ -1,57 +1,18 @@
 {
-  "adapter_rules": {
-    "error_rules": [
-      {
-        "action": "quota_exhausted",
-        "cooldown_sec": 1800,
-        "failover": true,
-        "match_keywords": [
-          "FreeTierError",
-          "free tier",
-          "within OpenCode"
-        ],
-        "match_status": 403,
-        "name": "zen_free_tier_forbidden"
-      },
-      {
-        "action": "failover",
-        "cooldown_sec": 300,
-        "failover": true,
-        "match_keywords": [
-          "FreeUsageLimitError",
-          "daily free usage limit",
-          "Rate limit exceeded"
-        ],
-        "match_status": 429,
-        "name": "zen_daily_free_limit"
-      }
-    ],
-    "reasoning": {
-      "strategy": "openai_passthrough"
-    },
-    "sanitization": {
-      "unsupported_params": []
-    },
-    "tools": {
-      "normalize_choice_to_string": false,
-      "rescue_from_text": false,
-      "strip_json_schema": false
-    },
-    "user_tracking": {
-      "passthrough_user": true
-    }
-  },
+  "id": "opencode",
+  "name": "OpenCode Zen",
+  "version": "2.0.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "OpenCode Zen 平台标准 OpenAI 协议适配，精简免费模型集合与 403 权限快速故障转移",
+  "protocol": "openai",
   "base_url": "https://opencode.ai/zen/v1",
-  "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
   "doc_url": "https://opencode.ai/docs/zen/",
+  "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
   "features": {
     "multimodal": true,
     "native_thinking": true,
     "tools": true
   },
-  "id": "opencode",
-  "name": "OpenCode Zen",
-  "protocol": "openai",
   "recommended_models": [
     {
       "description": "Zen 免费全能 stealth 模型（限时免费）",
@@ -94,5 +55,46 @@
       "upstream_model": "nemotron-3.5-lightning-free"
     }
   ],
-  "version": "2.0.0"
+  "adapter_rules": {
+    "error_rules": [
+      {
+        "action": "quota_exhausted",
+        "cooldown_sec": 1800,
+        "failover": true,
+        "match_keywords": [
+          "FreeTierError",
+          "free tier",
+          "within OpenCode"
+        ],
+        "match_status": 403,
+        "name": "zen_free_tier_forbidden"
+      },
+      {
+        "action": "failover",
+        "cooldown_sec": 300,
+        "failover": true,
+        "match_keywords": [
+          "FreeUsageLimitError",
+          "daily free usage limit",
+          "Rate limit exceeded"
+        ],
+        "match_status": 429,
+        "name": "zen_daily_free_limit"
+      }
+    ],
+    "reasoning": {
+      "strategy": "openai_passthrough"
+    },
+    "sanitization": {
+      "unsupported_params": []
+    },
+    "tools": {
+      "normalize_choice_to_string": false,
+      "rescue_from_text": false,
+      "strip_json_schema": false
+    },
+    "user_tracking": {
+      "passthrough_user": true
+    }
+  }
 }

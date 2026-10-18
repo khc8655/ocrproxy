@@ -119,13 +119,15 @@ function renderProviders(){
         ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 ${provRpmVal} RPM</span>`
         : `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>`;
       const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
-      const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
+      const dateText = prov.preset_updated_at ? ` · ${prov.preset_updated_at}` : '';
+      const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本与更新日期">${esc(ver + dateText)}</span>`;
       const vaultBadge = isVaultManaged 
         ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商由 EdgeOne 凭据中枢统管，本地持久化只读保存">🔒 中枢托管·只读</span>`
         : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">💻 本地自建</span>`;
       const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
+      const updateDateText = (hasUpdate && hasUpdate.updated_at) ? ` (${esc(hasUpdate.updated_at)})` : '';
       const updateBtn = hasUpdate
-        ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级规则至 v${esc(hasUpdate.remote_version)}</button>`
+        ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级至 v${esc(hasUpdate.remote_version)}${updateDateText}</button>`
         : '';
 
       const actionButtons = isVaultManaged
@@ -364,12 +366,17 @@ function populateCatalogSelect(select) {
         id: k,
         name: FALLBACK_PRESETS[k].name,
         version: FALLBACK_PRESETS[k].version || '1.1.0',
+        updated_at: FALLBACK_PRESETS[k].updated_at || '2026-10-18',
+        update_notes: FALLBACK_PRESETS[k].update_notes || '',
         description: FALLBACK_PRESETS[k].description
       }));
 
   select.innerHTML = '<option value="">-- 自定义供应商 (本地内置·手动填写) --</option>' +
-    '<optgroup label="官方预设厂商模板 (按需选用)">' +
-    catalog.map(p => `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'})</option>`).join('') +
+    '<optgroup label="官方预设厂商模板 (按需单选·按需拉取)">' +
+    catalog.map(p => {
+      const dateText = p.updated_at ? ` · ${p.updated_at}` : '';
+      return `<option value="${p.id}">${p.name} (v${p.version || '1.1.0'}${dateText})</option>`;
+    }).join('') +
     '</optgroup>';
   if (cur !== undefined && cur !== null) select.value = cur;
 }
@@ -417,7 +424,7 @@ async function onProviderPresetChange(){
     return;
   }
 
-  // Fetch preset detail on demand
+  // Fetch preset detail on demand (Strictly on-demand: only fetch this single preset)
   let preset = state.cachedPresets[presetId];
   if (!preset) {
     descEl.textContent = '正在按需拉取云端厂商规则...';
@@ -447,7 +454,15 @@ async function onProviderPresetChange(){
   state.currentSelectedPreset = preset;
   nameInput.value = preset.id;
   urlInput.value = preset.base_url;
-  descEl.textContent = `${preset.description || ''} · 规则版本: v${preset.version || '1.1.0'}`;
+  
+  const dateBadge = preset.updated_at
+    ? `<span class="brand-badge badge-neutral" style="font-size:11px;margin-right:6px;">📅 更新日期: ${esc(preset.updated_at)}</span>`
+    : '';
+  const verBadge = `<span class="brand-badge" style="font-size:11px;margin-right:6px;">v${esc(preset.version || '1.1.0')}</span>`;
+  const noteBox = preset.update_notes
+    ? `<div style="margin-top:6px;font-size:12px;color:var(--text);background:var(--bg-card);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);"><strong>📝 适配说明：</strong>${esc(preset.update_notes)}</div>`
+    : '';
+  descEl.innerHTML = `<div style="line-height:1.6;">${verBadge}${dateBadge}<strong>${esc(preset.name)}</strong>: ${esc(preset.description || '')}</div>${noteBox}`;
   descEl.style.display = 'block';
 
   // Preset protocols sync
@@ -600,6 +615,12 @@ function saveProvider(){
   if(state.currentSelectedPreset && (state.currentSelectedPreset.id === name || !state.config.providers[name].preset_id)){
     state.config.providers[name].preset_id = state.currentSelectedPreset.id;
     state.config.providers[name].preset_version = state.currentSelectedPreset.version || '1.1.0';
+    if(state.currentSelectedPreset.updated_at){
+      state.config.providers[name].preset_updated_at = state.currentSelectedPreset.updated_at;
+    }
+    if(state.currentSelectedPreset.update_notes){
+      state.config.providers[name].preset_update_notes = state.currentSelectedPreset.update_notes;
+    }
     if(state.currentSelectedPreset.adapter_rules){
       state.config.providers[name].adapter_rules = state.currentSelectedPreset.adapter_rules;
     }
@@ -673,16 +694,16 @@ async function checkAllRuleUpdates(){
           alertEl.style.display = 'flex';
           alertEl.innerHTML = `
             <div>
-              <strong>发现 ${data.updates.length} 个供应商规则有新版本</strong>：
-              ${data.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${esc(u.provider_id)}: ${esc(u.current_version)} &rarr; ${esc(u.remote_version)}</span>`).join('')}
+              <strong>发现 ${data.updates.length} 个本地已存供应商规则有新版本</strong>：
+              ${data.updates.map(u => `<span class="badge badge-warning" style="margin-left:4px;">${esc(u.provider_id)}: ${esc(u.current_version)} &rarr; ${esc(u.remote_version)}${u.updated_at ? ` (${esc(u.updated_at)})` : ''}</span>`).join('')}
             </div>
-            <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新全部规则</button>
+            <button class="btn btn-primary btn-sm" onclick="applyAllProviderRuleUpdates()">一键更新本地已存供应商规则</button>
           `;
         }
-        toast(`检查完成：发现 ${data.updates.length} 个供应商有新规则`, 'ok');
+        toast(`检查完成：发现 ${data.updates.length} 个本地已存供应商有新规则`, 'ok');
       } else {
         if (alertEl) alertEl.style.display = 'none';
-        toast('所有供应商规则均为最新版本 (无需更新)', 'ok');
+        toast('所有本地已存供应商规则均为最新版本 (无需更新)', 'ok');
       }
       renderProviders();
     } else {
@@ -710,7 +731,7 @@ async function applyAllProviderRuleUpdates(){
 
 async function applyRuleUpdates(providerIds){
   try {
-    toast(`正在增量拉取并更新 ${providerIds.join(', ')} 的规则...`, 'ok');
+    toast(`正在按需拉取并更新本地已存供应商 [${providerIds.join(', ')}] 的规则...`, 'ok');
     const res = await fetch('/api/admin/presets/update-rules', {
       method: 'POST',
       headers: headers(),
@@ -731,7 +752,7 @@ async function applyRuleUpdates(providerIds){
         if (alertEl && Object.keys(state.ruleUpdatesMap || {}).length === 0) {
           alertEl.style.display = 'none';
         }
-        toast(`成功更新 ${data.updated.length} 个供应商的规则并已自动生效！`, 'ok');
+        toast(`成功按需更新 ${data.updated.length} 个本地供应商规则并已自动生效！`, 'ok');
         renderProviders();
       } else {
         toast(data?.message || '规则更新失败或无变更', 'err');

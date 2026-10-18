@@ -2,6 +2,8 @@
   "id": "amd",
   "name": "AMD Radeon Cloud",
   "version": "2026.10.18",
+  "updated_at": "2026-10-18",
+  "update_notes": "AMD 开发者平台推理集群适配，system 消息置顶与 reasoning 字段映射",
   "protocol": "openai",
   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",

@@ -11,6 +11,7 @@
 1. [系统定位与两大产品形态 (Software Flavors)](#1-系统定位与两大产品形态-software-flavors)
    - 1.1 [形态对比与技术规格](#11-形态对比与技术规格)
    - 1.2 [核心解耦架构：配置与主程序分离原则 (零发版迭代)](#12-核心解耦架构配置与主程序分离原则-零发版迭代)
+   - 1.3 [厂商适配预设演进规范：日期驱动与按需差量同步](#13-厂商适配预设演进规范日期驱动与按需差量同步-date-driven--on-demand-differential-sync)
 2. [软件运行模式规格 (Runtime Modes)](#2-软件运行模式规格-runtime-modes)
 3. [核心凭据架构与生命周期 (Vault Hub vs Local Key)](#3-核心凭据架构与生命周期-vault-hub-vs-local-key)
 4. [路由调度算法与频控状态机 (Scheduler & Rate Limiting)](#4-路由调度算法与频控状态机-scheduler--rate-limiting)
@@ -67,6 +68,21 @@ graph TD
 3. **系统发版准入边界 (SemVer 铁律)**：
    - 🔴 **必须发版（升级 `version.json` 并走全流水线门禁）**：核心调度算法重构（如流式首包心跳、连接池保护）、网络协议底层改造、系统配置 Schema 字段变更、关键安全防线加固；
    - 🟢 **严禁发版（零发版热更新/常规提交）**：厂商 presets 预设增删改、说明文档与操作手册维护、测试用例扩充。
+
+### 1.3 厂商适配预设演进规范：日期驱动与按需差量同步 (Date-Driven & On-Demand Differential Sync)
+
+为杜绝厂商规则更新黑盒与全局配置污染，系统确立了预设规范的两大物理铁律：
+
+1. **日期与说明标准化 (Date-Driven Specification)**：
+   - 所有官方厂商预设文件（`shared/presets/*.json`）及轻量目录索引（`catalog.json`）必须包含且严格校验两项元数据：
+     - `updated_at`：标准 ISO 日期格式 (`YYYY-MM-DD`)，准确记录规则最后修订日期；
+     - `update_notes`：清晰的中文更新说明，说明该版本针对上游平台的改动（例如协议兼容、模型列表增补、思考参数优化等）；
+   - 前端管理后台在下拉单选与模板卡片上直观渲染版本与更新日期胶囊 (`📅 更新日期: YYYY-MM-DD`)，杜绝信息黑盒。
+2. **零全量污染与物理级按需拉取 (Physical-Level On-Demand Pulling)**：
+   - **新增添加时（按需单条拉取）**：用户在管理后台选择某一厂商预设时，前端仅单条请求 `/api/admin/presets/detail?id=<id>`，仅下载所选厂商的适配规则，**绝对禁止全量下载所有厂商预设**；
+   - **更新拉取时（差量/仅已存更新）**：
+     - 后端（EdgeOne 边缘函数 `updateConfiguredRules` 与 VM `update_preset_rules_endpoint`）对传入的 `provider_ids` 实施强制物理过滤：`valid_target_ids = [pid for pid in target_ids if pid in providers]`；
+     - **严禁全量拉取**：本地存了哪些厂商就只更新哪些厂商的适配规则，任何未在本地配置中存在的厂商坚决不拉取、不写入本地配置，彻底杜绝云端模板对本地配置的侵入与污染。
 
 ---
 

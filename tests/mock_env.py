@@ -66,6 +66,7 @@ if "starlette" not in sys.modules:
     try:
         import starlette
     except ImportError:
+        import json
         class StreamingResponse:
             def __init__(self, content, status_code=200, headers=None, media_type=None):
                 self.status_code = status_code
@@ -75,17 +76,30 @@ if "starlette" not in sys.modules:
             def __init__(self, content, status_code=200, headers=None):
                 self.status_code = status_code
                 self.headers = headers or {}
+                self.content = content
+                self.body = json.dumps(content).encode("utf-8")
         class Response:
             def __init__(self, content=b"", status_code=200, headers=None, media_type=None):
                 self.status_code = status_code
                 self.headers = headers or {}
+                self.body = content
+        class Request:
+            def __init__(self, scope=None):
+                self.scope = scope or {}
+                self._json = None
+                self.query_params = {}
+            async def json(self):
+                return self._json if self._json is not None else {}
         mock_starlette = MagicMock()
         mock_starlette_responses = MagicMock()
         mock_starlette_responses.StreamingResponse = StreamingResponse
         mock_starlette_responses.JSONResponse = JSONResponse
         mock_starlette_responses.Response = Response
+        mock_starlette_requests = MagicMock()
+        mock_starlette_requests.Request = Request
         sys.modules["starlette"] = mock_starlette
         sys.modules["starlette.responses"] = mock_starlette_responses
+        sys.modules["starlette.requests"] = mock_starlette_requests
 
 if "fastapi" not in sys.modules:
     try:
@@ -96,7 +110,18 @@ if "fastapi" not in sys.modules:
         mock_fastapi_responses.StreamingResponse = sys.modules["starlette.responses"].StreamingResponse
         mock_fastapi_responses.JSONResponse = sys.modules["starlette.responses"].JSONResponse
         mock_fastapi_responses.Response = sys.modules["starlette.responses"].Response
-        mock_fastapi.APIRouter = MagicMock(return_value=MagicMock())
-        mock_fastapi.Request = MagicMock
+        class APIRouter:
+            def __init__(self, *args, **kwargs):
+                pass
+            def get(self, *args, **kwargs):
+                return lambda f: f
+            def post(self, *args, **kwargs):
+                return lambda f: f
+            def put(self, *args, **kwargs):
+                return lambda f: f
+            def delete(self, *args, **kwargs):
+                return lambda f: f
+        mock_fastapi.APIRouter = APIRouter
+        mock_fastapi.Request = Request
         sys.modules["fastapi"] = mock_fastapi
         sys.modules["fastapi.responses"] = mock_fastapi_responses

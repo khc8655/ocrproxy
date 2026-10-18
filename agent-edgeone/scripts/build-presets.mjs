@@ -27,6 +27,8 @@ const catalog = {
       id: p.id,
       name: p.name,
       version: p.version || '1.0.0',
+      updated_at: p.updated_at || '2026-10-18',
+      update_notes: p.update_notes || p.description || '',
       rule_hash: ruleHash,
       protocol: p.protocol || 'openai',
       base_url: p.base_url || '',

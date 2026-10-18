@@ -2,6 +2,8 @@
   "id": "minimax",
   "name": "MiniMax",
   "version": "1.4.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "MiniMax-M3 / M3.1-Flash-Preview 官方平台适配，OpenAI Completions 与 Anthropic Messages 双协议直通",
   "protocol": "openai",
   "base_url": "https://api.minimaxi.com/v1",
   "anthropic_base_url": "https://api.minimaxi.com/anthropic",

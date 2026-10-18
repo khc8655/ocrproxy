@@ -5,12 +5,14 @@
 
 export const CATALOG = {
   "version": "2026.10.18",
-  "updated_at": "2026-10-18T13:43:47.507Z",
+  "updated_at": "2026-10-18T13:56:39.656Z",
   "providers": [
     {
       "id": "agnes",
       "name": "Agnes AI",
       "version": "1.4.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "Agnes 3.0 / 2.5 Flash 旗舰推理模型适配，支持 512K 长上下文与原生 Thinking 思考直通",
       "rule_hash": "fefc72d3505b",
       "protocol": "openai",
       "base_url": "https://apihub.agnes-ai.com/v1",
@@ -29,6 +31,8 @@ export const CATALOG = {
       "id": "amd",
       "name": "AMD Radeon Cloud",
       "version": "2026.10.18",
+      "updated_at": "2026-10-18",
+      "update_notes": "AMD 开发者平台推理集群适配，system 消息置顶与 reasoning 字段映射",
       "rule_hash": "23fbdf92a43f",
       "protocol": "openai",
       "base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -47,6 +51,8 @@ export const CATALOG = {
       "id": "bai",
       "name": "B.AI",
       "version": "1.4.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "DeepSeek-V4 Flash / Qwen 3.8 Flash 适配，原生兼容 OpenAI 与 Anthropic Messages 双通道",
       "rule_hash": "29fa1b76a913",
       "protocol": "openai",
       "base_url": "https://api.b.ai/v1",
@@ -64,6 +70,8 @@ export const CATALOG = {
       "id": "cline",
       "name": "Cline",
       "version": "1.1.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "Cline 编程助手自适应中转配置，支持 Claude 3.7 / 3.5 Sonnet 与 Thinking 深度思考",
       "rule_hash": "287adac94c15",
       "protocol": "openai",
       "base_url": "https://api.cline.bot/api/v1",
@@ -81,6 +89,8 @@ export const CATALOG = {
       "id": "deepseek",
       "name": "DeepSeek 官方开放平台",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "DeepSeek 官方平台直连适配，支持 V3 全尺寸旗舰与 R1 reasoning_content 思考流纯净透传",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.deepseek.com/v1",
@@ -97,6 +107,8 @@ export const CATALOG = {
       "id": "google",
       "name": "Google AI Studio",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "Google Gemini 3.5 / 2.5 系列 Thinking Config 思考等级 (low/medium/high) 自动适配映射",
       "rule_hash": "f87bea8c1551",
       "protocol": "google_openai",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -114,6 +126,8 @@ export const CATALOG = {
       "id": "minimax",
       "name": "MiniMax",
       "version": "1.4.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "MiniMax-M3 / M3.1-Flash-Preview 官方平台适配，OpenAI Completions 与 Anthropic Messages 双协议直通",
       "rule_hash": "e5cff916701c",
       "protocol": "openai",
       "base_url": "https://api.minimaxi.com/v1",
@@ -132,6 +146,8 @@ export const CATALOG = {
       "id": "nvidia",
       "name": "NVIDIA NIM",
       "version": "2.0.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "NVIDIA NIM 官方免费推理 API 适配，完善 404 未激活与 403/429 免费配额超限快速切换",
       "rule_hash": "8e640ea75adb",
       "protocol": "openai",
       "base_url": "https://integrate.api.nvidia.com/v1",
@@ -149,6 +165,8 @@ export const CATALOG = {
       "id": "openai",
       "name": "OpenAI 官方",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "OpenAI 官方及标准兼容端点纯净直通，完整支持 o1/o3-mini / GPT-4o 思考链与多模态视觉",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.openai.com/v1",
@@ -166,6 +184,8 @@ export const CATALOG = {
       "id": "opencode",
       "name": "OpenCode Zen",
       "version": "2.0.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "OpenCode Zen 平台标准 OpenAI 协议适配，精简免费模型集合与 403 权限快速故障转移",
       "rule_hash": "7b700ff3eb3e",
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
@@ -183,6 +203,8 @@ export const CATALOG = {
       "id": "openrouter",
       "name": "OpenRouter",
       "version": "1.0.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "OpenRouter 官方预设，收录 7 大热门免费模型 (:free) 与 OpenAI/Anthropic 双端点及 402 欠费识别",
       "rule_hash": "9172f2c3a65f",
       "protocol": "openai",
       "base_url": "https://openrouter.ai/api/v1",
@@ -201,6 +223,8 @@ export const CATALOG = {
       "id": "sensenova",
       "name": "商汤日日新",
       "version": "1.3.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "商汤 SenseNova 平台 GLM-5.2 与多模态 OCR 高速识别适配，Messages 原生直通",
       "rule_hash": "0cf60ddb3bd5",
       "protocol": "openai",
       "base_url": "https://token.sensenova.cn/v1",
@@ -219,6 +243,8 @@ export const CATALOG = {
       "id": "siliconflow",
       "name": "硅基流动",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "硅基流动高并发推理平台，DeepSeek-V3/R1 与开源大模型及向量/重排端点全链路适配",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://api.siliconflow.cn/v1",
@@ -235,6 +261,8 @@ export const CATALOG = {
       "id": "stepfun",
       "name": "阶跃星辰",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "阶跃星辰 Step-3.7-Flash 平台适配，reasoning_effort 自动兼容与 deepseek 思考格式注入",
       "rule_hash": "ff735ef0f91a",
       "protocol": "openai",
       "base_url": "https://api.stepfun.com/step_plan",
@@ -252,6 +280,8 @@ export const CATALOG = {
       "id": "tokenrhythm",
       "name": "TokenRhythm",
       "version": "1.2.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "TokenRhythm 聚合平台多模型路由适配，支持 OpenAI 兼容接口高速直通",
       "rule_hash": "61ae3a7b32fb",
       "protocol": "openai",
       "base_url": "https://tokenrhythm.studio/v1",
@@ -268,6 +298,8 @@ export const CATALOG = {
       "id": "vertex",
       "name": "Google Vertex AI",
       "version": "1.1.0",
+      "updated_at": "2026-10-18",
+      "update_notes": "Google Cloud Vertex AI 专属适配，多 region 动态端点计算与 ThoughtSplitter 思考流分离",
       "rule_hash": "1128b7ad5ca0",
       "protocol": "vertex_openai",
       "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
@@ -291,8 +323,11 @@ export const PRESETS = [
     "id": "agnes",
     "name": "Agnes AI",
     "version": "1.4.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "Agnes 3.0 / 2.5 Flash 旗舰推理模型适配，支持 512K 长上下文与原生 Thinking 思考直通",
     "protocol": "openai",
     "base_url": "https://apihub.agnes-ai.com/v1",
+    "anthropic_base_url": "https://apihub.agnes-ai.com/v1",
     "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",
     "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
     "features": {
@@ -334,13 +369,14 @@ export const PRESETS = [
         "unsupported_params": [],
         "max_tokens_ceiling": 65536
       }
-    },
-    "anthropic_base_url": "https://apihub.agnes-ai.com/v1"
+    }
   },
   {
     "id": "amd",
     "name": "AMD Radeon Cloud",
     "version": "2026.10.18",
+    "updated_at": "2026-10-18",
+    "update_notes": "AMD 开发者平台推理集群适配，system 消息置顶与 reasoning 字段映射",
     "protocol": "openai",
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -406,6 +442,8 @@ export const PRESETS = [
     "id": "bai",
     "name": "B.AI",
     "version": "1.4.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "DeepSeek-V4 Flash / Qwen 3.8 Flash 适配，原生兼容 OpenAI 与 Anthropic Messages 双通道",
     "protocol": "openai",
     "base_url": "https://api.b.ai/v1",
     "anthropic_base_url": "https://api.b.ai/v1",
@@ -472,6 +510,8 @@ export const PRESETS = [
     "id": "cline",
     "name": "Cline",
     "version": "1.1.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "Cline 编程助手自适应中转配置，支持 Claude 3.7 / 3.5 Sonnet 与 Thinking 深度思考",
     "protocol": "openai",
     "base_url": "https://api.cline.bot/api/v1",
     "doc_url": "https://docs.cline.bot/api/overview",
@@ -564,6 +604,8 @@ export const PRESETS = [
     "id": "deepseek",
     "name": "DeepSeek 官方开放平台",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "DeepSeek 官方平台直连适配，支持 V3 全尺寸旗舰与 R1 reasoning_content 思考流纯净透传",
     "protocol": "openai",
     "base_url": "https://api.deepseek.com/v1",
     "doc_url": "https://api-docs.deepseek.com",
@@ -611,8 +653,11 @@ export const PRESETS = [
     "id": "google",
     "name": "Google AI Studio",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "Google Gemini 3.5 / 2.5 系列 Thinking Config 思考等级 (low/medium/high) 自动适配映射",
     "protocol": "google_openai",
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "doc_url": "https://ai.google.dev/gemini-api/docs/openai",
     "description": "Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+，内置 Thinking Matrix、深度 Schema 裁剪与思考预算自动提升",
     "features": {
       "native_thinking": true,
@@ -677,13 +722,14 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       }
-    },
-    "doc_url": "https://ai.google.dev/gemini-api/docs/openai"
+    }
   },
   {
     "id": "minimax",
     "name": "MiniMax",
     "version": "1.4.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "MiniMax-M3 / M3.1-Flash-Preview 官方平台适配，OpenAI Completions 与 Anthropic Messages 双协议直通",
     "protocol": "openai",
     "base_url": "https://api.minimaxi.com/v1",
     "anthropic_base_url": "https://api.minimaxi.com/anthropic",
@@ -741,6 +787,53 @@ export const PRESETS = [
     }
   },
   {
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "version": "2.0.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "NVIDIA NIM 官方免费推理 API 适配，完善 404 未激活与 403/429 免费配额超限快速切换",
+    "protocol": "openai",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "anthropic_base_url": null,
+    "doc_url": "https://docs.api.nvidia.com/",
+    "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
+    "features": {
+      "multimodal": true,
+      "native_thinking": true,
+      "tools": true
+    },
+    "recommended_models": [
+      {
+        "description": "120B MoE 旗舰，通用/coding 全能主力",
+        "name": "nemotron-3-super-120b",
+        "upstream_model": "nvidia/nemotron-3-super-120b-a12b"
+      },
+      {
+        "description": "30B 极速闪电推理模型，低延迟高性价比",
+        "name": "nemotron-3.5-lightning",
+        "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b"
+      },
+      {
+        "description": "Kimi K3 视觉+推理，256K 上下文，支持 reasoning_effort",
+        "name": "kimi-k3",
+        "upstream_model": "moonshotai/kimi-k3"
+      },
+      {
+        "description": "DeepSeek V4 Flash 变体，快速通用",
+        "name": "deepseek-v4-flash",
+        "upstream_model": "deepseek-ai/deepseek-v4-flash-0731"
+      },
+      {
+        "description": "Agentic coding 小快模型",
+        "name": "laguna-xs-2.1",
+        "upstream_model": "poolside/laguna-xs-2.1"
+      },
+      {
+        "description": "Llama 3.2 11B Vision，极速图文+函数调用",
+        "name": "llama-3.2-11b-vision",
+        "upstream_model": "meta/llama-3.2-11b-vision-instruct"
+      }
+    ],
     "adapter_rules": {
       "error_rules": [
         {
@@ -789,57 +882,14 @@ export const PRESETS = [
       "user_tracking": {
         "passthrough_user": true
       }
-    },
-    "anthropic_base_url": null,
-    "base_url": "https://integrate.api.nvidia.com/v1",
-    "description": "NVIDIA NIM 官方加速平台（build.nvidia.com 免费领取 nvapi- Key，无需绑卡；免费档约 40 RPM / 每日 1 万请求）。注意模型按账号单独激活，404 即该 Key 未开通该模型；流式推理返回 reasoning_content，已加固自动关流防护",
-    "doc_url": "https://docs.api.nvidia.com/",
-    "features": {
-      "multimodal": true,
-      "native_thinking": true,
-      "tools": true
-    },
-    "id": "nvidia",
-    "name": "NVIDIA NIM",
-    "protocol": "openai",
-    "recommended_models": [
-      {
-        "description": "120B MoE 旗舰，通用/coding 全能主力",
-        "name": "nemotron-3-super-120b",
-        "upstream_model": "nvidia/nemotron-3-super-120b-a12b"
-      },
-      {
-        "description": "30B 极速闪电推理模型，低延迟高性价比",
-        "name": "nemotron-3.5-lightning",
-        "upstream_model": "nvidia/nemotron-3.5-lightning-30b-a3b"
-      },
-      {
-        "description": "Kimi K3 视觉+推理，256K 上下文，支持 reasoning_effort",
-        "name": "kimi-k3",
-        "upstream_model": "moonshotai/kimi-k3"
-      },
-      {
-        "description": "DeepSeek V4 Flash 变体，快速通用",
-        "name": "deepseek-v4-flash",
-        "upstream_model": "deepseek-ai/deepseek-v4-flash-0731"
-      },
-      {
-        "description": "Agentic coding 小快模型",
-        "name": "laguna-xs-2.1",
-        "upstream_model": "poolside/laguna-xs-2.1"
-      },
-      {
-        "description": "Llama 3.2 11B Vision，极速图文+函数调用",
-        "name": "llama-3.2-11b-vision",
-        "upstream_model": "meta/llama-3.2-11b-vision-instruct"
-      }
-    ],
-    "version": "2.0.0"
+    }
   },
   {
     "id": "openai",
     "name": "OpenAI 官方",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "OpenAI 官方及标准兼容端点纯净直通，完整支持 o1/o3-mini / GPT-4o 思考链与多模态视觉",
     "protocol": "openai",
     "base_url": "https://api.openai.com/v1",
     "doc_url": "https://platform.openai.com/docs",
@@ -895,59 +945,20 @@ export const PRESETS = [
     }
   },
   {
-    "adapter_rules": {
-      "error_rules": [
-        {
-          "action": "quota_exhausted",
-          "cooldown_sec": 1800,
-          "failover": true,
-          "match_keywords": [
-            "FreeTierError",
-            "free tier",
-            "within OpenCode"
-          ],
-          "match_status": 403,
-          "name": "zen_free_tier_forbidden"
-        },
-        {
-          "action": "failover",
-          "cooldown_sec": 300,
-          "failover": true,
-          "match_keywords": [
-            "FreeUsageLimitError",
-            "daily free usage limit",
-            "Rate limit exceeded"
-          ],
-          "match_status": 429,
-          "name": "zen_daily_free_limit"
-        }
-      ],
-      "reasoning": {
-        "strategy": "openai_passthrough"
-      },
-      "sanitization": {
-        "unsupported_params": []
-      },
-      "tools": {
-        "normalize_choice_to_string": false,
-        "rescue_from_text": false,
-        "strip_json_schema": false
-      },
-      "user_tracking": {
-        "passthrough_user": true
-      }
-    },
+    "id": "opencode",
+    "name": "OpenCode Zen",
+    "version": "2.0.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "OpenCode Zen 平台标准 OpenAI 协议适配，精简免费模型集合与 403 权限快速故障转移",
+    "protocol": "openai",
     "base_url": "https://opencode.ai/zen/v1",
-    "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
     "doc_url": "https://opencode.ai/docs/zen/",
+    "description": "OpenCode Zen 官方托管模型（opencode.ai/zen 登录领取 Key，纯 OpenAI 协议直通透传）。免费档模型限时免费，按账号/IP 计每日限额；超限返回 429 FreeUsageLimitError。注意：免费模型原则上仅限 OpenCode 客户端内调用，第三方直连可能触发 403 FreeTierError。",
     "features": {
       "multimodal": true,
       "native_thinking": true,
       "tools": true
     },
-    "id": "opencode",
-    "name": "OpenCode Zen",
-    "protocol": "openai",
     "recommended_models": [
       {
         "description": "Zen 免费全能 stealth 模型（限时免费）",
@@ -990,9 +1001,103 @@ export const PRESETS = [
         "upstream_model": "nemotron-3.5-lightning-free"
       }
     ],
-    "version": "2.0.0"
+    "adapter_rules": {
+      "error_rules": [
+        {
+          "action": "quota_exhausted",
+          "cooldown_sec": 1800,
+          "failover": true,
+          "match_keywords": [
+            "FreeTierError",
+            "free tier",
+            "within OpenCode"
+          ],
+          "match_status": 403,
+          "name": "zen_free_tier_forbidden"
+        },
+        {
+          "action": "failover",
+          "cooldown_sec": 300,
+          "failover": true,
+          "match_keywords": [
+            "FreeUsageLimitError",
+            "daily free usage limit",
+            "Rate limit exceeded"
+          ],
+          "match_status": 429,
+          "name": "zen_daily_free_limit"
+        }
+      ],
+      "reasoning": {
+        "strategy": "openai_passthrough"
+      },
+      "sanitization": {
+        "unsupported_params": []
+      },
+      "tools": {
+        "normalize_choice_to_string": false,
+        "rescue_from_text": false,
+        "strip_json_schema": false
+      },
+      "user_tracking": {
+        "passthrough_user": true
+      }
+    }
   },
   {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "version": "1.0.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "OpenRouter 官方预设，收录 7 大热门免费模型 (:free) 与 OpenAI/Anthropic 双端点及 402 欠费识别",
+    "protocol": "openai",
+    "base_url": "https://openrouter.ai/api/v1",
+    "anthropic_base_url": "https://openrouter.ai/api/v1",
+    "doc_url": "https://openrouter.ai/docs/api/reference/overview",
+    "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
+    "features": {
+      "anthropic_messages": true,
+      "multimodal": true,
+      "native_thinking": true,
+      "tools": true
+    },
+    "recommended_models": [
+      {
+        "description": "免费档最强 coding 模型（262K 上下文）",
+        "name": "qwen3-coder:free",
+        "upstream_model": "qwen/qwen3-coder:free"
+      },
+      {
+        "description": "Agentic coding 专用模型（262K 上下文）",
+        "name": "laguna-s-2.1:free",
+        "upstream_model": "poolside/laguna-s-2.1:free"
+      },
+      {
+        "description": "550B MoE 免费推理/调度模型（1M 上下文）",
+        "name": "nemotron-3-ultra:free",
+        "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      },
+      {
+        "description": "30B MoE 轻量 coding 模型（256K 上下文）",
+        "name": "north-mini-code:free",
+        "upstream_model": "cohere/north-mini-code:free"
+      },
+      {
+        "description": "120B MoE 多智能体吞吐模型（1M 上下文）",
+        "name": "nemotron-3-super:free",
+        "upstream_model": "nvidia/nemotron-3-super-120b-a12b:free"
+      },
+      {
+        "description": "Google 多模态轻量模型（262K 上下文）",
+        "name": "gemma-4-26b:free",
+        "upstream_model": "google/gemma-4-26b-a4b-it:free"
+      },
+      {
+        "description": "动态路由：自动选择当前可用的免费模型（兜底用）",
+        "name": "openrouter-free-router",
+        "upstream_model": "openrouter/free"
+      }
+    ],
     "adapter_rules": {
       "error_rules": [
         {
@@ -1050,65 +1155,17 @@ export const PRESETS = [
       "user_tracking": {
         "passthrough_user": true
       }
-    },
-    "anthropic_base_url": "https://openrouter.ai/api/v1",
-    "base_url": "https://openrouter.ai/api/v1",
-    "description": "OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。免费档（:free 后缀模型）：20 RPM；每日 50 请求（openrouter.ai 账户累计消费 ≥$10 后提至 1000/日）。注册无需绑卡（sk-or- 开头 Key）。",
-    "doc_url": "https://openrouter.ai/docs/api/reference/overview",
-    "features": {
-      "anthropic_messages": true,
-      "multimodal": true,
-      "native_thinking": true,
-      "tools": true
-    },
-    "id": "openrouter",
-    "name": "OpenRouter",
-    "protocol": "openai",
-    "recommended_models": [
-      {
-        "description": "免费档最强 coding 模型（262K 上下文）",
-        "name": "qwen3-coder:free",
-        "upstream_model": "qwen/qwen3-coder:free"
-      },
-      {
-        "description": "Agentic coding 专用模型（262K 上下文）",
-        "name": "laguna-s-2.1:free",
-        "upstream_model": "poolside/laguna-s-2.1:free"
-      },
-      {
-        "description": "550B MoE 免费推理/调度模型（1M 上下文）",
-        "name": "nemotron-3-ultra:free",
-        "upstream_model": "nvidia/nemotron-3-ultra-550b-a55b:free"
-      },
-      {
-        "description": "30B MoE 轻量 coding 模型（256K 上下文）",
-        "name": "north-mini-code:free",
-        "upstream_model": "cohere/north-mini-code:free"
-      },
-      {
-        "description": "120B MoE 多智能体吞吐模型（1M 上下文）",
-        "name": "nemotron-3-super:free",
-        "upstream_model": "nvidia/nemotron-3-super-120b-a12b:free"
-      },
-      {
-        "description": "Google 多模态轻量模型（262K 上下文）",
-        "name": "gemma-4-26b:free",
-        "upstream_model": "google/gemma-4-26b-a4b-it:free"
-      },
-      {
-        "description": "动态路由：自动选择当前可用的免费模型（兜底用）",
-        "name": "openrouter-free-router",
-        "upstream_model": "openrouter/free"
-      }
-    ],
-    "version": "1.0.0"
+    }
   },
   {
     "id": "sensenova",
     "name": "商汤日日新",
     "version": "1.3.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "商汤 SenseNova 平台 GLM-5.2 与多模态 OCR 高速识别适配，Messages 原生直通",
     "protocol": "openai",
     "base_url": "https://token.sensenova.cn/v1",
+    "anthropic_base_url": "https://token.sensenova.cn/v1",
     "doc_url": "https://platform.sensenova.cn/docs",
     "description": "商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型",
     "features": {
@@ -1156,13 +1213,14 @@ export const PRESETS = [
       "sanitization": {
         "unsupported_params": []
       }
-    },
-    "anthropic_base_url": "https://token.sensenova.cn/v1"
+    }
   },
   {
     "id": "siliconflow",
     "name": "硅基流动",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "硅基流动高并发推理平台，DeepSeek-V3/R1 与开源大模型及向量/重排端点全链路适配",
     "protocol": "openai",
     "base_url": "https://api.siliconflow.cn/v1",
     "doc_url": "https://docs.siliconflow.cn",
@@ -1215,6 +1273,8 @@ export const PRESETS = [
     "id": "stepfun",
     "name": "阶跃星辰",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "阶跃星辰 Step-3.7-Flash 平台适配，reasoning_effort 自动兼容与 deepseek 思考格式注入",
     "protocol": "openai",
     "base_url": "https://api.stepfun.com/step_plan",
     "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",
@@ -1257,6 +1317,8 @@ export const PRESETS = [
     "id": "tokenrhythm",
     "name": "TokenRhythm",
     "version": "1.2.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "TokenRhythm 聚合平台多模型路由适配，支持 OpenAI 兼容接口高速直通",
     "protocol": "openai",
     "base_url": "https://tokenrhythm.studio/v1",
     "doc_url": "https://tokenrhythm.studio/docs/api-integration",
@@ -1309,6 +1371,8 @@ export const PRESETS = [
     "id": "vertex",
     "name": "Google Vertex AI",
     "version": "1.1.0",
+    "updated_at": "2026-10-18",
+    "update_notes": "Google Cloud Vertex AI 专属适配，多 region 动态端点计算与 ThoughtSplitter 思考流分离",
     "protocol": "vertex_openai",
     "base_url": "https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi",
     "doc_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai?hl=zh-cn",

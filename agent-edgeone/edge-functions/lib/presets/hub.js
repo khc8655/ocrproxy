@@ -209,6 +209,8 @@ export async function checkConfiguredUpdates(context, providersToCheck = null) {
       current_version: currVer,
       latest_version: latestVer,
       remote_version: latestVer,
+      updated_at: remotePreset.updated_at || '',
+      update_notes: remotePreset.update_notes || '',
       has_update: hasUpdate,
     };
 
@@ -228,7 +230,7 @@ export async function checkConfiguredUpdates(context, providersToCheck = null) {
 }
 
 /**
- * Incrementally update rules strictly for selected configured providers.
+ * Incrementally update rules strictly for selected configured providers on demand.
  */
 export async function updateConfiguredRules(context, targetIds, kv) {
   if (!Array.isArray(targetIds) || targetIds.length === 0) {
@@ -241,15 +243,17 @@ export async function updateConfiguredRules(context, targetIds, kv) {
 
   const config = await loadConfig(context?.env, kv);
   const providers = config.providers || {};
+
+  // 物理级防御：只允许更新本地配置中已有的 provider_ids，任何未配置的 id 坚决拦截，绝不全量拉取或污染
+  const validTargetIds = targetIds.filter((pid) => Boolean(providers[pid]));
+  if (validTargetIds.length === 0) {
+    return { ok: false, error: 'None of the specified providers exist in local configuration', updated: [], failed: [] };
+  }
+
   const updated = [];
   const failed = [];
 
-  for (const pid of targetIds) {
-    if (!providers[pid]) {
-      failed.push({ provider_id: pid, error: 'Provider not found in current config' });
-      continue;
-    }
-
+  for (const pid of validTargetIds) {
     const pdata = providers[pid];
     const presId = pdata.preset_id || pid;
 
@@ -265,6 +269,12 @@ export async function updateConfiguredRules(context, targetIds, kv) {
     pdata.adapter_rules = presetData.adapter_rules || {};
     pdata.preset_version = presetData.version || '1.1.0';
     pdata.rule_hash = catalogMap[presId]?.rule_hash || presetData.rule_hash || '';
+    if (presetData.updated_at) {
+      pdata.preset_updated_at = presetData.updated_at;
+    }
+    if (presetData.update_notes) {
+      pdata.preset_update_notes = presetData.update_notes;
+    }
     if (presetData.recommended_models) {
       pdata.recommended_models = presetData.recommended_models;
     }
@@ -276,6 +286,8 @@ export async function updateConfiguredRules(context, targetIds, kv) {
       provider_id: pid,
       preset_id: presId,
       new_version: pdata.preset_version,
+      updated_at: presetData.updated_at || '',
+      update_notes: presetData.update_notes || '',
     });
   }
 

@@ -2,6 +2,8 @@
   "id": "cline",
   "name": "Cline",
   "version": "1.1.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "Cline 编程助手自适应中转配置，支持 Claude 3.7 / 3.5 Sonnet 与 Thinking 深度思考",
   "protocol": "openai",
   "base_url": "https://api.cline.bot/api/v1",
   "doc_url": "https://docs.cline.bot/api/overview",

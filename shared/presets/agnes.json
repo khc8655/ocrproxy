@@ -2,8 +2,11 @@
   "id": "agnes",
   "name": "Agnes AI",
   "version": "1.4.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "Agnes 3.0 / 2.5 Flash 旗舰推理模型适配，支持 512K 长上下文与原生 Thinking 思考直通",
   "protocol": "openai",
   "base_url": "https://apihub.agnes-ai.com/v1",
+  "anthropic_base_url": "https://apihub.agnes-ai.com/v1",
   "doc_url": "https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash",
   "description": "Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型，原生直通 512k 上下文",
   "features": {
@@ -45,6 +48,5 @@
       "unsupported_params": [],
       "max_tokens_ceiling": 65536
     }
-  },
-  "anthropic_base_url": "https://apihub.agnes-ai.com/v1"
+  }
 }

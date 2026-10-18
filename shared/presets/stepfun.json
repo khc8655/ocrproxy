@@ -2,6 +2,8 @@
   "id": "stepfun",
   "name": "阶跃星辰",
   "version": "1.2.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "阶跃星辰 Step-3.7-Flash 平台适配，reasoning_effort 自动兼容与 deepseek 思考格式注入",
   "protocol": "openai",
   "base_url": "https://api.stepfun.com/step_plan",
   "doc_url": "https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create",

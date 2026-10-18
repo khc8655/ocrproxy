@@ -2,6 +2,8 @@
   "id": "siliconflow",
   "name": "硅基流动",
   "version": "1.2.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "硅基流动高并发推理平台，DeepSeek-V3/R1 与开源大模型及向量/重排端点全链路适配",
   "protocol": "openai",
   "base_url": "https://api.siliconflow.cn/v1",
   "doc_url": "https://docs.siliconflow.cn",

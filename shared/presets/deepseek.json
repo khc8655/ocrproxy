@@ -2,6 +2,8 @@
   "id": "deepseek",
   "name": "DeepSeek 官方开放平台",
   "version": "1.2.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "DeepSeek 官方平台直连适配，支持 V3 全尺寸旗舰与 R1 reasoning_content 思考流纯净透传",
   "protocol": "openai",
   "base_url": "https://api.deepseek.com/v1",
   "doc_url": "https://api-docs.deepseek.com",

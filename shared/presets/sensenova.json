@@ -2,8 +2,11 @@
   "id": "sensenova",
   "name": "商汤日日新",
   "version": "1.3.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "商汤 SenseNova 平台 GLM-5.2 与多模态 OCR 高速识别适配，Messages 原生直通",
   "protocol": "openai",
   "base_url": "https://token.sensenova.cn/v1",
+  "anthropic_base_url": "https://token.sensenova.cn/v1",
   "doc_url": "https://platform.sensenova.cn/docs",
   "description": "商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型",
   "features": {
@@ -51,6 +54,5 @@
     "sanitization": {
       "unsupported_params": []
     }
-  },
-  "anthropic_base_url": "https://token.sensenova.cn/v1"
+  }
 }

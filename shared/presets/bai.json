@@ -2,6 +2,8 @@
   "id": "bai",
   "name": "B.AI",
   "version": "1.4.0",
+  "updated_at": "2026-10-18",
+  "update_notes": "DeepSeek-V4 Flash / Qwen 3.8 Flash 适配，原生兼容 OpenAI 与 Anthropic Messages 双通道",
   "protocol": "openai",
   "base_url": "https://api.b.ai/v1",
   "anthropic_base_url": "https://api.b.ai/v1",
