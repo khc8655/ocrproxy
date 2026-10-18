@@ -583,23 +583,17 @@ function saveProvider(){
     } else {
       delete state.config.providers[name].anthropic_base_url;
     }
-    if(rpmVal > 0){
-      state.config.providers[name].rpm_per_key = rpmVal;
-    } else {
-      delete state.config.providers[name].rpm_per_key;
-    }
+    state.config.providers[name].rpm_per_key = (rpmVal > 0 ? rpmVal : 0);
   } else {
     state.config.providers[name] = { 
       base_url: url, 
       keys: (state.config.providers[name] && state.config.providers[name].keys) || {}, 
       protocols: selectedProtos,
-      anthropic_messages: selectedProtos.includes('messages')
+      anthropic_messages: selectedProtos.includes('messages'),
+      rpm_per_key: (rpmVal > 0 ? rpmVal : 0)
     };
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
-    }
-    if(rpmVal > 0){
-      state.config.providers[name].rpm_per_key = rpmVal;
     }
   }
 

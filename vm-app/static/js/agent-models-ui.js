@@ -1106,7 +1106,7 @@
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
     const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
-    const isActive = (key === activeKey);
+    const isActive = (key === activeKey || `${prov}:${key}` === activeKey);
 
     const setActiveBtn = isActive
       ? `<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>`

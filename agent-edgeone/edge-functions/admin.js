@@ -471,7 +471,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.18-06</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.18-07</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -3777,23 +3777,17 @@ function saveProvider(){
     } else {
       delete state.config.providers[name].anthropic_base_url;
     }
-    if(rpmVal > 0){
-      state.config.providers[name].rpm_per_key = rpmVal;
-    } else {
-      delete state.config.providers[name].rpm_per_key;
-    }
+    state.config.providers[name].rpm_per_key = (rpmVal > 0 ? rpmVal : 0);
   } else {
     state.config.providers[name] = { 
       base_url: url, 
       keys: (state.config.providers[name] && state.config.providers[name].keys) || {}, 
       protocols: selectedProtos,
-      anthropic_messages: selectedProtos.includes('messages')
+      anthropic_messages: selectedProtos.includes('messages'),
+      rpm_per_key: (rpmVal > 0 ? rpmVal : 0)
     };
     if(selectedProtos.includes('messages') && anthropicUrl){
       state.config.providers[name].anthropic_base_url = anthropicUrl;
-    }
-    if(rpmVal > 0){
-      state.config.providers[name].rpm_per_key = rpmVal;
     }
   }
 
@@ -5356,7 +5350,7 @@ function openKeyModalFromCandidateModal(){
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
     const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
-    const isActive = (key === activeKey);
+    const isActive = (key === activeKey || \`\${prov}:\${key}\` === activeKey);
 
     const setActiveBtn = isActive
       ? \`<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>\`

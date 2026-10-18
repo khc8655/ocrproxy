@@ -801,32 +801,6 @@ def _model_not_found_response(model_name: str) -> JSONResponse:
     )
 
 
-def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
-    """Scale the failover budget with candidate count, ensuring at least max_retries attempts.
-
-    Supports long-thinking / reasoning models (e.g. 120s timeout with failover retries).
-    An explicitly configured request_total_budget_sec wins."""
-    try:
-        raw_budget = config.get("request_total_budget_sec")
-        if raw_budget is None:
-            raw_legacy = config.get("schedule_total_budget")
-            if raw_legacy is not None and float(raw_legacy) > 10.0:
-                raw_budget = raw_legacy
-        if raw_budget is not None:
-            explicit = float(raw_budget)
-            if explicit > 0:
-                return max(explicit, timeout)
-    except (ValueError, TypeError):
-        pass
-
-    try:
-        max_retries = int(config.get("max_retries", 3))
-    except (ValueError, TypeError):
-        max_retries = 3
-
-    return min(600.0, timeout * min(max_retries, max(candidate_count, 1)))
-
-
 async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES, return_raw_bytes: bool = False):
     """Parse the request JSON body, returning (body, error_response) or (body, raw_bytes, error_response).
 
@@ -1052,7 +1026,6 @@ async def chat_completions(request: Request):
     req_config = {
         **config,
         "upstream_timeout": chat_timeout,
-        "schedule_total_budget": _scale_budget(config, chat_timeout, len(candidates_list)),
         "candidates": {"chat": candidates_list},
     }
 
@@ -1324,7 +1297,6 @@ async def anthropic_messages(request: Request):
     req_config = {
         **config,
         "upstream_timeout": chat_timeout,
-        "schedule_total_budget": _scale_budget(config, chat_timeout, len(candidates_list)),
         "candidates": {"messages": candidates_list},
     }
 
@@ -1469,7 +1441,6 @@ async def embeddings(request: Request):
     req_config = {
         **config,
         "upstream_timeout": emb_timeout,
-        "schedule_total_budget": _scale_budget(config, emb_timeout, len(candidates_list)),
         "candidates": {"embedding": candidates_list},
     }
 
@@ -1560,7 +1531,6 @@ async def rerank(request: Request):
     req_config = {
         **config,
         "upstream_timeout": rerank_timeout,
-        "schedule_total_budget": _scale_budget(config, rerank_timeout, len(candidates_list)),
         "candidates": {"reranker": candidates_list},
     }
 
@@ -1817,11 +1787,9 @@ async def _ocr_handle(request: Request, config: dict):
     except (ValueError, TypeError):
         ocr_timeout = 60.0
 
-    ocr_candidates = len(config.get("candidates", {}).get("ocr", []))
     req_config = {
         **config,
         "upstream_timeout": ocr_timeout,
-        "schedule_total_budget": _scale_budget(config, ocr_timeout, ocr_candidates),
     }
 
     try:

@@ -109,8 +109,9 @@ export async function onRequestPost(context) {
     }
     return errorResponse(400, 'invalid_request_error', `Failed to read body: ${e?.message || e}`);
   }
-  if (bodyText.length > MAX_BODY_BYTES) {
-    return tooLargeResponse(bodyText.length);
+  const bodyByteLength = new TextEncoder().encode(bodyText).byteLength;
+  if (bodyByteLength > MAX_BODY_BYTES) {
+    return tooLargeResponse(bodyByteLength);
   }
 
   let body;
@@ -249,7 +250,7 @@ export async function onRequestPost(context) {
     }
 
     // Per-attempt body normalization (provider-specific)
-    const attemptBody = JSON.parse(JSON.stringify(body));
+    const attemptBody = typeof structuredClone === 'function' ? structuredClone(body) : JSON.parse(JSON.stringify(body));
     attemptBody.model = resolved.upstreamModel;
     normaliseForProvider(attemptBody, binding.provider, resolved.providerConfig);
 
@@ -527,28 +528,41 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
         };
       }
 
-      // Fast response branch (within 1500ms)
-      const { done, value } = peekResult;
+      // Fast response branch
+      const { done } = peekResult;
+      let value = peekResult.value;
       if (done || !value || value.length === 0) {
         console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} stream closed without emitting data`);
         try { await reader.cancel(); } catch (_) {}
         return { kind: 'empty_stream', status: upstreamResp.status, errorText: 'Stream closed without emitting data', response: null };
       }
 
-      // Check for in-band error in first chunk (e.g. {"error": {...}})
-      const firstChunkText = new TextDecoder().decode(value);
-      if (firstChunkText.trim().startsWith('{"error"') || firstChunkText.includes('"type":"error"')) {
-        console.warn(`[EdgeOne:InBandError] url=${url} status=${upstreamResp.status} in-band error detected: ${firstChunkText.slice(0, 150)}`);
-        try { await reader.cancel(); } catch (_) {}
-        let inbandStatus = 502;
+      // Check for in-band error in first chunk (e.g. data: {"error": {...}})
+      let firstChunkText = new TextDecoder().decode(value);
+      // If the first chunk only contained SSE comments (e.g. : ping), peek one more chunk to inspect real data
+      const nonCommentLines = firstChunkText.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith(':'));
+      if (nonCommentLines.length === 0 && value.length < 2048) {
         try {
-          const parsed = JSON.parse(firstChunkText.startsWith('data:') ? firstChunkText.replace(/^data:\s*/, '') : firstChunkText);
-          const errCode = parsed.error?.code || parsed.error?.status;
-          if (errCode && Number(errCode) >= 400 && Number(errCode) <= 599) inbandStatus = Number(errCode);
-          else if (parsed.error?.type === 'rate_limit_error') inbandStatus = 429;
-          else if (parsed.error?.type === 'authentication_error') inbandStatus = 401;
+          const nextRead = await Promise.race([
+            reader.read(),
+            new Promise(res => setTimeout(() => res(null), 300))
+          ]);
+          if (nextRead && !nextRead.done && nextRead.value && nextRead.value.length > 0) {
+            const nextText = new TextDecoder().decode(nextRead.value);
+            firstChunkText += '\n' + nextText;
+            const combined = new Uint8Array(value.length + nextRead.value.length);
+            combined.set(value, 0);
+            combined.set(nextRead.value, value.length);
+            value = combined;
+          }
         } catch (_) {}
-        return { kind: 'http', status: inbandStatus, errorText: firstChunkText, response: null };
+      }
+
+      const inBandErr = detectSseInBandError(firstChunkText);
+      if (inBandErr) {
+        console.warn(`[EdgeOne:InBandError] url=${url} status=${upstreamResp.status} in-band error detected: ${inBandErr.errorText.slice(0, 150)}`);
+        try { await reader.cancel(); } catch (_) {}
+        return { kind: 'http', status: inBandErr.status, errorText: inBandErr.errorText, response: null };
       }
 
       return {
@@ -585,6 +599,56 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       headers: buildOutHeaders(upstreamResp),
     }),
   };
+}
+
+function detectSseInBandError(text) {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{"error"') || trimmed.startsWith('{"error":')) {
+    try {
+      const obj = JSON.parse(trimmed);
+      if (obj && obj.error) {
+        return { status: parseInBandStatus(obj.error), errorText: trimmed };
+      }
+    } catch (_) {}
+  }
+  const lines = text.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith(':')) continue;
+    if (line.startsWith('data:')) {
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(payload);
+        if (obj && (obj.error || obj.type === 'error' || obj.code === 'error')) {
+          return { status: parseInBandStatus(obj.error || obj), errorText: payload };
+        }
+      } catch (_) {}
+    }
+  }
+  return null;
+}
+
+function parseInBandStatus(err) {
+  if (!err) return 502;
+  const code = err.code || err.status;
+  if (code && Number(code) >= 400 && Number(code) <= 599) return Number(code);
+  const type = String(err.type || '').toLowerCase();
+  const msg = String(err.message || '').toLowerCase();
+  if (type === 'rate_limit_error' || msg.includes('rate limit') || msg.includes('429')) return 429;
+  if (type === 'authentication_error' || msg.includes('invalid api key') || msg.includes('unauthorized')) return 401;
+  return 502;
+}
+
+function safeWaitUntil(context, p) {
+  if (context && typeof context.waitUntil === 'function') {
+    try {
+      context.waitUntil(p);
+      return;
+    } catch (_) {}
+  }
+  p.catch(() => {});
 }
 
 function buildOutHeaders(upstreamResp) {

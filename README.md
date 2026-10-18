@@ -554,6 +554,26 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.18-07` (2026-10-18)
+- **EdgeOne SSE 带内错误精准侦测与保活行规避**：
+  - 重构流式带内错误解析器，严格支持标准 OpenAI SSE 格式 (`data: {"error": ...}`)，自动跳过 EdgeOne 20 秒保活心跳注释行（`: ping`），彻底解决流式首包 429/500 带内错误穿透或解析失败的问题；
+- **400 故障精确短语匹配与 Key 误封根除**：
+  - 收敛 400 错误码的 Key 级冻结词表为完整精确短语（如 `invalid api key`、`no active subscription`），杜绝因请求体携带 `plan`、`insufficient` 等常规参数校验错误导致正常 Key 被误封 30 分钟；
+- **403 地区与模型级权限解耦**：
+  - 精准识别 `region`、`location`、`permission to access model` 等地区与模型级权限限制错误，将其严格隔离为模型级候选冷却，不再连带冻结整个 Key 名下的其他可用模型；
+- **RPM 调度细节彻底闭环与中枢同步增强**：
+  - 调度器懒加载提供商完整补全 `rpm_per_key` 约束，彻底废弃已失效的 `keys[*].rpm`；中枢管理端清空 RPM 时显式保存 `rpm_per_key: 0`，后端原子更新并重置本地滑动窗口；
+- **预算运行时残留彻底清除 (方案 A 契约加固)**：
+  - 彻底清除 `proxy_routes.py` 中 5 处 `schedule_total_budget` 覆盖与 `_scale_budget` 历史遗留，统一由调度器按候选剩余预算自主分配；VM 端保持强 HTTP 契约，首包前不提前发送 200，确保 429/502 能正常触发客户端重试；
+- **Agent 429 短冷却保护与全冷却等待时间完善**：
+  - 针对上游未提供 `Retry-After` 头的 429 响应，赋予 10 秒默认保守退避冷却；当全部候选均处于冷却时，候选等待时间完整纳入 `_key_cooldown_until`，杜绝未等待即重入导致的死循环或连续 429；
+- **Sticky 会话切 Key 条件精准约束**：
+  - 严格限制 `sticky_failover` 顺延指针的触发时机，仅在 429、401/403 认证错误及配额耗尽等关键凭据故障时顺延指针，普通可重试网络抖动优先就地重试，杜绝偶发波动误切主力 Key；
+- **EdgeOne 平台性能与准入加固**：
+  - 采用 `TextEncoder().encode(bodyText).byteLength` 计算真实 UTF-8 字节数，严密拦截超限请求；采用 `structuredClone` 消除循环内 JSON 序列化性能开销；`messages.js` 默认最大重试次数对齐为 3；边缘 KV 冷却写入接入 `safeWaitUntil`；
+- **管理控制台复合键高亮兼容**：
+  - `agent-models-ui.js` 的 `isActive` 判定全面兼容原生 Key 标识与 `provider:key` 复合键格式，确保正在调度生效的主力 Key 标签在界面上精准点亮高亮。
+
 ### `v2026.10.18-06` (2026-10-18)
 - **前端单一真理源 (Single Source of Truth) 重构彻底落地**：
   - 前端源代码（HTML、CSS、JS）统一收敛至 `shared/admin/`，彻底废除 `agent-edgeone/admin.*` 多重冗余副本维护，彻底根除多端代码漂移与重复修复的历史隐患；

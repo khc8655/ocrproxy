@@ -544,6 +544,13 @@ def evaluate_candidate_failure(
     # 2. Agent Mode: Only hard quota or auth failure causes long cooldown. Transient errors do NOT freeze the key.
     if is_agent:
         if status_code in (401, 403):
+            if status_code == 403 and config_params.get("is_model_level_403"):
+                return FailureEvaluation(
+                    cooldown_sec=config_params.get("cooldown_404_sec", 600.0),
+                    is_quota=False,
+                    mark_provider_down=False,
+                    circuit_breaker_triggered=False,
+                )
             # Auth failure (bad key token)
             return FailureEvaluation(
                 cooldown_sec=cooldown_403_sec,
@@ -551,18 +558,17 @@ def evaluate_candidate_failure(
                 mark_provider_down=False,
                 circuit_breaker_triggered=False,
             )
-        # 429 with an explicit Retry-After: honour it (capped at 60 s) when there
-        # is another candidate to use meanwhile, so the next requests stop
-        # hammering a key the provider just told us to back off from.
+        # 429 with alternatives: honour Retry-After (capped at 60s) or apply 10s backoff cooldown
         retry_after = config_params.get("retry_after_sec")
-        if status_code == 429 and retry_after and config_params.get("has_alternatives", True):
+        if status_code == 429 and config_params.get("has_alternatives", True):
+            cd_val = min(float(retry_after), 60.0) if retry_after else 10.0
             return FailureEvaluation(
-                cooldown_sec=min(float(retry_after), 60.0),
+                cooldown_sec=cd_val,
                 is_quota=False,
                 mark_provider_down=False,
                 circuit_breaker_triggered=False,
             )
-        # Transient 429 TPM, 5xx, or network timeouts: 0s cooldown (do not lock out from future retries)
+        # Transient 5xx or network timeouts: 0s cooldown (do not lock out from future retries)
         return FailureEvaluation(
             cooldown_sec=0.0,
             is_quota=False,
@@ -580,6 +586,13 @@ def evaluate_candidate_failure(
             circuit_breaker_triggered=False,
         )
     elif status_code in (401, 403):
+        if status_code == 403 and config_params.get("is_model_level_403"):
+            return FailureEvaluation(
+                cooldown_sec=config_params.get("cooldown_404_sec", 600.0),
+                is_quota=False,
+                mark_provider_down=False,
+                circuit_breaker_triggered=False,
+            )
         return FailureEvaluation(
             cooldown_sec=cooldown_403_sec,
             is_quota=False,
@@ -1366,22 +1379,9 @@ async def schedule(
     except (ValueError, TypeError):
         agent_first_byte_timeout_sec = 120.0
 
-    stb_val = config.get("schedule_total_budget")
-    stb_sec = None
-    stb_retries = None
-    if stb_val is not None:
-        try:
-            f_stb = float(stb_val)
-            if f_stb > 10.0:
-                stb_sec = f_stb
-            elif 0 < f_stb <= 10.0:
-                stb_retries = int(f_stb)
-        except (ValueError, TypeError):
-            pass
-
     # Max candidate retries per request
     try:
-        max_retries = max(1, int(config.get("max_retries", stb_retries if stb_retries is not None else config.get("schedule_total_budget_count", 3))))
+        max_retries = max(1, int(config.get("max_retries", 3)))
     except (ValueError, TypeError):
         max_retries = 3
 
@@ -1394,8 +1394,6 @@ async def schedule(
     endpoint_budget = max(min_single_attempt, min(600.0, endpoint_budget))
 
     raw_budget = config.get("request_total_budget_sec")
-    if raw_budget is None and stb_sec is not None:
-        raw_budget = stb_sec
 
     # Configured request_total_budget_sec acts as an upper safety cap
     max_cap = 600.0
@@ -1632,6 +1630,7 @@ async def schedule(
                         "protocols": fetched_p.get("protocols", ["chat"]),
                         "anthropic_messages": bool(fetched_p.get("anthropic_messages")),
                         "anthropic_base_url": fetched_p.get("anthropic_base_url"),
+                        "rpm_per_key": fetched_p.get("rpm_per_key", 0),
                         "adapter_rules": fetched_p.get("adapter_rules") or {},
                         "keys": dict(fetched_p.get("keys") or {})
                     }
@@ -1662,14 +1661,9 @@ async def schedule(
                 api_key = str(api_key_raw)
                 base_url = provider.get("base_url", "")
 
-            # 2c. Per-key RPM limit (opt-in via provider.rpm_per_key or key.rpm): skip a key
+            # 2c. Per-key RPM limit (strictly governed by provider.rpm_per_key): skip a key
             # whose minute budget is used up instead of collecting an upstream 429.
             rpm_limit = _provider_rpm(provider)
-            if isinstance(api_key_raw, dict) and api_key_raw.get("rpm") is not None:
-                try:
-                    rpm_limit = max(0, int(api_key_raw.get("rpm") or 0))
-                except (ValueError, TypeError):
-                    pass
             rpm_key_id = f"{provider_name}:{key_label}"
             if rpm_limit:
                 _rw = _rpm_wait(rpm_key_id, rpm_limit)
@@ -2018,12 +2012,23 @@ async def schedule(
                     # Distinguish 400 Bad Request:
                     _400_is_key_issue = False
                     if status_code == 400 and err_body_text:
-                        if _is_quota or any(kw in body_lower for kw in [
-                            "subscription", "no active", "api key", "invalid_key",
-                            "unauthorized", "account", "billing", "payment", "plan",
-                            "credit", "balance", "insufficient", "quota", "arrears",
-                        ]):
+                        _KEY_ISSUE_400_PHRASES = (
+                            "invalid api key", "invalid_api_key", "invalid api_key", "invalid key",
+                            "invalid token", "no active subscription", "account is suspended",
+                            "account deactivated", "account suspended", "billing arrears",
+                            "payment required", "credit depleted", "arrears", "unauthorized client",
+                            "api key is disabled", "api key revoked",
+                        )
+                        if _is_quota or any(kw in body_lower for kw in _KEY_ISSUE_400_PHRASES):
                             _400_is_key_issue = True
+
+                    _MODEL_LEVEL_403_PHRASES = (
+                        "permission to access model", "access to model", "not available in your region",
+                        "model not available", "unsupported country", "region is not supported",
+                        "country not supported", "access denied for model", "model access restricted",
+                        "not entitled to use model",
+                    )
+                    _403_is_model_level = (status_code == 403 and any(p in body_lower for p in _MODEL_LEVEL_403_PHRASES))
 
                     # 1. Non-retriable errors: abort immediately without failover
                     # 400 (Client parameter error): if single provider, abort; if multi-provider configured,
@@ -2133,20 +2138,21 @@ async def schedule(
                         config_params={**cooldown_cfg,
                                        "cooldown_404_sec": cooldown_404_sec if len(ordered_items) > 1 else 0.0,
                                        "retry_after_sec": _retry_after,
+                                       "is_model_level_403": _403_is_model_level,
                                        "has_alternatives": len(ordered_items) > 1},
                     )
 
                     if eval_res.cooldown_sec > 0:
                         _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
-                        # Three-tier cooldown: Key-level failure (401, 403, hard quota exhaustion)
+                        # Three-tier cooldown: Key-level failure (401, non-model-specific 403, hard quota, key-issue 400)
                         # parks the entire key (all models bound to provider:key)
-                        if status_code in (401, 403) or eval_res.is_quota or _400_is_key_issue:
+                        if (status_code in (401, 403) and not _403_is_model_level) or eval_res.is_quota or _400_is_key_issue:
                             _key_cooldown_until[f"{provider_name}:{key_label}"] = time.time() + eval_res.cooldown_sec
                     else:
                         _cooldown_until.pop(cand_id, None)
 
                     # Agent sticky mode: on 429 or auth/quota failure, proactively advance sticky pointer to next candidate
-                    if is_agent and strategy == "sticky_failover":
+                    if is_agent and strategy == "sticky_failover" and (status_code in (429, 401, 403) or eval_res.is_quota or _400_is_key_issue):
                         curr_active = _sticky_agent_active_keys.get(req_model_name)
                         if curr_active in (key_label, f"{provider_name}:{key_label}"):
                             for _, next_c in ordered_items[attempt_seq:]:
@@ -2326,6 +2332,7 @@ async def schedule(
             now_mono = time.monotonic()
             remaining_mono = deadline - now_mono
             expiries = [max(_cooldown_until.get(get_candidate_id(c), 0.0),
+                            _key_cooldown_until.get(f"{c.get('provider')}:{c.get('key')}", 0.0),
                             _rpm_blocked.get(get_candidate_id(c), 0.0)) for _, c in ordered_items]
             if expiries:
                 min_expiry = min(expiries)

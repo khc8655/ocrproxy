@@ -35,6 +35,7 @@ import {
   recordFailure,
   recordSuccess,
   classifyFailure,
+  isKeyLevelFailure,
   shouldFailover,
   bindingId,
   clearAllState,
@@ -934,6 +935,27 @@ test('shouldFailover: 429, 5xx, 401, 403 DO failover', () => {
 test('shouldFailover: empty_stream and read_timeout always failover', () => {
   eq(shouldFailover(200, 'empty_stream'), true);
   eq(shouldFailover(0, 'read_timeout'), true);
+});
+
+test('isKeyLevelFailure: 400 with ordinary parameter words (plan, context, tokens) does NOT trigger key failure', () => {
+  eq(isKeyLevelFailure(400, '{"error":"max_tokens exceeds plan limit"}'), false);
+  eq(isKeyLevelFailure(400, '{"error":"insufficient context length"}'), false);
+  eq(isKeyLevelFailure(400, '{"error":"invalid parameter temperature"}'), false);
+});
+
+test('isKeyLevelFailure: 400 with authentic key/quota issues triggers key failure', () => {
+  eq(isKeyLevelFailure(400, '{"error":"invalid api key"}'), true);
+  eq(isKeyLevelFailure(400, '{"error":"no active subscription"}'), true);
+  eq(isKeyLevelFailure(400, '{"error":"credit insufficient balance: balance=0"}'), true);
+});
+
+test('isKeyLevelFailure & classifyFailure: 403 model/region restriction is isolated to model level', () => {
+  eq(isKeyLevelFailure(403, '{"error":"model not available in your region"}'), false);
+  eq(isKeyLevelFailure(403, '{"error":"permission to access model denied"}'), false);
+  eq(classifyFailure(403, 'http', 'model not available in your region'), COOLDOWN_DURATIONS.KEY_DRIFT);
+  // True auth 403 remains key level
+  eq(isKeyLevelFailure(403, '{"error":"Forbidden"}'), true);
+  eq(classifyFailure(403, 'http', 'Forbidden'), COOLDOWN_DURATIONS.QUOTA_403);
 });
 
 // ---- bindingId ---------------------------------------------------------

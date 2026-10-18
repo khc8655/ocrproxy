@@ -119,6 +119,26 @@ def _migrate_agent_models(config: dict) -> bool:
     return True
 
 
+def _migrate_legacy_budget(config: dict) -> bool:
+    """Migrate legacy schedule_total_budget to max_retries and request_total_budget_sec."""
+    changed = False
+    stb = config.get("schedule_total_budget")
+    if stb is not None:
+        try:
+            f = float(stb)
+            if 0 < f <= 10.0:
+                if "max_retries" not in config:
+                    config["max_retries"] = int(f)
+                    changed = True
+            elif f > 10.0:
+                if "request_total_budget_sec" not in config:
+                    config["request_total_budget_sec"] = f
+                    changed = True
+        except (ValueError, TypeError):
+            pass
+    return changed
+
+
 def load_from_disk() -> dict:
     """Load and decrypt config from disk."""
     config_file = _get_config_file()
@@ -142,12 +162,15 @@ def load_from_disk() -> dict:
 
     # One-way schema migration; persist immediately so the encrypted file
     # converges to the current schema after the first read.
-    if _migrate_agent_models(config):
+    migrated = _migrate_agent_models(config)
+    if _migrate_legacy_budget(config):
+        migrated = True
+    if migrated:
         try:
             save_to_disk(config)
-            logger.info("agent_models migrated to model-centric schema and persisted.")
+            logger.info("Config migrated to latest schema and persisted.")
         except Exception as e:  # non-fatal: in-memory shape is already correct
-            logger.warning("agent_models migration could not be persisted: %s", e)
+            logger.warning("Config migration could not be persisted: %s", e)
     return config
 
 

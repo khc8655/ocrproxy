@@ -241,12 +241,33 @@ export const QUOTA_BALANCE_PHRASES = Object.freeze([
   '欠费', '余额不足', '配额不足', '额度不足', '账户欠费', '免费额度用尽'
 ]);
 
+export const KEY_ISSUE_400_PHRASES = Object.freeze([
+  'invalid api key', 'invalid_api_key', 'invalid api_key', 'invalid key',
+  'invalid token', 'no active subscription', 'account is suspended',
+  'account deactivated', 'account suspended', 'billing arrears',
+  'payment required', 'credit depleted', 'arrears', 'unauthorized client',
+  'api key is disabled', 'api key revoked'
+]);
+
+export const MODEL_LEVEL_403_PHRASES = Object.freeze([
+  'permission to access model', 'access to model', 'not available in your region',
+  'model not available', 'unsupported country', 'region is not supported',
+  'country not supported', 'access denied for model', 'model access restricted',
+  'not entitled to use model'
+]);
+
 /**
  * Check if a failure is key-level (401 invalid key, 403 forbidden, quota exhausted, arrears).
  */
 export function isKeyLevelFailure(status, errBody = '') {
-  if (status === 401 || status === 403) return true;
+  if (status === 401) return true;
   const lower = (errBody || '').toLowerCase();
+  if (status === 403) {
+    if (lower && MODEL_LEVEL_403_PHRASES.some(p => lower.includes(p))) {
+      return false; // Model/region restriction, only isolate the model
+    }
+    return true;
+  }
   const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
   const hasHardQuotaKw = Boolean(lower && (
     HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
@@ -255,7 +276,7 @@ export function isKeyLevelFailure(status, errBody = '') {
   if ([400, 401, 402, 403, 429].includes(status) && hasHardQuotaKw && !hasRateLimitKw) {
     return true;
   }
-  if (status === 400 && lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w))) {
+  if (status === 400 && lower && KEY_ISSUE_400_PHRASES.some(p => lower.includes(p))) {
     return true;
   }
   return false;
@@ -290,10 +311,15 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 
   if (isQuota) return quotaSec;
   if (status === 429) return tpmSec;
-  if (status === 403) return quotaSec;
+  if (status === 403) {
+    if (lower && MODEL_LEVEL_403_PHRASES.some(p => lower.includes(p))) {
+      return Number(settings.cooldown_404_sec) || COOLDOWN_DURATIONS.KEY_DRIFT;
+    }
+    return quotaSec;
+  }
 
   if (status === 400) {
-    if (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w))) {
+    if (lower && KEY_ISSUE_400_PHRASES.some(p => lower.includes(p))) {
       return COOLDOWN_DURATIONS.KEY_DRIFT;
     }
     return 0; // Client-side parameter error, do not cooldown
@@ -325,7 +351,7 @@ export function shouldFailover(status, kind, errBody = '') {
       HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
       QUOTA_BALANCE_PHRASES.some(p => lower.includes(p))
     ));
-    const isKeyIssue = hasHardQuotaKw || (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w)));
+    const isKeyIssue = hasHardQuotaKw || (lower && KEY_ISSUE_400_PHRASES.some(p => lower.includes(p)));
     return Boolean(isKeyIssue);
   }
   return true;

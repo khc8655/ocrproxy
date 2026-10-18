@@ -62,8 +62,9 @@ export async function onRequestPost(context) {
     } catch (e) {
       return anthropicError(400, 'invalid_request_error', `Failed to read body: ${e?.message || e}`);
     }
-    if (bodyText.length > MAX_BODY_BYTES) {
-      return anthropicError(413, 'invalid_request_error', `Request body too large: ${bodyText.length} bytes (max ${MAX_BODY_BYTES})`);
+    const bodyByteLength = new TextEncoder().encode(bodyText).byteLength;
+    if (bodyByteLength > MAX_BODY_BYTES) {
+      return anthropicError(413, 'invalid_request_error', `Request body too large: ${bodyByteLength} bytes (max ${MAX_BODY_BYTES})`);
     }
 
     let body;
@@ -94,7 +95,7 @@ export async function onRequestPost(context) {
     const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
     const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
     const maxRetries = Number(settings.max_retries || settings.schedule_total_budget || 3);
-    const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
+    const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 3);
     const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
     const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
     const deadline = startMs + totalBudgetSec * 1000;
@@ -209,7 +210,7 @@ export async function onRequestPost(context) {
       }
 
       // Normalise request body for Messages API
-      const attemptBody = JSON.parse(JSON.stringify(body));
+      const attemptBody = typeof structuredClone === 'function' ? structuredClone(body) : JSON.parse(JSON.stringify(body));
       attemptBody.model = resolved.upstreamModel;
       const provCfg = (config.providers || {})[binding.provider] || {};
       normaliseMessagesForProvider(attemptBody, binding.provider, provCfg);
@@ -418,25 +419,37 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
     };
   }
 
-  const { done, value } = peekResult;
+  const { done } = peekResult;
+  let value = peekResult.value;
   if (done || !value || value.length === 0) {
     try { await reader.cancel(); } catch (_) {}
     return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without emitting data' };
   }
 
-  // Detect in-band error in first chunk (e.g. Anthropic {"type":"error",...} or {"error":...})
-  const firstChunkText = new TextDecoder().decode(value);
-  if (firstChunkText.trim().startsWith('{"error"') || firstChunkText.includes('"type":"error"')) {
-    try { await reader.cancel(); } catch (_) {}
-    let inbandStatus = 502;
+  // Detect in-band error in first chunk (e.g. data: {"error":...} or {"type":"error",...})
+  let firstChunkText = new TextDecoder().decode(value);
+  const nonCommentLines = firstChunkText.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith(':'));
+  if (nonCommentLines.length === 0 && value.length < 2048) {
     try {
-      const parsed = JSON.parse(firstChunkText.startsWith('data:') ? firstChunkText.replace(/^data:\s*/, '') : firstChunkText);
-      const errCode = parsed.error?.code || parsed.error?.status;
-      if (errCode && Number(errCode) >= 400 && Number(errCode) <= 599) inbandStatus = Number(errCode);
-      else if (parsed.error?.type === 'rate_limit_error') inbandStatus = 429;
-      else if (parsed.error?.type === 'authentication_error') inbandStatus = 401;
+      const nextRead = await Promise.race([
+        reader.read(),
+        new Promise(res => setTimeout(() => res(null), 300))
+      ]);
+      if (nextRead && !nextRead.done && nextRead.value && nextRead.value.length > 0) {
+        const nextText = new TextDecoder().decode(nextRead.value);
+        firstChunkText += '\n' + nextText;
+        const combined = new Uint8Array(value.length + nextRead.value.length);
+        combined.set(value, 0);
+        combined.set(nextRead.value, value.length);
+        value = combined;
+      }
     } catch (_) {}
-    return { kind: 'http_error', status: inbandStatus, errorText: firstChunkText };
+  }
+
+  const inBandErr = detectSseInBandError(firstChunkText);
+  if (inBandErr) {
+    try { await reader.cancel(); } catch (_) {}
+    return { kind: 'http_error', status: inBandErr.status, errorText: inBandErr.errorText };
   }
 
   return {
@@ -447,6 +460,46 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
       headers: responseHeaders,
     }),
   };
+}
+
+function detectSseInBandError(text) {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{"error"') || trimmed.startsWith('{"error":') || trimmed.includes('"type":"error"')) {
+    try {
+      const obj = JSON.parse(trimmed);
+      if (obj && (obj.error || obj.type === 'error')) {
+        return { status: parseInBandStatus(obj.error || obj), errorText: trimmed };
+      }
+    } catch (_) {}
+  }
+  const lines = text.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith(':')) continue;
+    if (line.startsWith('data:')) {
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(payload);
+        if (obj && (obj.error || obj.type === 'error' || obj.code === 'error')) {
+          return { status: parseInBandStatus(obj.error || obj), errorText: payload };
+        }
+      } catch (_) {}
+    }
+  }
+  return null;
+}
+
+function parseInBandStatus(err) {
+  if (!err) return 502;
+  const code = err.code || err.status;
+  if (code && Number(code) >= 400 && Number(code) <= 599) return Number(code);
+  const type = String(err.type || '').toLowerCase();
+  const msg = String(err.message || '').toLowerCase();
+  if (type === 'rate_limit_error' || msg.includes('rate limit') || msg.includes('429')) return 429;
+  if (type === 'authentication_error' || msg.includes('invalid api key') || msg.includes('unauthorized')) return 401;
+  return 502;
 }
 
 function checkAuth(request, env, config) {

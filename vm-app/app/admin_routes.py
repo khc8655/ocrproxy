@@ -118,8 +118,7 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
             else:
                 if p_val.get("base_url"):
                     merged_providers[p_name]["base_url"] = p_val["base_url"]
-                if "rpm_per_key" in p_val:
-                    merged_providers[p_name]["rpm_per_key"] = p_val["rpm_per_key"]
+                merged_providers[p_name]["rpm_per_key"] = p_val.get("rpm_per_key", 0) or 0
                 if "protocols" in p_val:
                     merged_providers[p_name]["protocols"] = p_val["protocols"]
                 if "adapter_rules" in p_val:

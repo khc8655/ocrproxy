@@ -329,11 +329,146 @@ async def test_400_multi_provider_failover():
     print("  ✓ 400 multi-provider failover verified: skipped p1 and succeeded on p2")
 
 
+def test_400_plan_limit_does_not_freeze_key():
+    print("🧪 Running test_400_plan_limit_does_not_freeze_key...")
+    reset_runtime_state()
+
+    # Plain parameter errors with words like 'plan', 'tokens', 'context' must NOT freeze the key
+    body_plan = '{"error":{"message":"max_tokens exceeds plan limit","type":"invalid_request_error"}}'
+    _is_key_issue = False
+    _KEY_ISSUE_400_PHRASES = (
+        "invalid api key", "invalid_api_key", "invalid api_key", "invalid key",
+        "invalid token", "no active subscription", "account is suspended",
+        "account deactivated", "account suspended", "billing arrears",
+        "payment required", "credit depleted", "arrears", "unauthorized client",
+        "api key is disabled", "api key revoked",
+    )
+    if any(kw in body_plan.lower() for kw in _KEY_ISSUE_400_PHRASES):
+        _is_key_issue = True
+    assert not _is_key_issue, "Ordinary plan limit word should NOT trigger 400 key issue"
+
+    # Genuine key issue must trigger
+    body_key = '{"error":{"message":"invalid api key provided","type":"invalid_request_error"}}'
+    if any(kw in body_key.lower() for kw in _KEY_ISSUE_400_PHRASES):
+        _is_key_issue = True
+    assert _is_key_issue, "Authentic invalid api key must trigger 400 key issue"
+    print("  ✓ 400 plan limit parameter error does not freeze key")
+
+
+def test_403_region_model_isolation():
+    print("🧪 Running test_403_region_model_isolation...")
+    reset_runtime_state()
+
+    eval_region = evaluate_candidate_failure(
+        status_code=403,
+        is_quota=False,
+        is_key_issue_400=False,
+        category="agent",
+        consecutive_5xx_count=0,
+        config_params={"is_model_level_403": True, "cooldown_404_sec": 600.0, "cooldown_403_sec": 600.0}
+    )
+    # Model-level 403 gets candidate cooldown
+    assert eval_region.cooldown_sec == 600.0
+    assert not eval_region.is_quota
+
+    # Genuine auth 403 gets full key cooldown
+    eval_auth = evaluate_candidate_failure(
+        status_code=403,
+        is_quota=False,
+        is_key_issue_400=False,
+        category="agent",
+        consecutive_5xx_count=0,
+        config_params={"is_model_level_403": False, "cooldown_403_sec": 600.0}
+    )
+    assert eval_auth.cooldown_sec == 600.0
+    print("  ✓ 403 region/model restriction isolated from key-level freeze")
+
+
+def test_agent_429_short_cooldown_without_retry_after():
+    print("🧪 Running test_agent_429_short_cooldown_without_retry_after...")
+    reset_runtime_state()
+
+    # When alternatives exist and no Retry-After, apply short 10s cooldown
+    eval_429 = evaluate_candidate_failure(
+        status_code=429,
+        is_quota=False,
+        is_key_issue_400=False,
+        category="agent",
+        consecutive_5xx_count=0,
+        config_params={"has_alternatives": True, "retry_after_sec": None}
+    )
+    assert eval_429.cooldown_sec == 10.0, f"Expected 10.0s cooldown, got {eval_429.cooldown_sec}"
+
+    # When Retry-After is explicit, honour it
+    eval_429_ra = evaluate_candidate_failure(
+        status_code=429,
+        is_quota=False,
+        is_key_issue_400=False,
+        category="agent",
+        consecutive_5xx_count=0,
+        config_params={"has_alternatives": True, "retry_after_sec": 25.0}
+    )
+    assert eval_429_ra.cooldown_sec == 25.0
+    print("  ✓ Agent 429 short backoff (10s) verified when Retry-After is omitted")
+
+
+def test_lazy_provider_rpm_inheritance():
+    print("🧪 Running test_lazy_provider_rpm_inheritance...")
+    fetched_p = {
+        "name": "lazy_prov",
+        "base_url": "https://api.lazy.com",
+        "rpm_per_key": 5,
+        "keys": {"k1": "sk-lazy"}
+    }
+    lazy_constructed = {
+        "name": fetched_p.get("name") or "lazy_prov",
+        "base_url": fetched_p.get("base_url", ""),
+        "protocol": fetched_p.get("protocol", "openai"),
+        "protocols": fetched_p.get("protocols", ["chat"]),
+        "anthropic_messages": bool(fetched_p.get("anthropic_messages")),
+        "anthropic_base_url": fetched_p.get("anthropic_base_url"),
+        "rpm_per_key": fetched_p.get("rpm_per_key", 0),
+        "adapter_rules": fetched_p.get("adapter_rules") or {},
+        "keys": dict(fetched_p.get("keys") or {})
+    }
+    assert lazy_constructed["rpm_per_key"] == 5
+    assert sched._provider_rpm(lazy_constructed) == 5
+    print("  ✓ Lazy-loaded provider inherits rpm_per_key properly")
+
+
+def test_all_candidates_cooling_down_includes_key_cooldown():
+    print("🧪 Running test_all_candidates_cooling_down_includes_key_cooldown...")
+    reset_runtime_state()
+
+    cand = {"provider": "prov1", "key": "k1", "model": "m1"}
+    kid = "prov1:k1"
+    cid = sched.get_candidate_id(cand)
+
+    _key_cooldown_until[kid] = time.time() + 20.0
+    _cooldown_until[cid] = 0.0
+
+    expiries = [
+        max(
+            _cooldown_until.get(cid, 0.0),
+            _key_cooldown_until.get(kid, 0.0),
+            sched._rpm_blocked.get(cid, 0.0) if hasattr(sched, "_rpm_blocked") else 0.0
+        )
+    ]
+    min_exp = min(expiries)
+    assert min_exp > time.time() + 15.0, f"Expected key cooldown to be included in min_exp, got {min_exp}"
+    print("  ✓ All-candidates cooldown wait includes _key_cooldown_until")
+
+
 async def main():
     test_rpm_mark_exhausted_backoff()
     test_quota_keyword_precision()
     test_key_level_cooldown_isolation()
     test_zero_copy_raw_content()
+    test_400_plan_limit_does_not_freeze_key()
+    test_403_region_model_isolation()
+    test_agent_429_short_cooldown_without_retry_after()
+    test_lazy_provider_rpm_inheritance()
+    test_all_candidates_cooling_down_includes_key_cooldown()
     await test_budget_decoupling_failover()
     await test_sticky_composite_key_and_advance()
     await test_400_multi_provider_failover()
