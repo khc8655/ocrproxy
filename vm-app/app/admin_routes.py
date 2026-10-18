@@ -949,8 +949,15 @@ async def save_config_endpoint(request: Request):
                 if isinstance(in_keys, dict):
                     curr_keys = curr_providers.get(p_name, {}).get("keys", {}) if isinstance(curr_providers.get(p_name), dict) else {}
                     for k_lbl, k_val in list(in_keys.items()):
+                        orig_secret = curr_keys.get(k_lbl)
+                        is_vault_key = isinstance(orig_secret, dict) and (
+                            orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
+                        )
+                        if is_vault_key:
+                            # 严格后端不可变校验：中枢下发的 Key 绝不允许在前端通过普通保存接口篡改明文，强制恢复中枢母本
+                            in_keys[k_lbl] = orig_secret
+                            continue
                         if is_masked_secret(k_val):
-                            orig_secret = curr_keys.get(k_lbl)
                             if isinstance(k_val, dict):
                                 if orig_secret and not is_masked_secret(orig_secret):
                                     real_sec = orig_secret.get("key") if isinstance(orig_secret, dict) else orig_secret
@@ -2102,6 +2109,7 @@ async def vault_sync_endpoint(request: Request):
             cfg = await get_config()
             local_providers = cfg.setdefault("providers", {})
             updated = 0
+            created = 0
 
             # 严格精准增量同步：仅同步当前本地已添加/使用的提供商配置，绝不强塞未配置的中枢提供商
             active_pids = set(local_providers.keys())
@@ -2131,6 +2139,7 @@ async def vault_sync_endpoint(request: Request):
                 r_p = remote_providers[p_id]
                 if not isinstance(r_p, dict):
                     continue
+                is_new = p_id not in local_providers
                 p_cfg = local_providers.setdefault(p_id, {})
                 p_cfg["origin"] = "vault"
 
@@ -2193,9 +2202,12 @@ async def vault_sync_endpoint(request: Request):
                     except Exception as fe:
                         logger.warning(f"Failed to fetch key {kl} for provider {p_id} during sync: {fe}")
 
-                updated += 1
+                if is_new:
+                    created += 1
+                else:
+                    updated += 1
 
-            if updated > 0:
+            if updated > 0 or created > 0:
                 await save_config(cfg)
 
             msg = f"中枢同步完成：已精准增量更新 {updated} 个已配置供应商的最新中枢端点与密钥"

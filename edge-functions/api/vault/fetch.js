@@ -75,9 +75,9 @@ export async function handleVaultFetch(context, options = {}) {
   }
 
   const pCfg = config.providers?.[provider];
-  if (!pCfg) {
+  if (!pCfg || pCfg.origin === 'local') {
     return new Response(
-      JSON.stringify({ ok: false, error: `中枢未找到供应商「${provider}」` }),
+      JSON.stringify({ ok: false, error: `中枢未找到托管供应商「${provider}」` }),
       { status: 404, headers: { 'content-type': 'application/json' } }
     );
   }
