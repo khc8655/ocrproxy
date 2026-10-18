@@ -45,7 +45,8 @@ export const DEFAULT_SETTINGS = {
   agent_routing_strategy: 'sticky_failover',
   request_total_budget_sec: 300, // 300s budget for deep reasoning models (e.g. DeepSeek-R1 / Claude 3.7)
   upstream_timeout_sec: 120,    // 120s per attempt default, supports up to 300s with SSE keepalive
-  schedule_total_budget: 3,     // max 3 total attempts per request
+  max_retries: 3,               // max 3 total attempts per request
+  schedule_total_budget: 3,     // deprecated alias for max_retries
   max_attempts_per_provider: 3, // max 3 attempts per provider to allow trying 3 keys of same provider
   fast_failover_provider_down: true, // skip provider on 502/504/timeout if other providers exist
   cooldown_429_sec: 60,
@@ -91,6 +92,25 @@ function parseAndValidateConfig(raw, source) {
     if (parsed[k] !== undefined && (parsed.settings[k] === undefined || parsed.settings[k] === DEFAULT_SETTINGS[k])) {
       parsed.settings[k] = parsed[k];
     }
+  }
+
+  // Backward compatibility migration for schedule_total_budget
+  const legacyStb = parsed.settings.schedule_total_budget ?? parsed.schedule_total_budget;
+  if (legacyStb !== undefined) {
+    const stbNum = Number(legacyStb);
+    if (!isNaN(stbNum)) {
+      if (stbNum <= 10 && stbNum > 0) {
+        if (parsed.settings.max_retries === undefined || parsed.settings.max_retries === DEFAULT_SETTINGS.max_retries) {
+          parsed.settings.max_retries = Math.round(stbNum);
+        }
+      } else if (stbNum > 10) {
+        if (parsed.settings.request_total_budget_sec === undefined || parsed.settings.request_total_budget_sec === DEFAULT_SETTINGS.request_total_budget_sec) {
+          parsed.settings.request_total_budget_sec = stbNum;
+        }
+      }
+    }
+    delete parsed.settings.schedule_total_budget;
+    delete parsed.schedule_total_budget;
   }
 
   return parsed;

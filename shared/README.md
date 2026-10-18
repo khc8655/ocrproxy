@@ -11,9 +11,11 @@
 ```
 shared/
 ├── admin/                         # 🎨 前端管理控制台唯一开发真理源 (模块化源码)
-│   ├── admin.html                 # 语义化 HTML 骨架与弹窗容器 (~700 行)
+│   ├── admin.html                 # 语义化 HTML 骨架与弹窗容器
 │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 状态徽章)
-│   └── js/                        # 7 大高内聚独立业务领域脚本
+│   └── js/                        # 9 大高内聚独立业务领域脚本
+│       ├── host.js                # 宿主适配器 (HOST 对象封装 API 路由、capabilities 与请求体构建)
+│       ├── settings-form.js       # 系统配置 Schema 驱动表单引擎 (基于 settings.schema.json)
 │       ├── core.js                # 全局状态管理、加密/解密工具、Toast 与 API 请求封装
 │       ├── vault.js               # EdgeOne Vault 凭据中枢通信、Key 掩码与连通性诊断
 │       ├── providers.js           # 供应商管理、CDN/GitHub 按需拉取、协议解耦配置
@@ -21,6 +23,9 @@ shared/
 │       ├── models.js              # 模型探测、上游模型名映射、优先级与故障转移策略
 │       ├── settings.js            # 系统设置、运行模式切换 (Agent/KB)、超时预算控制
 │       └── app.js                 # 顶层单页应用控制器、生命周期初始化、事件总线分发
+│
+├── config/                        # ⚙️ 系统配置定义真理源
+│   └── settings.schema.json       # 全局参数元数据定义 (groups, types, defaults, min/max, modes, aliases)
 │
 ├── presets/                       # 🧩 13 大官方提供商声明式适配规则 (JSON 真理源)
 │   ├── catalog.json               # 提供商轻量索引目录 (由 build-presets.mjs 自动生成)
@@ -39,6 +44,9 @@ shared/
 │   └── cline.json                 # Cline 原生适配规则
 │
 └── docs/                          # 📖 跨端统一规范与设计文档
+    ├── backend-scheduler-refactor-standard.md # ⚡ 后端调度器与韧性架构标准 (三级冷却/预算解耦/零拷贝)
+    ├── backend-scheduler-refactor-roadmap.md  # ⚡ 调度器重构落地路线图
+    ├── ui-single-source-standard.md # 🎨 单真理源 UI 架构标准与重构技术规约
     ├── ui-single-source-design.md # 🎨 单真理源 UI 架构设计规范与全流程指南
     ├── config-schema.md           # 统一加密配置 Schema 规范
     ├── hermes-gemini-vertex-adaptation.md # Google Vertex AI 协议深度适配备忘录
@@ -50,13 +58,13 @@ shared/
 ## 二、 前端模块化开发与编译工作流 (`shared/admin/`)
 
 ### 1. 架构设计哲学
-为了彻底解决单文件 HTML 膨胀、两端代码维护割裂、修改小功能要梳理全工程的痛点，前端确立**唯一开发真理源 (SSOT) + 模块化物理拆分 + 自动化单体打包**：
-- **开发态 (Development)**：在 `shared/admin/` 中按职责划分为独立的 HTML、CSS 和 7 个 JS 业务脚本，清晰易维护；
-- **构建态 (Build)**：通过 `node agent-edgeone/scripts/build-admin.mjs` 统一编译，同步至 VM 并为 EdgeOne 生成自包含单体 HTML；
-- **运行态 (Production)**：公共组件通过环境探针（`isVm`）自适应分流，两端底层存储与接口互不干扰。
+为了彻底解决单文件 HTML 膨胀、两端代码维护割裂、修改小功能要梳理全工程的痛点，前端确立**唯一开发真理源 (SSOT) + 宿主适配器 (Host Adapter) + 配置声明化 (Schema-Driven)**：
+- **开发态 (Development)**：在 `shared/admin/` 中按职责划分为独立的 HTML、CSS 和 9 个 JS 业务脚本，所有端共用同一套代码；
+- **构建态 (Build)**：通过 `npm run build:admin` 统一编译，EdgeOne 完全由此单体打包，VM 产物完全由此同步；严禁在 `agent-edgeone/` 散落任何独立的 `admin.html/css/js`；
+- **运行态 (Production)**：通过全局 `HOST` 宿主适配器统一获取端能力与 API 路由，通过 `data-cap` 声明式控制各端专属面板显隐。
 
 ### 2. 编译与同步命令
-当修改了 `shared/admin/` 下的任何文件后，在项目根目录下执行：
+当修改了 `shared/admin/` 或 `shared/config/` 下的文件后，在项目根目录下执行：
 
 ```bash
 node agent-edgeone/scripts/build-admin.mjs

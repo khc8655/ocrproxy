@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20260922">
+  <link rel="stylesheet" href="/static/admin.css?v=2026.10.18-06">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -25,13 +25,15 @@
   </form>
 </div>
 
+<input type="file" id="configFileImportInput" accept=".json,application/json" style="display:none;" onchange="handleImportFile(event)">
+
 <!-- App -->
 <div id="app" class="app">
   <header class="appbar">
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.18-02</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.18-06</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -135,6 +137,7 @@
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
+      <div id="panel-agents" style="display:contents;">
       <!-- Sub-tab: Agent Models -->
       <div id="mtab-agents" class="model-subtab panel-agents active">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
@@ -160,10 +163,13 @@
         </div>
         <div id="kbModelsBox"></div>
       </div>
+      </div>
     </div>
 
     <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
+      <input type="hidden" id="set_upstream_timeout_sec" max="300" value="120">
+      <input type="hidden" id="set_proxy_api_key" value="">
       <div class="section">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
           <div>
@@ -446,6 +452,69 @@
           </button>
         </div>
 
+    <!-- Panel: Access & Guides -->
+    <div id="panel-access" class="panel">
+      <div class="section">
+        <div class="section-title mb-2">接入网关与接口调用示例</div>
+        <div class="card card-pad mb-3">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="text-secondary">Base URL 接口地址</span>
+            <span class="mono" id="accBaseUrl">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="text-secondary">已配置 Agent 模型</span>
+            <span class="mono" id="accModelsList">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="text-secondary">网关已支持协议</span>
+            <span id="accProtocols" style="display:flex;gap:6px;">—</span>
+          </div>
+        </div>
+        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
+          <span>1. OpenAI 格式调用 (Chat Completions)</span>
+          <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
+        </div>
+        <div class="code-block mb-3" style="position:relative;background:var(--bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accPy')">复制</button>
+          <pre id="accPy" style="margin:0;font-family:var(--font-mono);font-size:12px;overflow-x:auto;"></pre>
+        </div>
+        
+        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
+          <span>2. Claude 格式调用 (Anthropic Messages)</span>
+          <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
+        </div>
+        <div class="code-block mb-3" style="position:relative;background:var(--bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accMessagesPy')">复制</button>
+          <pre id="accMessagesPy" style="margin:0;font-family:var(--font-mono);font-size:12px;overflow-x:auto;"></pre>
+        </div>
+
+        <div class="section-title mb-2">cURL 示例</div>
+        <div class="code-block" style="position:relative;background:var(--bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accCurl')">复制</button>
+          <pre id="accCurl" style="margin:0;font-family:var(--font-mono);font-size:12px;overflow-x:auto;"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel: Raw JSON Editor -->
+    <div id="panel-raw" class="panel" data-cap="rawEditor">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">底层 JSON 配置直接编辑</div>
+            <div class="section-desc text-secondary text-sm">直接编辑完整底层 JSON 路由与凭证，保存后立即写入后端生效</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="exportConfigJson()">导出备份</button>
+            <button class="btn btn-secondary btn-sm" onclick="triggerImportConfig()">导入配置</button>
+            <button class="btn btn-secondary btn-sm" onclick="formatRawJson()">格式化 JSON</button>
+            <button class="btn btn-primary btn-sm" onclick="saveRawJson()">💾 保存配置并生效</button>
+          </div>
+        </div>
+        <div class="card card-pad">
+          <textarea id="rawJsonText" class="form-control" spellcheck="false" style="min-height:480px;font-family:var(--font-mono);font-size:12px;width:100%;"></textarea>
+          <div id="rawJsonErr" style="display:none;margin-top:10px;color:var(--error);font-size:12px;"></div>
+        </div>
       </div>
     </div>
   </main>
@@ -740,12 +809,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/core.js?v=2026.10.18-04"></script>
-  <script src="/static/js/vault.js?v=2026.10.18-04"></script>
-  <script src="/static/js/providers.js?v=2026.10.18-04"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.18-04"></script>
-  <script src="/static/js/models.js?v=2026.10.18-04"></script>
-  <script src="/static/js/settings.js?v=2026.10.18-04"></script>
-  <script src="/static/js/app.js?v=2026.10.18-04"></script>
+  <script src="/static/js/host.js?v=2026.10.18-06"></script>
+  <script src="/static/js/settings-form.js?v=2026.10.18-06"></script>
+  <script src="/static/js/core.js?v=2026.10.18-06"></script>
+  <script src="/static/js/vault.js?v=2026.10.18-06"></script>
+  <script src="/static/js/providers.js?v=2026.10.18-06"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.18-06"></script>
+  <script src="/static/js/models.js?v=2026.10.18-06"></script>
+  <script src="/static/js/settings.js?v=2026.10.18-06"></script>
+  <script src="/static/js/app.js?v=2026.10.18-06"></script>
 </body>
 </html>

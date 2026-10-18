@@ -149,13 +149,6 @@ function getAllAvailableProviders(){
   return list;
 }
 
-function toggleKeyCapsule(el){
-  const inp = el.querySelector('input[type="checkbox"]');
-  if(!inp) return;
-  inp.checked = !inp.checked;
-  el.classList.toggle('checked', inp.checked);
-}
-
 // Probed Models Selection Modal State & Logic
 
 async function ensureKeysImported(bindings){

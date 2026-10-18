@@ -95,14 +95,22 @@ export function failCountKey(provider, keyLabel, targetModel = '') {
 export async function getCooldown(provider, keyLabel, kv, targetModel = '') {
   if (!kv) return 0;
   try {
-    const raw = await kv.get(cooldownKey(provider, keyLabel, targetModel), { type: 'text' });
-    if (!raw) return 0;
-    const expires = Number(raw);
-    if (!Number.isFinite(expires) || expires <= Date.now()) return 0;
-    return expires;
+    // 1. Check Key-level cooldown (provider:key)
+    const rawKey = await kv.get(cooldownKey(provider, keyLabel, ''), { type: 'text' });
+    if (rawKey) {
+      const expKey = Number(rawKey);
+      if (Number.isFinite(expKey) && expKey > Date.now()) return expKey;
+    }
+    // 2. Check Model-level cooldown (provider:key:model)
+    if (targetModel) {
+      const raw = await kv.get(cooldownKey(provider, keyLabel, targetModel), { type: 'text' });
+      if (raw) {
+        const expires = Number(raw);
+        if (Number.isFinite(expires) && expires > Date.now()) return expires;
+      }
+    }
+    return 0;
   } catch (e) {
-    // KV read failures must NOT take down the relay — fall through as
-    // "no cooldown" and let the request proceed.
     console.warn('cooldown get failed:', e?.message || e);
     return 0;
   }
@@ -226,13 +234,44 @@ export const HARD_QUOTA_KEYWORDS = Object.freeze([
   '超出总额度', '超出配额限制'
 ]);
 
+export const QUOTA_BALANCE_PHRASES = Object.freeze([
+  'insufficient balance', 'balance is insufficient', 'balance not enough',
+  'balance is 0', 'balance=0', 'no balance', 'credit balance is too low',
+  'credit insufficient balance', 'credit is 0', 'credit depleted',
+  '欠费', '余额不足', '配额不足', '额度不足', '账户欠费', '免费额度用尽'
+]);
+
 /**
- * Classify an upstream response and return the cooldown duration it
- * should trigger (in seconds).  0 means "no cooldown needed".
+ * Check if a failure is key-level (401 invalid key, 403 forbidden, quota exhausted, arrears).
+ */
+export function isKeyLevelFailure(status, errBody = '') {
+  if (status === 401 || status === 403) return true;
+  const lower = (errBody || '').toLowerCase();
+  const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
+  const hasHardQuotaKw = Boolean(lower && (
+    HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
+    QUOTA_BALANCE_PHRASES.some(p => lower.includes(p))
+  ));
+  if ([400, 401, 402, 403, 429].includes(status) && hasHardQuotaKw && !hasRateLimitKw) {
+    return true;
+  }
+  if (status === 400 && lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Classify an upstream response and return the cooldown duration (seconds as primitive number).
+ * 0 means "no cooldown needed".
  *
  * Mirrors VM's scheduler.py logic for unified failure classification.
  */
-export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_timeout' */, errBody = '') {
+export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_timeout' */, errBody = '', settings = {}) {
+  const quotaSec = Number(settings.cooldown_quota_sec) || COOLDOWN_DURATIONS.QUOTA_403;
+  const tpmSec = Number(settings.cooldown_429_sec || settings.cooldown_tpm_sec) || COOLDOWN_DURATIONS.TPM_429;
+  const s5xxSec = Number(settings.cooldown_5xx_sec) || COOLDOWN_DURATIONS.SERVER_5XX;
+
   if (kind === 'empty_stream') return COOLDOWN_DURATIONS.EMPTY_STREAM;
   if (kind === 'read_timeout') return COOLDOWN_DURATIONS.READ_TIMEOUT;
 
@@ -240,8 +279,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
   const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
   const hasHardQuotaKw = Boolean(lower && (
     HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
-    (lower.includes('balance') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w))) ||
-    (lower.includes('credit') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w)))
+    QUOTA_BALANCE_PHRASES.some(p => lower.includes(p))
   ));
 
   const isQuota = Boolean(
@@ -250,9 +288,9 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
     !hasRateLimitKw
   );
 
-  if (isQuota) return COOLDOWN_DURATIONS.QUOTA_403;
-  if (status === 429) return COOLDOWN_DURATIONS.TPM_429;
-  if (status === 403) return COOLDOWN_DURATIONS.QUOTA_403;
+  if (isQuota) return quotaSec;
+  if (status === 429) return tpmSec;
+  if (status === 403) return quotaSec;
 
   if (status === 400) {
     if (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w))) {
@@ -263,7 +301,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 
   if (status === 410) return COOLDOWN_DURATIONS.MODEL_GONE_410;
   if (status === 401 || status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
-  if (status >= 500) return COOLDOWN_DURATIONS.SERVER_5XX;
+  if (status >= 500) return s5xxSec;
   return 0;
 }
 
@@ -285,8 +323,7 @@ export function shouldFailover(status, kind, errBody = '') {
     const hasRateLimitKw = Boolean(lower && RATE_LIMIT_KEYWORDS.some(k => lower.includes(k)));
     const hasHardQuotaKw = Boolean(lower && (
       HARD_QUOTA_KEYWORDS.some(k => lower.includes(k)) ||
-      (lower.includes('balance') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w))) ||
-      (lower.includes('credit') && ['insufficient', '0', 'zero', 'low', 'empty', 'not enough'].some(w => lower.includes(w)))
+      QUOTA_BALANCE_PHRASES.some(p => lower.includes(p))
     ));
     const isKeyIssue = hasHardQuotaKw || (lower && ['subscription', 'no active', 'api key', 'invalid_key', 'unauthorized', 'account', 'billing', 'payment', 'plan', 'credit', 'balance', 'insufficient', 'quota', 'arrears'].some(w => lower.includes(w)));
     return Boolean(isKeyIssue);

@@ -1,18 +1,6 @@
 /**
  * OCRProxy Admin - Knowledge Base (KB) Virtual Models & Candidate Routing
  */
-if (typeof getModelProtocols === 'undefined') {
-  function getModelProtocols(modelName){
-    const m = state.config && state.config.agent_models ? state.config.agent_models[modelName] : null;
-    if (!m || !m.keys || !m.keys.length) return ['chat'];
-    const set = new Set();
-    for (const b of m.keys) {
-      const provProtos = (typeof getProviderProtocols === 'function') ? getProviderProtocols(b.provider) : ['chat'];
-      provProtos.forEach(pr => set.add(pr));
-    }
-    return set.size ? Array.from(set) : ['chat'];
-  }
-}
 
 function renderKbModels(){
   const box = document.getElementById('kbModelsBox');
@@ -273,29 +261,6 @@ function toggleCandidateKeyCapsule(el){
   el.classList.toggle('checked', inp.checked);
 }
 
-async function removeLocalKeyFromModal(prov, label, event){
-  if(event) event.stopPropagation();
-  if(!confirm(`确定要从本地存储中彻底删除 Key「${label}」吗？`)) return;
-  if(state.config.providers && state.config.providers[prov] && state.config.providers[prov].keys){
-    delete state.config.providers[prov].keys[label];
-  }
-  if(state.config.agent_models){
-    Object.values(state.config.agent_models).forEach(m => {
-      m.keys = (m.keys || []).filter(x => !(x.provider === prov && x.key === label));
-    });
-  }
-  KB_TYPES.forEach(t => {
-    if(state.config.candidates && state.config.candidates[t]){
-      state.config.candidates[t] = state.config.candidates[t].filter(x => !(x.provider === prov && x.key === label));
-    }
-  });
-  await persistConfig(`本地 Key「${label}」已彻底删除`);
-  renderAgentKeyChecks();
-  renderCandidateKeyChecks();
-  renderProviders();
-  renderModels();
-}
-
 async function editCandidate(type,i){
   const c=state.config.candidates[type][i];
   const typeLabel = (typeof KB_LABELS !== 'undefined' && KB_LABELS[type]) ? KB_LABELS[type] : type;
@@ -463,100 +428,7 @@ async function testCandidate(type, i){
   }
 }
 
-// Settings
+// Settings and LiveTest are handled by shared components (agent-models-ui.js)
 
-async function runLiveTest(modelName){
-  const resBox = document.getElementById('liveTestRes-' + modelName);
-  const btn = document.getElementById('liveTestBtn-' + modelName);
-  if(!resBox) return;
-
-  resBox.style.display = 'block';
-  resBox.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
-      <span class="spinner"></span>
-      <span>正在向生产端点发起真实测试请求 (POST /v1/chat/completions)...</span>
-    </div>
-  `;
-  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 测试中'; }
-
-  const start = Date.now();
-  try {
-    const apiKey = (state.config && state.config.proxy_api_key) ? state.config.proxy_api_key : (state.adminPassword || '');
-    const resp = await fetch('/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [{ role: 'user', content: '1+1等于几？请仅回复一个数字。' }],
-        max_tokens: 15,
-        stream: false
-      })
-    });
-
-    const elapsed = Date.now() - start;
-    const rawRouted = resp.headers.get('X-Routed-Via') || '';
-    let routedVia = rawRouted;
-    try { routedVia = decodeURIComponent(rawRouted); } catch(e) {}
-    const fallbacks = resp.headers.get('X-Fallback-Attempts') || '0';
-
-    if(resp.ok){
-      const data = await resp.json();
-      const content = data?.choices?.[0]?.message?.content || '(无返回文本)';
-      resBox.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span class="badge badge-success" style="font-weight:700;">HTTP 200 OK</span>
-              <span style="font-weight:600;color:var(--text);">实际调用节点:</span>
-              <span class="badge badge-primary" style="font-family:monospace;font-size:12px;padding:2px 8px;">${esc(routedVia || '默认节点')}</span>
-              <span style="color:var(--text-secondary);font-size:12px;">往返耗时: <b>${elapsed}ms</b></span>
-              ${Number(fallbacks) > 0 ? `<span class="badge badge-warning">故障转移重试: ${fallbacks}次</span>` : ''}
-            </div>
-            <button class="btn btn-sm" onclick="this.closest('div').parentElement.parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
-          </div>
-          <div style="font-size:12px;background:var(--bg);padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text);">
-            <span style="color:var(--text-secondary);">模型输出：</span>${esc(content.trim())}
-          </div>
-        </div>
-      `;
-      toast(`[${modelName}] 实测验证成功！命中: ${routedVia} (${elapsed}ms)`, 'ok');
-    } else {
-      let errText = '';
-      try {
-        const errJson = await resp.json();
-        errText = errJson?.error?.message || JSON.stringify(errJson);
-      } catch(e) {
-        errText = await resp.text();
-      }
-      resBox.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--error);">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span class="badge badge-error" style="font-weight:700;">HTTP ${resp.status}</span>
-            <span style="font-weight:600;">调用失败:</span>
-            <span style="font-size:12px;">${esc(errText || '未知错误')}</span>
-            ${routedVia ? `<span class="badge badge-neutral" style="font-size:11px;">尝试节点: ${esc(routedVia)}</span>` : ''}
-            <span style="color:var(--text-secondary);font-size:12px;">(${elapsed}ms)</span>
-          </div>
-          <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
-        </div>
-      `;
-      toast(`[${modelName}] 实测失败: HTTP ${resp.status}`, 'err');
-    }
-  } catch(e) {
-    resBox.innerHTML = `
-      <div style="color:var(--error);display:flex;align-items:center;justify-content:space-between;">
-        <span>网络请求异常: ${esc(e.message)}</span>
-        <button class="btn btn-sm" onclick="this.closest('div').parentElement.style.display='none'" style="font-size:11px;padding:2px 6px;">收起</button>
-      </div>
-    `;
-  } finally {
-    if(btn) { btn.disabled = false; btn.innerHTML = icon('zap') + ' 对话实测'; }
-  }
-}
-
-// Access Guide -> Handled by renderDashboardGateway directly in dashboard
 
 

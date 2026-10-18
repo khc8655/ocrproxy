@@ -23,13 +23,16 @@ import {
 } from '../lib/config.js';
 import {
   shouldFailover,
+  classifyFailure,
+  isKeyLevelFailure,
   bindingId,
   recordFailure,
   getCooldownsBatch,
+  setCooldown,
 } from '../lib/cooldowns.js';
 import { normaliseMessagesForProvider, createKeepAliveStream } from '../lib/normalize.js';
 
-const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
+const MAX_BODY_BYTES = 900 * 1024; // 900 KB Edge Function safe ingress limit
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000;
 
 export async function onRequestPost(context) {
@@ -90,7 +93,7 @@ export async function onRequestPost(context) {
     const settings = config.settings || {};
     const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
     const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
-    const maxRetries = Number(settings.schedule_total_budget || 3);
+    const maxRetries = Number(settings.max_retries || settings.schedule_total_budget || 3);
     const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
     const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
     const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
@@ -244,6 +247,16 @@ export async function onRequestPost(context) {
 
       lastErrorText = result.errorText || '';
       lastStatus = result.status || 0;
+
+      // Classify failure and apply three-tier cooldown
+      const cdSec = classifyFailure(lastStatus, result.kind, lastErrorText, settings);
+      if (cdSec > 0 && kv) {
+        if (isKeyLevelFailure(lastStatus, lastErrorText)) {
+          setCooldown(binding.provider, binding.keyLabel, cdSec, kv, '').catch(() => {});
+        } else {
+          setCooldown(binding.provider, binding.keyLabel, cdSec, kv, binding.upstreamModel || body.model).catch(() => {});
+        }
+      }
 
       if (fastFailoverProvDown && (lastStatus >= 500 || result.kind === 'read_timeout' || result.kind === 'empty_stream')) {
         downProviders.add(binding.provider);
@@ -409,6 +422,21 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   if (done || !value || value.length === 0) {
     try { await reader.cancel(); } catch (_) {}
     return { kind: 'empty_stream', status: resp.status, errorText: 'Stream closed without emitting data' };
+  }
+
+  // Detect in-band error in first chunk (e.g. Anthropic {"type":"error",...} or {"error":...})
+  const firstChunkText = new TextDecoder().decode(value);
+  if (firstChunkText.trim().startsWith('{"error"') || firstChunkText.includes('"type":"error"')) {
+    try { await reader.cancel(); } catch (_) {}
+    let inbandStatus = 502;
+    try {
+      const parsed = JSON.parse(firstChunkText.startsWith('data:') ? firstChunkText.replace(/^data:\s*/, '') : firstChunkText);
+      const errCode = parsed.error?.code || parsed.error?.status;
+      if (errCode && Number(errCode) >= 400 && Number(errCode) <= 599) inbandStatus = Number(errCode);
+      else if (parsed.error?.type === 'rate_limit_error') inbandStatus = 429;
+      else if (parsed.error?.type === 'authentication_error') inbandStatus = 401;
+    } catch (_) {}
+    return { kind: 'http_error', status: inbandStatus, errorText: firstChunkText };
   }
 
   return {

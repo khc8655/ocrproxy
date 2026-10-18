@@ -1,12 +1,17 @@
 {
-  "version": "v2026.10.18-04",
+  "version": "v2026.10.18-06",
   "release_date": "2026-10-18",
   "commit": "HEAD",
-  "title": "Web 控制台支持 ?token= 免密快捷直达登录与地址栏敏感参数自动防泄露抹除 (v2026.10.18-04)",
+  "title": "前端单一真理源重构与后端调度器韧性体系全面加固 (v2026.10.18-06)",
   "changelog": [
-    "Web 控制台 URL 免密直连：访问地址支持追加 ?token= 或 ?key= 快速免密自动登录后台，省去手动输入管理员密码的繁琐步骤",
-    "地址栏敏感参数秒级抹除安全机制：成功登录后立即通过 HTML5 history.replaceState 无刷新擦除 URL 中的 token 参数，杜绝凭据在历史记录、书签或录屏中泄露",
-    "后端鉴权同步支持 Query 参数提取：vm-app 与 EdgeOne 鉴权网关底层同步兼容从 URL Query 参数提取管理员凭据与 API Key",
-    "EdgeOne 与 VM 端同构支持：双端共享相同的前端自动免密登录与安全地址抹除规范"
+    "前端唯一真理源 (SSOT) 彻底落地：所有前端源码统一收敛至 shared/admin/，彻底废除 agent-edgeone/admin.* 双重维护，编译管线全自动化生成",
+    "配置声明化与 Host 适配器：引入 settings.schema.json 与宿主适配器 host.js，实现前端功能与差异配置解耦，统一 max_retries 与 request_total_budget_sec",
+    "后端调度器预算彻底解耦：动态计算端点重试预算，保证多候选下 OCR 60s 失败后候选 2 拥有充裕时间继续执行，彻底杜绝单次超时饿死问题",
+    "三级精准故障冷却体系：建立 _key_cooldown_until，将 401/403/欠费/配额耗尽精准隔离到 Key 级别，EdgeOne 端全面接入 classifyFailure 与 KV 冷却持久化",
+    "Sticky 会话复合键一致性：统一存储为 provider:key 复合键，杜绝跨厂商同名 Key 漂移；遭遇 429 或故障时自动顺延避让至下一个健康候选",
+    "400 跨厂商参数容错与 Quota 防误杀：多厂商候选下单一厂商 400 自动跳过并平滑 failover 至备用厂商；收敛 Quota 判定短语彻底根除数字 0 造成的误杀",
+    "RPM 滑动窗口安全退避：遭遇 429 保守阻塞至少 15 秒防止雷暴，中枢同步完整保留 rpm_per_key 与适配器规则",
+    "向量与重排零拷贝：/v1/embeddings 与 /v1/rerank 原始字节零拷贝直通，消除几百万 float 对象对 Python 堆内存的严重碎片化污染",
+    "EdgeOne 平台硬限制加固：入口 900KB 请求体安全准入拦截，流式首包竞速快速侦测带内 JSON 错误并平滑切 Key"
   ]
 }

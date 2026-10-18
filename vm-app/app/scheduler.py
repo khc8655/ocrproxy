@@ -190,6 +190,7 @@ class GlobalOverloadError(Exception):
 
 # Module-level in-memory state (persists across requests on the same instance)
 _cooldown_until: Dict[str, float] = {}
+_key_cooldown_until: Dict[str, float] = {}
 _consecutive_failures: Dict[str, int] = {}
 _last_failure_at: Dict[str, float] = {}
 _quota_exhausted_cands: Set[str] = set()
@@ -260,15 +261,20 @@ def _rpm_try_acquire(key_id: str, limit: int) -> bool:
     return True
 
 
-def _rpm_mark_exhausted(key_id: str, limit: int):
-    """Upstream said 429 although our window had room (restart, key shared
-    elsewhere, limit set too high): treat the key as full until the oldest
-    request we know of leaves the window (60 s from now if we know none)."""
+def _rpm_mark_exhausted(key_id: str, limit: int, min_backoff_sec: float = 15.0):
+    """Upstream said 429 although our window had room: treat the key as full
+    and guarantee at least min_backoff_sec (default 15s) cooldown so the next
+    immediate request does not hammer the same key 1s later."""
     if limit <= 0:
         return
     now = time.monotonic()
     w = _rpm_window(key_id, now)
-    pad = w[0] if w else now
+    # Ensure no slot in w frees within min_backoff_sec
+    earliest_allowed = now - (RPM_WINDOW_SEC - min_backoff_sec)
+    for i in range(len(w)):
+        if w[i] < earliest_allowed:
+            w[i] = earliest_allowed
+    pad = max(earliest_allowed, w[0] if w else now)
     while len(w) < limit:
         w.appendleft(pad)
 
@@ -335,8 +341,21 @@ def get_gone_models() -> Dict[str, float]:
     return {k: v for k, v in _gone_models.items() if v > now}
 
 
+def is_key_cooling(provider: str, key_label: str, now: Optional[float] = None) -> bool:
+    """True if provider:key is under key-level cooldown (401/403/quota); lazily prunes expired."""
+    now = time.time() if now is None else now
+    key_id = f"{provider}:{key_label}"
+    exp = _key_cooldown_until.get(key_id)
+    if exp is None:
+        return False
+    if exp <= now:
+        _key_cooldown_until.pop(key_id, None)
+        return False
+    return True
+
+
 def get_active_cooldowns() -> Dict[str, dict]:
-    """Return candidates currently cooling down or quota-exhausted."""
+    """Return candidates and keys currently cooling down or quota-exhausted."""
     now = time.time()
     res = {}
     for cand_id, expiry in list(_cooldown_until.items()):
@@ -347,6 +366,13 @@ def get_active_cooldowns() -> Dict[str, dict]:
                 "cooling": True,
                 "is_quota": cand_id in _quota_exhausted_cands,
                 "is_gone": _is_model_gone(prov, model),
+            }
+    for key_id, expiry in list(_key_cooldown_until.items()):
+        if expiry > now:
+            res[f"key:{key_id}"] = {
+                "cooling": True,
+                "is_key_level": True,
+                "expires_at": expiry,
             }
     return res
 
@@ -807,6 +833,9 @@ def _prune_runtime_state(config: dict):
             if k not in valid_cand_ids:
                 del state[k]
     _quota_exhausted_cands.intersection_update(valid_cand_ids)
+    for k in list(_key_cooldown_until.keys()):
+        if k not in valid_key_ids:
+            del _key_cooldown_until[k]
     for k in list(_semaphores.keys()):
         if k not in valid_key_ids:
             del _semaphores[k]
@@ -834,6 +863,7 @@ def reset_runtime_state():
     effective per-key limit may briefly double — acceptable for a manual
     ops action."""
     _cooldown_until.clear()
+    _key_cooldown_until.clear()
     _consecutive_failures.clear()
     _last_failure_at.clear()
     _quota_exhausted_cands.clear()
@@ -1336,26 +1366,58 @@ async def schedule(
     except (ValueError, TypeError):
         agent_first_byte_timeout_sec = 120.0
 
-    try:
-        total_budget_sec = max(1.0, float(config.get("request_total_budget_sec", config.get("schedule_total_budget", 60))))
-    except (ValueError, TypeError):
-        total_budget_sec = 60.0
-    # A request budget shorter than a single attempt's timeout would cut the
-    # first (and only) attempt short — always allow at least one full attempt.
-    min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
-    total_budget_sec = max(total_budget_sec, min_single_attempt)
+    stb_val = config.get("schedule_total_budget")
+    stb_sec = None
+    stb_retries = None
+    if stb_val is not None:
+        try:
+            f_stb = float(stb_val)
+            if f_stb > 10.0:
+                stb_sec = f_stb
+            elif 0 < f_stb <= 10.0:
+                stb_retries = int(f_stb)
+        except (ValueError, TypeError):
+            pass
 
     # Max candidate retries per request
     try:
-        max_retries = max(1, int(config.get("max_retries", config.get("schedule_total_budget_count", 5))))
+        max_retries = max(1, int(config.get("max_retries", stb_retries if stb_retries is not None else config.get("schedule_total_budget_count", 3))))
     except (ValueError, TypeError):
-        max_retries = 5
+        max_retries = 3
+
+    min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
+    num_candidates = max(1, len(ordered_items))
+    eff_retries = min(max_retries, num_candidates)
+
+    # Dynamic budget decoupling: calculate required retry budget based on endpoint timeout
+    endpoint_budget = min_single_attempt * eff_retries + (5.0 if eff_retries > 1 else 2.0)
+    endpoint_budget = max(min_single_attempt, min(600.0, endpoint_budget))
+
+    raw_budget = config.get("request_total_budget_sec")
+    if raw_budget is None and stb_sec is not None:
+        raw_budget = stb_sec
+
+    # Configured request_total_budget_sec acts as an upper safety cap
+    max_cap = 600.0
+    if raw_budget is not None:
+        try:
+            cfg_cap = float(raw_budget)
+            if cfg_cap > 0:
+                max_cap = max(min_single_attempt, cfg_cap)
+        except (ValueError, TypeError):
+            pass
+
+    total_budget_sec = max(min_single_attempt, min(endpoint_budget, max_cap))
+    if eff_retries >= 2:
+        safe_min_failover = min_single_attempt * 2
+        if max_cap >= safe_min_failover:
+            total_budget_sec = max(total_budget_sec, safe_min_failover)
 
     # Max attempts per individual provider
     try:
-        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 6)))
+        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 3)))
     except (ValueError, TypeError):
-        max_attempts_per_provider = 6
+        max_attempts_per_provider = 3
 
     fast_failover_provider_down = bool(config.get("fast_failover_provider_down", True))
     provider_attempts: Dict[str, int] = {}
@@ -1366,11 +1428,6 @@ async def schedule(
         # Allow up to 300s safe bounded timeout, and let client decide when to disconnect.
         upstream_timeout_sec = max(upstream_timeout_sec, 300.0)
         total_budget_sec = upstream_timeout_sec + 5.0
-    else:
-        # Failover mode: if total_budget was not explicitly overridden by caller, scale with candidate pool and max_retries
-        has_explicit_budget = "schedule_total_budget" in config or "request_total_budget_sec" in config
-        if not has_explicit_budget:
-            total_budget_sec = max(total_budget_sec, upstream_timeout_sec * min(max_retries, max(1, len(ordered_items))))
 
     try:
         concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))
@@ -1402,11 +1459,11 @@ async def schedule(
     except (ValueError, TypeError):
         cooldown_410_sec = DEFAULT_COOLDOWN_410_SEC
 
-    # 429 TPM Rate Limit Cooldown (default 15s)
+    # 429 TPM Rate Limit Cooldown (default 60s)
     try:
-        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 15))))
+        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 60))))
     except (ValueError, TypeError):
-        cooldown_tpm_sec = 15.0
+        cooldown_tpm_sec = 60.0
 
     # 429/403 Quota Exhaustion Cooldown (default 1800s / 30m)
     try:
@@ -1546,7 +1603,13 @@ async def schedule(
                 logger.debug("Skipping candidate %s — reached max %d attempts for provider %s", cand_id, max_attempts_per_provider, provider_name)
                 continue
 
-            # 2. Cooldown check
+            # 2. Cooldown check (Key-level and Candidate-level)
+            key_id = f"{provider_name}:{key_label}"
+            key_cd_expiry = _key_cooldown_until.get(key_id, 0.0)
+            if not _is_same_key_retry and time.time() < key_cd_expiry:
+                logger.debug(f"Skipping candidate {cand_id} - key {key_id} cooling down until {key_cd_expiry}")
+                continue
+
             cooldown_expiry = _cooldown_until.get(cand_id, 0.0)
             if not _is_same_key_retry and time.time() < cooldown_expiry:
                 logger.debug(f"Skipping candidate {cand_id} - cooling down until {cooldown_expiry}")
@@ -1809,6 +1872,7 @@ async def schedule(
                         _last_failure_at.pop(cand_id, None)
                         _stall_strikes.pop(cand_id, None)
                         _cooldown_until[cand_id] = 0.0
+                        _key_cooldown_until.pop(f"{provider_name}:{key_label}", None)
                         _quota_exhausted_cands.discard(cand_id)
 
                         routed_via = f"{provider_name}/{key_label}"
@@ -1833,10 +1897,11 @@ async def schedule(
                                              category=category, request_model=req_model_name, cand_model=_cm)
                             remainder = _guard_stream(remainder, len(first_chunk), _on_stream_error)
 
-                        # Update sticky active key for Agent mode
+                        # Update sticky active key for Agent mode (use composite provider:key to avoid collisions)
                         if category == "agent":
-                            _sticky_agent_active_keys[req_model_name] = key_label
-                            stats.set_agent_active_key(req_model_name, key_label)
+                            active_composite_key = f"{provider_name}:{key_label}"
+                            _sticky_agent_active_keys[req_model_name] = active_composite_key
+                            stats.set_agent_active_key(req_model_name, active_composite_key)
 
                         if is_stream:
                             if handle_stream:
@@ -1922,11 +1987,16 @@ async def schedule(
 
                     body_lower = (err_body_text or "").lower()
                     _has_rate_limit_kw = bool(body_lower and any(w in body_lower for w in RATE_LIMIT_KEYWORDS))
+                    _QUOTA_BALANCE_PHRASES = (
+                        "insufficient balance", "balance is insufficient", "balance not enough",
+                        "balance is 0", "balance=0", "no balance", "credit balance is too low",
+                        "credit insufficient balance", "credit is 0", "credit depleted",
+                        "余额不足", "账户欠费", "配额不足", "额度不足", "免费额度用尽"
+                    )
                     _has_hard_quota_kw = bool(body_lower and (
                         any(w in body_lower for w in HARD_QUOTA_KEYWORDS)
                         or any(w in body_lower for w in cand_p_rules.get("quota_keywords", []))
-                        or ("balance" in body_lower and any(b in body_lower for b in ("insufficient", "0", "zero", "low", "empty", "not enough")))
-                        or ("credit" in body_lower and any(b in body_lower for b in ("insufficient", "0", "zero", "low", "empty", "not enough")))
+                        or any(p in body_lower for p in _QUOTA_BALANCE_PHRASES)
                     ))
 
                     # Provider declarative error rules from adapter_rules
@@ -1956,21 +2026,26 @@ async def schedule(
                             _400_is_key_issue = True
 
                     # 1. Non-retriable errors: abort immediately without failover
-                    # 400 (Client parameter error), 404 (Model not found / route invalid), 422 (Validation error)
-                    # 404 / 422 are NOT aborted any more: with several providers
-                    # behind one model, one provider delisting the model (404) or
-                    # rejecting a provider-specific field (422) must not stop the
-                    # others from being tried.  If every candidate fails, the last
-                    # upstream status (e.g. 404) is still returned to the client.
+                    # 400 (Client parameter error): if single provider, abort; if multi-provider configured,
+                    # skip this provider to allow alternatives to try, only abort if no other providers remain.
                     if status_code == 400 and not _400_is_key_issue:
-                        clean_400_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
-                        logger.warning(
-                            f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {clean_400_msg[:120]}"
+                        down_providers.add(provider_name)
+                        other_provider_remains = any(
+                            c.get("provider", "") != provider_name
+                            for _, c in ordered_items[attempt_seq:]
                         )
-                        raise AllCandidatesFailedError(
-                            f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {clean_400_msg[:200]}",
-                            last_status_code=status_code,
-                            last_response_body=err_body_text,
+                        clean_400_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
+                        if not other_provider_remains:
+                            logger.warning(
+                                f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {clean_400_msg[:120]}"
+                            )
+                            raise AllCandidatesFailedError(
+                                f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {clean_400_msg[:200]}",
+                                last_status_code=status_code,
+                                last_response_body=err_body_text,
+                            )
+                        logger.warning(
+                            f"Fast failover for HTTP 400 from {cand_id}: provider {provider_name} rejected parameters ({clean_400_msg[:100]}), skipping remaining keys for this provider to try alternatives"
                         )
 
                     # 413 Request Entity Too Large: payload exceeded upstream provider limits.
@@ -2063,8 +2138,24 @@ async def schedule(
 
                     if eval_res.cooldown_sec > 0:
                         _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
+                        # Three-tier cooldown: Key-level failure (401, 403, hard quota exhaustion)
+                        # parks the entire key (all models bound to provider:key)
+                        if status_code in (401, 403) or eval_res.is_quota or _400_is_key_issue:
+                            _key_cooldown_until[f"{provider_name}:{key_label}"] = time.time() + eval_res.cooldown_sec
                     else:
                         _cooldown_until.pop(cand_id, None)
+
+                    # Agent sticky mode: on 429 or auth/quota failure, proactively advance sticky pointer to next candidate
+                    if is_agent and strategy == "sticky_failover":
+                        curr_active = _sticky_agent_active_keys.get(req_model_name)
+                        if curr_active in (key_label, f"{provider_name}:{key_label}"):
+                            for _, next_c in ordered_items[attempt_seq:]:
+                                next_kid = f"{next_c.get('provider')}:{next_c.get('key')}"
+                                next_cid = get_candidate_id(next_c)
+                                if _key_cooldown_until.get(next_kid, 0.0) <= time.time() and _cooldown_until.get(next_cid, 0.0) <= time.time():
+                                    _sticky_agent_active_keys[req_model_name] = next_kid
+                                    stats.set_agent_active_key(req_model_name, next_kid)
+                                    break
 
                     # Key with rpm_per_key still got a 429: block the key (all its
                     # models) until our window frees, instead of the fixed

@@ -10,62 +10,6 @@ const PROTOCOLS = {
   google_openai: { label: 'Google OpenAI', short: 'OpenAI', badgeClass: 'badge-success', title: 'Google OpenAI 协议' }
 };
 
-function getProtocolBadge(proto){
-  const p = (proto || 'openai').toLowerCase();
-  if (p.includes('anthropic') || p.includes('messages') || p.includes('claude')) {
-    return `<span class="proto-badge proto-anthropic" title="Anthropic 协议"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M13.8 3.5l6.7 17h-3.6l-1.4-3.8h-7l-1.4 3.8H3.5l6.7-17h3.6zm-1.1 9.4L11 8.2l-1.7 4.7h3.4z"/></svg> Anthropic</span>`;
-  }
-  return `<span class="proto-badge proto-openai" title="OpenAI 兼容协议"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 15a5 5 0 1 1 5-5 5 5 0 0 1-5 5z"/><circle cx="12" cy="12" r="2"/></svg> OpenAI</span>`;
-}
-
-function getProviderProtocols(name, provObj){
-  // 1. 若云端（Vault）中存在此提供商定义，以云端权威为准
-  if (typeof findVaultProvider === 'function') {
-    const vp = findVaultProvider(name);
-    if (vp) {
-      if (Array.isArray(vp.protocols) && vp.protocols.length > 0) {
-        return vp.protocols;
-      }
-      if (vp.protocol === 'openai' && !vp.anthropic_messages && !vp.anthropic_base_url) {
-        return ['chat'];
-      }
-      if (vp.protocol === 'anthropic' && !vp.anthropic_messages && !vp.base_url) {
-        return ['messages'];
-      }
-    }
-  }
-
-  const p = provObj || (state.config && state.config.providers && state.config.providers[name]) || {};
-  
-  // 2. 若本地协议显式设定为 openai 且未配置 messages 混合，绝不误标为 messages
-  if (p.protocol === 'openai' && !p.anthropic_messages && !p.anthropic_base_url) {
-    return ['chat'];
-  }
-  
-  if (Array.isArray(p.protocols) && p.protocols.length > 0) {
-    return p.protocols;
-  }
-  
-  const protos = ['chat'];
-  const lower = (name || '').toLowerCase();
-  const clean = lower.replace(/[^a-z0-9]/g, '');
-  const preset = (typeof PRESET_DEFINITIONS !== 'undefined') ? (PRESET_DEFINITIONS[clean] || PRESET_DEFINITIONS[lower]) : null;
-  if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
-    protos.push('messages');
-  }
-  return protos;
-}
-
-
-function renderProtocolBadges(protoList){
-  const list = protoList || ['chat'];
-  const hasAnthropic = list.some(pr => String(pr).toLowerCase().includes('anthropic') || String(pr).toLowerCase().includes('messages'));
-  const hasOpenAI = list.some(pr => !String(pr).toLowerCase().includes('anthropic') && !String(pr).toLowerCase().includes('messages'));
-  const badges = [];
-  if (hasOpenAI || !hasAnthropic) badges.push(getProtocolBadge('openai'));
-  if (hasAnthropic) badges.push(getProtocolBadge('anthropic'));
-  return badges.join(' ');
-}
 
 function scrollToAlphaGroup(ch) {
   const target = document.getElementById(`alpha-group-${ch}`);

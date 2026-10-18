@@ -26,7 +26,9 @@ const tabs = [
   { id: 'dashboard', label: '概览', sub: '接入规范、实时请求统计与错误日志' },
   { id: 'providers', label: '供应商', sub: '上游 Base URL、协议、RPM 限流与密钥凭证库' },
   { id: 'models', label: '模型及路由', sub: 'Agent 模型与知识库模型路由' },
-  { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' }
+  { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' },
+  { id: 'access', label: '接入指引', sub: 'API 接口规范、SDK 接入示例与代码生成' },
+  { id: 'raw', label: 'JSON 配置', sub: '直接查看与编辑底层 JSON 配置' }
 ];
 const KB_TYPES = ['chat','embedding','reranker','ocr'];
 const KB_LABELS = { chat:'Chat 对话', embedding:'Embedding 向量', reranker:'Reranker 重排', ocr:'OCR 识图' };
@@ -231,10 +233,12 @@ async function login(){
   loginErr('');
   if(!k){ loginErr('请输入管理员凭证'); return; }
   try {
-    const r=await fetch('/api/admin/config',{headers:{'Authorization':'Bearer '+k}});
+    const configUrl = (typeof HOST !== 'undefined' && HOST.api && HOST.api.config) ? HOST.api.config : '/api/admin/config';
+    const r=await fetch(configUrl,{headers:{'Authorization':'Bearer '+k}});
     if(r.ok){
       state.key=k;
       sessionStorage.setItem('admin_key',k);
+      try { localStorage.setItem('ocrproxy_edge_token', k); } catch(_) {}
       toast('登录成功','ok');
       await initAppAfterAuth();
     }
@@ -248,7 +252,17 @@ function loginErr(m){
     e.style.display = m ? 'block' : 'none'; 
   }
 }
-function logout(){ sessionStorage.removeItem('admin_key'); state.key=''; location.reload(); }
+function getClientKey(){
+  const cfg = state.config || {};
+  return cfg.proxy_api_key || state.key || '';
+}
+
+function logout(){ 
+  sessionStorage.removeItem('admin_key'); 
+  localStorage.removeItem('ocrproxy_edge_token');
+  state.key=''; 
+  location.reload(); 
+}
 function clearLoginCacheAndReload(){ 
   try {
     sessionStorage.clear();
@@ -452,6 +466,12 @@ function render(){
   if(state.tab==='providers') renderProviders();
   if(state.tab==='models') renderModels();
   if(state.tab==='settings') renderSettings();
+  if(state.tab==='access') renderAccessPanel();
+  if(state.tab==='raw') renderRawJsonPanel();
+
+  if(typeof HOST !== 'undefined' && typeof HOST.applyCapabilities === 'function') {
+    HOST.applyCapabilities();
+  }
 }
 
 // Dashboard Log Filtering
@@ -876,11 +896,149 @@ function copy(id){
   navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板','ok')).catch(()=>toast('复制失败','err'));
 }
 
+function toggleKeyCapsule(el){
+  const inp = el.querySelector('input[type="checkbox"]');
+  if(!inp) return;
+  inp.checked = !inp.checked;
+  el.classList.toggle('checked', inp.checked);
+}
+
 // Cross-environment compatibility aliases
 window.doLogin = login;
 window.doLogout = logout;
 window.loadAllData = loadData;
 window.exportConfigJson = exportConfig;
+window.ocrproxy_edge_token = function() {
+  return sessionStorage.getItem('admin_key') || localStorage.getItem('ocrproxy_edge_token') || '';
+};
+
+// Raw JSON Panel Implementation
+function renderRawJsonPanel() {
+  const ta = document.getElementById('rawJsonText');
+  if (ta && state.config) ta.value = JSON.stringify(state.config, null, 2);
+}
+
+function formatRawJson() {
+  const ta = document.getElementById('rawJsonText');
+  if (!ta) return;
+  try {
+    const parsed = JSON.parse(ta.value);
+    ta.value = JSON.stringify(parsed, null, 2);
+    const errEl = document.getElementById('rawJsonErr');
+    if (errEl) errEl.style.display = 'none';
+  } catch (e) {
+    const errEl = document.getElementById('rawJsonErr');
+    if (errEl) {
+      errEl.textContent = 'JSON 格式错误: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  }
+}
+
+async function saveRawJson() {
+  const ta = document.getElementById('rawJsonText');
+  const errEl = document.getElementById('rawJsonErr');
+  if (!ta) return;
+  try {
+    const parsed = JSON.parse(ta.value);
+    if (errEl) errEl.style.display = 'none';
+    state.config = parsed;
+    await persistConfig('JSON 配置已更新并立即生效');
+  } catch (e) {
+    if (errEl) {
+      errEl.textContent = 'JSON 格式解析失败: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  }
+}
+
+function triggerImportConfig() {
+  const el = document.getElementById('configFileImportInput') || document.getElementById('importFile');
+  if (el) el.click();
+}
+
+function renderAccessPanel() {
+  const origin = window.location.origin;
+  const base = `${origin}/v1`;
+  const cfg = state.config || {};
+  const models = Object.keys(cfg.agent_models || {});
+  const messagesModels = models.filter(m => (typeof getModelProtocols === 'function' ? getModelProtocols(m) : ['chat']).includes('messages'));
+  const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
+  const proxyKey = (cfg.proxy_api_key || state.key || 'YOUR_PROXY_API_KEY');
+
+  const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  setT('accBaseUrl', base);
+  setT('accModelsList', models.join(', ') || '—');
+
+  const protoContainer = document.getElementById('accProtocols');
+  if (protoContainer) {
+    const activeProtos = new Set(['chat']);
+    if (messagesModels.length || Object.entries(cfg.providers || {}).some(([n, p]) => (typeof getProviderProtocols === 'function' ? getProviderProtocols(n, p) : ['chat']).includes('messages'))) {
+      activeProtos.add('messages');
+    }
+    if (Object.entries(cfg.providers || {}).some(([n, p]) => (typeof getProviderProtocols === 'function' ? getProviderProtocols(n, p) : ['chat']).includes('responses'))) {
+      activeProtos.add('responses');
+    }
+    protoContainer.innerHTML = (typeof renderProtocolBadges === 'function') ? renderProtocolBadges(Array.from(activeProtos), false) : 'OpenAI Chat';
+  }
+
+  // 1. OpenAI Chat
+  const pySample = `from openai import OpenAI
+
+client = OpenAI(
+    api_key="${proxyKey}",
+    base_url="${base}"
+)
+
+response = client.chat.completions.create(
+    model="${models[0] || 'qwen3.8-flash'}",
+    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
+    stream=True
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content or ""
+    print(content, end="", flush=True)
+`;
+  setT('accPy', pySample);
+
+  // 2. Anthropic Messages
+  const messagesPySample = `import anthropic
+
+client = anthropic.Anthropic(
+    api_key="${proxyKey}",
+    base_url="${base}"
+)
+
+response = client.messages.create(
+    model="${demoMessages}",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.type == "content_block_delta" and chunk.delta.text:
+        print(chunk.delta.text, end="", flush=True)
+`;
+  setT('accMessagesPy', messagesPySample);
+
+  // 3. cURL
+  const curlSample = `curl -X POST "${base}/chat/completions" \\
+  -H "Authorization: Bearer ${proxyKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${models[0] || 'qwen3.8-flash'}",
+    "messages": [{"role": "user", "content": "1+1=?"}],
+    "stream": false
+  }'`;
+  setT('accCurl', curlSample);
+}
+
+function copySnippet(id) {
+  const el = document.getElementById(id);
+  if (el && typeof copyText === 'function') copyText(el.textContent, '接入示例已复制到剪贴板');
+}
 
 // 全局彻底拦截数字输入框的鼠标滚轮微调行为，防止页面上下滚动误触修改数值
 document.addEventListener('wheel', function(e) {

@@ -118,11 +118,11 @@
 
   // 1. Internal Context Resolution & Fallbacks
   function getCtx() {
-    const isVm = (typeof state !== 'undefined' && state && state.config);
-    const cfgObj = isVm ? state.config : (typeof cfg !== 'undefined' ? cfg : {});
-    const statsObj = isVm ? (state.stats || {}) : { candidates_status: {} };
-    const probingKeysSet = isVm ? state.probingKeys : (window._probingKeys = window._probingKeys || new Set());
-    const probingModelsSet = isVm ? state.probingModels : (window._probingModels = window._probingModels || new Set());
+    const isVm = Boolean(global.HOST ? global.HOST.isVm : (typeof state !== 'undefined' && state && state.config));
+    const cfgObj = (global.state && global.state.config) ? global.state.config : (typeof cfg !== 'undefined' ? cfg : {});
+    const statsObj = (global.state && global.state.stats) ? global.state.stats : { candidates_status: {} };
+    const probingKeysSet = (global.state && global.state.probingKeys) ? global.state.probingKeys : (global._probingKeys = global._probingKeys || new Set());
+    const probingModelsSet = (global.state && global.state.probingModels) ? global.state.probingModels : (global._probingModels = global._probingModels || new Set());
     return { isVm, cfg: cfgObj, stats: statsObj, probingKeys: probingKeysSet, probingModels: probingModelsSet };
   }
 
@@ -820,10 +820,12 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12000);
 
-      const endpoint = isVm ? '/api/admin/test-candidate' : '/api/test';
-      const body = isVm 
-        ? { provider: b.provider, key: b.key, model, type: 'chat', category: 'agent', model_name: name }
-        : { provider: b.provider, key: b.key, model };
+      const endpoint = (global.HOST && global.HOST.api && global.HOST.api.testKey) ? global.HOST.api.testKey : (isVm ? '/api/admin/test-candidate' : '/api/test');
+      const body = (global.HOST && typeof global.HOST.buildTestBody === 'function')
+        ? global.HOST.buildTestBody(b, model, b.provider)
+        : (isVm 
+            ? { provider: b.provider, key: b.key, model, type: 'chat', category: 'agent', model_name: name }
+            : { provider: b.provider, key: b.key, model });
 
       const r = await fetch(endpoint, {
         method: 'POST',
@@ -885,7 +887,7 @@
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
-      const endpoint = isVm ? '/api/admin/test-agent-model' : '/api/test';
+      const endpoint = (global.HOST && global.HOST.api && global.HOST.api.testModel) ? global.HOST.api.testModel : (isVm ? '/api/admin/test-agent-model' : '/api/test');
 
       const r = await fetch(endpoint, {
         method: 'POST',
@@ -1047,7 +1049,7 @@
       return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
     }
 
-    const isEdgeOne = (typeof state === 'undefined' || !state || !state.config);
+    const isEdgeOne = Boolean(global.HOST ? global.HOST.isEdgeOne : (typeof state === 'undefined' || !state || !state.config));
     if (isEdgeOne) {
       return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
     }

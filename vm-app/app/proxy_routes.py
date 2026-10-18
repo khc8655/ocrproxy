@@ -802,17 +802,29 @@ def _model_not_found_response(model_name: str) -> JSONResponse:
 
 
 def _scale_budget(config: dict, timeout: float, candidate_count: int) -> float:
-    """Scale the failover budget with candidate count, ensuring at least 3 attempts.
+    """Scale the failover budget with candidate count, ensuring at least max_retries attempts.
 
     Supports long-thinking / reasoning models (e.g. 120s timeout with failover retries).
-    An explicitly configured schedule_total_budget wins."""
+    An explicitly configured request_total_budget_sec wins."""
     try:
-        explicit = float(config.get("schedule_total_budget", 0))
+        raw_budget = config.get("request_total_budget_sec")
+        if raw_budget is None:
+            raw_legacy = config.get("schedule_total_budget")
+            if raw_legacy is not None and float(raw_legacy) > 10.0:
+                raw_budget = raw_legacy
+        if raw_budget is not None:
+            explicit = float(raw_budget)
+            if explicit > 0:
+                return max(explicit, timeout)
     except (ValueError, TypeError):
-        explicit = 0.0
-    if explicit > 0:
-        return max(explicit, timeout)
-    return min(600.0, timeout * min(3, max(candidate_count, 1)))
+        pass
+
+    try:
+        max_retries = int(config.get("max_retries", 3))
+    except (ValueError, TypeError):
+        max_retries = 3
+
+    return min(600.0, timeout * min(max_retries, max(candidate_count, 1)))
 
 
 async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYTES, return_raw_bytes: bool = False):
@@ -1482,7 +1494,10 @@ async def embeddings(request: Request):
             req_config, "embedding", build_request,
             category="kb", request_model="embedding"
         )
-        resp = JSONResponse(content=sr.data)
+        if sr.raw_content is not None:
+            resp = Response(content=sr.raw_content, media_type="application/json")
+        else:
+            resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
         if getattr(sr, "trail", ""):
@@ -1564,7 +1579,10 @@ async def rerank(request: Request):
             req_config, "reranker", build_request,
             category="kb", request_model="reranker"
         )
-        resp = JSONResponse(content=sr.data)
+        if sr.raw_content is not None:
+            resp = Response(content=sr.raw_content, media_type="application/json")
+        else:
+            resp = JSONResponse(content=sr.data)
         resp.headers["X-Routed-Via"] = urllib.parse.quote(sr.routed_via)
         resp.headers["X-Fallback-Attempts"] = str(sr.fallback_attempts)
         if getattr(sr, "trail", ""):

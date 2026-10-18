@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * verify-frontend-symbols.mjs — 静态前端符号完整性与语法门禁扫描器
+ * verify-frontend-symbols.mjs — 静态前端符号完整性与架构门禁扫描器
  * 
  * 核心职责：
- * 1. 使用 Node.js 内置 vm 模块对所有前端 JS 进行硬性语法编译验证；
- * 2. 扫描所有函数声明与关键交互调用契约，严禁未定义函数（如 loginErr）逃逸；
- * 3. 任何语法错误或缺失符号当场 exit 1 阻断 npm run build:admin 构建。
+ * 1. 架构纯洁度：严禁 agent-edgeone/ 出现独立的 admin.html/css/js 副本；
+ * 2. 符号无遮蔽：严禁 shared/admin/js 各模块间顶层 function 声明重名覆盖；
+ * 3. 语法硬编译：使用 Node.js vm 对所有 JS 进行语法编译验证；
+ * 4. 契约完整性：确保所有核心业务交互函数 100% 声明存在；
+ * 5. 安全合规性：严禁出现已废弃或错误的外部镜像地址（如 xsk/ocrprox）。
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +20,17 @@ const sharedJsDir = join(root, '..', 'shared', 'admin', 'js');
 
 console.log('🔍 [Gate 1/2] 正在执行前端代码静态语法与符号完整性检查...');
 
+// 0. 架构纯洁度门禁：严禁 EdgeOne 目录出现散落的前端副本
+const forbiddenFiles = ['admin.html', 'admin.css', 'admin.js'];
+for (const f of forbiddenFiles) {
+  const p = join(root, f);
+  if (existsSync(p)) {
+    console.error(`❌ [SingleSourceViolation] 发现残留的独立前端文件: ${p}`);
+    console.error(`   👉 所有 UI 逻辑必须统一存放在 shared/admin/ 中！`);
+    process.exit(1);
+  }
+}
+
 if (!existsSync(sharedJsDir)) {
   console.error(`❌ 未找到前端源目录: ${sharedJsDir}`);
   process.exit(1);
@@ -27,13 +40,22 @@ const jsFiles = readdirSync(sharedJsDir).filter(f => f.endsWith('.js'));
 const allCodeByFile = {};
 const definedFunctions = new Set();
 const definedVariables = new Set();
+const topLevelFunctionsByFile = {};
 
 // 1. 语法编译检查 & 收集声明符号
 let hasSyntaxError = false;
+let duplicateFunctions = [];
+
 for (const file of jsFiles) {
   const filePath = join(sharedJsDir, file);
   const code = readFileSync(filePath, 'utf8');
   allCodeByFile[file] = code;
+
+  // 1.0 镜像与安全检查
+  if (code.includes('xsk/ocrprox')) {
+    console.error(`❌ [SecurityGate] 文件 ${file} 包含非法的旧预设地址 xsk/ocrprox！`);
+    process.exit(1);
+  }
 
   // 1.1 语法合法性硬编译 (Node.js vm.Script)
   try {
@@ -43,7 +65,21 @@ for (const file of jsFiles) {
     hasSyntaxError = true;
   }
 
-  // 1.2 收集函数与顶层声明
+  // 1.2 收集顶层函数声明并检测多文件重名覆盖 (闭包 IIFE 内部的局部函数除外)
+  if (!code.startsWith('(function')) {
+    const topFuncRegex = /^function\s+([a-zA-Z0-9_$]+)\s*\(/gm;
+    let m;
+    while ((m = topFuncRegex.exec(code)) !== null) {
+      const fn = m[1];
+      if (topLevelFunctionsByFile[fn]) {
+        duplicateFunctions.push({ fn, fileA: topLevelFunctionsByFile[fn], fileB: file });
+      } else {
+        topLevelFunctionsByFile[fn] = file;
+      }
+    }
+  }
+
+  // 1.3 收集所有声明符号
   const funcDeclRegex = /(?:function\s+([a-zA-Z0-9_$]+)|(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s*)?\()/g;
   let match;
   while ((match = funcDeclRegex.exec(code)) !== null) {
@@ -59,6 +95,14 @@ for (const file of jsFiles) {
 
 if (hasSyntaxError) {
   console.error('❌ 语法检查未通过，构建终止！');
+  process.exit(1);
+}
+
+if (duplicateFunctions.length > 0) {
+  console.error(`❌ [DuplicateFunctionDeclaration] 检测到多文件顶层函数重名遮蔽:`);
+  for (const item of duplicateFunctions) {
+    console.error(`   - 函数 "${item.fn}()" 在 ${item.fileA} 与 ${item.fileB} 中重复声明，存在作用域覆盖隐患！`);
+  }
   process.exit(1);
 }
 
@@ -80,6 +124,8 @@ const CRITICAL_REQUIRED_FUNCTIONS = [
   'renderProviders',
   'renderModels',
   'renderSettings',
+  'renderAccessPanel',
+  'renderRawJsonPanel',
   'toast',
   'icon',
   'esc'
@@ -94,11 +140,11 @@ for (const fn of CRITICAL_REQUIRED_FUNCTIONS) {
 
 if (missingCriticalFunctions.length > 0) {
   console.error(`❌ [SymbolMissing] 核心交互函数未声明: ${missingCriticalFunctions.join(', ')}`);
-  console.error(`   👉 请检查是否有函数被意外误删（如 loginErr）！构建已强行阻断。`);
+  console.error(`   👉 请检查是否有函数被意外误删！构建已强行阻断。`);
   process.exit(1);
 }
 
-// 3. 扫描各文件内部调用的未声明独立函数 (过滤 JS 保留字与已知浏览器环境)
+// 3. 扫描各文件内部调用的未声明独立函数
 const BROWSER_GLOBALS = new Set([
   'alert', 'confirm', 'prompt', 'fetch', 'setTimeout', 'clearTimeout',
   'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame',
@@ -114,8 +160,6 @@ const JS_KEYWORDS = new Set([
 let undefinedCalls = [];
 
 for (const [file, code] of Object.entries(allCodeByFile)) {
-  // 匹配独立函数调用: 不以 . 或 function 开头的 foo(...)
-  // 例如: loginErr('')
   const callRegex = /(?<![.\w$])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
   let m;
   const lines = code.split('\n');
@@ -127,7 +171,6 @@ for (const [file, code] of Object.entries(allCodeByFile)) {
     if (definedFunctions.has(fnName)) continue;
     if (definedVariables.has(fnName)) continue;
 
-    // 定位行号
     const matchIdx = m.index;
     let charCount = 0;
     let lineNo = 1;
@@ -139,7 +182,6 @@ for (const [file, code] of Object.entries(allCodeByFile)) {
       }
     }
 
-    // 仅针对在 core.js 或 app.js 中调用的顶级未知符号给出警报
     if (file === 'core.js' || file === 'app.js') {
       undefinedCalls.push({ file, line: lineNo, fnName });
     }
@@ -147,7 +189,6 @@ for (const [file, code] of Object.entries(allCodeByFile)) {
 }
 
 if (undefinedCalls.length > 0) {
-  // 检查是否有已知白名单外的重要缺失调用
   const hardFailures = undefinedCalls.filter(c => ['loginErr'].includes(c.fnName));
   if (hardFailures.length > 0) {
     console.error(`❌ [UndefinedFunctionCall] 检测到调用了未定义的函数:`);
@@ -158,5 +199,5 @@ if (undefinedCalls.length > 0) {
   }
 }
 
-console.log(`✅ [Gate 1/2] 静态符号完整性通过！已验证 ${definedFunctions.size} 个函数声明，无未定义核心符号。`);
+console.log(`✅ [Gate 1/2] 静态符号完整性通过！已验证 ${definedFunctions.size} 个函数声明，单一真理源合规，无函数遮蔽。`);
 process.exit(0);

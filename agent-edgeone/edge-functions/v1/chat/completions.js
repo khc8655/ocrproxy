@@ -40,6 +40,8 @@ import {
 import { normaliseForProvider, createKeepAliveStream } from '../../lib/normalize.js';
 import {
   shouldFailover,
+  classifyFailure,
+  isKeyLevelFailure,
   bindingId,
   recordFailure,
   getCooldownsBatch,
@@ -48,7 +50,7 @@ import {
 } from '../../lib/cooldowns.js';
 import { edgeLogger } from '../../lib/logger.js';
 
-const MAX_BODY_BYTES = 1024 * 1024; // 1 MB Edge Function limit
+const MAX_BODY_BYTES = 900 * 1024; // 900 KB Edge Function safe ingress limit (avoids 1MB hard crash)
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000; // 300s (5min) full EdgeOne fetch limit for deep reasoning models
 const MAX_RETRIES = 3;
 
@@ -138,8 +140,8 @@ export async function onRequestPost(context) {
   const settings = config.settings || {};
   const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
   const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
-  const maxRetries = Number(settings.schedule_total_budget || 3);
-  const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 2);
+  const maxRetries = Number(settings.max_retries ?? settings.schedule_total_budget ?? 3);
+  const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 3);
   const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
   const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
   const deadline = startMs + totalBudgetSec * 1000;
@@ -282,6 +284,22 @@ export async function onRequestPost(context) {
 
     lastErrorText = result.errorText || '';
     lastStatus = result.status || 0;
+
+    // Classify failure and apply three-tier cooldown
+    const cdSec = classifyFailure(result.status, result.kind, lastErrorText, config.settings || {});
+    if (cdSec > 0) {
+      const cdExp = Date.now() + cdSec * 1000;
+      cooldowns.set(bindingId(binding), cdExp);
+      if (kv) {
+        if (isKeyLevelFailure(result.status, lastErrorText)) {
+          // Key-level cooldown: park provider:key
+          setCooldown(binding.provider, binding.keyLabel, cdSec, kv, '').catch(() => {});
+        } else {
+          // Model-level cooldown: park provider:key:model
+          setCooldown(binding.provider, binding.keyLabel, cdSec, kv, binding.upstreamModel || body.model).catch(() => {});
+        }
+      }
+    }
 
     // For 5xx / timeout / empty stream / 429, mark provider as down if fast-failover is on
     if (result.kind === 'empty_stream' || result.kind === 'read_timeout' ||
@@ -515,6 +533,22 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
         console.warn(`[EdgeOne:EmptyStream] url=${url} status=${upstreamResp.status} stream closed without emitting data`);
         try { await reader.cancel(); } catch (_) {}
         return { kind: 'empty_stream', status: upstreamResp.status, errorText: 'Stream closed without emitting data', response: null };
+      }
+
+      // Check for in-band error in first chunk (e.g. {"error": {...}})
+      const firstChunkText = new TextDecoder().decode(value);
+      if (firstChunkText.trim().startsWith('{"error"') || firstChunkText.includes('"type":"error"')) {
+        console.warn(`[EdgeOne:InBandError] url=${url} status=${upstreamResp.status} in-band error detected: ${firstChunkText.slice(0, 150)}`);
+        try { await reader.cancel(); } catch (_) {}
+        let inbandStatus = 502;
+        try {
+          const parsed = JSON.parse(firstChunkText.startsWith('data:') ? firstChunkText.replace(/^data:\s*/, '') : firstChunkText);
+          const errCode = parsed.error?.code || parsed.error?.status;
+          if (errCode && Number(errCode) >= 400 && Number(errCode) <= 599) inbandStatus = Number(errCode);
+          else if (parsed.error?.type === 'rate_limit_error') inbandStatus = 429;
+          else if (parsed.error?.type === 'authentication_error') inbandStatus = 401;
+        } catch (_) {}
+        return { kind: 'http', status: inbandStatus, errorText: firstChunkText, response: null };
       }
 
       return {

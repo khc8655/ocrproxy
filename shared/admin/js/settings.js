@@ -23,7 +23,7 @@ function renderSettings(){
   const derivedBudget = c.request_total_budget_sec ?? c.schedule_total_budget ?? (baseTimeout * (c.max_retries ?? 3));
   set('s_budget', derivedBudget);
   set('s_maxRetries', c.max_retries ?? 3);
-  set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 2);
+  set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 3);
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
   set('s_concurrency', c.max_concurrency_per_key ?? 5);
   set('s_ocrMaxInflight', c.ocr_max_inflight ?? 6);
@@ -510,10 +510,16 @@ async function saveSettings(silent=false){
     if (!c.upstream_timeout_sec) c.upstream_timeout_sec = 15;
   }
   c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
-  // 动态预算自适应：支持深度长思考（如 120s × 3 = 360s），按实际超时与重试次数计算，放宽硬编码上限至 600s
-  c.request_total_budget_sec = Math.min(600, Math.max(60, timeoutVal * c.max_retries));
-  c.schedule_total_budget = c.request_total_budget_sec; // backward compatibility
-  c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 2;
+  // 预算由后端自适应计算或尊重用户自定义填写，不再强行写入已废弃的 schedule_total_budget
+  const budgetInput = document.getElementById('s_budget');
+  if (budgetInput && budgetInput.value.trim() !== '') {
+    const bVal = Number(budgetInput.value);
+    if (bVal > 0) c.request_total_budget_sec = bVal;
+  }
+  delete c.schedule_total_budget;
+  if (c.settings) delete c.settings.schedule_total_budget;
+
+  c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 3;
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
   c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
   c.upstream_timeout_ocr = c.upstream_timeout_kb;
@@ -536,6 +542,13 @@ async function saveSettings(silent=false){
   c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
   c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
   delete c.latency_based_routing;
+
+  // Integrate Schema-driven form values if present
+  if (typeof SettingsForm !== 'undefined' && typeof SettingsForm.collect === 'function') {
+    const schemaSettings = SettingsForm.collect();
+    Object.assign(c, schemaSettings);
+    c.settings = Object.assign(c.settings || {}, schemaSettings);
+  }
 
   // Card 6: EdgeOne Vault Hub
   const vaultUrlEl = document.getElementById('cfg_vault_url');

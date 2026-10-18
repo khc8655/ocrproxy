@@ -17,16 +17,17 @@ ocrprox (Monorepo)
 │
 ├── agent-edgeone/                     # 部署于 EdgeOne 边缘函数 (Serverless)
 │   ├── edge-functions/                # V8 边缘函数 (自包含极速内联单体，由 build-admin.mjs 自动生成)
-│   ├── admin.html / css / js          # 由 shared/admin 编译输出的单体产物 (带自动生成警示)
-│   └── package.json                   # EdgeOne 构建与 167 项自动化测试套件
+│   └── package.json                   # EdgeOne 构建与 191 项自动化测试套件
 │
 ├── shared/                            # 共享资源与唯一规范源
-│   ├── presets/                       # 14 大官方供应商标准预设 JSON（含 NVIDIA NIM）与目录索引 catalog.json
+│   ├── presets/                       # 14 大官方供应商标准预设 JSON 与目录索引 catalog.json
 │   ├── admin/                         # 全局唯一的前端开发真理源 (Single Source of Truth)
-│   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器 (~700 行)
+│   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器
 │   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨)
-│   │   └── js/                        # 7 大独立业务领域小脚本 (core, vault, providers, agent-models-ui, models, settings, app)
-│   └── docs/config-schema.md          # 统一配置规范文档
+│   │   └── js/                        # 9 大独立业务领域小脚本 (host, settings-form, core, vault, providers, agent-models-ui, models, settings, app)
+│   ├── config/                        # 统一配置定义真理源
+│   │   └── settings.schema.json       # 系统配置 Schema 定义 (类型/默认值/范围/模式隔离/别名映射)
+│   └── docs/                          # 统一规范文档 (UI-SSOT 规范、后端调度器韧性标准等)
 │
 └── design-system/                     # UI 设计系统 Tokens 与组件库
 ```
@@ -552,6 +553,37 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 ---
 
 ## 最新版本更新记录 (Release Notes)
+
+### `v2026.10.18-06` (2026-10-18)
+- **前端单一真理源 (Single Source of Truth) 重构彻底落地**：
+  - 前端源代码（HTML、CSS、JS）统一收敛至 `shared/admin/`，彻底废除 `agent-edgeone/admin.*` 多重冗余副本维护，彻底根除多端代码漂移与重复修复的历史隐患；
+  - 引入规范化编译构建管线 `npm run build:admin`，通过 AST / 模板处理自动生成 EdgeOne 内联单体边缘函数 (`edge-functions/index.js`, `admin.js`) 并精准同步 VM 静态资源 (`vm-app/static/`)；
+- **配置声明化与 Host 宿主适配器架构**：
+  - 引入 `shared/config/settings.schema.json`（全局配置 Schema 真理源）与 `host.js`（宿主适配器环境感知），通过 `settings-form.js` 实现设置面板的声明式动态渲染，前端功能与 VM / EdgeOne 差异化参数彻底解耦；
+  - 统一重试与超时模型参数命名，全端支持 `max_retries` 与 `request_total_budget_sec`；
+- **后端调度器预算解耦与多候选防饿死保障**：
+  - 重构端点调用预算模型，将整体请求总超时与单次候选超时彻底解耦，针对 OCR 等长耗时任务，首选候选超时（如 60s）失败后自动为备选候选 2 保留充裕时间继续尝试，彻底杜绝单次超时饿死备选候选的问题；
+- **三级精准故障冷却体系与 Key 级熔断**：
+  - 引入 `_key_cooldown_until` 三级冷却机制，将 401（未授权）、403（凭据禁用）、余额欠费、模型配额耗尽等错误精准锁定在具体 Key 级别，杜绝单个 Key 故障导致全提供商被误熔断；
+  - EdgeOne 端无缝接入 `classifyFailure` 与 `isKeyLevelFailure`，将 Key 级冷却持久化写入边缘 KV；
+- **Sticky 会话复合键一致性与智能顺延避让**：
+  - 针对 `sticky_failover` 模式，将绑定状态升级为 `provider:key` 复合键，杜绝跨提供商同名 Key 导致的调度漂移；当遭遇 429 或节点故障时，自动顺延避让至下一个健康候选并持久锁定；
+- **400 跨厂商参数容错与配额短语防误杀**：
+  - 当配置了多个不同上游厂商候选时，针对某厂商特有格式报错的 HTTP 400，调度器不再直接中断，而是自动尝试 failover 至备选厂商；
+  - 严格收敛 Quota 耗尽判定正则表达式，彻底杜绝包含数字 `0` 的常规错误信息被误杀为 Quota 耗尽的问题；
+- **RPM 滑动窗口安全退避与中枢规则完整保留**：
+  - 遭遇上游 429 时实施不少于 15 秒的保守安全退避，防止突发流量引发雪崩重试；中枢同步时完整合并保留 `rpm_per_key`、`adapter_rules` 与 `protocols` 等高级字段；
+- **向量与重排响应零拷贝 (Zero-Copy Pass-Through)**：
+  - `/v1/embeddings` 与 `/v1/rerank` 接口采用字节流零拷贝直通，消除海量浮点数组解析对 Python 堆内存的严重碎片化污染与 GC 停顿；
+- **EdgeOne 平台硬限制安全防护与带内错误侦测**：
+  - 入口强置 900KB 请求体安全准入拦截，防止超限触发边缘运行平台硬性崩溃；流式响应首包极速侦测带内 JSON 错误（如 `{"error": ...}`），遇错秒级切 Key。
+
+### `v2026.10.18-05` (2026-10-18)
+- **RPM 速率限制统一收敛至供应商级别**：
+  - 统一在供应商级别配置每分钟请求上限 (`rpm_per_key`)，作为该提供商名下所有 Key 的统一约束源，彻底告别单 Key 重复配置的混乱；
+  - 界面彻底移除 Key 弹窗与 Key 芯片上的冗余限流输入，禁用鼠标滚轮误触；
+- **移除过时预设推荐模型与选用体验优化**：
+  - 供应商弹窗彻底删除静态过时的官方预设推荐模型列表，统一改由「模型及路由」面板实时探测上游可用模型一键选用。
 
 ### `v2026.10.18-04` (2026-10-18)
 - **Web 控制台 URL 免密直连 (`?token=` / `?key=`)**：

@@ -8,6 +8,6 @@
     "test:ui": "node agent-edgeone/scripts/test-ui-smoke.mjs",
     "build:presets": "cd agent-edgeone && node scripts/build-presets.mjs",
     "build:admin": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs && cp -R edge-functions/* ../edge-functions/",
-    "test": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && node agent-edgeone/scripts/test-ui-smoke.mjs && cd agent-edgeone && node scripts/build-presets.mjs && npm test && cd .. && node tests/test_security_hardening.mjs && node --test tests/test_edgeone_logging.mjs && python3 vm-app/scripts/test_run_server_dual_stack.py && python3 tests/test_system_hardening_audit.py"
+    "test": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && node agent-edgeone/scripts/test-ui-smoke.mjs && cd agent-edgeone && node scripts/build-presets.mjs && npm test && cd .. && node tests/test_security_hardening.mjs && node --test tests/test_edgeone_logging.mjs && python3 vm-app/scripts/test_run_server_dual_stack.py && python3 tests/test_system_hardening_audit.py && python3 tests/test_budget_and_ui_consistency.py && python3 vm-app/scripts/test_backend_scheduler_resilience.py"
   }
 }

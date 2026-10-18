@@ -118,6 +118,16 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
             else:
                 if p_val.get("base_url"):
                     merged_providers[p_name]["base_url"] = p_val["base_url"]
+                if "rpm_per_key" in p_val:
+                    merged_providers[p_name]["rpm_per_key"] = p_val["rpm_per_key"]
+                if "protocols" in p_val:
+                    merged_providers[p_name]["protocols"] = p_val["protocols"]
+                if "adapter_rules" in p_val:
+                    merged_providers[p_name]["adapter_rules"] = p_val["adapter_rules"]
+                if "anthropic_base_url" in p_val:
+                    merged_providers[p_name]["anthropic_base_url"] = p_val["anthropic_base_url"]
+                if "anthropic_messages" in p_val:
+                    merged_providers[p_name]["anthropic_messages"] = p_val["anthropic_messages"]
                 merged_keys = merged_providers[p_name].setdefault("keys", {})
                 incoming_keys = p_val.get("keys", {})
                 if isinstance(incoming_keys, dict):
@@ -168,11 +178,11 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
     setting_keys = [
         "proxy_api_key", "proxy_keys",
         "agent_routing_strategy", "kb_routing_strategy",
-        "request_total_budget_sec", "upstream_timeout_sec", "agent_first_byte_timeout_sec", "max_attempts_per_provider",
+        "request_total_budget_sec", "max_retries", "upstream_timeout_sec", "agent_first_byte_timeout_sec", "max_attempts_per_provider",
         "fast_failover_provider_down",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
-        "schedule_total_budget", "max_concurrency_per_key",
+        "max_concurrency_per_key",
         "cooldown_tpm_sec", "cooldown_quota_sec", "cooldown_5xx_sec",
         "cooldown_429_sec", "cooldown_403_sec", "cooldown_duration",
         "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing",
@@ -183,11 +193,35 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
         if sk in incoming:
             merged[sk] = incoming[sk]
 
+    # Handle incoming legacy schedule_total_budget if present
+    legacy_stb = incoming.get("schedule_total_budget")
+    if legacy_stb is not None:
+        try:
+            val = float(legacy_stb)
+            if 0 < val <= 10:
+                merged.setdefault("max_retries", int(val))
+            elif val > 10:
+                merged.setdefault("request_total_budget_sec", float(val))
+        except (ValueError, TypeError):
+            pass
+
     # 5. Merge Schema v2 settings block if present
     incoming_settings = incoming.get("settings")
     if isinstance(incoming_settings, dict):
         merged_settings = merged.setdefault("settings", {})
         for k, v in incoming_settings.items():
+            if k == "schedule_total_budget":
+                try:
+                    val = float(v)
+                    if 0 < val <= 10:
+                        merged_settings["max_retries"] = int(val)
+                        merged["max_retries"] = int(val)
+                    elif val > 10:
+                        merged_settings["request_total_budget_sec"] = float(val)
+                        merged["request_total_budget_sec"] = float(val)
+                except (ValueError, TypeError):
+                    pass
+                continue
             merged_settings[k] = v
             merged[k] = v
 
