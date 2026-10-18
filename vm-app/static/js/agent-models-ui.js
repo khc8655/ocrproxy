@@ -487,21 +487,21 @@
     if (optVault) optVault.style.display = (cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url)) ? '' : 'none';
 
     const providers = _getAllProvidersList();
-    const localList = providers.filter(p => !p.isVault);
-    const vaultList = providers.filter(p => p.isVault);
+    const configuredList = providers.filter(p => p.isConfigured !== false);
+    const unconfiguredVaultList = providers.filter(p => !p.isConfigured && p.isVault);
 
     if (optLocal) {
-      if (localList.length > 0) {
-        optLocal.innerHTML = localList.map(p => {
+      if (configuredList.length > 0) {
+        optLocal.innerHTML = configuredList.map(p => {
           const optLabel = _formatProviderOptionLabel(p);
           return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
         }).join('');
       } else {
-        optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
+        optLocal.innerHTML = '<option value="" disabled>-- 暂无已配置供应商 (可从下方选用或点击右上角新增) --</option>';
       }
     } else {
-      sel.innerHTML = providers.length
-        ? providers.map(p => {
+      sel.innerHTML = configuredList.length
+        ? configuredList.map(p => {
             const optLabel = _formatProviderOptionLabel(p);
             return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
           }).join('')
@@ -509,12 +509,17 @@
     }
 
     if (optVault) {
-      optVault.innerHTML = vaultList.length
-        ? vaultList.map(p => {
-            const optLabel = _formatProviderOptionLabel(p);
-            return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
-          }).join('')
-        : '<option disabled>暂无中枢托管供应商</option>';
+      const hasVault = Boolean(cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url));
+      if (!hasVault || unconfiguredVaultList.length === 0) {
+        optVault.style.display = 'none';
+        optVault.innerHTML = '';
+      } else {
+        optVault.style.display = '';
+        optVault.innerHTML = unconfiguredVaultList.map(p => {
+          const optLabel = _formatProviderOptionLabel(p) + ' (中枢按需拉取)';
+          return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
+        }).join('');
+      }
     }
 
     const curId = (selectedId && providers.some(p => p.id === selectedId)) 
@@ -797,9 +802,54 @@
   async function deleteAgentModel(name) {
     if (!confirm(`确定要删除 Agent 模型 "${name}" 吗？`)) return;
     const { cfg } = getCtx();
+    const targetModel = cfg.agent_models?.[name];
+    const usedProviders = new Set((targetModel?.keys || []).map(k => k.provider).filter(Boolean));
+
     delete cfg.agent_models[name];
-    await _persist(`Agent 模型「${name}」已删除并立即生效`);
+
+    // 检查是否有供应商变成孤立供应商（本地已无任何模型或候选模型引用）
+    const orphanedProviders = [];
+    for (const provId of usedProviders) {
+      if (!cfg.providers?.[provId]) continue;
+      let stillUsed = false;
+      // 检查其他 Agent 模型
+      for (const mName of Object.keys(cfg.agent_models || {})) {
+        if ((cfg.agent_models[mName]?.keys || []).some(k => k.provider === provId)) {
+          stillUsed = true;
+          break;
+        }
+      }
+      // 检查 candidates 候选模型
+      if (!stillUsed && cfg.candidates) {
+        for (const t of Object.keys(cfg.candidates)) {
+          if (Array.isArray(cfg.candidates[t]) && cfg.candidates[t].some(x => x.provider === provId)) {
+            stillUsed = true;
+            break;
+          }
+        }
+      }
+      if (!stillUsed) {
+        orphanedProviders.push(provId);
+      }
+    }
+
+    let extraMsg = '';
+    if (orphanedProviders.length > 0) {
+      const provListStr = orphanedProviders.join(', ');
+      if (confirm(`删除模型「${name}」后，供应商 [${provListStr}] 本地已无任何模型引用。\n是否同时从本地清理该供应商及其凭据？`)) {
+        for (const p of orphanedProviders) {
+          delete cfg.providers[p];
+          if (typeof state !== 'undefined' && state.ruleUpdatesMap && state.ruleUpdatesMap[p]) {
+            delete state.ruleUpdatesMap[p];
+          }
+        }
+        extraMsg = `，并已同步清理孤立供应商 [${provListStr}]`;
+      }
+    }
+
+    await _persist(`Agent 模型「${name}」已删除${extraMsg}并立即生效`);
     renderAgentModels();
+    if (typeof renderProviders === 'function') renderProviders();
   }
 
   // 6. Key Operations: Reorder, Set Active, Delete

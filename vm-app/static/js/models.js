@@ -102,32 +102,34 @@ function populateCandidateProviderSelect(selectedId){
   if (optVault) optVault.style.display = hasVault ? '' : 'none';
 
   const providers = getAllAvailableProviders();
-  const localList = providers.filter(p => !p.isVault);
-  const vaultList = providers.filter(p => p.isVault);
+  const configuredList = providers.filter(p => p.isConfigured !== false);
+  const unconfiguredVaultList = providers.filter(p => !p.isConfigured && p.isVault);
 
   if (optLocal) {
-    if (localList.length > 0) {
-      optLocal.innerHTML = localList.map(p => {
+    if (configuredList.length > 0) {
+      optLocal.innerHTML = configuredList.map(p => {
         const optLabel = (typeof _formatProviderOptionLabel === 'function') 
           ? _formatProviderOptionLabel(p) 
           : `${p.label} (${p.protoStr || 'openai'})`;
         return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
       }).join('');
-    } else if (vaultList.length > 0) {
-      optLocal.innerHTML = '<option value="" disabled>-- 暂无本地自建供应商 --</option>';
     } else {
-      optLocal.innerHTML = '<option value="" disabled selected>-- 当前暂无可用供应商 (请在供应商Tab中配置) --</option>';
+      optLocal.innerHTML = '<option value="" disabled>-- 暂无已配置供应商 (可从下方选用或点击新增) --</option>';
     }
   }
   if (optVault) {
-    optVault.innerHTML = vaultList.length
-      ? vaultList.map(p => {
-          const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-            ? _formatProviderOptionLabel(p) 
-            : `${p.label} (${p.protoStr || 'openai'})`;
-          return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
-        }).join('')
-      : '<option disabled>暂无中枢托管供应商</option>';
+    if (!hasVault || unconfiguredVaultList.length === 0) {
+      optVault.style.display = 'none';
+      optVault.innerHTML = '';
+    } else {
+      optVault.style.display = '';
+      optVault.innerHTML = unconfiguredVaultList.map(p => {
+        const optLabel = (typeof _formatProviderOptionLabel === 'function') 
+          ? _formatProviderOptionLabel(p) + ' (中枢按需拉取)'
+          : `${p.label} (${p.protoStr || 'openai'}) (中枢按需拉取)`;
+        return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
+      }).join('');
+    }
   }
 
   const curId = (selectedId && providers.some(p => p.id === selectedId)) 

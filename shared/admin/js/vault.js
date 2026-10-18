@@ -91,57 +91,51 @@ function formatProtocolsDisplay(protos) {
 function getAllAvailableProviders(){
   const localProviders = state.config?.providers || {};
   const remoteProviders = getVaultProviderList();
-  const remoteIds = new Set(remoteProviders.map(p => (p.id || '').toLowerCase()));
+  const remoteMap = new Map();
+  remoteProviders.forEach(rp => {
+    if (rp.id) remoteMap.set(rp.id.toLowerCase(), rp);
+  });
   const list = [];
 
-  // 1. 中枢供应商优先且完整展示 (无论本地是否已拉取，均归属中枢托管)
+  // 1. 本地已配置供应商 (优先且始终位于第一梯队，用户可直接选用绑定模型)
+  const localKeys = Object.keys(localProviders).sort();
+  localKeys.forEach(name => {
+    const p = localProviders[name] || {};
+    const low = name.toLowerCase();
+    const rp = remoteMap.get(low);
+    const protos = getProviderProtocols(name, p);
+    const protoStr = formatProtocolsDisplay(protos);
+    const isVault = (p.origin === 'vault');
+    list.push({
+      id: name,
+      label: cleanProviderLabel(p.name || rp?.name || name),
+      protoStr: protoStr,
+      isConfigured: true,
+      isVault: isVault,
+      isCached: true,
+      origin: p.origin || (isVault ? 'vault' : 'local'),
+      protocols: protos
+    });
+  });
+
+  // 2. 凭据中枢未导入项 (仅列出本地尚未配置的中枢供应商，供用户按需拉取)
   remoteProviders.forEach(rp => {
     const pId = rp.id;
-    const hasLocal = !!localProviders[pId];
-    const protos = rp.protocols || (hasLocal ? getProviderProtocols(pId) : ['chat']);
+    if (!pId) return;
+    const low = pId.toLowerCase();
+    if (localProviders[pId] || localKeys.some(k => k.toLowerCase() === low)) {
+      return; // 已在本地配置列表中，不重复冗余展示
+    }
+    const protos = rp.protocols || ['chat'];
     const protoStr = formatProtocolsDisplay(protos);
     list.push({
       id: pId,
       label: cleanProviderLabel(rp.name || pId),
       protoStr: protoStr,
+      isConfigured: false,
       isVault: true,
-      isCached: hasLocal,
-      protocols: protos
-    });
-  });
-
-  // 2. 本地自建供应商 (严格仅展示本地手动添加且非中枢托管的项)
-  Object.keys(localProviders).forEach(name => {
-    const low = name.toLowerCase();
-    const isVaultItem = remoteIds.has(low) || (localProviders[name] && localProviders[name].origin === 'vault');
-    if (isVaultItem) {
-      if (!remoteIds.has(low)) {
-        remoteIds.add(low);
-        const protos = getProviderProtocols(name);
-        const protoStr = formatProtocolsDisplay(protos);
-        list.push({
-          id: name,
-          label: cleanProviderLabel(localProviders[name]?.name || name),
-          protoStr: protoStr,
-          isVault: true,
-          isCached: true,
-          protocols: protos
-        });
-      }
-      return;
-    }
-
-    // 纯本地手动维护条目
-    const protos = getProviderProtocols(name);
-    const protoStr = formatProtocolsDisplay(protos);
-    const preset = (typeof PRESET_DEFINITIONS !== 'undefined' && PRESET_DEFINITIONS[low]) || null;
-    const label = cleanProviderLabel(localProviders[name]?.name || preset?.name || name);
-    list.push({
-      id: name,
-      label: label,
-      protoStr: protoStr,
-      isVault: false,
-      isCached: true,
+      isCached: false,
+      origin: 'vault',
       protocols: protos
     });
   });
