@@ -65,6 +65,7 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
           'content-type': 'application/json',
         },
         body: JSON.stringify(probeBody),
+        redirect: 'manual',
         eo: {
           timeoutSetting: {
             connectTimeout: 8_000,
@@ -96,6 +97,7 @@ async function probeKey(providerName, keyLabel, apiKey, baseUrl, targetModel = '
             'authorization': `Bearer ${apiKey}`,
             'accept': 'application/json',
           },
+          redirect: 'manual',
           eo: {
             timeoutSetting: {
               connectTimeout: 8_000,

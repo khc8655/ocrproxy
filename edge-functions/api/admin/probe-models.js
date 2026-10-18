@@ -185,8 +185,21 @@ export async function onRequestPost(context) {
           method: 'GET',
           headers,
           signal: controller.signal,
+          redirect: 'manual',
+          eo: {
+            timeoutSetting: {
+              connectTimeout: 5_000,
+              readTimeout: 15_000,
+            },
+          },
         });
         clearTimeout(timer);
+
+        if (res.status >= 300 && res.status < 400) {
+          const loc = res.headers.get('location') || '';
+          lastErr = `Base URL 配置错误: 上游返回 HTTP ${res.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`;
+          continue;
+        }
 
         if (!res.ok) {
           lastErr = `上游 HTTP ${res.status}: ${res.statusText || 'Error'}`;

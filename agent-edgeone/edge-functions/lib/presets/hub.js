@@ -32,6 +32,12 @@ export async function fetchFromMirrors(subPath, timeoutMs = 2500) {
       const res = await fetch(`${mirror}/${subPath}`, {
         signal: controller.signal,
         headers: { 'Accept': 'application/json' },
+        eo: {
+          timeoutSetting: {
+            connectTimeout: Math.min(timeoutMs, 5000),
+            readTimeout: Math.max(timeoutMs, 10000),
+          },
+        },
       });
       clearTimeout(timer);
       if (res.ok) {

@@ -24,7 +24,7 @@ app.add_middleware(
 )
 
 PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "")
-UPSTREAM_TIMEOUT_SEC = float(os.environ.get("UPSTREAM_TIMEOUT_SEC", "90"))
+UPSTREAM_TIMEOUT_SEC = float(os.environ.get("UPSTREAM_TIMEOUT_SEC", "120"))
 
 _cached_config = None
 _cached_time = 0
@@ -212,10 +212,10 @@ async def post_chat_completions(
         )
 
     settings = config.get("settings") or {}
-    total_budget_sec = float(settings.get("request_total_budget_sec", 25))
-    upstream_timeout_sec = float(settings.get("upstream_timeout_sec", 15))
-    max_attempts = int(settings.get("schedule_total_budget", 3))
-    max_per_prov = int(settings.get("max_attempts_per_provider", 2))
+    total_budget_sec = float(settings.get("request_total_budget_sec", 120))
+    upstream_timeout_sec = float(settings.get("upstream_timeout_sec", 120))
+    max_attempts = int(settings.get("max_retries") or settings.get("schedule_total_budget") or 3)
+    max_per_prov = int(settings.get("max_attempts_per_provider", 3))
     fast_failover_down = settings.get("fast_failover_provider_down", True)
 
     start_time = time.time()

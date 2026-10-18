@@ -335,6 +335,7 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      redirect: 'manual', // Prevent 301/302 from silently converting POST to GET and dropping body
       eo: {
         timeoutSetting: {
           connectTimeout: 10_000,
@@ -349,6 +350,25 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
       kind: e?.name === 'AbortError' ? 'read_timeout' : 'network_error',
       status: 0,
       errorText: `Fetch failed: ${e?.message || e}`,
+    };
+  }
+
+  // 3xx Redirection — Base URL misconfiguration (do not failover, do not drop POST body)
+  if (resp.status >= 300 && resp.status < 400) {
+    clearTimeout(timer);
+    const loc = resp.headers.get('location') || '';
+    const redirectErrMsg = `Base URL 配置错误: 上游返回 HTTP ${resp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查提供商 Base URL 是否缺少 https 或路径有误`;
+    console.error(`[EdgeOne:RedirectError] url=${url} status=${resp.status} location=${loc}`);
+    return {
+      kind: 'http_error',
+      status: resp.status,
+      errorText: JSON.stringify({
+        error: {
+          type: 'invalid_request_error',
+          message: redirectErrMsg,
+          code: 'base_url_redirect_error',
+        },
+      }),
     };
   }
 
@@ -378,7 +398,7 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   // If upstream produces first chunk within 1.5s, peek detects empty stream or fast errors and fails over.
   // If 1.5s passes without first chunk (deep reasoning / long thinking models like Claude 3.7 Thinking / DeepSeek),
   // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
-  // completely bypassing EdgeOne's 25s idle gateway timeout while allowing up to 300s upstream inference!
+  // keeping client TCP active during long prefill while allowing up to 300s upstream inference!
   const PEEK_WINDOW_MS = 1500;
   let readPromise = reader.read();
   let peekTimer = null;

@@ -104,6 +104,7 @@ export async function onRequestPost(context) {
           'accept': 'application/json',
           'user-agent': 'ocrproxy-verifier/1.0',
         },
+        redirect: 'manual',
         eo: {
           timeoutSetting: {
             connectTimeout: 5_000,
@@ -116,6 +117,12 @@ export async function onRequestPost(context) {
       const lat = Date.now() - startT;
       if (resp.status >= 200 && resp.status < 300) {
         results['chat'] = { valid: true, status: resp.status, latency_ms: lat, message: '鉴权验证通过' };
+      } else if (resp.status >= 300 && resp.status < 400) {
+        overallValid = false;
+        const loc = resp.headers.get('location') || '';
+        const err = `Base URL 配置错误: 上游返回 HTTP ${resp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`;
+        results['chat'] = { valid: false, status: resp.status, latency_ms: lat, error: err };
+        errorMsgs.push(`OpenAI Chat: ${err}`);
       } else if (resp.status === 401 || resp.status === 403) {
         overallValid = false;
         const err = `密钥无效，上游拒绝访问 (HTTP ${resp.status})`;
@@ -136,6 +143,7 @@ export async function onRequestPost(context) {
             messages: [{ role: 'user', content: 'hi' }],
             max_tokens: 1,
           }),
+          redirect: 'manual',
           eo: {
             timeoutSetting: {
               connectTimeout: 5_000,
@@ -146,8 +154,14 @@ export async function onRequestPost(context) {
         });
         const chatLat = Date.now() - startT;
         const chatText = (await chatResp.text().catch(() => '')).toLowerCase();
-        if (chatResp.status === 200 || chatResp.status === 201) {
+        if (chatResp.status >= 200 && chatResp.status < 300) {
           results['chat'] = { valid: true, status: chatResp.status, latency_ms: chatLat, message: '鉴权验证通过' };
+        } else if (chatResp.status >= 300 && chatResp.status < 400) {
+          overallValid = false;
+          const loc = chatResp.headers.get('location') || '';
+          const err = `Base URL 配置错误: 上游返回 HTTP ${chatResp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`;
+          results['chat'] = { valid: false, status: chatResp.status, latency_ms: chatLat, error: err };
+          errorMsgs.push(`OpenAI Chat: ${err}`);
         } else if (chatResp.status === 401 || chatResp.status === 403) {
           overallValid = false;
           const err = `密钥无效，上游拒绝访问 (HTTP ${chatResp.status})`;
@@ -209,6 +223,7 @@ export async function onRequestPost(context) {
           max_tokens: 1,
           messages: [{ role: 'user', content: 'hi' }],
         }),
+        redirect: 'manual',
         eo: {
           timeoutSetting: {
             connectTimeout: 5_000,
@@ -223,6 +238,12 @@ export async function onRequestPost(context) {
 
       if (resp.status >= 200 && resp.status < 300) {
         results['messages'] = { valid: true, status: resp.status, latency_ms: lat, message: '鉴权验证通过' };
+      } else if (resp.status >= 300 && resp.status < 400) {
+        overallValid = false;
+        const loc = resp.headers.get('location') || '';
+        const err = `Base URL 配置错误: 上游返回 HTTP ${resp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`;
+        results['messages'] = { valid: false, status: resp.status, latency_ms: lat, error: err };
+        errorMsgs.push(`Anthropic Messages: ${err}`);
       } else if (resp.status === 401 || resp.status === 403) {
         overallValid = false;
         const err = `密钥无效，Anthropic 端点拒绝访问 (HTTP ${resp.status})`;

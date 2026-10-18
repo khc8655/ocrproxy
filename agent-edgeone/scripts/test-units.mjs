@@ -911,12 +911,23 @@ test('classifyFailure: returns 2s for read timeout', () => {
   eq(classifyFailure(0, 'read_timeout'), COOLDOWN_DURATIONS.READ_TIMEOUT);
 });
 
-test('shouldFailover: 2xx, 400, 404, 422 do NOT failover', () => {
+test('shouldFailover: 2xx, 3xx (Base URL config error), 400, 404, 422 do NOT failover', () => {
   eq(shouldFailover(200, 'http'), false);
   eq(shouldFailover(201, 'http'), false);
+  eq(shouldFailover(301, 'http'), false);
+  eq(shouldFailover(302, 'http'), false);
+  eq(shouldFailover(307, 'http'), false);
+  eq(shouldFailover(308, 'http'), false);
   eq(shouldFailover(400, 'http'), false);
   eq(shouldFailover(404, 'http'), false);
   eq(shouldFailover(422, 'http'), false);
+});
+
+test('classifyFailure: returns 0 for 3xx (Base URL misconfiguration, do not cooldown key)', () => {
+  eq(classifyFailure(301, 'http'), 0);
+  eq(classifyFailure(302, 'http'), 0);
+  eq(classifyFailure(307, 'http'), 0);
+  eq(classifyFailure(308, 'http'), 0);
 });
 
 test('classifyFailure & shouldFailover: 400 with quota/balance/credit failure triggers QUOTA_403 and failover', () => {
@@ -2192,6 +2203,39 @@ test('edgeLogger logs with [EdgeOne:Tag] prefix and redacts secrets', () => {
     truthy(!errLogs[0].includes('mypassword123'));
   } finally {
     console.error = origError;
+  }
+});
+
+test('edgeone.json: complies with official EdgeOne schema and avoids regex in headers source', () => {
+  const rootEo = JSON.parse(readFileSync(new URL('../../edgeone.json', import.meta.url), 'utf8'));
+  const agentEo = JSON.parse(readFileSync(new URL('../edgeone.json', import.meta.url), 'utf8'));
+
+  for (const eo of [rootEo, agentEo]) {
+    // Official fields only
+    const allowedFields = new Set([
+      'name', 'buildCommand', 'installCommand', 'outputDirectory',
+      'nodeVersion', 'redirects', 'rewrites', 'headers',
+      'cloudFunctions', 'schedules', 'agents'
+    ]);
+    for (const key of Object.keys(eo)) {
+      truthy(allowedFields.has(key), `Disallowed unofficial field in edgeone.json: ${key}`);
+    }
+
+    // CloudFunctions python maxDuration == 120
+    eq(eo.cloudFunctions?.python?.maxDuration, 120);
+    eq(Array.isArray(eo.cloudFunctions?.mainlandRegions), true);
+    eq(eo.cloudFunctions?.mainlandRegions?.length, 1);
+
+    // Headers source validation
+    truthy(Array.isArray(eo.headers));
+    for (const entry of eo.headers) {
+      truthy(entry.source, 'Header rule must have source');
+      // No regex characters (parentheses, pipes, question marks)
+      eq(/[\(\)\|\?]/.test(entry.source), false, `Header source must not use regex: ${entry.source}`);
+      // Wildcard check: at most one '*'
+      const starCount = (entry.source.match(/\*/g) || []).length;
+      truthy(starCount <= 1, `Header source must contain at most one *: ${entry.source}`);
+    }
   }
 });
 

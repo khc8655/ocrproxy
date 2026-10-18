@@ -75,7 +75,9 @@ export async function onRequestPost(context) {
         { status: 404, headers: { 'content-type': 'application/json' } }
       );
     }
-    const bindings = entry.keys || [];
+    const MAX_PROBE_BATCH = 60; // Stay under EdgeOne 64 fetch-per-invocation hard limit
+    const PROBE_CONCURRENCY = 6; // Stay under EdgeOne 8 concurrent fetch hard limit
+    const bindingsToProbe = bindings.slice(0, MAX_PROBE_BATCH);
     const providers = config.providers || {};
 
     const probeBinding = async (b) => {
@@ -91,6 +93,7 @@ export async function onRequestPost(context) {
       const url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
       const upstreamModel = b.upstream_model || entry.upstream_model || modelName;
 
+      // Start timing right before dispatching fetch to eliminate queue latency
       const start = Date.now();
       try {
         const resp = await fetch(url, {
@@ -105,6 +108,7 @@ export async function onRequestPost(context) {
             max_tokens: 16,
             stream: false,
           }),
+          redirect: 'manual', // Prevent 301/302 from silently converting POST to GET and dropping body
           eo: {
             timeoutSetting: {
               connectTimeout: 5_000,
@@ -114,6 +118,20 @@ export async function onRequestPost(context) {
           },
         });
         const lat = Date.now() - start;
+
+        // 3xx Redirection — Base URL misconfiguration
+        if (resp.status >= 300 && resp.status < 400) {
+          const loc = resp.headers.get('location') || '';
+          return {
+            provider: b.provider,
+            key: b.key,
+            ok: false,
+            status: resp.status,
+            latency_ms: lat,
+            error: `Base URL 配置错误: 上游返回 HTTP ${resp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`,
+          };
+        }
+
         const ok = resp.status >= 200 && resp.status < 300;
         let errText = null;
         if (!ok) {
@@ -141,7 +159,26 @@ export async function onRequestPost(context) {
       }
     };
 
-    const results = await Promise.all(bindings.map(probeBinding));
+    // Worker pool: execute at most PROBE_CONCURRENCY simultaneous probes
+    async function mapConcurrent(items, limit, fn) {
+      const results = new Array(items.length);
+      let nextIndex = 0;
+      async function worker() {
+        while (nextIndex < items.length) {
+          const idx = nextIndex++;
+          results[idx] = await fn(items[idx]);
+        }
+      }
+      const workers = [];
+      const count = Math.min(limit, items.length);
+      for (let i = 0; i < count; i++) {
+        workers.push(worker());
+      }
+      await Promise.all(workers);
+      return results;
+    }
+
+    const results = await mapConcurrent(bindingsToProbe, PROBE_CONCURRENCY, probeBinding);
     const okCount = results.filter((r) => r.ok).length;
 
     return new Response(
@@ -152,6 +189,9 @@ export async function onRequestPost(context) {
         ok: okCount,
         results,
         checked_at: new Date().toISOString(),
+        truncated: bindings.length > MAX_PROBE_BATCH,
+        total_bindings: bindings.length,
+        ...(bindings.length > MAX_PROBE_BATCH ? { message: `单次探测已截断至前 ${MAX_PROBE_BATCH} 个候选以符合 EdgeOne 单请求 64 次 fetch 限制` } : {}),
       }),
       { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }
     );
@@ -207,6 +247,7 @@ export async function onRequestPost(context) {
           'authorization': `Bearer ${apiKey}`,
           'accept': 'application/json',
         },
+        redirect: 'manual',
         eo: {
           timeoutSetting: {
             connectTimeout: 8_000,
@@ -215,6 +256,11 @@ export async function onRequestPost(context) {
           },
         },
       });
+      if (resp && resp.status >= 300 && resp.status < 400) {
+        const loc = resp.headers.get('location') || '';
+        lastErr = new Error(`Base URL 配置错误: 上游返回 HTTP ${resp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查 Base URL 是否缺少 https 或路径有误`);
+        break;
+      }
       if (resp && resp.status !== 404) {
         break; // found live endpoint
       }

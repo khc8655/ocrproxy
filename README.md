@@ -394,7 +394,7 @@ curl -fsSL https://raw.githubusercontent.com/khc8655/ocrproxy/main/install.sh | 
 ```bash
 cd agent-edgeone
 npm install
-npm test            # 运行 158 项自动化单元测试（含编译构建强断言门禁）
+npm test            # 运行 196 项自动化单元测试（含编译构建强断言门禁）
 npm run build:admin # 构建单文件管理后台（含 Fail-Fast 产物强校验）
 npm run deploy      # 一键发布至 EdgeOne
 ```
@@ -545,14 +545,32 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 规范体系、迭代发版与安全质量红线
 
-所有版本发布、特性迭代与安装脚本修改必须严格遵守官方三大核心规范体系：
+所有版本发布、特性迭代与安装脚本修改必须严格遵守官方四大核心规范体系：
 1. **[《OCRProxy 核心架构规范与开发铁律》](ARCHITECTURE_STANDARDS.md)**：包含生产环境三套拓扑分工、单真理源 UI 开发铁律、核心服务与厂商规则绝对物理隔离铁律等十二大开发铁律；
 2. **[《OCRProxy 官方安全架构规范与红线标准》](docs/SECURITY_SPEC.md)**：确立物理级三权分立鉴权矩阵、Fail-Closed 默认拒绝、SSRF 深度防御、恒定时间比对、反脱敏保真与代码库零秘钥铁律；
-3. **[《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)**：执行版本号 6 处全网联动、安装脚本 100% 零漂移、以及包含安全测试在内的全量自动化测试 100% 守门发版 Checklist。
+3. **[《OCRProxy 迭代发版规范与红线标准》](docs/RELEASE_SPEC.md)**：执行版本号 6 处全网联动、安装脚本 100% 零漂移、以及包含安全测试在内的全量自动化测试 100% 守门发版 Checklist；
+4. **[《OCRProxy EdgeOne 官方运行时与超时架构规范》](docs/EDGEONE_RUNTIME_SPEC.md)**：严格对照腾讯云 EdgeOne 官方规范（81897 / 127389 / 127415），确立 edgeone.json 官方标准字段与通配符路径匹配规范、出站 fetch redirect: 'manual' 防降级铁律、全链路超时配置闭环与并发度硬限制治理标准。
 
 ---
 
 ## 最新版本更新记录 (Release Notes)
+
+### `v2026.10.18-08` (2026-10-18)
+- **E1: `edgeone.json` 官方规范化与路径匹配合规化**：
+  - 清除所有非官方标准字段（`build`、`functions`、`routes`、`kv`、`env`），全面合规声明 `cloudFunctions.python.maxDuration: 120` 与 `mainlandRegions: ["ap-guangzhou"]`；
+  - 彻底移除 `headers.source` 中的正则写法，采用官方支持的单通配符（`/v1/*`、`/api/*`、`/admin`、`/admin/*`、`/*.html`），确保 CDN 边缘层 `Cache-Control: no-store` 与 `X-Accel-Buffering: no` 真实生效；
+  - KV 命名空间绑定与环境变量配置指引完整收敛至控制台操作手册与 README 说明；
+- **E2: 出站请求防重定向降级 (`redirect: 'manual'`)**：
+  - 代理转发与关键探测链路（`completions`、`messages`、`verify-key`、`probe-models`、`config`、`test`）出站 fetch 统一显式设置 `redirect: 'manual'`；
+  - 杜绝 WHATWG 默认跟随重定向导致 POST 请求体丢失并被静默降级为空 GET；遭遇 3xx 时即刻诊断为 Base URL 配置错误并返回 HTTP 502 明确指引，严格阻断 failover 与误冷却；
+- **E3: 超时设置全链路官方闭环**：
+  - 依据官方 Fetch 81897 文档，在 `probe-models.js` 与 `presets/hub.js` 出站请求中显式注入 `eo.timeoutSetting`，防止未配置时被 EdgeOne 平台 15 秒默认截断；
+  - `cloud-functions/v1.py` 兜底超时提升至 120 秒，对齐云函数规格上限；
+- **E4: Fetch 并发与次数硬限制治理**：
+  - 针对 EdgeOne 单次运行 64 次 fetch 与最多 8 并发限制，在 `api/test.js` 中实现并发度为 6 的 Worker Pool 调度器；
+  - 单次批量探测入参严格截断至最多 60 个候选；单次探测耗时改为在 fetch 真正发出瞬间打点，剔除排队等待延迟；
+- **官方运行时与超时架构规范确立**：
+  - 新建 `docs/EDGEONE_RUNTIME_SPEC.md`，彻底清除所有历史遗留的“25 秒断开限制”过时记忆与误导文案，明确出站 fetch 原生支持最长 300 秒等待，20 秒保活心跳的唯一职责是保障下游客户端、移动网络 NAT 与反代 TCP 连接的活跃。
 
 ### `v2026.10.18-07` (2026-10-18)
 - **EdgeOne SSE 带内错误精准侦测与保活行规避**：

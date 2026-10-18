@@ -468,6 +468,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       method: 'POST',
       headers: upstreamHeaders,
       body: JSON.stringify(body),
+      redirect: 'manual', // Prevent 301/302 from silently converting POST to GET and dropping body
       eo: {
         timeoutSetting: {
           connectTimeout: 10_000,
@@ -480,6 +481,31 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
     // Network / timeout. Read timeout is the most common case here.
     console.error(`[EdgeOne:NetworkError] fetch url=${url} failed: ${e?.message || e}`);
     return { kind: 'read_timeout', status: 0, errorText: e?.message || String(e), response: null };
+  }
+
+  // 3xx Redirection — Base URL misconfiguration (do not failover, do not drop POST body)
+  if (upstreamResp.status >= 300 && upstreamResp.status < 400) {
+    const loc = upstreamResp.headers.get('location') || '';
+    const redirectErrMsg = `Base URL 配置错误: 上游返回 HTTP ${upstreamResp.status} 重定向${loc ? ' (指向 ' + loc + ')' : ''}，请检查提供商 Base URL 是否缺少 https 或路径有误`;
+    console.error(`[EdgeOne:RedirectError] url=${url} status=${upstreamResp.status} location=${loc}`);
+    return {
+      kind: 'http',
+      status: upstreamResp.status,
+      errorText: redirectErrMsg,
+      response: new Response(
+        JSON.stringify({
+          error: {
+            type: 'invalid_request_error',
+            message: redirectErrMsg,
+            code: 'base_url_redirect_error',
+          },
+        }),
+        {
+          status: 502,
+          headers: buildOutHeaders(upstreamResp),
+        }
+      ),
+    };
   }
 
   // 2xx — process normally
@@ -496,7 +522,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       // and triggers key failover or normal streaming.
       // If 1.5s passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
       // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
-      // completely bypassing EdgeOne's 25s idle gateway timeout while allowing up to 300s upstream inference!
+      // keeping client TCP active during long prefill while allowing up to 300s upstream inference!
       const PEEK_WINDOW_MS = 1500;
       let readPromise = reader.read();
       let peekTimer = null;

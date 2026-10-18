@@ -15,12 +15,12 @@
 - **`round_robin` (轮询负载均衡)**：按请求原子轮询各可用 Key，均匀打散并发压力；
 - **`priority_fallback` (优先级优先)**：按配置顺序优先使用高优先级 Key。
 
-### 2. OpenAI & Anthropic 零拷贝极速透传与长思考 300s 超时破除 (v2026.10.08)
+### 2. OpenAI & Anthropic 零拷贝极速透传与长思考 300s 超时支持 (v2026.10.18)
 - **两阶段流式竞速预握手 (Two-Phase Race Peek + Pre-Keepalive Pipeline)**：
   * **快速竞速窗口 (1500ms)**：当上游在 1.5 秒内极速返回首个 chunk 或快速报错（400/401/429/空流）时，保持原汁原味快速错误侦测与 Key Failover 机制；
   * **长思考自适应长连接握手 (> 1500ms)**：若上游大模型正在进行长时间思考（如 DeepSeek-R1、Claude 3.7 Thinking、超长文档 Prefill），1.5 秒立即向客户端返回 `HTTP 200 OK`，握手时间（TTFB）严格压在 1.5 秒；
-  * **前置标准 SSE 注释心跳 (`: keep-alive\n\n`)**：每 5 秒在管道中向客户端注入一次 RFC 8895 标准注释行，持续刷新 EdgeOne 入口网关的空闲检测定时器，彻底破除 25 秒断开限制；
-  * **官方 300 秒 Fetch 超时全额支持**：出站 fetch 显式配置 `readTimeout: 300,000ms`（5 分钟），模型生成第一个 token 以及后续 token 时无缝通过管道流入客户端；
+  * **前置标准 SSE 注释心跳 (`: ping\n\n`)**：每 20 秒在管道中向客户端注入一次 RFC 8895 标准注释行，持续维持下游客户端、移动网络 NAT 网关及反向代理的 TCP 活跃，杜绝客户端侧空闲超时断开；
+  * **官方 300 秒 Fetch 超时全额支持**：出站 fetch 显式配置 `requestInit.eo.timeoutSetting: { readTimeout: 300000 }`（5 分钟），模型生成第一个 token 以及后续 token 时无缝通过管道流入客户端；
   * **100% 保持全球 Anycast 边缘多 IP 特性**：完全由 EdgeOne 全球 3200+ 分布式节点直接发起公网请求，无需挂靠任何固定服务器机房 IP。
 - **非流式响应零序列化 (`rawBytes` 直通)**：
   * 上游响应直接以底层原始字节 `rawBytes` 透传给客户端，彻底消除在边缘节点反序列化 `resp.json()` 与二次 `JSON.stringify()` 的 CPU 与内存开销；
@@ -53,20 +53,20 @@
 
 ## 🚀 EdgeOne Makers 单仓库一键部署指南
 
-由于项目已预置经过深度调优的 `edgeone.json` 配置文件，EdgeOne Makers 将**自动读取构建命令、安装命令、Node 20 版本及 API/控制台零缓存网络规则**：
+由于项目已预置严格遵从官方规范的 `edgeone.json` 配置文件，EdgeOne Makers 将**自动读取构建命令、安装命令、Node 20 版本、Cloud Functions Python 120s 规格及 API/控制台零缓存网络规则**：
 
 ### 1. EdgeOne 控制台创建项目
 在 [EdgeOne 控制台](https://console.cloud.tencent.com/edgeone) 创建 Makers 项目：
 * **Git 仓库**：选择 `https://github.com/khc8655/ocrproxy`
-* **根目录 (Root Directory)**：填写 **`agent-edgeone`**
-* **构建与运行设置**：系统将自动读取 `edgeone.json`（已内嵌 `npm run build:admin`、Node 20、禁用 API 缓存、开启 SSE 流式直通 `X-Accel-Buffering: no` 与全域 CORS）。
+* **根目录 (Root Directory)**：填写 **`agent-edgeone`**（若单仓库独立部署）或留空；
+* **构建与运行设置**：系统将自动读取 `edgeone.json`（包含 `npm run build:admin`、Node 20、禁用 API 缓存、开启 SSE 流式直通 `X-Accel-Buffering: no` 与全域 CORS）。
 
-### 2. KV 命名空间绑定
+### 2. KV 命名空间绑定（控制台操作）
 * 在 EdgeOne 控制台「KV 存储」中创建一个名为 **`agent_kv`** 的命名空间；
 * 在项目设置的「KV 绑定」中，将变量名 `agent_kv` 绑定到该命名空间。
 
-### 3. 环境变量配置
-在项目环境变量中配置：
+### 3. 环境变量配置（控制台操作）
+在项目设置的「环境变量」中配置：
 * `PROXY_API_KEY`: 客户端调用 `/v1/*` 接口所需的 Bearer Token；
 * `ADMIN_PASSWORD`: Web 管理后台登录密码；
 * `UPSTREAM_TIMEOUT_MS`: 上游读取超时时间（默认为 `300000`，即 5 分钟，支持深度思考大模型）。

@@ -310,6 +310,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
   );
 
   if (isQuota) return quotaSec;
+  if (status >= 300 && status < 400) return 0; // 3xx Base URL configuration error, do not cooldown key
   if (status === 429) return tpmSec;
   if (status === 403) {
     if (lower && MODEL_LEVEL_403_PHRASES.some(p => lower.includes(p))) {
@@ -334,6 +335,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 /**
  * Decide if a status code should trigger failover to the next candidate.
  * 2xx → no, return to client
+ * 3xx → no (Base URL configuration error, failover won't fix misconfigured URL), return to client
  * 400 → no (unless key/quota/billing issue), return to client (client-level param error)
  * 404 / 422 → no, client error
  * 408 / 429 / 5xx / empty stream / read timeout → yes
@@ -342,6 +344,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
 export function shouldFailover(status, kind, errBody = '') {
   if (kind === 'empty_stream' || kind === 'read_timeout') return true;
   if (status >= 200 && status < 300) return false;
+  if (status >= 300 && status < 400) return false; // 3xx is a base_url misconfiguration, do not failover
   if (status === 404 || status === 422) return false;
 
   if (status === 400) {
