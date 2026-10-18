@@ -30,7 +30,15 @@ export function timingSafeEqual(a, b) {
  */
 export function extractAuthToken(request) {
   const rawAuth = request?.headers?.get('authorization') || request?.headers?.get('x-api-key') || '';
-  return rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+  if (rawAuth) {
+    return rawAuth.toLowerCase().startsWith('bearer ') ? rawAuth.slice(7).trim() : rawAuth.trim();
+  }
+  try {
+    const url = new URL(request?.url || '');
+    const qToken = url.searchParams.get('token') || url.searchParams.get('key');
+    if (qToken) return qToken.trim();
+  } catch (_) {}
+  return '';
 }
 
 /**

@@ -30,9 +30,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Initial Auth & Data Load
-  if (state.key) {
-    await initAppAfterAuth();
-  } else {
-    showLogin();
+  const autoLoggedIn = await tryAutoLoginFromUrl();
+  if (!autoLoggedIn) {
+    if (state.key) {
+      await initAppAfterAuth();
+    } else {
+      showLogin();
+    }
   }
 });

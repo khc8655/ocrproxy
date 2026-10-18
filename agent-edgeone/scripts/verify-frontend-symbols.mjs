@@ -66,6 +66,7 @@ if (hasSyntaxError) {
 const CRITICAL_REQUIRED_FUNCTIONS = [
   'login',
   'loginErr',
+  'tryAutoLoginFromUrl',
   'logout',
   'clearLoginCacheAndReload',
   'initAppAfterAuth',

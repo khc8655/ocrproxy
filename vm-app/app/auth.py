@@ -78,6 +78,11 @@ def _extract_token(request: Request) -> Optional[str]:
     if not token and x_api_key:
         token = x_api_key
 
+    if not token and request.query_params:
+        token = request.query_params.get("token") or request.query_params.get("key")
+        if token:
+            token = token.strip()
+
     return token
 
 

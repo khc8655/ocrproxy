@@ -39,6 +39,8 @@ function createMockElement(id, tagName = 'div') {
     },
     addEventListener() {},
     removeEventListener() {},
+    appendChild() {},
+    removeChild() {},
     querySelector() { return null; },
     querySelectorAll() { return []; }
   };
@@ -50,6 +52,7 @@ function createMockElement(id, tagName = 'div') {
 createMockElement('loginKey', 'input');
 createMockElement('loginErr', 'div');
 createMockElement('loginOverlay', 'div');
+createMockElement('toasts', 'div');
 createMockElement('app', 'div');
 createMockElement('topNav', 'div');
 createMockElement('dbBaseUrl', 'div');
@@ -68,7 +71,14 @@ const mockWindow = {
   window: null,
   self: null,
   globalThis: null,
-  location: { origin: 'http://localhost:8080', reload() {} },
+  location: { origin: 'http://localhost:8080', pathname: '/admin', search: '', hash: '', reload() {} },
+  history: {
+    lastCleanUrl: null,
+    replaceState(st, title, url) { this.lastCleanUrl = url; }
+  },
+  URLSearchParams: globalThis.URLSearchParams,
+  setTimeout: (...args) => globalThis.setTimeout(...args),
+  clearTimeout: (...args) => globalThis.clearTimeout(...args),
   sessionStorage: {
     getItem(k) { return sessionStore.get(k) || null; },
     setItem(k, v) { sessionStore.set(k, String(v)); },
@@ -93,7 +103,9 @@ const mockWindow = {
       return null;
     },
     querySelectorAll() { return []; },
-    addEventListener() {}
+    addEventListener() {},
+    createElement(tag) { return createMockElement('elem-' + tag, tag); },
+    body: { appendChild() {}, removeChild() {} }
   },
   fetch: async (url, opts) => {
     // 模拟服务端响应
@@ -239,6 +251,58 @@ try {
   }
 } catch (e) {
   console.error('❌ [SmokeFailure] renderDashboardGateway 客户端 Key 隔离测试异常:', e);
+  process.exit(1);
+}
+
+console.log('  ▸ 测试用例 7: URL ?token=GoodPassword 免密登录与地址栏自动擦除测试...');
+try {
+  sandbox.sessionStorage.clear();
+  vm.runInContext("state.key = '';", sandbox);
+  sandbox.location.search = '?token=GoodPassword';
+  sandbox.location.pathname = '/admin';
+  sandbox.history.lastCleanUrl = null;
+
+  const autoRes = await sandbox.tryAutoLoginFromUrl();
+  if (!autoRes) {
+    console.error('❌ [SmokeFailure] 正确 Token URL 免密登录应返回 true！');
+    process.exit(1);
+  }
+  if (sandbox.sessionStorage.getItem('admin_key') !== 'GoodPassword') {
+    console.error('❌ [SmokeFailure] 免密登录成功后未能写入 sessionStorage！');
+    process.exit(1);
+  }
+  if (sandbox.history.lastCleanUrl !== '/admin') {
+    console.error(`❌ [SmokeFailure] 未能自动擦除地址栏参数！lastCleanUrl: ${sandbox.history.lastCleanUrl}`);
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('❌ [SmokeFailure] URL 免密登录测试异常:', e);
+  process.exit(1);
+}
+
+console.log('  ▸ 测试用例 8: URL ?token=WrongPassword 错误凭据拦截测试...');
+try {
+  sandbox.sessionStorage.clear();
+  vm.runInContext("state.key = '';", sandbox);
+  sandbox.location.search = '?token=WrongPassword';
+  sandbox.location.pathname = '/admin';
+
+  const autoRes = await sandbox.tryAutoLoginFromUrl();
+  if (autoRes !== false) {
+    console.error('❌ [SmokeFailure] 错误 Token URL 免密登录必须返回 false！');
+    process.exit(1);
+  }
+  const errEl = sandbox.document.getElementById('loginErr');
+  if (!errEl.textContent.includes('凭据无效')) {
+    console.error(`❌ [SmokeFailure] 错误 Token 未正确展示提示: ${errEl.textContent}`);
+    process.exit(1);
+  }
+  if (sandbox.sessionStorage.getItem('admin_key') !== null) {
+    console.error('❌ [SmokeFailure] 错误 Token 登录不得向 sessionStorage 写入凭证！');
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('❌ [SmokeFailure] 错误 Token 拦截测试异常:', e);
   process.exit(1);
 }
 

@@ -326,6 +326,32 @@ async function doLogin() {
   }
 }
 
+async function tryAutoLoginFromUrl() {
+  let token = '';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    token = (params.get('token') || params.get('key') || '').trim();
+  } catch (_) {}
+
+  if (!token) return false;
+
+  setKey(token);
+  try {
+    await loadAllData();
+    hideLoginOverlay();
+    try {
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch (_) {}
+    toast('免密登录成功', 'ok');
+    return true;
+  } catch (e) {
+    clearKey();
+    showLoginOverlay('URL 携带的 Token 凭据无效，请重新输入管理员密码');
+    return false;
+  }
+}
+
 function doLogout() {
   clearKey();
   showLoginOverlay();
@@ -2038,7 +2064,10 @@ document.addEventListener('wheel', function(e) {
 }, { passive: true });
 
 // ---- Init ----------------------------------------------------------------
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  const autoLoggedIn = await tryAutoLoginFromUrl();
+  if (autoLoggedIn) return;
+
   if (getKey()) {
     doLogin();
   } else {

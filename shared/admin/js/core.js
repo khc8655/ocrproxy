@@ -187,6 +187,44 @@ async function initAppAfterAuth(){
   if (typeof loadPresetsCatalog === 'function') loadPresetsCatalog();
   if (typeof fetchVaultManifest === 'function') fetchVaultManifest(true);
 }
+async function tryAutoLoginFromUrl(){
+  let token = '';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    token = (params.get('token') || params.get('key') || '').trim();
+  } catch (_) {}
+
+  if (!token) return false;
+
+  try {
+    const r = await fetch('/api/admin/config', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.ok) {
+      state.key = token;
+      sessionStorage.setItem('admin_key', token);
+
+      // 安全清理：无刷新抹除地址栏中的敏感 token 参数，防止历史记录或肩窥泄露
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (_) {}
+
+      toast('免密登录成功', 'ok');
+      await initAppAfterAuth();
+      return true;
+    } else {
+      sessionStorage.removeItem('admin_key');
+      state.key = '';
+      showLogin();
+      loginErr('URL 携带的 Token 凭据无效，请重新输入管理员密码');
+    }
+  } catch (e) {
+    showLogin();
+    loginErr('自动登录连接失败: ' + e.message);
+  }
+  return false;
+}
 async function login(){
   const k=document.getElementById('loginKey').value.trim();
   loginErr('');
@@ -806,7 +844,9 @@ function closeModal(id){
   }
 }
 function toast(msg,type){
-  const c=document.getElementById('toasts'); const t=document.createElement('div');
+  const c=document.getElementById('toasts');
+  if(!c) return;
+  const t=document.createElement('div');
   const tType = type || 'info';
   t.className='toast '+tType;
   const icName = (tType==='ok'||tType==='success') ? 'checkCircle' : ((tType==='err'||tType==='danger') ? 'xCircle' : 'info');
