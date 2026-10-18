@@ -941,7 +941,41 @@ async def save_config_endpoint(request: Request):
         # When saving, unmask each key by restoring the actual secret from current_config.
         curr_providers = current_config.get("providers") or {}
         incoming_providers = body.get("providers")
-        if isinstance(incoming_providers, dict):
+        if isinstance(incoming_providers, dict) and isinstance(curr_providers, dict):
+            for p_name, curr_p in curr_providers.items():
+                if not isinstance(curr_p, dict):
+                    continue
+                is_vault_prov = (curr_p.get("origin") == "vault")
+                curr_keys = curr_p.get("keys") or {}
+                if not isinstance(curr_keys, dict):
+                    curr_keys = {}
+
+                # 严格拦截删除中枢托管供应商
+                if is_vault_prov and p_name not in incoming_providers:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"error": f"中枢统一凭据不可在本地篡改：禁止删除中枢托管供应商「{p_name}」"}
+                    )
+
+                if p_name in incoming_providers:
+                    in_p = incoming_providers[p_name]
+                    in_keys = in_p.get("keys") if isinstance(in_p, dict) else {}
+                    if not isinstance(in_keys, dict):
+                        in_keys = {}
+
+                    # 严格拦截删除中枢 Key
+                    for k_lbl, orig_secret in curr_keys.items():
+                        is_vault_key = is_vault_prov or (
+                            isinstance(orig_secret, dict) and (
+                                orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
+                            )
+                        )
+                        if is_vault_key and k_lbl not in in_keys:
+                            return JSONResponse(
+                                status_code=403,
+                                content={"error": f"中枢统一凭据不可在本地篡改：禁止删除中枢 Key「{k_lbl}」"}
+                            )
+
             for p_name, p_data in incoming_providers.items():
                 if not isinstance(p_data, dict):
                     continue

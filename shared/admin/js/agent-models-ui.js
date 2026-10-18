@@ -1036,14 +1036,20 @@
           : `<span class="badge badge-error" title="${_esc(res.error||'')}">${_esc(res.provider)}/${_esc(res.key)} (${res.status||'ERR'})</span>`;
       }).join(' ');
 
+      const summaryHtml = `
+        <div class="mb-2" style="font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+          <span>可用性统计: <b>${okCount} / ${totalCount}</b> 正常</span>
+          <span class="text-secondary" style="font-weight:400;font-size:11px;">探测时间: ${_esc(d.checked_at||'')}</span>
+        </div>
+        <div class="flex gap-2" style="flex-wrap:wrap;">${chips || '<span>全部检测完成</span>'}</div>
+      `;
+      if (typeof window !== 'undefined') {
+        window.modelProbeSummaryCache = window.modelProbeSummaryCache || {};
+        window.modelProbeSummaryCache[name] = summaryHtml;
+      }
       if (box) {
-        box.innerHTML = `
-          <div class="mb-2" style="font-weight:600;display:flex;align-items:center;justify-content:space-between;">
-            <span>可用性统计: <b>${okCount} / ${totalCount}</b> 正常</span>
-            <span class="text-secondary" style="font-weight:400;font-size:11px;">探测时间: ${_esc(d.checked_at||'')}</span>
-          </div>
-          <div class="flex gap-2" style="flex-wrap:wrap;">${chips || '<span>全部检测完成</span>'}</div>
-        `;
+        box.innerHTML = summaryHtml;
+        box.style.display = 'block';
       }
       _toast(`探活完成: ${name} (可用 ${okCount}/${totalCount})`, okCount > 0 ? 'ok' : 'err');
     } catch(e) {
@@ -1223,7 +1229,7 @@
             <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
-        <div id="agentProbe-${_esc(name)}" style="display:none;padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;"></div>
+        <div id="agentProbe-${_esc(name)}" style="${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) ? 'display:block;' : 'display:none;'}padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;">${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) || ''}</div>
       </div>`;
     }).join('');
 
