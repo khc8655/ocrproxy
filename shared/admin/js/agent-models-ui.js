@@ -155,7 +155,10 @@
     const provs = (getCtx().cfg || {}).providers || {};
     const localProv = provs[provId] || Object.entries(provs).find(([k]) => k.toLowerCase() === String(provId || '').toLowerCase())?.[1];
     const raw = localProv && localProv.keys ? localProv.keys[keyLabel] : undefined;
-    if (raw && typeof raw === 'object' && raw.is_local === true) return 'local';
+    if (raw && typeof raw === 'object') {
+      if (raw.is_local === true || raw.origin === 'local') return 'local';
+      if (raw.is_local === false || raw.origin === 'vault') return 'vault';
+    }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
     const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
@@ -1222,6 +1225,14 @@
 
   async function removeLocalKeyFromModal(prov, label, event) {
     if (event) event.stopPropagation();
+    if (typeof resolveKeySource === 'function' && resolveKeySource(prov, label) === 'vault') {
+      if (typeof _toast === 'function') {
+        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+      } else if (typeof toast === 'function') {
+        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+      }
+      return;
+    }
     if (!confirm(`确定要从本地存储中彻底删除 Key「${label}」吗？`)) return;
     const { cfg } = getCtx();
     if (cfg && cfg.providers && cfg.providers[prov] && cfg.providers[prov].keys) {

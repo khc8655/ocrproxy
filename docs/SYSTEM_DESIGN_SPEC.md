@@ -14,6 +14,7 @@
    - 1.3 [厂商适配预设演进规范：日期驱动与按需差量同步](#13-厂商适配预设演进规范日期驱动与按需差量同步-date-driven--on-demand-differential-sync)
 2. [软件运行模式规格 (Runtime Modes)](#2-软件运行模式规格-runtime-modes)
 3. [核心凭据架构与生命周期 (Vault Hub vs Local Key)](#3-核心凭据架构与生命周期-vault-hub-vs-local-key)
+   - 3.4 [中枢与本地二元权限矩阵与可变性规则](#34-中枢与本地二元权限矩阵与可变性规则-vault-vs-local-matrix)
 4. [路由调度算法与频控状态机 (Scheduler & Rate Limiting)](#4-路由调度算法与频控状态机-scheduler--rate-limiting)
 5. [探针机制与网络探测规格 (Health Probing)](#5-探针机制与网络探测规格-health-probing)
 6. [前端 UI 架构与双端契约 (UI Parity & Component Contract)](#6-前端-ui-架构与双端契约-ui-parity--component-contract)
@@ -215,6 +216,51 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
    - 响应内容：返回该 Provider 的精准鉴权配置与明文 Key，供 VM 节点按需懒加载；拦截所有 `is_local: true` 请求（返回 404）。
 3. `POST /api/vault/credentials`：
    - 专用无规则扁平凭据端点，严格剥离 `adapter_rules`，仅传输纯净 Base URL 与密钥。
+
+### 3.4 中枢与本地二元权限矩阵与可变性规则 (Vault vs Local Matrix)
+
+为确保 EdgeOne 与 VM 能够 **100% 共享复用前端组件 (`agent-models-ui.js` 与 `providers.js`)**，全系统统一确立资产归属与权限划分铁律：
+
+```
+                              ┌──────────────────────────────────────────────┐
+                              │  资产录入动作与场景 (Action & Source Menu)    │
+                              └──────────────────────┬───────────────────────┘
+                                                     │
+                    ┌────────────────────────────────┴───────────────────────────────┐
+                    ▼                                                                ▼
+      【模型提供商】菜单中录入                                            【模型列表 / 模型及路由】弹窗中录入
+                    │                                                                │
+         ┌──────────┴──────────┐                                          无论 EdgeOne 还是 VM：
+         ▼                     ▼                                          统一注入 is_local: true
+    在 EdgeOne 端         在 VM 端                                                   │
+         │                     │                                                     ▼
+         ▼                     ▼                                            【本地资产 (Local Key)】
+   【中枢母本资产】        【本地自建资产】                                       - 双端弹窗带绿色[本地]徽章
+   - origin: 'vault'      - origin: 'local'                                   - 允许点击红色「×」单删
+   - 唯一金库编辑源头      - 本地自由增删改                                    - EdgeOne 对外分发接口绝对过滤
+   - 允许编辑与删除
+```
+
+#### 1. 资产二元归属定义
+- **EdgeOne 内部的清晰二元划分**：
+  - **EdgeOne 的「中枢」**：严格指在 EdgeOne **「模型提供商」菜单**里添加和维护的提供商与 Key。这里是中枢金库（Vault Hub）的唯一编辑源头，拥有完整的增删改查权限；
+  - **EdgeOne 的「本地」**：在 EdgeOne **「模型列表 / 模型及路由」弹窗**中添加的提供商或 Key，**不算中枢，对 EdgeOne 来说同样是「本地 (Local)」**！结构上带有 `is_local: true` 与 `origin: 'local'`，在模型弹窗内显示绿色「本地」徽章和红色「×」删除按钮，完全允许删除；且 EdgeOne 的金库分发接口（`/api/vault/fetch`）严格拦截过滤任何 `is_local: true` 的 Key，绝不向外泄露。
+- **VM 内部的清晰二元划分**：
+  - **VM 的「中枢」**：通过 `/api/admin/vault/sync` 从 EdgeOne 同步下来的提供商（`origin: 'vault'`）及其名下的中枢 Key。在 VM 上属于只读托管，**绝对禁止修改 Base URL，绝对禁止删除供应商，中枢 Key 绝对只读不可删**；
+  - **VM 的「本地」**：在 VM 端「模型提供商」菜单手动新增的供应商（`origin: 'local'`），以及在提供商卡片或模型弹窗中点击「+ 本地 Key」录入的 Key（`is_local: true`）。在 VM 上享有最高自治权，**完全支持随时修改和删除**。
+
+#### 2. 全平台权限与操作矩阵表
+
+| 资产类型 | 资产归属 | 操作场景 / 界面 | 修改权限 (Edit) | 删除权限 (Delete) | 前端 UI 表现 | 后端 API 防护 |
+| :--- | :--- | :--- | :---: | :---: | :--- | :--- |
+| **模型提供商** | **中枢 (Vault)** | **EdgeOne: 模型提供商页** | **✅ 允许** | **✅ 允许** | 显示正常「编辑」按钮与红色「删除」按钮；Base URL 与协议可自由修改 | 作为中枢真理源，EdgeOne 配置接口允许全权写入与物理删除 |
+| **模型提供商** | **中枢 (Vault)** | **VM: 模型提供商页** | ❌ **禁止** | ❌ **禁止** | 显示「配置/查看」只读按钮；删除按钮禁用且置灰（提示“🔒 中枢托管供应商，不可在本地删除”）；Base URL 强制只读锁定 | VM 保存配置时若检测到中枢提供商被篡改 BaseURL 或被删除，强制予以拦截或从金库还原 |
+| **模型提供商** | **本地 (Local)** | **任意端: 模型提供商页** | **✅ 允许** | **✅ 允许** | 显示「编辑」按钮；显示红色「删除」按钮 | 自由增删改查 |
+| **Key 凭证** | **中枢 (Vault)** | **EdgeOne: 模型提供商页** | **✅ 允许** | **✅ 允许** | 芯片显示「编辑」与「×」删除按钮 | 作为中枢真理源，全权写入 |
+| **Key 凭证** | **中枢 (Vault)** | **VM: 模型提供商页** | ❌ **禁止** | ❌ **禁止** | 芯片显示「只读」灰色标签；无编辑与删除操作 | VM 接口脱敏保护，中枢同步接口绝不被本地删除操作破坏 |
+| **Key 凭证** | **中枢 (Vault)** | **双端: 模型管理 (Agent/KB)** | ❌ **禁止** | ❌ **禁止** | 仅作为候选 Key 胶囊供点选（打勾绑定），**绝无红色「×」删除按钮** | 模型保存仅引用 Key 别名，不触碰提供商凭据库 |
+| **Key 凭证** | **本地 (Local)** | **双端: 模型提供商页** | **✅ 允许** | **✅ 允许** | 芯片带有「本地」绿色徽章，显示「编辑」与「×」删除按钮 | 本地自建资产自由维护 |
+| **Key 凭证** | **本地 (Local)** | **双端: 模型管理 (Agent/KB)** | **✅ 允许** | **✅ 允许** | 胶囊带有「本地」绿色徽章，**带有红色「×」直接删除按钮** | 点击直接调用 `removeLocalKeyFromModal` 从底层凭据库安全物理擦除 |
 
 ---
 
@@ -467,6 +513,7 @@ vm-app/static/        agent-edgeone/
   "providers": {
     "stepfun": {
       "name": "stepfun (openai)",
+      "origin": "vault",
       "protocol": "openai",
       "base_url": "https://api.stepfun.com/v1",
       "rpm_limit": 60,
@@ -475,7 +522,13 @@ vm-app/static/        agent-edgeone/
         "备用小号": {
           "key": "sk-secret-key-2",
           "rpm": 30,
+          "origin": "vault",
           "is_local": false
+        },
+        "临时自测": {
+          "key": "sk-temp-local-key",
+          "origin": "local",
+          "is_local": true
         }
       }
     }
@@ -487,7 +540,7 @@ vm-app/static/        agent-edgeone/
       "keys": [
         { "provider": "stepfun", "key_label": "生产主号" },
         { "provider": "stepfun", "key_label": "备用小号" },
-        { "provider": "stepfun", "key_label": "临时测试", "is_local": true, "key": "sk-temp-local-key" }
+        { "provider": "stepfun", "key_label": "临时自测", "is_local": true, "key": "sk-temp-local-key" }
       ]
     }
   },
@@ -502,13 +555,15 @@ vm-app/static/        agent-edgeone/
 
 ### 7.2 核心字段字典约束
 
-1. **`providers.<id>.keys` (提供商凭据映射)**：
+1. **`providers.<id>` (提供商主配置)**：
+   - **`origin` 标志**：`"vault"`（中枢提供商，在 EdgeOne 模型提供商菜单创建）或 `"local"`（本地自建提供商，在 VM 端创建）。在 VM 端，`origin: "vault"` 的提供商受到严格只读保护，禁止修改端点或删除。
+2. **`providers.<id>.keys` (提供商凭据映射)**：
    - **键名 (`key_label`)**：用户可读的别名标识（如 `生产主号`、`账户B`）；
    - **键值 (`value`)**：
-     - 标量形态：直接为字符串密钥明文 `"sk-..."`；
-     - 结构化形态：字典对象 `{"key": "sk-...", "rpm": 20, "is_local": false}`；
-   - **`is_local` 标志**：恒定标示该凭据是否为本地私有调试 Key。若为 `true`，中枢分发接口强制过滤，绝不外泄。
-2. **`agent_models.<model_alias>` (真实大模型映射)**：
+     - 标量形态：直接为字符串密钥明文 `"sk-..."`（默认继承父级提供商的 origin）；
+     - 结构化形态：字典对象 `{"key": "sk-...", "rpm": 20, "origin": "vault"|"local", "is_local": false|true}`；
+   - **`origin` 与 `is_local` 标志**：恒定标示该凭据属于中枢凭据还是本地私有调试 Key。若 `is_local: true`（或 `origin: "local"`），为本地专属 Key，EdgeOne 对外金库分发接口强制过滤，绝不外泄给下游各 VM 节点。
+3. **`agent_models.<model_alias>` (真实大模型映射)**：
    - `upstream_model`：发送给上游厂商的物理模型名称；
    - `current_key`：当前粘性激活驻留的 Key 标签别名；
    - `keys`：已绑定的有序候选 Key 列表。调度引擎按此列表进行粘性故障转移。

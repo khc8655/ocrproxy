@@ -77,7 +77,9 @@ function renderProviders(){
 
     for (const name of list) {
       const prov = p[name];
-      const isVaultManaged = (prov.origin === 'vault') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+      const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+      const isVaultManaged = (prov.origin === 'vault') || (isHostEdgeOne && prov.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+      const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
       const keys = Object.keys(prov.keys || {});
       const keyChips = keys.map(k => {
         const val = prov.keys[k];
@@ -87,7 +89,7 @@ function renderProviders(){
           ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
           : '';
         const sourceBadge = keySourceBadge(keySrc, 10);
-        const actions = (isVaultManaged && !isLocalKey)
+        const actions = (isVaultReadOnly && !isLocalKey)
           ? `<button class="btn-ghost" style="padding:0 4px;opacity:0.4;cursor:not-allowed;" disabled title="🔒 中枢统一凭据，请在 EdgeOne 中枢修改">只读</button>`
           : `
             <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
@@ -121,16 +123,25 @@ function renderProviders(){
       const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
       const dateText = prov.preset_updated_at ? ` · ${prov.preset_updated_at}` : '';
       const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本与更新日期">${esc(ver + dateText)}</span>`;
-      const vaultBadge = isVaultManaged 
-        ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商由 EdgeOne 凭据中枢统管，本地持久化只读保存">🔒 中枢托管·只读</span>`
-        : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">💻 本地自建</span>`;
+      
+      let vaultBadge;
+      if (isHostEdgeOne) {
+        vaultBadge = (prov.origin === 'local')
+          ? `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="EdgeOne 本地自建供应商">💻 本地自建</span>`
+          : `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">🔒 中枢统一</span>`;
+      } else {
+        vaultBadge = isVaultManaged 
+          ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商由 EdgeOne 凭据中枢统管，本地持久化只读保存">🔒 中枢托管·只读</span>`
+          : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">💻 本地自建</span>`;
+      }
+
       const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
       const updateDateText = (hasUpdate && hasUpdate.updated_at) ? ` (${esc(hasUpdate.updated_at)})` : '';
       const updateBtn = hasUpdate
         ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级至 v${esc(hasUpdate.remote_version)}${updateDateText}</button>`
         : '';
 
-      const actionButtons = isVaultManaged
+      const actionButtons = isVaultReadOnly
         ? `
           <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">配置/查看</button>
           <button class="btn btn-sm btn-secondary" onclick="openKeyModal('${esc(name)}', null, true)">+ 本地 Key</button>
@@ -515,16 +526,21 @@ function openProviderModal(sourceModal){
 
 function editProvider(name){
   state.currentSelectedPreset = null;
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
-  const isVaultManaged = (p.origin === 'vault') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
-  document.getElementById('providerModalTitle').textContent = isVaultManaged ? `配置/查看供应商 - ${name} (中枢托管)` : `编辑供应商 - ${name}`;
+  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
+
+  document.getElementById('providerModalTitle').textContent = isVaultReadOnly
+    ? `配置/查看供应商 - ${name} (中枢托管·只读)`
+    : (isHostEdgeOne && isVaultManaged ? `编辑供应商 - ${name} (中枢统一)` : `编辑供应商 - ${name}`);
   document.getElementById('p_preset_wrap').style.display = 'none';
   document.getElementById('p_desc').style.display = 'none';
   document.getElementById('p_name').value = name;
   document.getElementById('p_name').disabled = true;
   document.getElementById('p_url').value = p.base_url || '';
-  document.getElementById('p_url').disabled = Boolean(isVaultManaged);
-  document.getElementById('p_url').title = isVaultManaged ? '中枢托管 Base URL 只读' : '';
+  document.getElementById('p_url').disabled = Boolean(isVaultReadOnly);
+  document.getElementById('p_url').title = isVaultReadOnly ? '中枢托管 Base URL 只读' : '';
 
   const protos = getProviderProtocols(name, p);
   document.getElementById('p_proto_chat').checked = protos.includes('chat');
@@ -553,9 +569,12 @@ function saveProvider(){
   const url = document.getElementById('p_url').value.trim();
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const isEdit = document.getElementById('p_name').disabled;
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
-  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
+  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local') || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
+  const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
+  const isFromModelModal = (state.providerModalSource === 'agent' || state.providerModalSource === 'candidate');
 
   const selectedProtos = [];
   if(document.getElementById('p_proto_chat').checked) selectedProtos.push('chat');
@@ -582,12 +601,12 @@ function saveProvider(){
       const vp = typeof findVaultProvider === 'function' ? findVaultProvider(name) : null;
       state.config.providers[name] = {
         name: vp?.name || name,
-        origin: 'vault',
+        origin: isHostEdgeOne ? 'vault' : 'vault',
         base_url: vp?.base_url || url,
         protocols: selectedProtos,
         keys: {}
       };
-    } else if (!isVaultManaged) {
+    } else if (!isVaultReadOnly) {
       state.config.providers[name].base_url = url;
     }
     state.config.providers[name].protocols = selectedProtos;
@@ -599,7 +618,13 @@ function saveProvider(){
     }
     state.config.providers[name].rpm_per_key = (rpmVal > 0 ? rpmVal : 0);
   } else {
+    // 新增供应商：
+    // 若在“模型列表 / 候选弹窗”中快捷新增，无论 EdgeOne 还是 VM 均确立为本地自建 (origin: 'local')；
+    // 若在 EdgeOne 的“模型提供商”菜单中新增，确立为中枢母本 (origin: 'vault')；
+    // 若在 VM 的“模型提供商”菜单中新增，确立为本地自建 (origin: 'local')。
+    const provOrigin = (!isFromModelModal && isHostEdgeOne) ? 'vault' : 'local';
     state.config.providers[name] = { 
+      origin: provOrigin,
       base_url: url, 
       keys: (state.config.providers[name] && state.config.providers[name].keys) || {}, 
       protocols: selectedProtos,
@@ -641,6 +666,15 @@ function saveProvider(){
 }
 
 async function deleteProvider(name){ 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+  const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
+  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
+
+  if (isVaultReadOnly) {
+    toast('中枢托管供应商不可在本地删除，请在 EdgeOne 中枢控制台进行维护', 'err');
+    return;
+  }
   if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？本地规则与配置将一并清理。')) return; 
   delete state.config.providers[name]; 
   if(state.ruleUpdatesMap && state.ruleUpdatesMap[name]) delete state.ruleUpdatesMap[name];
@@ -808,18 +842,24 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
 }
 
 function editKey(prov, label){ 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+  const keySrc = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, label) : 'local';
+  if (!isHostEdgeOne && keySrc === 'vault') {
+    toast('中枢统一凭据不可在本地修改，请在 EdgeOne 中枢控制台进行维护', 'err');
+    return;
+  }
   const p = (state.config && state.config.providers && state.config.providers[prov]) || {}; 
   const currentKeyObj = p.keys && p.keys[label];
   let keyVal = '';
   let projVal = '';
   let locVal = 'global';
-  let isLocal = false;
+  let isLocal = (keySrc === 'local');
 
   if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
     keyVal = currentKeyObj.key || '';
     projVal = currentKeyObj.project_id || '';
     locVal = currentKeyObj.location || 'global';
-    isLocal = Boolean(currentKeyObj.is_local);
+    if (typeof currentKeyObj.is_local === 'boolean') isLocal = currentKeyObj.is_local;
   } else {
     keyVal = String(currentKeyObj || '');
   }
@@ -857,6 +897,12 @@ function editKey(prov, label){
 }
 
 async function deleteKey(prov,label){ 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+  const keySrc = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, label) : 'local';
+  if (!isHostEdgeOne && keySrc === 'vault') {
+    toast('中枢统一凭据不可在本地删除，请在 EdgeOne 中枢控制台进行维护', 'err');
+    return;
+  }
   if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
     delete state.config.providers[prov].keys[label]; 
@@ -905,20 +951,22 @@ async function saveKey(){
     };
   }
 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   let finalKeyVal;
   if (vertexKeyMeta) {
     finalKeyVal = { ...vertexKeyMeta };
   } else {
-    finalKeyVal = val;
+    finalKeyVal = { key: val };
   }
 
   if (_isLocalKeyMode) {
-    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
-      finalKeyVal.is_local = true;
-    } else {
-      finalKeyVal = { key: finalKeyVal, is_local: true };
-    }
+    finalKeyVal.is_local = true;
+    finalKeyVal.origin = 'local';
     _isLocalKeyMode = false;
+  } else {
+    const keyOrigin = isHostEdgeOne ? 'vault' : 'local';
+    finalKeyVal.is_local = (keyOrigin === 'local');
+    finalKeyVal.origin = keyOrigin;
   }
 
   if(skip){ commitKey(prov, label, finalKeyVal); return; }

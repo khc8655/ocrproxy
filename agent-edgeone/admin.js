@@ -1195,6 +1195,7 @@ async function saveProviderModal() {
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].protocols = selectedProtos;
+  cfg.providers[name].origin = 'vault';
 
   if (rpmVal > 0) {
     cfg.providers[name].rpm_per_key = rpmVal;
@@ -1581,10 +1582,18 @@ async function saveKeyModal() {
   if (_isLocalKeyMode) {
     if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
       finalKeyVal.is_local = true;
+      finalKeyVal.origin = 'local';
     } else {
-      finalKeyVal = { key: finalKeyVal, is_local: true };
+      finalKeyVal = { key: finalKeyVal, is_local: true, origin: 'local' };
     }
     _isLocalKeyMode = false;
+  } else {
+    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
+      if (finalKeyVal.is_local === undefined) finalKeyVal.is_local = false;
+      if (!finalKeyVal.origin) finalKeyVal.origin = 'vault';
+    } else {
+      finalKeyVal = { key: finalKeyVal, is_local: false, origin: 'vault' };
+    }
   }
 
   cfg.providers[prov].keys[label] = finalKeyVal;

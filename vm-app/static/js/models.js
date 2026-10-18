@@ -233,14 +233,17 @@ function renderCandidateKeyChecks(){
     box.innerHTML='<div class="hint">该供应商下暂无可用 Key</div>';
   } else {
     box.innerHTML=allKeyLabels.map((k, idx)=>{
-      const isVault = remoteKeys.includes(k);
-      const isLocal = localKeys.includes(k);
+      const src = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, k) : (remoteKeys.includes(k) ? 'vault' : 'local');
+      const isVault = src === 'vault';
+      const isLocal = src === 'local';
       const isChecked = idx === 0;
-      const tag = isVault 
-        ? `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`
-        : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`;
+      const tag = (typeof keySourceBadge === 'function')
+        ? keySourceBadge(src, 10)
+        : (isVault 
+          ? `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`
+          : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`);
 
-      const deleteBtn = (!isVault && isLocal)
+      const deleteBtn = isLocal
         ? `<button type="button" class="btn-ghost" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key" onclick="removeLocalKeyFromModal('${esc(prov)}', '${esc(k)}', event)">×</button>`
         : '';
 

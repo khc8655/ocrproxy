@@ -120,7 +120,141 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
     }
   }
 
-  console.log('\n🎉 [中枢] vs [本地] 胶囊徽章与删除权限 100% 验证通过！');
+  console.log('\n2. 走查在模型弹窗中删除 Key 的防绕行门禁...');
+  const modalDeleteRes = await page.evaluate(async () => {
+    let lastToast = null;
+    window._toast = (msg, type) => { lastToast = { msg, type }; };
+    window.toast = (msg, type) => { lastToast = { msg, type }; };
+    window.confirm = () => true;
+
+    // 尝试在模型弹窗中删除中枢 Key
+    await removeLocalKeyFromModal('stepfun', '小号');
+    const stepfunStillHasXiaohao = Boolean(window.cfg.providers.stepfun.keys['小号']);
+    const toastForXiaohao = lastToast;
+
+    // 尝试在模型弹窗中删除本地 Key
+    lastToast = null;
+    await removeLocalKeyFromModal('stepfun', '临时调试');
+    const stepfunHasLinshi = Boolean(window.cfg.providers.stepfun.keys['临时调试']);
+
+    return { stepfunStillHasXiaohao, toastForXiaohao, stepfunHasLinshi };
+  });
+
+  if (!modalDeleteRes.stepfunStillHasXiaohao) {
+    throw new Error('中枢 Key「小号」在模型弹窗中被误删！防绕行门禁失效！');
+  }
+  if (!modalDeleteRes.toastForXiaohao?.msg?.includes('中枢统一凭据不可在模型弹窗中删除')) {
+    throw new Error('删除中枢 Key 时未弹出正确的提示消息！实际为: ' + JSON.stringify(modalDeleteRes.toastForXiaohao));
+  }
+  if (modalDeleteRes.stepfunHasLinshi) {
+    throw new Error('本地 Key「临时调试」未能成功在模型弹窗中删除！');
+  }
+  console.log('  ✓ 模型弹窗拦截中枢 Key 删除成功 (已阻断并给出友好提示)');
+  console.log('  ✓ 模型弹窗允许本地 Key 删除成功');
+
+  console.log('\n3. 走查 EdgeOne vs VM 供应商菜单操作权限差异...');
+  const edgeonePermRes = await page.evaluate(async () => {
+    // 恢复测试数据并设置为 EdgeOne 环境
+    window.HOST = { isEdgeOne: true, isVm: false };
+    const testProv = {
+      name: 'stepfun',
+      origin: 'vault',
+      keys: { '小号': 'sk-central-1', '本地Key': { key: 'sk-loc-1', is_local: true, origin: 'local' } }
+    };
+    if (typeof state !== 'undefined' && state && state.config && state.config.providers) {
+      state.config.providers.stepfun = testProv;
+    }
+    if (typeof cfg !== 'undefined' && cfg && cfg.providers) {
+      cfg.providers.stepfun = testProv;
+    }
+    renderProviders();
+    
+    // 在 EdgeOne 上尝试删除中枢提供商 (应允许进入确认流程，不被硬拦截)
+    let intercepted = false;
+    window.toast = (msg, type) => {
+      if (msg.includes('中枢托管供应商不可在本地删除')) intercepted = true;
+    };
+    window.confirm = () => false; // 拦截真正的删除动作，只看是否在 confirm 前被硬阻断
+    deleteProvider('stepfun');
+    const edgeoneBlocked = intercepted;
+
+    return { edgeoneBlocked };
+  });
+
+  if (edgeonePermRes.edgeoneBlocked) {
+    throw new Error('EdgeOne 控制台误把自身中枢提供商拦截为只读！');
+  }
+  console.log('  ✓ EdgeOne 端允许正常维护和管理中枢提供商');
+
+  // 读取并注入 VM 端专属的 providers.js 模块，测试 VM 宿主环境下的只读门禁
+  const vmProvidersJs = fs.readFileSync(path.resolve(__dirname, '../shared/admin/js/providers.js'), 'utf8');
+  await page.evaluate((scriptCode) => {
+    // 注入 VM 模块代码覆盖全局函数
+    window.eval(scriptCode);
+  }, vmProvidersJs);
+
+  const vmPermRes = await page.evaluate(async () => {
+    // 切换为 VM 环境
+    window.HOST = { isEdgeOne: false, isVm: true };
+    const testProv = {
+      name: 'stepfun',
+      origin: 'vault',
+      keys: {
+        '小号': { key: 'sk-central-1', origin: 'vault', is_local: false },
+        '本地Key': { key: 'sk-loc-1', is_local: true, origin: 'local' }
+      }
+    };
+    if (typeof state !== 'undefined' && state && state.config && state.config.providers) {
+      state.config.providers.stepfun = testProv;
+    }
+    if (typeof cfg !== 'undefined' && cfg && cfg.providers) {
+      cfg.providers.stepfun = testProv;
+    }
+    renderProviders();
+
+    let toastMsg = '';
+    window.toast = (msg, type) => { toastMsg = msg; };
+    window.confirm = () => true;
+
+    // 在 VM 端尝试删除中枢提供商
+    deleteProvider('stepfun');
+    const provBlocked = toastMsg.includes('中枢托管供应商不可在本地删除');
+    const debugProvToast = toastMsg;
+
+    // 在 VM 端尝试删除中枢 Key
+    toastMsg = '';
+    deleteKey('stepfun', '小号');
+    const keyBlocked = toastMsg.includes('中枢统一凭据不可在本地删除');
+
+    // 在 VM 端尝试删除本地 Key
+    toastMsg = '';
+    deleteKey('stepfun', '本地Key');
+    const localKeyDeleted = !state.config.providers.stepfun?.keys?.['本地Key'];
+
+    return {
+      provBlocked,
+      keyBlocked,
+      localKeyDeleted,
+      debugProvToast,
+      provObj: state.config.providers.stepfun,
+      host: window.HOST
+    };
+  });
+
+  if (!vmPermRes.provBlocked) {
+    console.error('DEBUG vmPermRes:', vmPermRes);
+    throw new Error('VM 端未拦截删除中枢提供商！');
+  }
+  if (!vmPermRes.keyBlocked) {
+    throw new Error('VM 端未拦截删除中枢 Key！');
+  }
+  if (!vmPermRes.localKeyDeleted) {
+    throw new Error('VM 端未允许删除本地 Key！');
+  }
+  console.log('  ✓ VM 端成功硬拦截中枢提供商与中枢 Key 的删除/修改');
+  console.log('  ✓ VM 端成功允许本地 Key 的修改与删除');
+
+  console.log('\n🎉 [中枢] vs [本地] 胶囊徽章、操作权限矩阵与防绕行门禁 100% 验证通过！');
   await browser.close();
 })().catch(err => {
   console.error('❌ 验证失败:', err);

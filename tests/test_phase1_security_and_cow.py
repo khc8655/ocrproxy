@@ -169,10 +169,44 @@ def test_ui_no_inline_event_interpolation():
     print("  PASS: core.js 409 conflict safe abort verified (no destructive overwrite)")
 
 
+def test_vault_vs_local_data_and_permission_isolation():
+    print("\n=== 4. Vault vs Local Binary Permissions & Safe Sandbox Isolation ===")
+
+    # 1. Verify EdgeOne backend vault fetch strictly filters out local keys
+    fetch_path = os.path.join(os.path.dirname(__file__), "..", "edge-functions", "api", "vault", "fetch.js")
+    with open(fetch_path, "r", encoding="utf-8") as f:
+        fetch_code = f.read()
+
+    assert "keyObj.is_local === true" in fetch_code, "api/vault/fetch.js must filter is_local === true"
+    assert "keyObj.origin === 'local'" in fetch_code, "api/vault/fetch.js must filter origin === 'local'"
+    print("  PASS: api/vault/fetch.js strictly excludes local keys (physical sandbox isolation)")
+
+    # 2. Verify shared/admin/js/providers.js host-differentiated read-only logic
+    providers_path = os.path.join(os.path.dirname(__file__), "..", "shared", "admin", "js", "providers.js")
+    with open(providers_path, "r", encoding="utf-8") as f:
+        providers_code = f.read()
+
+    assert "!isHostEdgeOne && isVaultManaged" in providers_code, "providers.js must differentiate EdgeOne vs VM read-only logic"
+    assert "中枢托管供应商不可在本地删除" in providers_code, "providers.js must protect vault providers from deletion on VM"
+    assert "中枢统一凭据不可在本地删除" in providers_code, "providers.js must protect vault keys from deletion on VM"
+    print("  PASS: shared/admin/js/providers.js implements asymmetric vault host permissions (EdgeOne editable, VM read-only)")
+
+    # 3. Verify agent-models-ui.js resolveKeySource and removeLocalKeyFromModal guard
+    agent_ui_path = os.path.join(os.path.dirname(__file__), "..", "shared", "admin", "js", "agent-models-ui.js")
+    with open(agent_ui_path, "r", encoding="utf-8") as f:
+        agent_ui_code = f.read()
+
+    assert "raw.origin === 'local'" in agent_ui_code, "resolveKeySource must identify raw.origin === 'local'"
+    assert "raw.origin === 'vault'" in agent_ui_code, "resolveKeySource must identify raw.origin === 'vault'"
+    assert "中枢统一凭据不可在模型弹窗中删除" in agent_ui_code, "removeLocalKeyFromModal must guard vault keys"
+    print("  PASS: agent-models-ui.js key source resolution and anti-bypass delete guard verified")
+
+
 if __name__ == "__main__":
     test_cow_messages_isolation()
     test_edgeone_security_fail_closed()
     test_ui_no_inline_event_interpolation()
+    test_vault_vs_local_data_and_permission_isolation()
     print("\n----------------------------------------")
     print("All Phase 1 Security & Reliability Gates PASSED!")
     print("----------------------------------------")

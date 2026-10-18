@@ -1960,7 +1960,10 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const provs = (getCtx().cfg || {}).providers || {};
     const localProv = provs[provId] || Object.entries(provs).find(([k]) => k.toLowerCase() === String(provId || '').toLowerCase())?.[1];
     const raw = localProv && localProv.keys ? localProv.keys[keyLabel] : undefined;
-    if (raw && typeof raw === 'object' && raw.is_local === true) return 'local';
+    if (raw && typeof raw === 'object') {
+      if (raw.is_local === true || raw.origin === 'local') return 'local';
+      if (raw.is_local === false || raw.origin === 'vault') return 'vault';
+    }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
     const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
@@ -3027,6 +3030,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
   async function removeLocalKeyFromModal(prov, label, event) {
     if (event) event.stopPropagation();
+    if (typeof resolveKeySource === 'function' && resolveKeySource(prov, label) === 'vault') {
+      if (typeof _toast === 'function') {
+        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+      } else if (typeof toast === 'function') {
+        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+      }
+      return;
+    }
     if (!confirm(\`确定要从本地存储中彻底删除 Key「\${label}」吗？\`)) return;
     const { cfg } = getCtx();
     if (cfg && cfg.providers && cfg.providers[prov] && cfg.providers[prov].keys) {
@@ -4300,6 +4311,7 @@ async function saveProviderModal() {
   cfg.providers = cfg.providers || {};
   cfg.providers[name] = cfg.providers[name] || { keys: {} };
   cfg.providers[name].protocols = selectedProtos;
+  cfg.providers[name].origin = 'vault';
 
   if (rpmVal > 0) {
     cfg.providers[name].rpm_per_key = rpmVal;
@@ -4686,10 +4698,18 @@ async function saveKeyModal() {
   if (_isLocalKeyMode) {
     if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
       finalKeyVal.is_local = true;
+      finalKeyVal.origin = 'local';
     } else {
-      finalKeyVal = { key: finalKeyVal, is_local: true };
+      finalKeyVal = { key: finalKeyVal, is_local: true, origin: 'local' };
     }
     _isLocalKeyMode = false;
+  } else {
+    if (typeof finalKeyVal === 'object' && finalKeyVal !== null) {
+      if (finalKeyVal.is_local === undefined) finalKeyVal.is_local = false;
+      if (!finalKeyVal.origin) finalKeyVal.origin = 'vault';
+    } else {
+      finalKeyVal = { key: finalKeyVal, is_local: false, origin: 'vault' };
+    }
   }
 
   cfg.providers[prov].keys[label] = finalKeyVal;
