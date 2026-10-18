@@ -1,12 +1,14 @@
 {
-  "version": "v2026.10.18-09",
+  "version": "v2026.10.18-10",
   "release_date": "2026-10-18",
   "commit": "HEAD",
-  "title": "EdgeOne 专属控制台与组件化共用架构恢复及发版门禁强制焊死 (v2026.10.18-09)",
+  "title": "系统配置界面紧凑化与历史代码遗毒彻底根除 (v2026.10.18-10)",
   "changelog": [
-    "架构正本清源：彻底理清'UI 组件共用'与'整页代码复用'的边界，恢复 EdgeOne 专属控制台骨架（Vault Hub 凭据中枢、常驻 A-Z 字母轨、Anycast 面板与独立登录浮层），严禁使用 VM 骨架覆盖 EdgeOne",
-    "共享组件内联：通用模型卡片与路由组件 (shared/admin/js/agent-models-ui.js) 在构建时内联并入 EdgeOne，实现组件业务逻辑 100% 复用",
-    "历史硬编码清零：彻底清除 core.js 与 admin.js 中的 APP_VERSION 旧版本硬编码，对齐 IS_EDGEONE 宿主环境判断，统一由流水线从 version.json 动态注入",
-    "发版门禁机械化焊死：将 tests/test_phase3_phase4_audit.py 强制串联写入 package.json 的 build:admin 与 test 命令，增加 EdgeOne 专属控制台与产物防污染强断言，物理级杜绝任何漏检"
+    "系统配置界面紧凑化重构：精简冗余废话说明，输入框标准化为 32px 紧凑尺寸，重构为结构协调的双列 Key-Value 紧凑栅格，大幅收敛垂直高度",
+    "根除 404 镜像死链：将 agent-edgeone/admin.js 中的预设规则源镜像由失效的 xsk/ocrprox 彻底纠正为权威仓库 khc8655/ocrproxy",
+    "彻底拔除幽灵 25 秒：移除 admin.html 中隐藏的 value='25' 幽灵字段，开放显式 request_total_budget_sec 配置，默认 300 秒",
+    "重试字段规范化：将 schedule_total_budget 全面规范化为 max_retries: 3，并安全保留别名兼容，杜绝导出时 VM 调度预算被压缩为 3 秒",
+    "Key 结构体元数据防覆盖：修复编辑普通 Key 保存时浅拷贝保留原有对象扩展属性与元数据",
+    "门禁红线强化：在 build-admin.mjs 与 test_phase3_phase4_audit.py 中增加幽灵 25s、xsk/ocrprox 与 max_retries 强断言"
   ]
 }

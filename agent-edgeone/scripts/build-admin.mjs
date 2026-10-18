@@ -142,8 +142,20 @@ if (htmlBundled.includes('EdgeOne 建议 20~25s') || htmlBundled.includes('20~25
   console.error('FATAL BUILD ERROR: Obsolete "EdgeOne 建议 20~25s" detected in admin HTML! Red Line 2 violated.');
   process.exit(1);
 }
+if (htmlBundled.includes('value="25"')) {
+  console.error('FATAL BUILD ERROR: Ghost "value=\\"25\\"" detected in admin HTML! Red Line 2 violated.');
+  process.exit(1);
+}
+if (htmlBundled.includes('xsk/ocrprox')) {
+  console.error('FATAL BUILD ERROR: Broken mirror "xsk/ocrprox" detected in admin HTML/JS! Security violated.');
+  process.exit(1);
+}
 if (!/id="set_upstream_timeout_sec"[^>]*max="300"/i.test(htmlBundled)) {
   console.error('FATAL BUILD ERROR: set_upstream_timeout_sec must have max="300"! Red Line 2 violated.');
+  process.exit(1);
+}
+if (!htmlBundled.includes('id="set_max_retries"')) {
+  console.error('FATAL BUILD ERROR: set_max_retries input missing from admin HTML!');
   process.exit(1);
 }
 if (/Math\.min\(\s*30\s*,\s*upTimeout\s*\)/.test(bundledJs)) {

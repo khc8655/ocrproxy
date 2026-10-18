@@ -555,6 +555,22 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.18-10` (2026-10-18)
+- **系统配置界面紧凑化与信息密度提升**：
+  - 彻底精简冗长说明文字，消除重复低效的长段描述，采用高信噪比短语提示；
+  - 输入框高度统一标准化为 `32px` 紧凑尺寸（`.form-control-compact`），数字框限制宽度并与单位内联；
+  - 重构为紧凑协调的双列 Key-Value 网格布局（`.settings-grid` / `.settings-row`），去除底部冗余按钮行，将纵向高度压缩 60% 以上，在一屏内协调展现；
+- **彻底根除 404 规则源镜像死链**：
+  - 将 `agent-edgeone/admin.js` 中的预设规则源镜像地址由早已失效的 `xsk/ocrprox` 修正为权威仓库 `khc8655/ocrproxy`；
+- **拔除幽灵 25 秒与重试预算对齐**：
+  - 彻底删除 `admin.html` 中遗留的隐藏 `value="25"` 幽灵超时字段，开放显式 `request_total_budget_sec` 配置（默认 300 秒）；
+  - 全面规范化重试字段为 `max_retries: 3`，杜绝导出导入时将 VM 调度预算压缩至 3 秒；
+  - `max_attempts_per_provider` 默认值与重置默认值对齐为 3（与后端一致）；
+- **结构化 Key 元数据防覆盖**：
+  - 修复 `saveKeyModal` 在编辑普通 Key 保存时浅拷贝保留原有对象扩展属性（`is_local`、`created_at`、`rpm` 等），防止被降级为纯文本；
+- **发版门禁强断言追加**：
+  - 在 `build-admin.mjs` 与 `tests/test_phase3_phase4_audit.py` 中强断言禁止出现 `xsk/ocrprox` 与 `value="25"`，必须具备 `set_max_retries`。
+
 ### `v2026.10.18-09` (2026-10-18)
 - **架构正本清源：彻底厘清“UI 组件共用”与“页面骨架复用”边界**：
   - 严格遵守《架构规范》铁律一，恢复 EdgeOne 专属控制台骨架资产（`agent-edgeone/admin.html`、`admin.css`、`admin.js`），保证 EdgeOne 作为【云端真理源凭据中枢（Vault Hub）】的独立控制台地位；

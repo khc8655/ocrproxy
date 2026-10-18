@@ -585,6 +585,78 @@ textarea.form-control {
   cursor: not-allowed;
 }
 
+.form-control-compact {
+  height: 32px !important;
+  padding: 4px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+.settings-card {
+  padding: 18px 20px;
+}
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-1);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-group-title::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 13px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  min-height: 48px;
+}
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.settings-row-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+.settings-row-hint {
+  font-size: 11px;
+  color: var(--color-text-3);
+  line-height: 1.25;
+}
+.settings-row-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .checkbox {
   display: inline-flex;
   align-items: center;

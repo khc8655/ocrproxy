@@ -601,6 +601,78 @@ textarea.form-control {
   cursor: not-allowed;
 }
 
+.form-control-compact {
+  height: 32px !important;
+  padding: 4px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+.settings-card {
+  padding: 18px 20px;
+}
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-1);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-group-title::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 13px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  min-height: 48px;
+}
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.settings-row-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+.settings-row-hint {
+  font-size: 11px;
+  color: var(--color-text-3);
+  line-height: 1.25;
+}
+.settings-row-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .checkbox {
   display: inline-flex;
   align-items: center;
@@ -1209,7 +1281,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-09</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-10</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1249,7 +1321,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-09</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-10</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1323,117 +1395,155 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <!-- Panel: Global Settings -->
     <div id="panel-settings" class="panel">
       <div class="section">
-        <div class="section-head">
+        <div class="section-head" style="margin-bottom:12px;">
           <div>
             <div class="section-title">全局策略与超时控制</div>
-            <div class="section-desc">统一配置大模型路由算法、全局硬超时预算与跨厂商熔断策略</div>
+            <div class="section-desc">调度策略、超时预算与跨厂商容错熔断配置</div>
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
             <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 保存设置并生效</button>
           </div>
         </div>
-        <div class="card card-pad mb-4">
-          <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">分流算法与超时预算</h4>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
-            <div class="form-group" style="grid-column: 1 / -1;">
-              <label class="form-label" for="set_proxy_api_key">客户端调用密钥 (PROXY_API_KEY)</label>
-              <div style="display:flex;gap:8px;">
-                <input type="text" id="set_proxy_api_key" class="form-control mono" placeholder="sk-..." style="flex:1;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()">复制 Key</button>
+
+        <div class="card settings-card">
+          <!-- Group 1: Auth & Routing -->
+          <div class="settings-group-title">客户端鉴权与分流策略</div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint">用于外部客户端 Bearer 鉴权；留空则使用管理员密码</span>
               </div>
-              <div class="text-secondary text-sm mt-1">客户端（Cursor / Cline / OpenAI SDK 等）调用 <code>/v1/*</code> 接口所需的凭证。系统优先读取 EdgeOne 环境变量中的 <code>PROXY_API_KEY</code>，亦可在此保存至 KV 覆盖。</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">路由分流算法 (agent_routing_strategy)</label>
-              <select id="set_routing_strategy" class="form-control">
-                <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐，稳定高效</option>
-                <option value="round_robin">原子轮询 (round_robin) — 均衡摊销各个 Key</option>
-                <option value="priority_fallback">优先级优先 (priority_fallback) — 严格按顺序尝试</option>
-                <option value="random">随机散列 (random) — 随机挑选候选 Key</option>
-              </select>
-              <div class="text-secondary text-sm mt-1">控制多个候选 Key 之间的主备切换与负载均衡方式</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">上游请求等待超时 (upstream_timeout_sec)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control" min="5" max="300" step="5" value="120" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">秒 (支持 5~300s，长思考模型推荐 120~300s，前置 SSE 心跳自动保活)</span>
+              <div class="settings-row-ctrl" style="flex:1;max-width:420px;">
+                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="sk-... (留空默认使用管理员凭证)" style="flex:1;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyProxyKey()" style="height:32px;white-space:nowrap;">复制</button>
               </div>
-              <div class="text-secondary text-sm mt-1">向上游发起调用的等待上限（秒）。故障转移模式下超时立即切换备用 Key；总调度死线由系统智能自适应推导。</div>
             </div>
-            <!-- request_total_budget_sec auto-derived; hidden input preserved -->
-            <input type="hidden" id="set_request_total_budget_sec" value="25">
-            <div class="form-group">
-              <label class="form-label">单请求最大重试次数 (schedule_total_budget)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_schedule_total_budget" class="form-control" min="1" max="5" step="1" value="3" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">次 (默认 3 次)</span>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">路由分流算法 (agent_routing_strategy)</span>
+                <span class="settings-row-hint">控制多 Key 之间的主备切换与调度规则</span>
               </div>
-              <div class="text-secondary text-sm mt-1">单次请求最多允许尝试的候选 Key 数量上限</div>
+              <div class="settings-row-ctrl">
+                <select id="set_routing_strategy" class="form-control form-control-compact" style="width:230px;">
+                  <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
+                  <option value="round_robin">原子轮询 (均衡负载)</option>
+                  <option value="priority_fallback">优先级优先 (按序尝试)</option>
+                  <option value="random">随机散列 (纯随机)</option>
+                </select>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="card card-pad">
-          <h4 style="margin:0 0 16px 0;font-size:15px;color:var(--color-text-1);">智能故障熔断与冷却避让</h4>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;">
-            <div class="form-group">
-              <label class="form-label">单厂商尝试次数上限 (max_attempts_per_provider)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_max_attempts_per_provider" class="form-control" min="1" max="5" step="1" value="2" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">次 (默认 2 次)</span>
+          <!-- Group 2: Timeout & Budget -->
+          <div class="settings-group-title" style="margin-top:16px;">超时预算与重试控制</div>
+          <div class="settings-grid" style="margin-bottom:16px;">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">单次请求等待超时</span>
+                <span class="settings-row-hint">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
               </div>
-              <div class="text-secondary text-sm mt-1">防止同一厂商（如7个商汤Key）源站宕机时在同一厂商上死等7次超时</div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">秒</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">跨厂商快速熔断 (fast_failover_provider_down)</label>
-              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-                <label class="checkbox" style="font-size:14px;cursor:pointer;">
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">单请求全局总预算</span>
+                <span class="settings-row-hint">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">单请求最大重试次数</span>
+                <span class="settings-row-hint">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">次</span>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">单厂商重试 Key 上限</span>
+                <span class="settings-row-hint">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">次</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Group 3: Fault Tolerance & Cooldowns -->
+          <div class="settings-group-title" style="margin-top:16px;">容错熔断与冷却避让</div>
+          <div class="settings-grid">
+            <div class="settings-row" style="grid-column: 1 / -1;">
+              <div class="settings-row-label">
+                <span class="settings-row-title">跨厂商快速熔断 (fast_failover_provider_down)</span>
+                <span class="settings-row-hint">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <label class="checkbox" style="font-size:13px;cursor:pointer;">
                   <input type="checkbox" id="set_fast_failover_provider_down" checked>
-                  <span style="font-weight:600;">开启跨厂商快速熔断</span>
+                  <span style="font-weight:600;">已开启</span>
                 </label>
               </div>
-              <div class="text-secondary text-sm mt-1">遇 502/504/超时且存在其他备用厂商时，直接跳过当前厂商所有 Key，秒级切走</div>
             </div>
-            <div class="form-group">
-              <label class="form-label">429 限流冷却时长 (cooldown_429_sec)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_429_sec" class="form-control" min="10" max="600" step="1" value="60" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">秒 (默认 60s)</span>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">429 限流冷却时长</span>
+                <span class="settings-row-hint">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
               </div>
-              <div class="text-secondary text-sm mt-1">命中 RPM / TPM 限流时的临时避让冷却时长</div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">秒</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">5xx 故障冷却时长 (cooldown_5xx_sec)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_5xx_sec" class="form-control" min="5" max="300" step="1" value="30" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">秒 (默认 30s)</span>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">5xx 故障冷却时长</span>
+                <span class="settings-row-hint">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
               </div>
-              <div class="text-secondary text-sm mt-1">上游源站抛出 500/502/503/504 错误时的避让冷却时长</div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">秒</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">连续失败熔断阈值 (circuit_break_threshold)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_circuit_break_threshold" class="form-control" min="1" max="10" step="1" value="3" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">次 (默认 3 次)</span>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">403 鉴权失败隔离</span>
+                <span class="settings-row-hint">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
               </div>
-              <div class="text-secondary text-sm mt-1">某个 Key 连续失败达到该次数后触发断路器熔断</div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">秒</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">403 鉴权失败隔离时长 (cooldown_403_sec)</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input type="number" id="set_cooldown_403_sec" class="form-control" min="60" max="3600" step="1" value="600" style="width:140px;" onwheel="this.blur()">
-                <span class="text-secondary">秒 (默认 600s)</span>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title">断路器熔断连续失败阈值</span>
+                <span class="settings-row-hint">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
               </div>
-              <div class="text-secondary text-sm mt-1">Key 无效或欠费被拒时的主动隔离时间</div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
+                <span class="text-secondary" style="font-size:12px;">次</span>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--color-border);">
-          <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
-          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">💾 保存设置并生效</button>
         </div>
       </div>
     </div>
@@ -2988,7 +3098,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.18-09';
+const BUILD_VERSION = 'v2026.10.18-10';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3390,11 +3500,11 @@ function renderSettings() {
   const elUpstream = document.getElementById('set_upstream_timeout_sec');
   if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 120;
 
-  const elRetries = document.getElementById('set_schedule_total_budget');
-  if (elRetries) elRetries.value = s.schedule_total_budget || 3;
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = s.max_retries || s.schedule_total_budget || 3;
 
   const elProvMax = document.getElementById('set_max_attempts_per_provider');
-  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 2;
+  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 3;
 
   const elFastFail = document.getElementById('set_fast_failover_provider_down');
   if (elFastFail) elFastFail.checked = s.fast_failover_provider_down !== false;
@@ -3423,15 +3533,18 @@ function copyProxyKey() {
 
 async function saveSettings() {
   const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 120;
-  const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
-  // Dynamic adaptive budget based on retry count; up to 600s total deadline
-  const budget = Math.min(600, Math.max(upTimeout, upTimeout * retries));
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  const retries = Number(elRetries?.value) || 3;
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  const budget = elBudget ? (Number(elBudget.value) || 300) : Math.min(600, Math.max(upTimeout, upTimeout * retries));
+
   cfg.settings = {
     agent_routing_strategy: document.getElementById('set_routing_strategy').value,
     upstream_timeout_sec: upTimeout,
     request_total_budget_sec: budget,
+    max_retries: retries,
     schedule_total_budget: retries,
-    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
+    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 3,
     fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
     cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
     cooldown_5xx_sec: Number(document.getElementById('set_cooldown_5xx_sec').value) || 30,
@@ -3457,10 +3570,11 @@ async function saveSettings() {
 function resetSettingsToDefault() {
   document.getElementById('set_routing_strategy').value = 'sticky_failover';
   document.getElementById('set_upstream_timeout_sec').value = 120;
-  const hiddenBudget = document.getElementById('set_request_total_budget_sec');
-  if (hiddenBudget) hiddenBudget.value = 300;
-  document.getElementById('set_schedule_total_budget').value = 3;
-  document.getElementById('set_max_attempts_per_provider').value = 2;
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  if (elBudget) elBudget.value = 300;
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = 3;
+  document.getElementById('set_max_attempts_per_provider').value = 3;
   document.getElementById('set_fast_failover_provider_down').checked = true;
   document.getElementById('set_cooldown_429_sec').value = 60;
   document.getElementById('set_cooldown_5xx_sec').value = 30;
@@ -4545,8 +4659,11 @@ async function saveKeyModal() {
   }
 
   let finalKeyVal;
+  const existingKeyObj = oldLabel ? cfg.providers[prov]?.keys?.[oldLabel] : null;
   if (vertexKeyMeta) {
-    finalKeyVal = { ...vertexKeyMeta };
+    finalKeyVal = { ...(typeof existingKeyObj === 'object' && existingKeyObj !== null ? existingKeyObj : {}), ...vertexKeyMeta };
+  } else if (typeof existingKeyObj === 'object' && existingKeyObj !== null) {
+    finalKeyVal = { ...existingKeyObj, key: val };
   } else {
     finalKeyVal = val;
   }
@@ -4764,15 +4881,15 @@ async function persistConfig() {
 
 // ---- EdgeOne GitHub Dynamic Presets & Rule Updates ------------------------
 const PRESET_CATALOG_URLS = [
-  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets/catalog.json',
-  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets/catalog.json',
-  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets/catalog.json'
+  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json',
+  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json',
+  'https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets/catalog.json'
 ];
 
 const PRESET_RULE_BASE_URLS = [
-  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets',
-  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets',
-  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets'
+  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets',
+  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets',
+  'https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets'
 ];
 
 async function _fetchEdgeOneRemoteJson(urls, timeoutMs = 3000) {

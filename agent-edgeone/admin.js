@@ -413,11 +413,11 @@ function renderSettings() {
   const elUpstream = document.getElementById('set_upstream_timeout_sec');
   if (elUpstream) elUpstream.value = s.upstream_timeout_sec || 120;
 
-  const elRetries = document.getElementById('set_schedule_total_budget');
-  if (elRetries) elRetries.value = s.schedule_total_budget || 3;
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = s.max_retries || s.schedule_total_budget || 3;
 
   const elProvMax = document.getElementById('set_max_attempts_per_provider');
-  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 2;
+  if (elProvMax) elProvMax.value = s.max_attempts_per_provider || 3;
 
   const elFastFail = document.getElementById('set_fast_failover_provider_down');
   if (elFastFail) elFastFail.checked = s.fast_failover_provider_down !== false;
@@ -446,15 +446,18 @@ function copyProxyKey() {
 
 async function saveSettings() {
   const upTimeout = Number(document.getElementById('set_upstream_timeout_sec').value) || 120;
-  const retries = Number(document.getElementById('set_schedule_total_budget').value) || 3;
-  // Dynamic adaptive budget based on retry count; up to 600s total deadline
-  const budget = Math.min(600, Math.max(upTimeout, upTimeout * retries));
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  const retries = Number(elRetries?.value) || 3;
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  const budget = elBudget ? (Number(elBudget.value) || 300) : Math.min(600, Math.max(upTimeout, upTimeout * retries));
+
   cfg.settings = {
     agent_routing_strategy: document.getElementById('set_routing_strategy').value,
     upstream_timeout_sec: upTimeout,
     request_total_budget_sec: budget,
+    max_retries: retries,
     schedule_total_budget: retries,
-    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 2,
+    max_attempts_per_provider: Number(document.getElementById('set_max_attempts_per_provider').value) || 3,
     fast_failover_provider_down: document.getElementById('set_fast_failover_provider_down').checked,
     cooldown_429_sec: Number(document.getElementById('set_cooldown_429_sec').value) || 60,
     cooldown_5xx_sec: Number(document.getElementById('set_cooldown_5xx_sec').value) || 30,
@@ -480,10 +483,11 @@ async function saveSettings() {
 function resetSettingsToDefault() {
   document.getElementById('set_routing_strategy').value = 'sticky_failover';
   document.getElementById('set_upstream_timeout_sec').value = 120;
-  const hiddenBudget = document.getElementById('set_request_total_budget_sec');
-  if (hiddenBudget) hiddenBudget.value = 300;
-  document.getElementById('set_schedule_total_budget').value = 3;
-  document.getElementById('set_max_attempts_per_provider').value = 2;
+  const elBudget = document.getElementById('set_request_total_budget_sec');
+  if (elBudget) elBudget.value = 300;
+  const elRetries = document.getElementById('set_max_retries') || document.getElementById('set_schedule_total_budget');
+  if (elRetries) elRetries.value = 3;
+  document.getElementById('set_max_attempts_per_provider').value = 3;
   document.getElementById('set_fast_failover_provider_down').checked = true;
   document.getElementById('set_cooldown_429_sec').value = 60;
   document.getElementById('set_cooldown_5xx_sec').value = 30;
@@ -1568,8 +1572,11 @@ async function saveKeyModal() {
   }
 
   let finalKeyVal;
+  const existingKeyObj = oldLabel ? cfg.providers[prov]?.keys?.[oldLabel] : null;
   if (vertexKeyMeta) {
-    finalKeyVal = { ...vertexKeyMeta };
+    finalKeyVal = { ...(typeof existingKeyObj === 'object' && existingKeyObj !== null ? existingKeyObj : {}), ...vertexKeyMeta };
+  } else if (typeof existingKeyObj === 'object' && existingKeyObj !== null) {
+    finalKeyVal = { ...existingKeyObj, key: val };
   } else {
     finalKeyVal = val;
   }
@@ -1787,15 +1794,15 @@ async function persistConfig() {
 
 // ---- EdgeOne GitHub Dynamic Presets & Rule Updates ------------------------
 const PRESET_CATALOG_URLS = [
-  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets/catalog.json',
-  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets/catalog.json',
-  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets/catalog.json'
+  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets/catalog.json',
+  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets/catalog.json',
+  'https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets/catalog.json'
 ];
 
 const PRESET_RULE_BASE_URLS = [
-  'https://cdn.jsdelivr.net/gh/xsk/ocrprox@main/shared/presets',
-  'https://raw.githubusercontent.com/xsk/ocrprox/main/shared/presets',
-  'https://raw.gitmirror.com/xsk/ocrprox/main/shared/presets'
+  'https://cdn.jsdelivr.net/gh/khc8655/ocrproxy@main/shared/presets',
+  'https://raw.githubusercontent.com/khc8655/ocrproxy/main/shared/presets',
+  'https://raw.gitmirror.com/khc8655/ocrproxy/main/shared/presets'
 ];
 
 async function _fetchEdgeOneRemoteJson(urls, timeoutMs = 3000) {
