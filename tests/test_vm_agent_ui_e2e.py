@@ -197,11 +197,9 @@ async def run_ui(base, admin_pw, proxy_key, mock_url, shots):
         box = await page.inner_text("#agentModelsBox")
         check("Blocked" not in box and "HTTPS" not in box, "探活结果不再被 HTTPS/SSRF 误拦", box[:300])
 
-        # 5b. live test button (client-side real call through /v1/chat/completions)
-        await page.click("#agentModelsBox [data-action='live-test']")
-        await page.wait_for_function("(document.getElementById('liveTestRes-mock-chat-1')||{}).innerText && !document.getElementById('liveTestRes-mock-chat-1').innerText.includes('正在')", timeout=10000)
-        live = await page.inner_text("#liveTestRes-mock-chat-1")
-        check("200" in live and "2" in live, "「实测 1+1」按钮可用并显示真实返回", live[:200])
+        # 5b. verify deprecated live test button is completely removed
+        live_btn_count = await page.locator("#agentModelsBox [data-action='live-test']").count()
+        check(live_btn_count == 0, "废弃「实测 1+1」按钮已彻底拔除不存在", f"count={live_btn_count}")
 
         # 5c. edit model: bind the second key as well -> two rows, probe-all reports 1/2
         await page.click("#agentModelsBox [data-action='edit-model']")
