@@ -1213,9 +1213,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
-      <button onclick="switchTab('agents')">Agent 模型</button>
       <button onclick="switchTab('providers')">供应商</button>
-      <button onclick="switchTab('settings')">全局策略</button>
+      <button onclick="switchTab('agents')">模型及路由</button>
+      <button onclick="switchTab('settings')">系统设置</button>
       <button onclick="switchTab('raw')">JSON 配置</button>
       <button onclick="switchTab('access')">接入说明</button>
     </nav>
@@ -1283,21 +1283,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       </div>
     </div>
 
-    <!-- Panel 2: Agent Models -->
-    <div id="panel-agents" class="panel">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">Agent 模型</div>
-            <div class="section-desc">配置 Agent 模型与候选 Key 绑定</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddModelModal()">新增模型</button>
-        </div>
-        <div id="agentModelsBox"></div>
-      </div>
-    </div>
-
-    <!-- Panel 3: Providers & Keys -->
+    <!-- Panel 2: Providers & Keys -->
     <div id="panel-providers" class="panel">
       <div class="section">
         <div class="section-head">
@@ -1317,6 +1303,20 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="alpha-rail-inner" id="alphaRailInner"></div>
           </aside>
         </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Models & Routing -->
+    <div id="panel-agents" class="panel">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">模型及路由</div>
+            <div class="section-desc">配置 Agent 模型与候选 Key 绑定</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddModelModal()">新增模型</button>
+        </div>
+        <div id="agentModelsBox"></div>
       </div>
     </div>
 
@@ -2249,7 +2249,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
     if (protoInfoEl) {
       const badgeHtml = _renderProtocolBadges(provProtos);
-      protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml}</div>\`;
+      const provRpm = localProv?.rpm || localProv?.rpm_per_key || remoteProv?.rpm || remoteProv?.rpm_per_key;
+      const rpmBadge = (provRpm && Number(provRpm) > 0)
+        ? \`<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 \${provRpm} RPM</span>\`
+        : \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>\`;
+      protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml} \${rpmBadge}</div>\`;
     }
 
     let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];

@@ -112,15 +112,29 @@
       </div>
     </div>
 
+    <!-- Panel: Providers -->
+    <div id="panel-providers" class="panel">
+      <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="section-title">供应商与 Key 凭证库</div>
+          <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 同步中枢规则</button>
+          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
+        </div>
+      </div>
+      <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
+        <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
+        <!-- Alphabet Nav Rail -->
+        <div id="alphabetNavRail" class="alphabet-nav-rail" style="display:none;">
+          <div class="alpha-rail-inner" id="alphaRailInner"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <!-- Subtabs for Providers & Models (Hidden by default in Scheme A) -->
-      <div class="subtabs" id="modelsSubTabs" style="display:none !important;">
-        <button id="msub-agents" class="active" onclick="switchModelTab('agents')">Agent 模型</button>
-        <button id="msub-providers" onclick="switchModelTab('providers')">供应商与 Key 凭证库</button>
-        <button id="msub-kb" onclick="switchModelTab('kb')">知识库模型</button>
-      </div>
-
       <!-- Sub-tab: Agent Models -->
       <div id="mtab-agents" class="model-subtab panel-agents active">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
@@ -129,32 +143,11 @@
             <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="openProviderModal('agent')" style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> + 添加供应商</button>
-            <button class="btn btn-primary btn-sm" onclick="openAgentModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增 Agent 模型</button>
+            <button class="btn btn-secondary btn-sm" onclick="openProviderModal('agent')">+ 添加供应商</button>
+            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
           </div>
         </div>
         <div id="agentModelsBox"></div>
-      </div>
-
-      <!-- Sub-tab: Providers & Keys -->
-      <div id="mtab-providers" class="model-subtab panel-providers">
-        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="section-title">供应商与 Key 凭证库</div>
-            <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 同步中枢规则</button>
-            <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
-          </div>
-        </div>
-        <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
-          <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
-          <!-- Alphabet Nav Rail -->
-          <div id="alphabetNavRail" class="alphabet-nav-rail" style="display:none;">
-            <div class="alpha-rail-inner" id="alphaRailInner"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Sub-tab: KB View -->

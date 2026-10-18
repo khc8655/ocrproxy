@@ -599,9 +599,9 @@ test('normalize: dynamic KV override rules take precedence over static baseline 
   eq(body.reasoning_effort, 'low');
 });
 
-test('preset: amd official 2026-10-17 spec alignment (20 RPM, 4 models, reasoning mapping)', () => {
+test('preset: amd official spec alignment (user configurable RPM, 4 models, reasoning mapping)', () => {
   const p = getPreset('amd');
-  eq(p.rpm_per_key, 20);
+  eq(p.rpm_per_key, undefined);
   eq(p.recommended_models.length, 4);
   const upstreamModels = p.recommended_models.map(m => m.upstream_model);
   truthy(upstreamModels.includes('DeepSeek-V4-Flash'));
@@ -1628,7 +1628,7 @@ test('PresetHub: getPresetDetail returns specific provider detail on demand', as
   truthy(res);
   eq(res.ok, true);
   eq(res.preset.id, 'amd');
-  eq(res.preset.rpm_per_key, 20);
+  eq(res.preset.rpm_per_key, undefined);
   truthy(res.preset.recommended_models.length >= 2);
 });
 

@@ -35,9 +35,9 @@
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
-      <button onclick="switchTab('agents')">Agent 模型</button>
       <button onclick="switchTab('providers')">供应商</button>
-      <button onclick="switchTab('settings')">全局策略</button>
+      <button onclick="switchTab('agents')">模型及路由</button>
+      <button onclick="switchTab('settings')">系统设置</button>
       <button onclick="switchTab('raw')">JSON 配置</button>
       <button onclick="switchTab('access')">接入说明</button>
     </nav>
@@ -105,21 +105,7 @@
       </div>
     </div>
 
-    <!-- Panel 2: Agent Models -->
-    <div id="panel-agents" class="panel">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">Agent 模型</div>
-            <div class="section-desc">配置 Agent 模型与候选 Key 绑定</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddModelModal()">新增模型</button>
-        </div>
-        <div id="agentModelsBox"></div>
-      </div>
-    </div>
-
-    <!-- Panel 3: Providers & Keys -->
+    <!-- Panel 2: Providers & Keys -->
     <div id="panel-providers" class="panel">
       <div class="section">
         <div class="section-head">
@@ -139,6 +125,20 @@
             <div class="alpha-rail-inner" id="alphaRailInner"></div>
           </aside>
         </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Models & Routing -->
+    <div id="panel-agents" class="panel">
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">模型及路由</div>
+            <div class="section-desc">配置 Agent 模型与候选 Key 绑定</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddModelModal()">新增模型</button>
+        </div>
+        <div id="agentModelsBox"></div>
       </div>
     </div>
 

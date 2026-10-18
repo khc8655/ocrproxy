@@ -24,7 +24,8 @@ const state = {
 
 const tabs = [
   { id: 'dashboard', label: '概览', sub: '接入规范、实时请求统计与错误日志' },
-  { id: 'models', label: '模型路由', sub: '供应商、Agent 模型与知识库模型' },
+  { id: 'providers', label: '供应商', sub: '上游 Base URL、协议、RPM 限流与密钥凭证库' },
+  { id: 'models', label: '模型及路由', sub: 'Agent 模型与知识库模型路由' },
   { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' }
 ];
 const KB_TYPES = ['chat','embedding','reranker','ocr'];
@@ -524,34 +525,60 @@ function renderDashboardGateway(){
 
   if(runMode === 'agent') {
     const agentModels = state.config?.agent_models || {};
-    modelsList = Object.keys(agentModels).map(mName => {
+    const names = Object.keys(agentModels);
+    modelsList = names.map(mName => {
+      const m = agentModels[mName] || {};
+      const keyCount = (m.keys || []).length;
+      const isAvail = keyCount > 0;
       const protos = getModelProtocols(mName);
       const protoBadges = renderProtocolBadges(protos, true);
       return `
-        <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(mName)}')" title="点击复制模型名称: ${esc(mName)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);">
+        <span class="badge badge-neutral model-chip-clickable mono ${!isAvail ? 'disabled' : ''}" onclick="${isAvail ? `copyModelName('${esc(mName)}')` : ''}" title="${isAvail ? `点击复制模型名称: ${esc(mName)} (${keyCount} 个 Key)` : '未绑定有效 Key'}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:${isAvail ? 'pointer' : 'default'};background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);${!isAvail ? 'opacity:0.45;border-style:dashed;' : ''}">
           <span style="font-weight:500;">${esc(mName)}</span>
+          <span class="text-secondary" style="font-size:11px;">(${keyCount} Key)</span>
           <span style="display:inline-flex;gap:3px;align-items:center;">${protoBadges}</span>
         </span>
       `;
     });
   } else {
-    // KB mode
+    // KB mode: 4 standard virtual model types (chat, embedding, reranker, ocr)
     const candidates = state.config?.candidates || {};
-    KB_TYPES.forEach(t => {
+    modelsList = KB_TYPES.map(t => {
       const cList = candidates[t] || [];
-      if(cList.length > 0) {
-        modelsList.push(`
-          <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(t)}')" title="点击复制模型名称: ${esc(t)}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);">
-            <span style="font-weight:500;">${esc(t)}</span>
-            <span class="badge badge-success" style="font-size:10px;padding:1px 4px;">openai</span>
+      const nodeCount = cList.length;
+      const isAvail = nodeCount > 0;
+      const label = KB_LABELS[t] || t;
+
+      // Extract unique protocols from mounted nodes
+      const protoSet = new Set();
+      cList.forEach(c => {
+        const pList = getProviderProtocols(c.provider);
+        pList.forEach(pr => protoSet.add(pr));
+      });
+      const protos = protoSet.size > 0 ? Array.from(protoSet) : ['chat'];
+      const protoBadges = renderProtocolBadges(protos, true);
+
+      if (isAvail) {
+        return `
+          <span class="badge badge-neutral model-chip-clickable mono" onclick="copyModelName('${esc(t)}')" title="点击复制模型名称: ${esc(t)} (${label})" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:var(--bg-subtle, var(--bg-card));border:1px solid var(--border);">
+            <span style="font-weight:600;">${esc(t)}</span>
+            <span class="text-secondary" style="font-size:11px;">(${label} · ${nodeCount} 节点)</span>
+            <span style="display:inline-flex;gap:3px;align-items:center;">${protoBadges}</span>
           </span>
-        `);
+        `;
+      } else {
+        return `
+          <span class="badge badge-neutral mono" title="未挂载候选节点，请前往「模型及路由」挂载" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;font-size:12px;opacity:0.45;border:1px dashed var(--border);background:transparent;cursor:not-allowed;">
+            <span style="font-weight:500;">${esc(t)}</span>
+            <span class="text-secondary" style="font-size:11px;">(${label} · 未挂载)</span>
+          </span>
+        `;
       }
     });
   }
 
   if(modelsList.length === 0) {
-    listContainer.innerHTML = '<span class="text-secondary" style="font-size:12px;">(暂无可用模型，请在「模型管理」中配置)</span>';
+    listContainer.innerHTML = '<span class="text-secondary" style="font-size:12px;">(暂无可用模型，请在「模型及路由」中配置)</span>';
   } else {
     listContainer.innerHTML = modelsList.join('');
   }
@@ -725,31 +752,22 @@ function handlePrimaryModelAction(){
 }
 
 function switchModelTab(id){
+  if (id === 'providers') {
+    switchTab('providers');
+    return;
+  }
   state.modelTab = id;
-  const subTabs = document.getElementById('modelsSubTabs');
-  if (subTabs) subTabs.style.display = 'none';
-
-  document.querySelectorAll('#modelsSubTabs button').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('msub-' + id);
-  if (btn) btn.classList.add('active');
-
   document.querySelectorAll('.model-subtab').forEach(m => m.classList.remove('active'));
   const target = document.getElementById('mtab-' + id);
   if (target) target.classList.add('active');
 
-  if (id === 'providers') renderProviders();
-  else if (id === 'agents') renderAgentModels();
+  if (id === 'agents') renderAgentModels();
   else if (id === 'kb') renderKbModels();
 }
 
 function renderModels(){
   const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
-  const subTabs = document.getElementById('modelsSubTabs');
-  if (subTabs) {
-    subTabs.style.display = 'none';
-  }
-
-  // Scheme A (Strict): Agent mode locks to 'agents', KB mode locks to 'kb'
+  // Agent mode locks to 'agents', KB mode locks to 'kb'
   state.modelTab = (runMode === 'kb') ? 'kb' : 'agents';
   switchModelTab(state.modelTab);
 }

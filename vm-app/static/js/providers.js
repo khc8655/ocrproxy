@@ -153,7 +153,7 @@ function renderProviders(){
           ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
           : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
         const actions = (isVaultManaged && !isLocalKey)
-          ? `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;">中枢只读</span>`
+          ? `<button class="btn-ghost" style="padding:0 4px;opacity:0.4;cursor:not-allowed;" disabled title="🔒 中枢统一凭据，请在 EdgeOne 中枢修改">只读</button>`
           : `
             <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
             <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
@@ -180,6 +180,10 @@ function renderProviders(){
           messagesUrlPart = ` · Messages: ${esc(prov.anthropic_base_url || prov.base_url)} (默认)`;
         }
       }
+      const provRpmVal = prov.rpm || prov.rpm_per_key;
+      const provRpmBadge = (provRpmVal && Number(provRpmVal) > 0)
+        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 ${provRpmVal} RPM</span>`
+        : `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>`;
       const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
       const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本">${esc(ver)}</span>`;
       const vaultBadge = isVaultManaged 
@@ -192,8 +196,9 @@ function renderProviders(){
 
       const actionButtons = isVaultManaged
         ? `
-          <button class="btn btn-sm btn-ghost" style="color:var(--text-secondary);cursor:default;" title="由中枢统管，不可在本地篡改或删除">🔒 仅限中枢维护</button>
-          <button class="btn btn-sm" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 中枢拉取最新规则与凭据">${icon('refresh')} 同步中枢</button>
+          <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">配置/查看</button>
+          <button class="btn btn-sm btn-secondary" onclick="openKeyModal('${esc(name)}', null, true)">+ 本地 Key</button>
+          <button class="btn btn-sm btn-ghost" style="color:var(--text-secondary);cursor:not-allowed;opacity:0.5;" disabled title="🔒 中枢托管供应商，不可在本地删除">删除</button>
         `
         : `
           <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
@@ -205,7 +210,7 @@ function renderProviders(){
         <div>
           <div class="provider-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="font-size:14px;font-weight:700;">${esc(name)}</span>
-            <span style="display:inline-flex;gap:4px;">${protoBadges} ${verBadge} ${vaultBadge}</span>
+            <span style="display:inline-flex;gap:4px;">${protoBadges} ${provRpmBadge} ${verBadge} ${vaultBadge}</span>
             <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span>
           </div>
           <div class="key-list" style="margin-top:6px;">${keyChips || '<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
@@ -571,6 +576,8 @@ function openProviderModal(sourceModal){
   document.getElementById('p_name').value = '';
   document.getElementById('p_name').disabled = false;
   document.getElementById('p_url').value = '';
+  document.getElementById('p_url').disabled = false;
+  document.getElementById('p_url').title = '';
   document.getElementById('p_proto_chat').checked = true;
   document.getElementById('p_proto_messages').checked = false;
   document.getElementById('p_proto_responses').checked = false;
@@ -587,13 +594,16 @@ function openProviderModal(sourceModal){
 
 function editProvider(name){
   state.currentSelectedPreset = null;
-  const p = state.config.providers[name];
-  document.getElementById('providerModalTitle').textContent = '编辑供应商 - ' + name;
+  const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
+  const isVaultManaged = (p.origin === 'vault') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  document.getElementById('providerModalTitle').textContent = isVaultManaged ? `配置/查看供应商 - ${name} (中枢托管)` : `编辑供应商 - ${name}`;
   document.getElementById('p_preset_wrap').style.display = 'none';
   document.getElementById('p_desc').style.display = 'none';
   document.getElementById('p_name').value = name;
   document.getElementById('p_name').disabled = true;
   document.getElementById('p_url').value = p.base_url || '';
+  document.getElementById('p_url').disabled = Boolean(isVaultManaged);
+  document.getElementById('p_url').title = isVaultManaged ? '中枢托管 Base URL 只读' : '';
 
   const protos = getProviderProtocols(name, p);
   document.getElementById('p_proto_chat').checked = protos.includes('chat');
@@ -611,7 +621,8 @@ function editProvider(name){
   }
 
   const rpmEditInput = document.getElementById('p_rpm');
-  if(rpmEditInput) rpmEditInput.value = p.rpm_per_key ? String(p.rpm_per_key) : '';
+  const provRpm = p.rpm_per_key || p.rpm;
+  if(rpmEditInput) rpmEditInput.value = provRpm ? String(provRpm) : '';
 
   document.getElementById('p_models_wrap').style.display = 'none';
   openModal('providerModal');
@@ -623,6 +634,8 @@ function saveProvider(){
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
 
   const isEdit = document.getElementById('p_name').disabled;
+  const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
+  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
 
   const selectedProtos = [];
   if(document.getElementById('p_proto_chat').checked) selectedProtos.push('chat');
@@ -645,7 +658,18 @@ function saveProvider(){
   if(!state.config.providers) state.config.providers = {};
 
   if(isEdit) {
-    state.config.providers[name].base_url = url;
+    if (!state.config.providers[name]) {
+      const vp = typeof findVaultProvider === 'function' ? findVaultProvider(name) : null;
+      state.config.providers[name] = {
+        name: vp?.name || name,
+        origin: 'vault',
+        base_url: vp?.base_url || url,
+        protocols: selectedProtos,
+        keys: {}
+      };
+    } else if (!isVaultManaged) {
+      state.config.providers[name].base_url = url;
+    }
     state.config.providers[name].protocols = selectedProtos;
     state.config.providers[name].anthropic_messages = selectedProtos.includes('messages');
     if(selectedProtos.includes('messages') && anthropicUrl){
@@ -671,8 +695,9 @@ function saveProvider(){
     if(rpmVal > 0){
       state.config.providers[name].rpm_per_key = rpmVal;
     }
+  }
 
-    // Attach preset metadata and rules if created from preset
+  // Attach preset metadata and rules if created from preset
     if(state.currentSelectedPreset && (state.currentSelectedPreset.id === name || !state.config.providers[name].preset_id)){
       state.config.providers[name].preset_id = state.currentSelectedPreset.id;
       state.config.providers[name].preset_version = state.currentSelectedPreset.version || '1.1.0';
@@ -705,7 +730,6 @@ function saveProvider(){
         }
       });
     }
-  }
 
   closeModal('providerModal');
   persistConfig(`供应商「${name}」已保存并立即生效`);

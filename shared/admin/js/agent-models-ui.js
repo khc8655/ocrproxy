@@ -539,7 +539,11 @@
 
     if (protoInfoEl) {
       const badgeHtml = _renderProtocolBadges(provProtos);
-      protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml}</div>`;
+      const provRpm = localProv?.rpm || localProv?.rpm_per_key || remoteProv?.rpm || remoteProv?.rpm_per_key;
+      const rpmBadge = (provRpm && Number(provRpm) > 0)
+        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 ${provRpm} RPM</span>`
+        : `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>`;
+      protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml} ${rpmBadge}</div>`;
     }
 
     let localKeys = localProv ? Object.keys(localProv.keys || {}) : [];

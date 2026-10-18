@@ -3,7 +3,6 @@
   "name": "AMD Radeon Cloud",
   "version": "2026.10.18",
   "protocol": "openai",
-  "rpm_per_key": 20,
   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
   "doc_url": "https://amd-aim.github.io/radeon-cloud-docs/",
