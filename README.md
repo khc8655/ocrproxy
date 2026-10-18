@@ -558,6 +558,19 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 最新版本更新记录 (Release Notes)
 
+### `v2026.10.18-12` (2026-10-18)
+- **PR #11 管理端凭据归属统一、SSRF 守卫加固与实时推理验收**：
+  - 提取 [`resolveKeySource`](shared/admin/js/agent-models-ui.js) 判定算法并在供应商列表、模型配置弹窗与列表行统一复用，彻底消灭钥匙徽章的历史显示漂移；
+  - 在 `admin_routes.py` 构筑 `_admin_upstream_block_reason` SSRF 守卫，公网 HTTPS 永远放行、已保存私有 HTTP 放行，**绝对阻断实例元数据（`169.254.169.254`）**；
+  - 管理后台新增「实测 1+1」(`live-test`) 按钮，直接以真实客户端身份发起模型推理验收；
+  - 引入 `tests/test_vm_static_sync.py` 强门禁，确保 `vm-app/static/` 与 `shared/admin/` 逐字节强一致。
+- **PR #12 流式首包前预提交心跳保活、客户端早停取消与出站连接池保护**：
+  - 首包前流式预提交心跳保活（`_stream_with_precommit`）：大模型深思超过静默宽限期（VM 45s、EdgeOne 20s）时，先预提交 200 并以 15s 间隔下发 `: keep-alive` 心跳保活，首包到达后无缝拼接流，根除中间网关超时断开（N3 问题）；
+  - 客户端断开主动取消：当客户端中止连接时主动取消调度 Task，原子释放信号量与出站连接；
+  - 出站连接池耗尽防御与健康 Key 零误罚：连接池等待锁定为 10s（`UPSTREAM_POOL_WAIT_SEC`），连接池满抛出 `PoolTimeout` 时转为 `503 GlobalOverloadError`，**绝不扣分惩罚健康的 Key**；连接池上限提升至 256。
+- **双端全量测试套件 100% 验收通过**：
+  - 包含 198 项 EdgeOne 单测、安全基线、SSRF 白名单守卫、静态镜像强同步与 11 项流式心跳门禁。
+
 ### `v2026.10.18-11` (2026-10-18)
 - **EdgeOne 探活系统（“测”按钮）彻底修复**：
   - 修复 `agent-edgeone/edge-functions/api/test.js` 中 `bindings` 未定义即切片引发的 `ReferenceError: bindings is not defined`（HTTP 500 崩溃）；

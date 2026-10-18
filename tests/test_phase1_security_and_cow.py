@@ -15,9 +15,12 @@ import os
 import re
 import json
 
-# Add vm-app to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "vm-app")))
+# Add root and vm-app to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, root_dir)
+sys.path.insert(0, os.path.join(root_dir, "vm-app"))
 
+import tests.mock_env
 from app.proxy_routes import _clone_request_payload, _apply_request_adapter_rules
 
 def test_cow_messages_isolation():
