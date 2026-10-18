@@ -146,6 +146,7 @@ export async function onRequestPost(context) {
   const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
   const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
   const deadline = startMs + totalBudgetSec * 1000;
+  const peekDeadlineMs = peekDeadlineFrom(startMs, settings);
 
   // ---- Resolve candidate list -------------------------------------------
   const allBindings = listBindings(config, body.model);
@@ -266,7 +267,8 @@ export async function onRequestPost(context) {
       body.stream === true,
       request,
       env,
-      perAttemptTimeoutMs
+      perAttemptTimeoutMs,
+      peekDeadlineMs
     );
 
     if (result.kind === 'success') {
@@ -433,7 +435,17 @@ export async function onRequestPost(context) {
 // Upstream forward + first-chunk peek
 // ------------------------------------------------------------------------
 
-async function forwardUpstream(resolved, body, isStream, request, env, perAttemptTimeoutMs) {
+// Max silence before the client receives its first byte (request-level, across
+// all failover attempts).  The EdgeOne <-> client idle limit is ~25s, so the
+// default 20s keeps a 5s margin; after it we commit 200 + keep-alive (every 5s).
+function peekDeadlineFrom(startMs, settings) {
+  let sec = Number(settings && settings.edge_peek_window_sec);
+  if (!Number.isFinite(sec) || sec <= 0) sec = 20;
+  sec = Math.min(24, Math.max(3, sec));
+  return startMs + sec * 1000;
+}
+
+async function forwardUpstream(resolved, body, isStream, request, env, perAttemptTimeoutMs, peekDeadlineMs = Date.now() + 20000) {
   const url = buildChatUrl(resolved.baseUrl);
   const upstreamHeaders = {
     'content-type': 'application/json',
@@ -517,18 +529,16 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       }
       const reader = upstreamResp.body.getReader();
 
-      // Fast Race Peek Window (8000ms):
-      // If the upstream produces the first chunk or fails within 8s, peek detects empty stream or fast errors
+      // Fast Race Peek Window (request-level, default 20s):
+      // If the upstream produces the first chunk or fails within the peek window, peek detects empty stream or fast errors
       // and triggers key failover or normal streaming.
-      // If 8s passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
+      // If the window passes without first chunk (deep reasoning/long thinking models like DeepSeek-R1),
       // we immediately commit HTTP 200 OK to downstream client with keep-alive heartbeat stream,
       // keeping client TCP active during long prefill while allowing up to 300s upstream inference!
-      // 8s (was 1.5s): thinking models routinely need >1.5s for the first byte, and
-      // committing 200 that early made every later 429 / in-band error un-failover-able.
-      // 8s covers the vast majority of fast failures while staying far below the
-      // 60s idle timeout of common reverse proxies; after it we still commit 200
-      // with keep-alive so long prefill (up to 300s) keeps working.
-      const PEEK_WINDOW_MS = 8000;
+      // Hold the response (so 429 / in-band errors can still fail over) only
+      // until the request-level peek deadline (edge_peek_window_sec, default
+      // 20s, under the ~25s EdgeOne<->client idle limit).
+      const PEEK_WINDOW_MS = Math.max(1000, peekDeadlineMs - Date.now());
       let readPromise = reader.read();
       let peekTimer = null;
       const timeoutPromise = new Promise((resolve) => {

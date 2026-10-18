@@ -693,12 +693,12 @@ async def _stream_with_keepalive(
 # default) so that 429 / in-band errors can still fail over to another key.
 # During that window the client used to receive *nothing* — not even headers —
 # and Nginx (proxy_read_timeout 60 s), Cloudflare (100 s) or IDE clients would
-# drop the connection.  Now: wait a short grace window with a normal response
+# drop the connection.  Now: wait a grace window (default 45s) with a normal response
 # (fast failures keep their real HTTP status); if scheduling is still running,
 # commit 200 + SSE keep-alive comments every 15 s and finish with the stream or
 # an SSE error event.  If the client disconnects, scheduling is cancelled so it
 # stops holding upstream connections and key semaphores.
-_STREAM_PRECOMMIT_GRACE_SEC = 8.0
+_STREAM_PRECOMMIT_GRACE_SEC = 45.0  # under Nginx's default 60s proxy_read_timeout
 _STREAM_KEEPALIVE_SEC = 15.0
 
 
@@ -707,7 +707,7 @@ def _precommit_grace(config: dict) -> float:
         v = float(config.get("stream_precommit_grace_sec", _STREAM_PRECOMMIT_GRACE_SEC))
     except (TypeError, ValueError):
         v = _STREAM_PRECOMMIT_GRACE_SEC
-    return max(0.5, min(60.0, v))
+    return max(0.5, min(120.0, v))
 
 
 def _schedule_error_as_sse(exc: Exception, error_format: str) -> bytes:
@@ -804,6 +804,19 @@ async def _stream_with_precommit(schedule_coro, finalize, config: dict, error_fo
         media_type="text/event-stream",
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache", "X-Proxy-Precommitted": "1"},
     )
+
+
+def _kb_capped_budget(config: dict, per_attempt_sec: float, factor: float, extra: float = 0.0) -> float:
+    """KB requests should fail fast: cap the whole request at ~factor x one
+    attempt (chat/embedding/rerank: 2 attempts + 5s; OCR: 1.5x so a stuck image
+    gets one short retry and is then skipped) instead of the agent-sized 300s
+    global budget.  A smaller user-set request_total_budget_sec still wins."""
+    cap = per_attempt_sec * factor + extra
+    try:
+        user = float(config.get("request_total_budget_sec") or 0)
+    except (TypeError, ValueError):
+        user = 0.0
+    return min(user, cap) if user > 0 else cap
 
 
 # Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
@@ -1147,6 +1160,8 @@ async def chat_completions(request: Request):
         "upstream_timeout": chat_timeout,
         "candidates": {"chat": candidates_list},
     }
+    if req_category == "kb":
+        req_config["request_total_budget_sec"] = _kb_capped_budget(config, chat_timeout, 2.0, extra=5.0)
 
     # Gemini (VM only): thought signatures carried in tool_call ids, thought tags
     # split into reasoning_content.  Track which candidates / upstream URLs are
@@ -1562,6 +1577,7 @@ async def embeddings(request: Request):
         "upstream_timeout": emb_timeout,
         "candidates": {"embedding": candidates_list},
     }
+    req_config["request_total_budget_sec"] = _kb_capped_budget(config, emb_timeout, 2.0, extra=5.0)
 
     def build_request(cand, api_key, upstream_base_url):
         out = dict(body)
@@ -1652,6 +1668,7 @@ async def rerank(request: Request):
         "upstream_timeout": rerank_timeout,
         "candidates": {"reranker": candidates_list},
     }
+    req_config["request_total_budget_sec"] = _kb_capped_budget(config, rerank_timeout, 2.0, extra=5.0)
 
     def build_request(cand, api_key, upstream_base_url):
         out = dict(body)
@@ -1909,6 +1926,7 @@ async def _ocr_handle(request: Request, config: dict):
     req_config = {
         **config,
         "upstream_timeout": ocr_timeout,
+        "request_total_budget_sec": _kb_capped_budget(config, ocr_timeout, 1.5),
     }
 
     try:

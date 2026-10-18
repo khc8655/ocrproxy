@@ -63,6 +63,32 @@
       "aliases": ["upstream_timeout_sec", "upstream_timeout_chat"]
     },
     {
+      "key": "stream_precommit_grace_sec",
+      "group": "timeout",
+      "label": "流式首包前静默上限",
+      "hint": "流式请求在上游首包前最多静默多少秒（期间仍可换 Key），超过后先回 200 + 心跳。需小于前置代理空闲超时（Nginx 默认 60s）",
+      "type": "int",
+      "unit": "s",
+      "default": 45,
+      "min": 1,
+      "max": 120,
+      "modes": ["agent"],
+      "hosts": ["vm"]
+    },
+    {
+      "key": "edge_peek_window_sec",
+      "group": "timeout",
+      "label": "流式首包前静默上限",
+      "hint": "流式请求在上游首包前最多静默多少秒（期间仍可换 Key），超过后先回 200 + 心跳。EdgeOne 与客户端空闲上限约 25s",
+      "type": "int",
+      "unit": "s",
+      "default": 20,
+      "min": 3,
+      "max": 24,
+      "modes": ["agent"],
+      "hosts": ["edgeone"]
+    },
+    {
       "key": "upstream_timeout_sec",
       "group": "timeout",
       "label": "知识库常规请求单次超时",
