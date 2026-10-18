@@ -3,82 +3,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "vm-app"))
 
-import types
 import unittest
 from unittest.mock import MagicMock
-
-# Mock web frameworks if running under standalone python without deps
-if "httpx" not in sys.modules:
-    try:
-        import httpx
-    except ImportError:
-        class _HttpxMock(types.ModuleType):
-            pass
-        httpx = _HttpxMock("httpx")
-        class HTTPError(Exception): pass
-        class RequestError(HTTPError): pass
-        class TransportError(RequestError): pass
-        class TimeoutException(RequestError): pass
-        class PoolTimeout(TimeoutException): pass
-        class ConnectError(TransportError): pass
-        class ConnectTimeout(TimeoutException): pass
-        class ReadError(TransportError): pass
-        class WriteError(TransportError): pass
-        class RemoteProtocolError(TransportError): pass
-        class ReadTimeout(TimeoutException): pass
-        class WriteTimeout(TimeoutException): pass
-        httpx.HTTPError = HTTPError
-        httpx.RequestError = RequestError
-        httpx.TransportError = TransportError
-        httpx.TimeoutException = TimeoutException
-        httpx.PoolTimeout = PoolTimeout
-        httpx.ConnectError = ConnectError
-        httpx.ConnectTimeout = ConnectTimeout
-        httpx.ReadError = ReadError
-        httpx.WriteError = WriteError
-        httpx.RemoteProtocolError = RemoteProtocolError
-        httpx.ReadTimeout = ReadTimeout
-        httpx.WriteTimeout = WriteTimeout
-        sys.modules["httpx"] = httpx
-
-if "starlette" not in sys.modules:
-    try:
-        import starlette
-    except ImportError:
-        class StreamingResponse:
-            def __init__(self, content, status_code=200, headers=None, media_type=None):
-                self.status_code = status_code
-                self.headers = headers or {}
-                self.body_iterator = content
-        class JSONResponse:
-            def __init__(self, content, status_code=200, headers=None):
-                self.status_code = status_code
-                self.headers = headers or {}
-        class Response:
-            def __init__(self, content=b"", status_code=200, headers=None, media_type=None):
-                self.status_code = status_code
-                self.headers = headers or {}
-        mock_starlette = MagicMock()
-        mock_starlette_responses = MagicMock()
-        mock_starlette_responses.StreamingResponse = StreamingResponse
-        mock_starlette_responses.JSONResponse = JSONResponse
-        mock_starlette_responses.Response = Response
-        sys.modules["starlette"] = mock_starlette
-        sys.modules["starlette.responses"] = mock_starlette_responses
-
-if "fastapi" not in sys.modules:
-    try:
-        import fastapi
-    except ImportError:
-        mock_fastapi = MagicMock()
-        mock_fastapi_responses = MagicMock()
-        mock_fastapi_responses.StreamingResponse = sys.modules["starlette.responses"].StreamingResponse
-        mock_fastapi_responses.JSONResponse = sys.modules["starlette.responses"].JSONResponse
-        mock_fastapi_responses.Response = sys.modules["starlette.responses"].Response
-        mock_fastapi.APIRouter = MagicMock(return_value=MagicMock())
-        mock_fastapi.Request = MagicMock
-        sys.modules["fastapi"] = mock_fastapi
-        sys.modules["fastapi.responses"] = mock_fastapi_responses
+import httpx
 
 from app.proxy_routes import _mark_retryable, _RETRYABLE_STATUSES
 from app.scheduler import _transport_error_status, _PROVIDER_LEVEL_STATUSES, _PROVIDER_LEVEL_EXC

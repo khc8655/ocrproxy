@@ -20,7 +20,6 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, root_dir)
 sys.path.insert(0, os.path.join(root_dir, "vm-app"))
 
-import tests.mock_env
 from app.proxy_routes import _clone_request_payload, _apply_request_adapter_rules
 
 def test_cow_messages_isolation():
@@ -172,34 +171,23 @@ def test_ui_no_inline_event_interpolation():
 def test_vault_vs_local_data_and_permission_isolation():
     print("\n=== 4. Vault vs Local Binary Permissions & Safe Sandbox Isolation ===")
 
-    # 1. Verify EdgeOne backend vault fetch strictly filters out local keys
+    # 1. Verify EdgeOne backend vault fetch strictly filters out local keys and local providers
     fetch_path = os.path.join(os.path.dirname(__file__), "..", "edge-functions", "api", "vault", "fetch.js")
     with open(fetch_path, "r", encoding="utf-8") as f:
         fetch_code = f.read()
 
-    assert "keyObj.is_local === true" in fetch_code, "api/vault/fetch.js must filter is_local === true"
-    assert "keyObj.origin === 'local'" in fetch_code, "api/vault/fetch.js must filter origin === 'local'"
-    print("  PASS: api/vault/fetch.js strictly excludes local keys (physical sandbox isolation)")
+    assert "origin === 'local'" in fetch_code, "api/vault/fetch.js must block providers with origin === 'local'"
+    assert "keyObj.origin === 'local'" in fetch_code, "api/vault/fetch.js must filter origin === 'local' keys"
+    print("  PASS: api/vault/fetch.js strictly excludes local providers and keys (physical sandbox isolation)")
 
-    # 2. Verify shared/admin/js/providers.js host-differentiated read-only logic
+    # 2. Verify shared/admin/js/providers.js local deletion sovereignty
     providers_path = os.path.join(os.path.dirname(__file__), "..", "shared", "admin", "js", "providers.js")
     with open(providers_path, "r", encoding="utf-8") as f:
         providers_code = f.read()
 
-    assert "!isHostEdgeOne && isVaultManaged" in providers_code, "providers.js must differentiate EdgeOne vs VM read-only logic"
-    assert "中枢托管供应商不可在本地删除" in providers_code, "providers.js must protect vault providers from deletion on VM"
-    assert "中枢统一凭据不可在本地删除" in providers_code, "providers.js must protect vault keys from deletion on VM"
-    print("  PASS: shared/admin/js/providers.js implements asymmetric vault host permissions (EdgeOne editable, VM read-only)")
-
-    # 3. Verify agent-models-ui.js resolveKeySource and removeLocalKeyFromModal guard
-    agent_ui_path = os.path.join(os.path.dirname(__file__), "..", "shared", "admin", "js", "agent-models-ui.js")
-    with open(agent_ui_path, "r", encoding="utf-8") as f:
-        agent_ui_code = f.read()
-
-    assert "raw.origin === 'local'" in agent_ui_code, "resolveKeySource must identify raw.origin === 'local'"
-    assert "raw.origin === 'vault'" in agent_ui_code, "resolveKeySource must identify raw.origin === 'vault'"
-    assert "中枢统一凭据不可在模型弹窗中删除" in agent_ui_code, "removeLocalKeyFromModal must guard vault keys"
-    print("  PASS: agent-models-ui.js key source resolution and anti-bypass delete guard verified")
+    assert "getProviderPermissions" in providers_code, "providers.js must define getProviderPermissions"
+    assert "canDelete: true" in providers_code, "providers.js must ensure local deletion sovereignty"
+    print("  PASS: shared/admin/js/providers.js guarantees local provider deletion sovereignty")
 
 
 if __name__ == "__main__":

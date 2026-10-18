@@ -17,7 +17,6 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, root_dir)
 sys.path.insert(0, os.path.join(root_dir, "vm-app"))
 
-import tests.mock_env
 from app.scheduler import ConcurrencyLease, ScheduleResult, schedule, get_key_semaphore, _get_global_semaphore, AllCandidatesFailedError
 import app.scheduler as sched_mod
 

@@ -19,8 +19,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "vm-app"))
 
-import tests.mock_env  # noqa: F401
-
 PRESETS_DIR = REPO_ROOT / "shared" / "presets"
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
