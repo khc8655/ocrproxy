@@ -1178,6 +1178,7 @@ async def _async_persist_lazy_provider(provider_name: str, prov_cfg: dict):
         p_dict = cfg.setdefault("providers", {})
         target = p_dict.setdefault(provider_name, {})
         target["name"] = prov_cfg.get("name") or provider_name
+        target["origin"] = "vault"
         proto = prov_cfg.get("protocol") or "openai"
         target["protocol"] = proto
         raw_protos = prov_cfg.get("protocols")
@@ -1193,11 +1194,17 @@ async def _async_persist_lazy_provider(provider_name: str, prov_cfg: dict):
             target["adapter_rules"] = prov_cfg["adapter_rules"]
         if prov_cfg.get("models") or prov_cfg.get("cached_models"):
             target["cached_models"] = prov_cfg.get("models") or prov_cfg.get("cached_models")
+        if prov_cfg.get("rpm_per_key"):
+            target["rpm_per_key"] = prov_cfg["rpm_per_key"]
 
         t_keys = target.setdefault("keys", {})
         r_keys = prov_cfg.get("keys") or {}
         for kl, kv in r_keys.items():
             if kl and kv:
+                # 严格保护本地自建 Key，中枢懒加载绝不冲毁
+                existing_k = t_keys.get(kl)
+                if isinstance(existing_k, dict) and existing_k.get("is_local"):
+                    continue
                 t_keys[kl] = kv
 
         await save_config(cfg)

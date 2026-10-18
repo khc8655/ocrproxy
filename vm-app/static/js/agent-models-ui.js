@@ -1037,25 +1037,26 @@
     const { cfg } = getCtx();
     const localProv = cfg && cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
     const rawKeyObj = localProv && localProv.keys && localProv.keys[key];
-    const isLocalKey = !!rawKeyObj;
     const isLocalFlag = typeof rawKeyObj === 'object' && rawKeyObj !== null && rawKeyObj.is_local === true;
-
-    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
-    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
 
     if (isLocalFlag) {
       return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
     }
-    if (isVaultKey) {
+
+    const isEdgeOne = (typeof state === 'undefined' || !state || !state.config);
+    if (isEdgeOne) {
       return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
     }
-    if (isLocalKey) {
-      const isVm = (typeof state !== 'undefined' && state && state.config);
-      return isVm 
-        ? '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>'
-        : '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+
+    // In VM mode: check if provider is vault-managed
+    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
+    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
+    const isVaultProv = (localProv && localProv.origin === 'vault') || !!remoteProv;
+
+    if (isVaultKey || (isVaultProv && !isLocalFlag)) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
     }
-    return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
   }
 
   // 9. Render Single Binding Row in Key Table

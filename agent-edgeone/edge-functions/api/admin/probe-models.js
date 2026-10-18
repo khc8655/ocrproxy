@@ -126,14 +126,19 @@ export async function onRequestPost(context) {
   // 优先匹配用户勾选的 targetKeyLabels
   for (const kl of targetKeyLabels) {
     if (pKeys[kl]) {
-      candidateKeys.push({ label: kl, secret: pKeys[kl] });
+      const rawSec = pKeys[kl];
+      const secStr = (typeof rawSec === 'object' && rawSec !== null) ? rawSec.key : rawSec;
+      if (secStr && typeof secStr === 'string') {
+        candidateKeys.push({ label: kl, secret: secStr.trim() });
+      }
     }
   }
   // 若未指定或未匹配到，加入本地供应商的所有有效 Key
   if (candidateKeys.length === 0) {
-    for (const [lbl, sec] of Object.entries(pKeys)) {
-      if (sec && typeof sec === 'string') {
-        candidateKeys.push({ label: lbl, secret: sec });
+    for (const [lbl, rawSec] of Object.entries(pKeys)) {
+      const secStr = (typeof rawSec === 'object' && rawSec !== null) ? rawSec.key : rawSec;
+      if (secStr && typeof secStr === 'string' && secStr.trim()) {
+        candidateKeys.push({ label: lbl, secret: secStr.trim() });
       }
     }
   }
@@ -152,14 +157,15 @@ export async function onRequestPost(context) {
       'accept': 'application/json',
       'user-agent': 'OCRProxy-ModelProber/1.0',
     };
-    if (cand.secret) {
-      headers['authorization'] = `Bearer ${String(cand.secret).trim()}`;
+    const secStr = (typeof cand.secret === 'object' && cand.secret !== null) ? cand.secret.key : cand.secret;
+    if (secStr) {
+      headers['authorization'] = `Bearer ${String(secStr).trim()}`;
     }
 
     if (isGoogle) {
       urlsToTry.push('https://generativelanguage.googleapis.com/v1beta/openai/models');
-      if (cand.secret) {
-        urlsToTry.push(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cand.secret)}`);
+      if (secStr) {
+        urlsToTry.push(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(String(secStr).trim())}`);
       }
     } else {
       const b = base_url.replace(/\/+$/, '');

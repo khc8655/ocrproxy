@@ -1209,7 +1209,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-02</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.18-03</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1249,7 +1249,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-02</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.18-03</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -2747,25 +2747,26 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const { cfg } = getCtx();
     const localProv = cfg && cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
     const rawKeyObj = localProv && localProv.keys && localProv.keys[key];
-    const isLocalKey = !!rawKeyObj;
     const isLocalFlag = typeof rawKeyObj === 'object' && rawKeyObj !== null && rawKeyObj.is_local === true;
-
-    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
-    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
 
     if (isLocalFlag) {
       return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
     }
-    if (isVaultKey) {
+
+    const isEdgeOne = (typeof state === 'undefined' || !state || !state.config);
+    if (isEdgeOne) {
       return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
     }
-    if (isLocalKey) {
-      const isVm = (typeof state !== 'undefined' && state && state.config);
-      return isVm 
-        ? '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>'
-        : '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+
+    // In VM mode: check if provider is vault-managed
+    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
+    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
+    const isVaultProv = (localProv && localProv.origin === 'vault') || !!remoteProv;
+
+    if (isVaultKey || (isVaultProv && !isLocalFlag)) {
+      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
     }
-    return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
+    return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
   }
 
   // 9. Render Single Binding Row in Key Table
@@ -2994,7 +2995,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.18-02';
+const BUILD_VERSION = 'v2026.10.18-03';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

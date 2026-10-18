@@ -243,7 +243,12 @@ async def get_config_endpoint(request: Request):
                         if k_lbl in ("public", "__public__") or k_val == "public":
                             masked_keys[k_lbl] = "public"
                         elif isinstance(k_val, dict):
-                            masked_keys[k_lbl] = {"type": "service_account", "project_id": k_val.get("project_id", "masked"), "private_key": "●●●●●●●●"}
+                            if k_val.get("type") == "service_account" or "private_key" in k_val:
+                                masked_keys[k_lbl] = {"type": "service_account", "project_id": k_val.get("project_id", "masked"), "private_key": "●●●●●●●●"}
+                            else:
+                                m_dict = dict(k_val)
+                                m_dict["key"] = "●●●●●●●●" if k_val.get("key") else ""
+                                masked_keys[k_lbl] = m_dict
                         else:
                             masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
                     p_data["keys"] = masked_keys
@@ -819,15 +824,23 @@ async def save_config_endpoint(request: Request):
                     for k_lbl, k_val in list(in_keys.items()):
                         if is_masked_secret(k_val):
                             orig_secret = curr_keys.get(k_lbl)
-                            if orig_secret and not is_masked_secret(orig_secret):
-                                in_keys[k_lbl] = orig_secret
-                            elif isinstance(k_val, dict) and isinstance(orig_secret, dict):
-                                in_pk = k_val.get("private_key")
-                                orig_pk = orig_secret.get("private_key")
-                                if is_masked_secret(in_pk) and orig_pk and not is_masked_secret(orig_pk):
-                                    k_val["private_key"] = orig_pk
+                            if isinstance(k_val, dict):
+                                if orig_secret and not is_masked_secret(orig_secret):
+                                    real_sec = orig_secret.get("key") if isinstance(orig_secret, dict) else orig_secret
+                                    if is_masked_secret(k_val.get("key")):
+                                        k_val["key"] = real_sec
+                                    in_pk = k_val.get("private_key")
+                                    if isinstance(orig_secret, dict):
+                                        orig_pk = orig_secret.get("private_key")
+                                        if is_masked_secret(in_pk) and orig_pk and not is_masked_secret(orig_pk):
+                                            k_val["private_key"] = orig_pk
+                                else:
+                                    in_keys.pop(k_lbl, None)
                             else:
-                                in_keys.pop(k_lbl, None)
+                                if orig_secret and not is_masked_secret(orig_secret):
+                                    in_keys[k_lbl] = orig_secret.get("key") if isinstance(orig_secret, dict) else orig_secret
+                                else:
+                                    in_keys.pop(k_lbl, None)
 
         # 3. Rolling encrypted backups (keep last 20)
         try:
@@ -2016,6 +2029,8 @@ async def vault_sync_endpoint(request: Request):
                     p_cfg["adapter_rules"] = r_p["adapter_rules"]
                 if r_p.get("models"):
                     p_cfg["cached_models"] = r_p["models"]
+                if r_p.get("rpm_per_key"):
+                    p_cfg["rpm_per_key"] = r_p["rpm_per_key"]
 
                 # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key）
                 remote_key_labels = r_p.get("keys") or []

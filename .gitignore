@@ -47,3 +47,4 @@ Thumbs.db
 .env
 .edgeone/*
 .tef_dist/*
+*.bundled.html

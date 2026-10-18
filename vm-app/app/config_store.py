@@ -61,10 +61,16 @@ def is_masked_secret(val) -> bool:
         s = val.strip()
         return "●" in s or s == "********" or s.startswith("***")
     if isinstance(val, dict):
+        k = val.get("key")
+        if isinstance(k, str):
+            s = k.strip()
+            if "●" in s or s == "********" or s.startswith("***"):
+                return True
         pk = val.get("private_key")
-        if pk and isinstance(pk, str):
+        if isinstance(pk, str):
             s = pk.strip()
-            return "●" in s or s == "********" or s.startswith("***")
+            if "●" in s or s == "********" or s.startswith("***"):
+                return True
     return False
 
 
@@ -179,16 +185,25 @@ def save_to_disk(config: dict) -> None:
                         for k_lbl, k_val in list(p_data["keys"].items()):
                             if is_masked_secret(k_val):
                                 orig = disk_keys.get(k_lbl)
-                                if orig and not is_masked_secret(orig):
-                                    p_data["keys"][k_lbl] = orig
-                                    logger.info("Kernel Guard: Restored masked key %s/%s from disk.", p_name, k_lbl)
-                                elif isinstance(k_val, dict) and isinstance(orig, dict):
-                                    if is_masked_secret(k_val.get("private_key")) and orig.get("private_key") and not is_masked_secret(orig.get("private_key")):
-                                        k_val["private_key"] = orig["private_key"]
-                                        logger.info("Kernel Guard: Restored masked service account private_key for %s/%s from disk.", p_name, k_lbl)
+                                if isinstance(k_val, dict):
+                                    if orig and not is_masked_secret(orig):
+                                        orig_secret = orig.get("key") if isinstance(orig, dict) else orig
+                                        if is_masked_secret(k_val.get("key")):
+                                            k_val["key"] = orig_secret
+                                            logger.info("Kernel Guard: Restored structured key secret %s/%s from disk.", p_name, k_lbl)
+                                        if is_masked_secret(k_val.get("private_key")) and isinstance(orig, dict) and orig.get("private_key"):
+                                            k_val["private_key"] = orig["private_key"]
+                                            logger.info("Kernel Guard: Restored masked service account private_key for %s/%s from disk.", p_name, k_lbl)
+                                    else:
+                                        logger.warning("Kernel Guard: Removed masked key %s/%s with no disk counterpart.", p_name, k_lbl)
+                                        p_data["keys"].pop(k_lbl, None)
                                 else:
-                                    logger.warning("Kernel Guard: Removed masked key %s/%s with no disk counterpart.", p_name, k_lbl)
-                                    p_data["keys"].pop(k_lbl, None)
+                                    if orig and not is_masked_secret(orig):
+                                        p_data["keys"][k_lbl] = orig.get("key") if isinstance(orig, dict) else orig
+                                        logger.info("Kernel Guard: Restored masked key %s/%s from disk.", p_name, k_lbl)
+                                    else:
+                                        logger.warning("Kernel Guard: Removed masked key %s/%s with no disk counterpart.", p_name, k_lbl)
+                                        p_data["keys"].pop(k_lbl, None)
             except Exception as e:
                 logger.error("Kernel Guard: Failed to unmask keys from disk: %s", e)
 

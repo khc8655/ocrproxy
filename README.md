@@ -71,7 +71,8 @@ ocrprox (Monorepo)
   - **本地独有 Key 安全保留**：在覆盖供应商元数据的同时，智能合并密钥凭据字典，保留本地临时或独有新增的 Key，避免本地 Key 被误冲毁；
 - **精准增量同步与本地凭据最高优先级保护 (Incremental Vault Sync & Local Key Sandboxing)**：
   - **精准增量落库 (`POST /api/admin/vault/sync`)**：杜绝全量强塞污染本地数据库。同步时严格仅增量同步当前本地已添加或已绑定模型/KB 的供应商，未配置的远端提供商绝不落库；
-  - **本地自建 Key 绝对隔离与保护**：无论在 EdgeOne 还是 VM 端，在模型弹窗中点击「+ 添加本地 Key」录入的密钥均显式打上 `is_local: true` 标记。EdgeOne 中枢对外接口严格过滤防泄露；VM 执行中枢同步时，本地带有 `is_local: true` 的凭据享有最高保护，绝对不被中枢覆盖或清空。
+  - **本地自建 Key 绝对隔离与保护**：无论在 EdgeOne 还是 VM 端，在模型弹窗中点击「+ 添加本地 Key」录入的密钥均显式打上 `is_local: true` 标记。EdgeOne 中枢对外接口严格过滤防泄露；VM 执行中枢同步时，本地带有 `is_local: true` 的凭据享有最高保护，绝对不被中枢覆盖或清空；
+  - **结构化凭据防冲毁保护与运行时懒加载沙箱**：针对带有 RPM 限流覆盖的字典型 Key (`{ key, rpm, is_local }`)，Web 接口在脱敏下发时仅脱敏敏感密钥字段，完整保留运维元数据；在写盘与保存时由双层 Unmask Guard 严格还原真实密钥，杜绝假掩码覆写损坏；调度引擎异步懒加载中枢提供商时，严格保护本地自建 Key 不被覆盖，并完整同步供应商级 `rpm_per_key` 限流规则。
 
 ### 2. 精准每 Key 速率限制与零开销保障 (Per-Key RPM Rate Limiter)
 - **多 Key 免费额度精准压榨**：针对 AMD、InternLM（书生·浦语）等提供商的严苛 RPM 限制（如免费 Key 仅 2 次/分），在供应商及具体 Key 级别支持配置每分钟请求上限 (`rpm_per_key` / `rpm`)。
