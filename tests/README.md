@@ -17,7 +17,10 @@ tests/
 ├── test_live_kb_suite.py          # 📚 实机套件：KB 知识库模式对话/向量/重排/OCR 全功能测试
 ├── test_duplicate_model_prevention.mjs # 🛡️ 单元测试：知识库候选节点与 Agent 模型 Key 防重复挂载拦截断言
 ├── test_run_server_dual_stack.py  # 🌐 单元测试：VM 服务真双栈 Socket 绑定及无 IPv6 环境容灾降级断言 (发版核心门禁)
-└── test_edgeone_upgraded_ui.py    # 🖥️ 集成测试：升级版前端组件与状态契约测试
+├── test_edgeone_upgraded_ui.py    # 🖥️ 集成测试：升级版前端组件与状态契约测试 (需本地 scratch 夹具，缺失则 SKIP)
+├── test_vm_agent_ui_e2e.py        # 🧭 E2E：真实 Chromium 点击 VM Agent 控制台全流程 (自带 Mock 上游，离线可跑)
+├── test_vm_static_sync.py         # 🔁 门禁：shared/admin 与 vm-app/static 发布副本必须一致
+└── test_admin_upstream_guard.py   # 🛡️ 单元测试：管理端探活 SSRF 守卫 (允许已保存的内网/HTTP 供应商，永远拒绝元数据地址)
 ```
 
 ---
@@ -112,3 +115,16 @@ python3 tests/test_messages_pipeline.py
 | **EdgeOne 适配规则断言** | `node tests/test_edgeone_normalize.mjs` | 10 / 10 PASS |
 | **Anthropic Messages 接口测试** | `python3 tests/test_messages_pipeline.py` | 100% PASS |
 | **KB 知识库模式实机测试** | `python3 tests/test_live_kb_suite.py` | 100% PASS |
+
+
+---
+
+## VM Agent 控制台端到端测试 (`test_vm_agent_ui_e2e.py`)
+
+不做字符串断言，而是起真实 VM 服务 + OpenAI 兼容 Mock 上游，用 Chromium 真实点击完成：登录 → 新增供应商 → 新增 Key (在线校验 / 坏 Key 拦截 / 跳过校验) → 新增 Agent 模型 (探测上游并点选) → 单 Key 测 / 全部探活 / 实测 1+1 → 追加第二个 Key → `/v1/chat/completions` 真实调用 → 概览统计。全程任何 JS 异常或非预期 4xx/5xx 即失败。
+
+```bash
+pip install -r vm-app/requirements.txt playwright
+python3 -m playwright install chromium     # 或 export CHROMIUM_PATH=/usr/bin/chromium
+npm run test:e2e:vm                         # E2E_KEEP=1 保留截图与服务日志
+```

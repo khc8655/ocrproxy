@@ -102,8 +102,16 @@ def test_edgeone_security_fail_closed():
     with open(vault_fetch_file, "r", encoding="utf-8") as f:
         vault_code = f.read()
 
-    assert "status: 503" in vault_code, "api/vault/fetch.js must fail closed with 503 when unconfigured"
-    assert "status: 401" in vault_code, "api/vault/fetch.js must reject unauthorized requests with 401"
+    # Vault auth was centralised into lib/security.js#checkVaultAuth; fetch.js must delegate to it
+    assert "checkVaultAuth" in vault_code, "api/vault/fetch.js must authenticate through checkVaultAuth"
+    sec_file = os.path.join(os.path.dirname(__file__), "..", "agent-edgeone", "edge-functions", "lib", "security.js")
+    with open(sec_file, "r", encoding="utf-8") as f:
+        sec_code = f.read()
+    start = sec_code.index("export function checkVaultAuth")
+    body = sec_code[start:sec_code.index("\n}\n", start)]
+    assert "authErrorResponse(\n      503" in body or "503" in body, "checkVaultAuth must fail closed with 503 when VAULT_ACCESS_TOKEN is unset"
+    assert "401" in body, "checkVaultAuth must reject missing/invalid tokens with 401"
+    assert "timingSafeEqual" in body, "checkVaultAuth must use constant-time comparison"
     print("  PASS: api/vault/fetch.js fails closed with 503 when unconfigured and authenticates properly")
 
     # 3. Test api/config.js checkAuth
@@ -111,9 +119,13 @@ def test_edgeone_security_fail_closed():
     with open(config_file, "r", encoding="utf-8") as f:
         cfg_code = f.read()
 
-    assert "admin_unconfigured" in cfg_code or "status: 503" in cfg_code, "api/config.js must fail closed when unconfigured"
-    assert "token === proxyKey" in cfg_code and "token === adminPass" in cfg_code, "api/config.js must support both ADMIN_PASSWORD and PROXY_API_KEY"
-    print("  PASS: api/config.js supports login with both ADMIN_PASSWORD and PROXY_API_KEY")
+    # 三权分立 (lib/security.js)：/api/config 只认 ADMIN_PASSWORD，PROXY_API_KEY 明确禁止访问管理接口
+    assert "checkAdminAuth(request, env)" in cfg_code, "api/config.js must authenticate through checkAdminAuth"
+    start = sec_code.index("export function checkAdminAuth")
+    admin_body = sec_code[start:sec_code.index("\n}\n", start)]
+    assert "503" in admin_body and "admin_password_unconfigured" in admin_body, "checkAdminAuth must fail closed with 503"
+    assert "PROXY_API_KEY" not in admin_body.split("*/")[-1], "checkAdminAuth must not accept PROXY_API_KEY"
+    print("  PASS: api/config.js is admin-only (ADMIN_PASSWORD), fail-closed 503 when unconfigured")
 
 
 def test_ui_no_inline_event_interpolation():

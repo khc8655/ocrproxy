@@ -1256,6 +1256,39 @@ async def _async_persist_lazy_provider(provider_name: str, prov_cfg: dict):
         logger.warning("Failed to persist lazy-fetched provider %s to disk: %s", provider_name, e)
 
 
+
+def compute_request_budget(min_single_attempt: float, max_retries: int, num_candidates: int,
+                           raw_cap=None) -> float:
+    """Total wall-clock budget for one scheduled request.
+
+    budget = single-attempt timeout × min(max_retries, candidates) (+ small slack),
+    never below one full attempt, never above 600 s, and capped by the optional
+    `request_total_budget_sec`. When ≥2 attempts are possible and the cap allows it,
+    at least two full attempts are guaranteed so failover is never starved.
+    """
+    min_single_attempt = max(1.0, float(min_single_attempt))
+    num_candidates = max(1, int(num_candidates or 1))
+    eff_retries = min(max(1, int(max_retries or 1)), num_candidates)
+
+    endpoint_budget = min_single_attempt * eff_retries + (5.0 if eff_retries > 1 else 2.0)
+    endpoint_budget = max(min_single_attempt, min(600.0, endpoint_budget))
+
+    max_cap = 600.0
+    if raw_cap is not None:
+        try:
+            cfg_cap = float(raw_cap)
+            if cfg_cap > 0:
+                max_cap = max(min_single_attempt, cfg_cap)
+        except (ValueError, TypeError):
+            pass
+
+    total = max(min_single_attempt, min(endpoint_budget, max_cap))
+    if eff_retries >= 2:
+        safe_min_failover = min_single_attempt * 2
+        if max_cap >= safe_min_failover:
+            total = max(total, safe_min_failover)
+    return total
+
 async def schedule(
     config: dict,
     model_type: str,
@@ -1386,30 +1419,9 @@ async def schedule(
         max_retries = 3
 
     min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
-    num_candidates = max(1, len(ordered_items))
-    eff_retries = min(max_retries, num_candidates)
-
-    # Dynamic budget decoupling: calculate required retry budget based on endpoint timeout
-    endpoint_budget = min_single_attempt * eff_retries + (5.0 if eff_retries > 1 else 2.0)
-    endpoint_budget = max(min_single_attempt, min(600.0, endpoint_budget))
-
-    raw_budget = config.get("request_total_budget_sec")
-
-    # Configured request_total_budget_sec acts as an upper safety cap
-    max_cap = 600.0
-    if raw_budget is not None:
-        try:
-            cfg_cap = float(raw_budget)
-            if cfg_cap > 0:
-                max_cap = max(min_single_attempt, cfg_cap)
-        except (ValueError, TypeError):
-            pass
-
-    total_budget_sec = max(min_single_attempt, min(endpoint_budget, max_cap))
-    if eff_retries >= 2:
-        safe_min_failover = min_single_attempt * 2
-        if max_cap >= safe_min_failover:
-            total_budget_sec = max(total_budget_sec, safe_min_failover)
+    total_budget_sec = compute_request_budget(
+        min_single_attempt, max_retries, len(ordered_items), config.get("request_total_budget_sec")
+    )
 
     # Max attempts per individual provider
     try:

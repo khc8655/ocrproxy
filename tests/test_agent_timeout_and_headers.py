@@ -45,20 +45,22 @@ class TestAgentTimeoutAndHeaders(unittest.TestCase):
         self.assertEqual(cand_timeout_sec_kb, 12.0)
 
     def test_budget_scale_agent_bounds(self):
-        from app.proxy_routes import _scale_budget
-        # When explicit budget is 60s but agent timeout is 120s, budget must not clamp below 120s
-        cfg_small_budget = {"schedule_total_budget": 60.0}
-        budget = _scale_budget(cfg_small_budget, timeout=120.0, candidate_count=1)
-        self.assertEqual(budget, 120.0)
-
-        # When no explicit budget, scales with candidate count
-        cfg_auto = {}
-        budget_1 = _scale_budget(cfg_auto, timeout=120.0, candidate_count=1)
-        self.assertEqual(budget_1, 120.0)
-        budget_2 = _scale_budget(cfg_auto, timeout=120.0, candidate_count=2)
-        self.assertEqual(budget_2, 240.0)
-        budget_3 = _scale_budget(cfg_auto, timeout=120.0, candidate_count=3)
-        self.assertEqual(budget_3, 360.0)
+        # _scale_budget was removed when budgeting moved into the scheduler (f7dbe6e);
+        # assert the same contract against the extracted pure function instead.
+        from app.scheduler import compute_request_budget
+        # A small explicit cap can never clamp below one full 120 s agent attempt
+        self.assertEqual(compute_request_budget(120.0, 3, 1, raw_cap=60.0), 120.0)
+        # Without a cap the budget scales with min(max_retries, candidates)
+        self.assertEqual(compute_request_budget(120.0, 3, 1), 122.0)
+        self.assertEqual(compute_request_budget(120.0, 3, 2), 245.0)
+        self.assertEqual(compute_request_budget(120.0, 3, 3), 365.0)
+        # max_retries limits the scaling, 600 s is the hard ceiling
+        self.assertEqual(compute_request_budget(120.0, 2, 5), 245.0)
+        self.assertEqual(compute_request_budget(300.0, 3, 3), 600.0)
+        # A cap that still allows two attempts guarantees failover is not starved
+        self.assertEqual(compute_request_budget(120.0, 3, 3, raw_cap=250.0), 250.0)
+        # A cap below two attempts is honoured (but never below one attempt)
+        self.assertEqual(compute_request_budget(120.0, 3, 3, raw_cap=200.0), 200.0)
 
     def test_preset_rules_do_not_contain_timeout_rules(self):
         import json

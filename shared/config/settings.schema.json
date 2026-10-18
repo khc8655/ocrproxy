@@ -22,13 +22,12 @@
       "key": "agent_routing_strategy",
       "group": "routing",
       "label": "智能体 Key 调度策略",
-      "hint": "sticky_failover 具备会话粘性且故障自动转移；failover 纯随机故障转移；manual 按添加顺序严格直通",
+      "hint": "sticky_failover 固定当前 Key，遇 429/鉴权/配额故障自动顺延；manual 锁定当前激活 Key，不重试不切换（调度器仅支持这两种，旧值自动回落为 sticky_failover）",
       "type": "select",
       "default": "sticky_failover",
       "options": [
         { "value": "sticky_failover", "label": "粘性会话与智能故障转移 (推荐)" },
-        { "value": "failover", "label": "优先轮询与故障转移" },
-        { "value": "manual", "label": "手动严格顺序直通 (不重试)" }
+        { "value": "manual", "label": "手动严格直通 (不重试)" }
       ],
       "modes": ["agent"],
       "hosts": ["vm", "edgeone"]

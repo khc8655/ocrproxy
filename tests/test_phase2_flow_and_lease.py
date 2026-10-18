@@ -103,6 +103,11 @@ async def test_stream_concurrency_retention():
     class MockStreamResp:
         status_code = 200
         content = b""
+        headers = {"content-type": "text/event-stream"}
+        async def aiter_bytes(self):
+            # schedule() now buffers via _peek_until_payload (reads aiter_bytes
+            # until the first real SSE payload) instead of _peek_first_chunk.
+            yield b'data: {"choices":[{"delta":{"content":"first"}}]}\n\n'
         async def aclose(self):
             pass
 
@@ -146,7 +151,7 @@ async def test_stream_concurrency_retention():
         # Now consume first chunk from generator
         gen = sr.stream_resp
         first = await gen.__anext__()
-        assert first == b"data: first\n\n"
+        assert first == b'data: {"choices":[{"delta":{"content":"first"}}]}\n\n', first
         assert not sr.lease._released, "Lease must STILL be held while client is consuming stream!"
 
         # Attempt to acquire the key semaphore with a second request - it MUST be blocked!
@@ -187,8 +192,12 @@ async def test_monotonic_deadline_and_semaphore_timeout():
     """Verify that saturated key semaphore times out gracefully within bounded deadline."""
     config = {
         "run_mode": "agent",
+        # Legacy `schedule_total_budget` is migrated at config-load time only;
+        # the scheduler itself reads request_total_budget_sec (cap, never below
+        # one attempt) and agent_first_byte_timeout_sec (single attempt).
         "upstream_timeout_sec": 5.0,
-        "schedule_total_budget": 0.5,  # 0.5s hard total budget
+        "agent_first_byte_timeout_sec": 1.0,
+        "request_total_budget_sec": 0.5,
         "max_concurrency_per_key": 1,
         "candidates": {
             "chat": [

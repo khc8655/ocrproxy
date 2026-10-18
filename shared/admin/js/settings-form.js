@@ -11,8 +11,18 @@
     return (global.HOST && global.HOST.kind) ? global.HOST.kind : 'vm';
   }
 
+  // core.js declares `const state` (global lexical scope, not window.state).
+  function _currentConfig() {
+    try {
+      if (typeof state !== 'undefined' && state && state.config) return state.config;
+    } catch (_) {}
+    if (global.state && global.state.config) return global.state.config;
+    try { if (typeof cfg !== 'undefined' && cfg) return cfg; } catch (_) {}
+    return global.cfg || {};
+  }
+
   function getActiveRunMode() {
-    const cfg = (global.state && global.state.config) ? global.state.config : (global.cfg || {});
+    const cfg = _currentConfig();
     return cfg.run_mode || 'agent';
   }
 
@@ -29,7 +39,7 @@
     const schema = global.SETTINGS_SCHEMA;
     const host = getActiveHost();
     const mode = getActiveRunMode();
-    const cfg = (global.state && global.state.config) ? global.state.config : (global.cfg || {});
+    const cfg = _currentConfig();
     const s = cfg.settings || cfg || {};
 
     let html = '';

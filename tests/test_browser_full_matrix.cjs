@@ -1,9 +1,30 @@
-const puppeteer = require('/Users/xk/.gemini/antigravity/brain/2ca4fce3-c438-49d6-86ab-1bf05296978f/scratch/node_modules/puppeteer-core');
+// Live multi-target browser matrix (EdgeOne / KB VM / Agent VM). Needs real deployments.
+// CommonJS on purpose (repo root package.json is "type": "module").
+// Env: PUPPETEER_CORE_PATH (module dir), CHROME_PATH, ARTIFACTS_DIR, TEST_*_URL / TEST_*_PASS
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const CHROME_PATH = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const ARTIFACTS_DIR = '/Users/xk/.gemini/antigravity/brain/2ca4fce3-c438-49d6-86ab-1bf05296978f';
+function loadPuppeteer() {
+  const candidates = [process.env.PUPPETEER_CORE_PATH, 'puppeteer-core', 'puppeteer'].filter(Boolean);
+  for (const c of candidates) {
+    try { return require(c); } catch (_) { /* try next */ }
+  }
+  console.log('SKIP: puppeteer-core not installed (npm i -D puppeteer-core, or set PUPPETEER_CORE_PATH)');
+  process.exit(0);
+}
+const puppeteer = loadPuppeteer();
+
+function findChrome() {
+  const list = [
+    process.env.CHROME_PATH,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+  ].filter(Boolean);
+  return list.find(p => { try { return fs.existsSync(p); } catch (_) { return false; } });
+}
+const CHROME_PATH = findChrome();
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ocrproxy-matrix-'));
 
 const TARGETS = {
   edgeone: {

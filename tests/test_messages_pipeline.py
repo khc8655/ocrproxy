@@ -61,8 +61,9 @@ test(
     build_messages_upstream("https://api.b.ai/v1/", provider="bai") == "https://api.b.ai/v1/messages"
 )
 test(
-    "MiniMax domestic default (api.minimaxi.com) -> api.minimax.cn/anthropic/v1/messages",
-    build_messages_upstream("https://api.minimaxi.com/v1", provider="minimax") == "https://api.minimax.cn/anthropic/v1/messages"
+    # 国内默认与 shared/presets/minimax.json 的 anthropic_base_url 保持一致 (api.minimaxi.com/anthropic)
+    "MiniMax domestic default (api.minimaxi.com) -> api.minimaxi.com/anthropic/v1/messages",
+    build_messages_upstream("https://api.minimaxi.com/v1", provider="minimax") == "https://api.minimaxi.com/anthropic/v1/messages"
 )
 test(
     "MiniMax overseas (api.minimax.io) -> api.minimax.io/anthropic/v1/messages",
@@ -85,9 +86,10 @@ body_output_cfg = {
     "messages": [{"role": "user", "content": "Hi"}]
 }
 _normalise_messages_for_provider(body_output_cfg, "minimax")
+# 设计原则 (tests/README.md §三)：除 Gemini 外 Messages 协议参数原样透传，适配完全由预设 adapter_rules 驱动
 test(
-    "MiniMax messages: strip Claude output_config",
-    "output_config" not in body_output_cfg
+    "MiniMax messages: Claude output_config passthrough (rule-driven, no hardcoded strip)",
+    body_output_cfg.get("output_config") == {"effort": "medium"}
 )
 
 # 2. Case sensitivity: lowercase minimax-m3 preserved as MiniMax-M3
@@ -109,8 +111,8 @@ body_thinking = {
 }
 _normalise_messages_for_provider(body_thinking, "minimax")
 test(
-    "MiniMax messages: thinking budget gets type='enabled'",
-    body_thinking["thinking"].get("type") == "enabled" and body_thinking["thinking"].get("budget_tokens") == 4096
+    "MiniMax messages: thinking budget passthrough (no thinking conversion except Gemini)",
+    body_thinking["thinking"].get("budget_tokens") == 4096
 )
 
 # 4. Adaptive thinking preserved
@@ -148,7 +150,7 @@ with open(minimax_preset_path, "r", encoding="utf-8") as f:
     mm_data = json.load(f)
 test("minimax.json id is minimax", mm_data.get("id") == "minimax")
 test("minimax.json has domestic base_url", mm_data.get("base_url") == "https://api.minimaxi.com/v1")
-test("minimax.json has domestic anthropic_base_url", mm_data.get("anthropic_base_url") == "https://api.minimax.cn/anthropic")
+test("minimax.json has domestic anthropic_base_url", mm_data.get("anthropic_base_url") == "https://api.minimaxi.com/anthropic")
 test("minimax.json recommends MiniMax-M3", any(m.get("name") == "MiniMax-M3" for m in mm_data.get("recommended_models", [])))
 
 bai_preset_path = root_dir / "shared" / "presets" / "bai.json"

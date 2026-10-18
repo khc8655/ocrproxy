@@ -1841,6 +1841,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         deleteAgentModel(model);
       } else if (action === 'probe-model-all') {
         testAgentModelAll(model);
+      } else if (action === 'live-test') {
+        runLiveTest(model);
       } else if (action === 'set-active-key') {
         const key = btn.dataset.key;
         setActiveAgentKey(model, key);
@@ -1922,14 +1924,60 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   // 1. Internal Context Resolution & Fallbacks
+  // NOTE: core.js declares \`const state\` at script top level. Top-level const/let
+  // live in the shared global lexical scope, NOT on \`window\`, so \`global.state\`
+  // is always undefined on the VM console. Resolve the bare binding first.
+  function _resolveState() {
+    try {
+      if (typeof state !== 'undefined' && state) return state;
+    } catch (_) { /* TDZ / not declared */ }
+    return global.state || null;
+  }
+
   function getCtx() {
-    const isVm = Boolean(global.HOST ? global.HOST.isVm : (typeof state !== 'undefined' && state && state.config));
-    const cfgObj = (global.state && global.state.config) ? global.state.config : (typeof cfg !== 'undefined' ? cfg : {});
-    const statsObj = (global.state && global.state.stats) ? global.state.stats : { candidates_status: {} };
-    const probingKeysSet = (global.state && global.state.probingKeys) ? global.state.probingKeys : (global._probingKeys = global._probingKeys || new Set());
-    const probingModelsSet = (global.state && global.state.probingModels) ? global.state.probingModels : (global._probingModels = global._probingModels || new Set());
+    const st = _resolveState();
+    const isVm = Boolean(global.HOST ? global.HOST.isVm : (st && st.config));
+    const cfgObj = (st && st.config) ? st.config : (typeof cfg !== 'undefined' ? cfg : {});
+    const statsObj = (st && st.stats) ? st.stats : { candidates_status: {} };
+    const probingKeysSet = (st && st.probingKeys) ? st.probingKeys : (global._probingKeys = global._probingKeys || new Set());
+    const probingModelsSet = (st && st.probingModels) ? st.probingModels : (global._probingModels = global._probingModels || new Set());
     return { isVm, cfg: cfgObj, stats: statsObj, probingKeys: probingKeysSet, probingModels: probingModelsSet };
   }
+
+  /**
+   * Single source of truth for "where does this key come from".
+   * Returns 'public' | 'vault' | 'local'.
+   *  - A key explicitly flagged { is_local: true } is always local.
+   *  - On EdgeOne the console *is* the hub, so unflagged keys are hub keys.
+   *  - On VM a key is a hub key only when its provider is hub-managed
+   *    (origin === 'vault' or listed in the hub manifest) AND the hub lists that
+   *    key (or the provider came from the hub wholesale). Everything else is local.
+   * Used by the providers list, the agent-model modal and the binding rows so the
+   * three places can never disagree again.
+   */
+  function resolveKeySource(provId, keyLabel) {
+    if (keyLabel === 'public' || keyLabel === '__public__') return 'public';
+    const provs = (getCtx().cfg || {}).providers || {};
+    const localProv = provs[provId] || Object.entries(provs).find(([k]) => k.toLowerCase() === String(provId || '').toLowerCase())?.[1];
+    const raw = localProv && localProv.keys ? localProv.keys[keyLabel] : undefined;
+    if (raw && typeof raw === 'object' && raw.is_local === true) return 'local';
+    const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+    if (isEdgeOne) return 'vault';
+    const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
+    const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
+    if (remoteKeys.includes(keyLabel)) return 'vault';
+    if (localProv && localProv.origin === 'vault') return 'vault';
+    if (!localProv && remote) return 'vault';
+    return 'local';
+  }
+
+  function keySourceBadge(src, size) {
+    const fs = size || 10;
+    if (src === 'public') return \`<span class="badge badge-warning" style="font-size:\${fs}px;padding:0 6px;">免Key兜底</span>\`;
+    if (src === 'vault') return \`<span class="badge badge-neutral" style="font-size:\${fs}px;padding:1px 5px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>\`;
+    return \`<span class="badge badge-success" style="font-size:\${fs}px;padding:1px 5px;font-weight:600;" title="本地加密存储">本地</span>\`;
+  }
+
 
   function _esc(s) {
     if (typeof esc === 'function') return esc(s);
@@ -2368,22 +2416,11 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方「+ 添加本地 Key」直接录入</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
-        const isPublic = (k === 'public' || k === '__public__');
-        const keyObj = localProv?.keys?.[k];
-        const isExplicitLocal = (typeof keyObj === 'object' && keyObj !== null && keyObj.is_local === true);
-        const isEdgeOne = Boolean(global.HOST ? global.HOST.isEdgeOne : (typeof state === 'undefined' || !state || !state.config));
-        const isVault = !isPublic && (
-          isEdgeOne 
-            ? !isExplicitLocal 
-            : (!isExplicitLocal && (remoteKeys.includes(k) || (localProv && localProv.origin === 'vault')))
-        );
-        const isLocal = !isPublic && !isVault;
+        const src = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, k) : 'local';
+        const isPublic = src === 'public';
+        const isLocal = src === 'local';
         const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
-        const tag = isPublic
-          ? \`<span class="badge badge-warning" style="font-size:10px;padding:0 6px;">免Key兜底</span>\`
-          : (isVault 
-              ? \`<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">中枢</span>\`
-              : \`<span class="badge badge-success" style="font-size:10px;padding:0 6px;">本地</span>\`);
+        const tag = (typeof keySourceBadge === 'function') ? keySourceBadge(src, 10) : '';
 
         const deleteBtn = isLocal
           ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
@@ -2845,35 +2882,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
   // 8. Helper to resolve Key source badge (Local vs Vault Hub)
   function _getKeySourceBadge(prov, key, binding) {
-    if (binding && (binding.is_local === true || binding.source === 'local')) {
-      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
-    }
-    if (binding && (binding.is_vault === true || binding.source === 'vault')) {
-      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
-    }
-    const { cfg } = getCtx();
-    const localProv = cfg && cfg.providers && (cfg.providers[prov] || Object.entries(cfg.providers).find(([k]) => k.toLowerCase() === prov.toLowerCase())?.[1]);
-    const rawKeyObj = localProv && localProv.keys && localProv.keys[key];
-    const isLocalFlag = typeof rawKeyObj === 'object' && rawKeyObj !== null && rawKeyObj.is_local === true;
-
-    if (isLocalFlag) {
-      return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
-    }
-
-    const isEdgeOne = Boolean(global.HOST ? global.HOST.isEdgeOne : (typeof state === 'undefined' || !state || !state.config));
-    if (isEdgeOne) {
-      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
-    }
-
-    // In VM mode: check if provider is vault-managed
-    const remoteProv = (typeof findVaultProvider === 'function') ? findVaultProvider(prov) : null;
-    const isVaultKey = !!(remoteProv && remoteProv.keys && remoteProv.keys.some(k => (typeof k === 'string' ? k : (k.label || k.id)) === key));
-    const isVaultProv = (localProv && localProv.origin === 'vault') || !!remoteProv;
-
-    if (isVaultKey || (isVaultProv && !isLocalFlag)) {
-      return '<span class="badge badge-neutral" style="font-size:11px;padding:2px 6px;font-weight:600;">中枢</span>';
-    }
-    return '<span class="badge badge-success" style="font-size:11px;padding:2px 6px;font-weight:600;">本地</span>';
+    if (binding && (binding.is_local === true || binding.source === 'local')) return keySourceBadge('local', 11);
+    if (binding && (binding.is_vault === true || binding.source === 'vault')) return keySourceBadge('vault', 11);
+    return keySourceBadge((typeof resolveKeySource === 'function') ? resolveKeySource(prov, key) : 'local', 11);
   }
 
   // 9. Render Single Binding Row in Key Table
@@ -2995,6 +3006,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <button class="btn btn-secondary btn-sm" id="probeAllBtn-\${_esc(name)}" data-action="probe-model-all" data-model="\${_esc(name)}" \${isProbingAll ? 'disabled' : ''}>
               \${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
             </button>
+            <button class="btn btn-secondary btn-sm" id="liveTestBtn-\${_esc(name)}" data-action="live-test" data-model="\${_esc(name)}" title="以客户端身份真实调用 /v1/chat/completions，验证完整路由链路">实测 1+1</button>
             <button class="btn btn-secondary btn-sm" data-action="edit-model" data-model="\${_esc(name)}">编辑</button>
             <button class="btn btn-secondary-danger btn-sm" data-action="delete-model" data-model="\${_esc(name)}">删除</button>
           </div>
@@ -3046,6 +3058,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   // 10. Exports to Window Scope
+  global.resolveKeySource = resolveKeySource;
+  global.keySourceBadge = keySourceBadge;
   global.removeLocalKeyFromModal = removeLocalKeyFromModal;
   global.renderAgentModels = renderAgentModels;
   global.renderAgentBindingRow = renderAgentBindingRow;

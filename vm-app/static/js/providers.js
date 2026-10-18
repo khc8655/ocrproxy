@@ -81,13 +81,12 @@ function renderProviders(){
       const keys = Object.keys(prov.keys || {});
       const keyChips = keys.map(k => {
         const val = prov.keys[k];
-        const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
+        const keySrc = resolveKeySource(name, k);
+        const isLocalKey = keySrc !== 'vault';
         const gcpBadge = (typeof val === 'object' && val !== null && (val.project_id || val.location))
           ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
           : '';
-        const sourceBadge = isLocalKey
-          ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
-          : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
+        const sourceBadge = keySourceBadge(keySrc, 10);
         const actions = (isVaultManaged && !isLocalKey)
           ? `<button class="btn-ghost" style="padding:0 4px;opacity:0.4;cursor:not-allowed;" disabled title="🔒 中枢统一凭据，请在 EdgeOne 中枢修改">只读</button>`
           : `
@@ -945,7 +944,14 @@ async function saveKey(){
       if(diagBox){
         let html = `<div style="font-weight:700;margin-bottom:8px;color:var(--danger);display:flex;align-items:center;gap:6px;">${icon('alert', 16)} 协议连通性未完全通过 (已阻止保存)</div>`;
         html += '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">';
+        // Request-level rejection (bad URL, SSRF guard, missing params) carries d.error
+        // and no per-protocol results; show it instead of a misleading "未测试".
+        const topErr = d.error || (Array.isArray(d.errors) ? d.errors.join('; ') : '');
+        if (topErr && !d.protocols) {
+          html += `<div style="display:flex;align-items:flex-start;gap:6px;color:var(--danger);">${icon('xCircle', 14)} <div>${esc(topErr)} (HTTP ${r.status})</div></div>`;
+        }
         for(const pr of protos){
+          if (topErr && !d.protocols) break;
           const res = (d.protocols && d.protocols[pr]) || { valid: false, error: '未测试' };
           const pName = PROTOCOLS[pr] ? PROTOCOLS[pr].label : pr;
           if(res.valid){
