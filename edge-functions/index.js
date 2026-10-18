@@ -2745,11 +2745,18 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
       if (typeof window !== 'undefined') {
         window.modelLatencyCache = window.modelLatencyCache || {};
-        window.modelLatencyCache[\`model:\${name}:\${b.provider}:\${b.key}\`] = {
+        const cacheEntry = {
           ok: isSuccess,
           latency_ms: latency,
-          status: isSuccess ? 200 : (d.status || 500)
+          status: isSuccess ? 200 : (d.status || 500),
+          time: Date.now()
         };
+        window.modelLatencyCache[\`agent:\${name}:\${b.provider}:\${b.key}\`] = cacheEntry;
+        window.modelLatencyCache[\`model:\${name}:\${b.provider}:\${b.key}\`] = cacheEntry;
+        window.modelLatencyCache[\`prov:\${b.provider}:\${b.key}\`] = cacheEntry;
+        try {
+          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
+        } catch (_) {}
       }
     } catch(e) {
       _toast(\`[\${b.provider}/\${b.key}] 探活超时或异常: \${e.message}\`, 'err');
@@ -2806,6 +2813,25 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       const okCount = d.ok !== undefined ? d.ok : results.filter(x => x.ok).length;
       const totalCount = d.total !== undefined ? d.total : results.length;
 
+      if (typeof window !== 'undefined' && Array.isArray(results)) {
+        window.modelLatencyCache = window.modelLatencyCache || {};
+        const now = Date.now();
+        results.forEach(res => {
+          const cacheEntry = {
+            ok: !!res.ok,
+            latency_ms: (res.latency_ms !== null && res.latency_ms !== undefined) ? res.latency_ms : null,
+            status: res.status || (res.ok ? 200 : 500),
+            time: now
+          };
+          window.modelLatencyCache[\`agent:\${name}:\${res.provider}:\${res.key}\`] = cacheEntry;
+          window.modelLatencyCache[\`model:\${name}:\${res.provider}:\${res.key}\`] = cacheEntry;
+          window.modelLatencyCache[\`prov:\${res.provider}:\${res.key}\`] = cacheEntry;
+        });
+        try {
+          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
+        } catch (_) {}
+      }
+
       const chips = results.map(res => {
         const lat = (res.latency_ms !== null && res.latency_ms !== undefined)
           ? \` \${res.latency_ms >= 1000 ? (res.latency_ms/1000).toFixed(2)+'s' : res.latency_ms+'ms'}\`
@@ -2856,7 +2882,21 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const prov = b.provider;
     const key = b.key;
     const nk = 'agent:' + modelName + ':' + prov + ':' + key;
-    const ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
+    let ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
+
+    if (!ns && typeof window !== 'undefined') {
+      if (!window.modelLatencyCache) {
+        try {
+          const saved = localStorage.getItem('ocrprox_model_latency_cache');
+          if (saved) window.modelLatencyCache = JSON.parse(saved);
+        } catch (_) {}
+      }
+      if (window.modelLatencyCache) {
+        ns = window.modelLatencyCache[nk] ||
+             window.modelLatencyCache[\`model:\${modelName}:\${prov}:\${key}\`] ||
+             window.modelLatencyCache[\`prov:\${prov}:\${key}\`];
+      }
+    }
     let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
 
     if (ns) {
@@ -2908,13 +2948,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const sourceBadge = _getKeySourceBadge(prov, key, b);
 
     return \`<tr>
-      <td>\${orderInputHtml}</td>
-      <td><b>\${_esc(prov)}</b></td>
-      <td>\${keyBadgeHtml}</td>
-      <td>\${sourceBadge}</td>
-      <td>\${badge}</td>
-      <td class="text-sm text-secondary">\${time}</td>
-      <td style="text-align:right"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">\${actions}</div></td>
+      <td style="width:52px;text-align:center;">\${orderInputHtml}</td>
+      <td style="width:140px;" class="truncate" title="\${_esc(prov)}"><b>\${_esc(prov)}</b></td>
+      <td style="width:160px;" class="truncate" title="\${_esc(key)}">\${keyBadgeHtml}</td>
+      <td style="width:80px;text-align:center;">\${sourceBadge}</td>
+      <td style="width:130px;text-align:center;">\${badge}</td>
+      <td style="width:140px;text-align:center;" class="text-sm text-secondary">\${time}</td>
+      <td style="width:160px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">\${actions}</div></td>
     </tr>\`;
   }
 
@@ -2974,8 +3014,17 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>供应商</th><th>Key 别名</th><th>来源</th><th>响应耗时 / 状态</th><th>最近调用</th><th style="text-align:right">操作</th></tr></thead>
+          <table style="table-layout: fixed; width: 100%;">
+            <colgroup>
+              <col style="width: 52px;">
+              <col style="width: 140px;">
+              <col style="width: 160px;">
+              <col style="width: 80px;">
+              <col style="width: 130px;">
+              <col style="width: 140px;">
+              <col style="width: 160px;">
+            </colgroup>
+            <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:140px;">供应商</th><th style="width:160px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:160px;text-align:right;">操作</th></tr></thead>
             <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>

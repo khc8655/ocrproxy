@@ -940,11 +940,18 @@
 
       if (typeof window !== 'undefined') {
         window.modelLatencyCache = window.modelLatencyCache || {};
-        window.modelLatencyCache[`model:${name}:${b.provider}:${b.key}`] = {
+        const cacheEntry = {
           ok: isSuccess,
           latency_ms: latency,
-          status: isSuccess ? 200 : (d.status || 500)
+          status: isSuccess ? 200 : (d.status || 500),
+          time: Date.now()
         };
+        window.modelLatencyCache[`agent:${name}:${b.provider}:${b.key}`] = cacheEntry;
+        window.modelLatencyCache[`model:${name}:${b.provider}:${b.key}`] = cacheEntry;
+        window.modelLatencyCache[`prov:${b.provider}:${b.key}`] = cacheEntry;
+        try {
+          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
+        } catch (_) {}
       }
     } catch(e) {
       _toast(`[${b.provider}/${b.key}] 探活超时或异常: ${e.message}`, 'err');
@@ -1001,6 +1008,25 @@
       const okCount = d.ok !== undefined ? d.ok : results.filter(x => x.ok).length;
       const totalCount = d.total !== undefined ? d.total : results.length;
 
+      if (typeof window !== 'undefined' && Array.isArray(results)) {
+        window.modelLatencyCache = window.modelLatencyCache || {};
+        const now = Date.now();
+        results.forEach(res => {
+          const cacheEntry = {
+            ok: !!res.ok,
+            latency_ms: (res.latency_ms !== null && res.latency_ms !== undefined) ? res.latency_ms : null,
+            status: res.status || (res.ok ? 200 : 500),
+            time: now
+          };
+          window.modelLatencyCache[`agent:${name}:${res.provider}:${res.key}`] = cacheEntry;
+          window.modelLatencyCache[`model:${name}:${res.provider}:${res.key}`] = cacheEntry;
+          window.modelLatencyCache[`prov:${res.provider}:${res.key}`] = cacheEntry;
+        });
+        try {
+          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
+        } catch (_) {}
+      }
+
       const chips = results.map(res => {
         const lat = (res.latency_ms !== null && res.latency_ms !== undefined)
           ? ` ${res.latency_ms >= 1000 ? (res.latency_ms/1000).toFixed(2)+'s' : res.latency_ms+'ms'}`
@@ -1051,7 +1077,21 @@
     const prov = b.provider;
     const key = b.key;
     const nk = 'agent:' + modelName + ':' + prov + ':' + key;
-    const ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
+    let ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
+
+    if (!ns && typeof window !== 'undefined') {
+      if (!window.modelLatencyCache) {
+        try {
+          const saved = localStorage.getItem('ocrprox_model_latency_cache');
+          if (saved) window.modelLatencyCache = JSON.parse(saved);
+        } catch (_) {}
+      }
+      if (window.modelLatencyCache) {
+        ns = window.modelLatencyCache[nk] ||
+             window.modelLatencyCache[`model:${modelName}:${prov}:${key}`] ||
+             window.modelLatencyCache[`prov:${prov}:${key}`];
+      }
+    }
     let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
 
     if (ns) {

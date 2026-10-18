@@ -39,7 +39,20 @@ function renderKbModels(){
 
 function renderKbBindingRow(idx, binding, type, i, status){
   const nk = 'kb:' + type + ':' + binding.provider + ':' + binding.key + (binding.model ? (':' + binding.model) : '');
-  const ns = status[nk] || status['kb:' + type + ':' + binding.provider + ':' + binding.key] || status[binding.provider + ':' + binding.key + ':' + type];
+  let ns = status[nk] || status['kb:' + type + ':' + binding.provider + ':' + binding.key] || status[binding.provider + ':' + binding.key + ':' + type];
+
+  if (!ns && typeof window !== 'undefined') {
+    if (!window.modelLatencyCache) {
+      try {
+        const saved = localStorage.getItem('ocrprox_model_latency_cache');
+        if (saved) window.modelLatencyCache = JSON.parse(saved);
+      } catch (_) {}
+    }
+    if (window.modelLatencyCache) {
+      ns = window.modelLatencyCache[nk] ||
+           window.modelLatencyCache[`prov:${binding.provider}:${binding.key}`];
+    }
+  }
   let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
   if (ns) { 
     if (ns.is_quota || ns.status === 'quota') {
@@ -430,6 +443,20 @@ async function testCandidate(type, i){
     clearTimeout(timer);
     const d = await r.json();
     const latency = Date.now() - start;
+    if(typeof window !== 'undefined'){
+      window.modelLatencyCache = window.modelLatencyCache || {};
+      const cacheEntry = {
+        ok: !!d.success,
+        latency_ms: latency,
+        status: d.success ? 200 : (d.status || 500),
+        time: Date.now()
+      };
+      window.modelLatencyCache[probeKeyId] = cacheEntry;
+      window.modelLatencyCache[`prov:${c.provider}:${c.key}`] = cacheEntry;
+      try {
+        localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
+      } catch (_) {}
+    }
     if(d.success){
       toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活成功 (${latency}ms)`, 'ok');
     } else {
