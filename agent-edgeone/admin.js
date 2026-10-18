@@ -746,14 +746,6 @@ function renderProviders() {
               : `<span class="badge badge-error" style="font-size:10px;padding:1px 5px;">${latInfo.status || 'ERR'}</span>`;
           }
 
-          let keyRpmBadge = '';
-          const keyRpm = (typeof val === 'object' && val !== null) ? val.rpm : null;
-          if (keyRpm) {
-            keyRpmBadge = `<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(59,130,246,0.12);color:var(--color-primary);font-weight:600;" title="独立限流: ${keyRpm} 次/分钟">${keyRpm} RPM</span>`;
-          } else if (prov.rpm_per_key) {
-            keyRpmBadge = `<span class="badge" style="font-size:10px;padding:1px 6px;background:rgba(107,114,128,0.12);color:var(--color-text-2);" title="继承供应商限流: ${prov.rpm_per_key} 次/分钟">${prov.rpm_per_key} RPM</span>`;
-          }
-
           const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
           const sourceBadge = isLocalKey
             ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
@@ -765,7 +757,6 @@ function renderProviders() {
                 <span style="font-weight:600;white-space:nowrap;color:var(--color-text-1);">${esc(k)}</span>
                 ${sourceBadge}
                 ${gcpBadge}
-                ${keyRpmBadge}
                 <span class="mono text-secondary" style="font-size:11px;white-space:nowrap;">${esc(masked)}</span>
                 <span class="key-lat-slot" style="display:inline-flex;align-items:center;">${latBadge}</span>
               </div>
@@ -1055,13 +1046,10 @@ async function onEdgeOnePresetChange() {
   const messageInput = document.getElementById('m_prov_url_message');
   const responsesInput = document.getElementById('m_prov_url_responses');
   const descEl = document.getElementById('m_prov_desc');
-  const modelsWrap = document.getElementById('m_prov_models_wrap');
-  const modelsList = document.getElementById('m_prov_models_list');
 
   if (!presetId) {
     currentSelectedPreset = null;
     if (descEl) descEl.style.display = 'none';
-    if (modelsWrap) modelsWrap.style.display = 'none';
     const rpmInput = document.getElementById('m_prov_rpm');
     if (rpmInput) rpmInput.value = '';
     nameInput.disabled = false;
@@ -1115,25 +1103,6 @@ async function onEdgeOnePresetChange() {
   if (rpmInput) {
     rpmInput.value = preset.rpm_per_key ? String(preset.rpm_per_key) : '';
   }
-
-  // Recommended models preview
-  const recModels = preset.recommended_models || [];
-  if (modelsWrap && modelsList) {
-    if (recModels.length > 0) {
-      modelsWrap.style.display = 'block';
-      modelsList.innerHTML = recModels.map(rm => `
-        <div style="font-size:12px;display:flex;align-items:flex-start;gap:6px;line-height:1.4;">
-          <span style="font-weight:700;color:var(--color-primary);">•</span>
-          <div>
-            <div style="font-weight:600;color:var(--color-text-1);">${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: ${esc(rm.upstream || rm.upstream_model || rm.name)})</span></div>
-            <div class="text-secondary" style="font-size:11px;">${esc(rm.desc || rm.description || '')}</div>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      modelsWrap.style.display = 'none';
-    }
-  }
 }
 
 function openAddProviderModal(presetId) {
@@ -1150,8 +1119,6 @@ function openAddProviderModal(presetId) {
 
   const descEl = document.getElementById('m_prov_desc');
   if (descEl) descEl.style.display = 'none';
-  const modelsWrap = document.getElementById('m_prov_models_wrap');
-  if (modelsWrap) modelsWrap.style.display = 'none';
 
   const presetSelect = document.getElementById('m_prov_preset');
   if (presetSelect) {
@@ -1188,24 +1155,6 @@ function openEditProviderModal(name) {
 
   const descEl = document.getElementById('m_prov_desc');
   if (descEl) descEl.style.display = 'none';
-
-  const modelsWrap = document.getElementById('m_prov_models_wrap');
-  const modelsList = document.getElementById('m_prov_models_list');
-  const recModels = prov.recommended_models || PRESET_DEFINITIONS[name]?.recommended_models || [];
-  if (modelsWrap && modelsList && recModels.length > 0) {
-    modelsWrap.style.display = 'block';
-    modelsList.innerHTML = recModels.map(rm => `
-      <div style="font-size:12px;display:flex;align-items:flex-start;gap:6px;line-height:1.4;">
-        <span style="font-weight:700;color:var(--color-primary);">•</span>
-        <div>
-          <div style="font-weight:600;color:var(--color-text-1);">${esc(rm.name)} <span class="mono text-secondary" style="font-weight:normal;">(上游映射: ${esc(rm.upstream || rm.upstream_model || rm.name)})</span></div>
-          <div class="text-secondary" style="font-size:11px;">${esc(rm.desc || rm.description || '')}</div>
-        </div>
-      </div>
-    `).join('');
-  } else if (modelsWrap) {
-    modelsWrap.style.display = 'none';
-  }
 
   openModal('providerModal');
 }
@@ -1449,31 +1398,6 @@ function openAddKeyModal(prov, onSavedCallback = null, isLocal = false) {
     vSec.style.display = 'none';
   }
 
-  const provObj = cfg.providers?.[prov] || {};
-  const provRpm = provObj.rpm_per_key;
-  const rpmInput = document.getElementById('m_key_rpm');
-  const rpmBadge = document.getElementById('m_key_rpm_inherit_badge');
-  const rpmHint = document.getElementById('m_key_rpm_hint');
-  if (rpmInput) {
-    rpmInput.value = '';
-    if (provRpm) {
-      rpmInput.placeholder = `留空 = 继承供应商 (${provRpm} RPM)`;
-      if (rpmBadge) {
-        rpmBadge.style.display = 'inline-block';
-        rpmBadge.textContent = `供应商默认: ${provRpm} RPM`;
-      }
-      if (rpmHint) {
-        rpmHint.textContent = `当前所属供应商已配置默认限流 (${provRpm} 次/分钟)。若留空则自动继承；输入数字可为该 Key 单独覆盖。`;
-      }
-    } else {
-      rpmInput.placeholder = '留空或 0 = 不限制';
-      if (rpmBadge) rpmBadge.style.display = 'none';
-      if (rpmHint) {
-        rpmHint.textContent = '支持为该 Key 单独指定限流阈值；留空或 0 则不限制。';
-      }
-    }
-  }
-
   openModal('keyModal');
 }
 
@@ -1482,15 +1406,11 @@ function openEditKeyModal(prov, label) {
   let keyVal = '';
   let projVal = '';
   let locVal = 'global';
-  let keyRpmVal = '';
 
   if (typeof currentKeyObj === 'object' && currentKeyObj !== null) {
     keyVal = currentKeyObj.key || '';
     projVal = currentKeyObj.project_id || '';
     locVal = currentKeyObj.location || 'global';
-    if (currentKeyObj.rpm !== undefined && currentKeyObj.rpm !== null) {
-      keyRpmVal = String(currentKeyObj.rpm);
-    }
   } else {
     keyVal = String(currentKeyObj || '');
   }
@@ -1518,31 +1438,6 @@ function openEditKeyModal(prov, label) {
     vSec.style.display = 'none';
   }
 
-  const provObj = cfg.providers?.[prov] || {};
-  const provRpm = provObj.rpm_per_key;
-  const rpmInput = document.getElementById('m_key_rpm');
-  const rpmBadge = document.getElementById('m_key_rpm_inherit_badge');
-  const rpmHint = document.getElementById('m_key_rpm_hint');
-  if (rpmInput) {
-    rpmInput.value = keyRpmVal;
-    if (provRpm) {
-      rpmInput.placeholder = `留空 = 继承供应商 (${provRpm} RPM)`;
-      if (rpmBadge) {
-        rpmBadge.style.display = 'inline-block';
-        rpmBadge.textContent = `供应商默认: ${provRpm} RPM`;
-      }
-      if (rpmHint) {
-        rpmHint.textContent = `当前所属供应商已配置默认限流 (${provRpm} 次/分钟)。若留空则自动继承；输入数字可为该 Key 单独覆盖。`;
-      }
-    } else {
-      rpmInput.placeholder = '留空或 0 = 不限制';
-      if (rpmBadge) rpmBadge.style.display = 'none';
-      if (rpmHint) {
-        rpmHint.textContent = '支持为该 Key 单独指定限流阈值；留空或 0 则不限制。';
-      }
-    }
-  }
-
   openModal('keyModal');
 }
 
@@ -1556,17 +1451,6 @@ async function saveKeyModal() {
   if (diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
 
   if (!label || !val) { toast('请填写 Key 别名与密钥明文', 'err'); return; }
-
-  const rpmRaw = (document.getElementById('m_key_rpm')?.value || '').trim();
-  let keyRpm = null;
-  if (rpmRaw !== '') {
-    const parsed = Math.floor(Number(rpmRaw));
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      toast('RPM 上限必须是不小于 0 的整数', 'err');
-      return;
-    }
-    keyRpm = parsed;
-  }
 
   const isVertex = isVertexProvider(prov);
   let vertexKeyMeta = null;
@@ -1686,11 +1570,6 @@ async function saveKeyModal() {
   let finalKeyVal;
   if (vertexKeyMeta) {
     finalKeyVal = { ...vertexKeyMeta };
-    if (keyRpm !== null && keyRpm > 0) {
-      finalKeyVal.rpm = keyRpm;
-    }
-  } else if (keyRpm !== null && keyRpm > 0) {
-    finalKeyVal = { key: val, rpm: keyRpm };
   } else {
     finalKeyVal = val;
   }
