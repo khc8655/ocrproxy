@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS = {
   cooldown_403_sec: 600,
   circuit_break_threshold: 3,
   circuit_cooldown_sec: 60,
+  edge_peek_window_sec: 20,     // max client-visible silence before first byte (EdgeOne<->client idle ~25s)
 };
 
 /**
