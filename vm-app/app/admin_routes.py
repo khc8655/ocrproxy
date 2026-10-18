@@ -31,6 +31,86 @@ def _check_auth(request: Request) -> bool:
     return verify_admin_auth(request)
 
 
+_METADATA_HOSTS = {"169.254.169.254", "metadata.google.internal", "metadata", "100.100.100.200", "fd00:ec2::254"}
+
+
+def _origin_of(url: str):
+    try:
+        u = urlparse(url or "")
+        if not u.hostname:
+            return None
+        port = u.port or (443 if u.scheme == "https" else 80)
+        return (u.scheme.lower(), u.hostname.lower(), port)
+    except Exception:
+        return None
+
+
+def _configured_upstream_origins(config: dict) -> set:
+    """Origins (scheme, host, port) the admin has explicitly saved as provider endpoints."""
+    origins = set()
+    for prov in ((config or {}).get("providers") or {}).values():
+        if not isinstance(prov, dict):
+            continue
+        for u in (prov.get("base_url"), prov.get("anthropic_base_url")):
+            o = _origin_of(u)
+            if o:
+                origins.add(o)
+        for kv in (prov.get("keys") or {}).values():
+            if isinstance(kv, dict):
+                o = _origin_of(kv.get("base_url"))
+                if o:
+                    origins.add(o)
+    return origins
+
+
+def _is_link_local_or_metadata(host: str) -> bool:
+    host = (host or "").lower().strip("[]")
+    if host in _METADATA_HOSTS:
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+        return addr.is_link_local
+    except ValueError:
+        return False
+
+
+async def _admin_upstream_block_reason(url: str, config: dict = None):
+    """SSRF guard for admin-side probes (verify-key / test / probe-models).
+
+    Runtime routing already calls whatever base_url the admin saved (including
+    self-hosted http://10.x / http://127.0.0.1 endpoints such as vLLM/Ollama),
+    so admin probes must accept the same endpoints or every "test" button lies.
+    Rules:
+      * cloud metadata / link-local targets are always blocked;
+      * public HTTPS is always allowed;
+      * HTTP or private/loopback targets are allowed only when the exact origin
+        (scheme+host+port) is a provider endpoint saved in the config.
+    Returns None when allowed, otherwise a human-readable reason.
+    """
+    try:
+        parsed = urlparse(url or "")
+    except Exception:
+        return "上游 URL 格式无效"
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in ("http", "https") or not host:
+        return "上游 URL 格式无效"
+    if _is_link_local_or_metadata(host):
+        return "禁止访问云厂商元数据 / 链路本地地址"
+    try:
+        resolved = await asyncio.to_thread(socket.getaddrinfo, host, None)
+        if any(_is_link_local_or_metadata(info[4][0]) for info in resolved):
+            return "禁止访问云厂商元数据 / 链路本地地址"
+    except (socket.gaierror, socket.herror, UnicodeError):
+        pass
+    if parsed.scheme == "https" and not await _is_blocked_hostname(host):
+        return None
+    if _origin_of(url) in _configured_upstream_origins(config or {}):
+        return None
+    return "仅允许 HTTPS 公网地址；内网或 HTTP 上游请先在「供应商」中保存该 Base URL 后再测试"
+
+
 def _check_ip_address(addr_str: str) -> bool:
     """Check if an IP address is private, loopback, link-local, or multicast."""
     try:
@@ -992,12 +1072,13 @@ async def verify_key_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"valid": False, "error": "base_url 格式无效"})
 
-    if parsed.scheme != "https":
-        return JSONResponse(status_code=400, content={"valid": False, "error": "base_url 必须使用 HTTPS 协议"})
-
-    hostname = parsed.hostname.lower() if parsed.hostname else ""
-    if await _is_blocked_hostname(hostname):
-        return JSONResponse(status_code=400, content={"valid": False, "error": "不允许访问内网或本地地址"})
+    _cfg_for_guard = await get_config()
+    for _u in (base_url, anthropic_base_url):
+        if not _u:
+            continue
+        _reason = await _admin_upstream_block_reason(_u, _cfg_for_guard)
+        if _reason:
+            return JSONResponse(status_code=400, content={"valid": False, "error": _reason})
 
     results = {}
     overall_valid = True
@@ -1173,6 +1254,8 @@ async def test_candidate_endpoint(request: Request):
     category = body.get("category", "kb")
     model_name = body.get("model_name") or model
 
+    # HOST.buildTestBody (shared admin UI) sends `model_name`; older callers send `model`.
+    model = model or model_name
     if not provider_name or not key_label or not model:
         return JSONResponse(status_code=400, content={"error": "Missing provider, key, or model"})
 
@@ -1192,9 +1275,9 @@ async def test_candidate_endpoint(request: Request):
         api_key = str(api_key_raw)
         base_url = provider.get("base_url", "")
     try:
-        parsed = urlparse(base_url)
-        if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
-            return JSONResponse(status_code=400, content={"valid": False, "error": "Blocked or invalid upstream URL"})
+        _reason = await _admin_upstream_block_reason(base_url, config)
+        if _reason:
+            return JSONResponse(status_code=400, content={"valid": False, "success": False, "error": _reason})
     except Exception:
         return JSONResponse(status_code=400, content={"valid": False, "error": "Invalid upstream URL"})
 
@@ -1303,10 +1386,10 @@ async def test_agent_model_endpoint(request: Request):
             api_key = str(api_key_raw)
             base_url = provider.get("base_url", "")
         try:
-            parsed = urlparse(base_url)
-            if parsed.scheme != "https" or await _is_blocked_hostname(parsed.hostname or ""):
+            _reason = await _admin_upstream_block_reason(base_url, config)
+            if _reason:
                 return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
-                        "status": None, "latency_ms": None, "error": "Blocked or invalid upstream URL"}
+                        "status": None, "latency_ms": None, "error": _reason}
         except Exception:
             return {"provider": b.get("provider"), "key": b.get("key"), "ok": False,
                     "status": None, "latency_ms": None, "error": "Invalid upstream URL"}
@@ -1610,6 +1693,7 @@ async def probe_models_endpoint(request: Request):
         candidate_keys.append(("自定义Key", api_key))
 
     cfg = await get_config()
+    _probe_cfg = cfg
     p_local = cfg.get("providers", {}).get(provider, {})
     if not base_url:
         base_url = p_local.get("base_url", "")
@@ -1719,12 +1803,9 @@ async def probe_models_endpoint(request: Request):
             u = pt["url"]
             hdrs = pt["headers"]
             try:
-                parsed_u = urlparse(u)
-                if parsed_u.scheme != "https":
-                    probe_errors.append(f"[{label}] {u} -> 探针 URL 必须使用 HTTPS 协议")
-                    continue
-                if await _is_blocked_hostname(parsed_u.hostname or ""):
-                    probe_errors.append(f"[{label}] {u} -> 不允许访问内网或本地地址 (SSRF Protection)")
+                _reason = await _admin_upstream_block_reason(u, _probe_cfg)
+                if _reason:
+                    probe_errors.append(f"[{label}] {u} -> {_reason}")
                     continue
             except Exception as pe:
                 probe_errors.append(f"[{label}] {u} -> 探针 URL 无效: {pe}")

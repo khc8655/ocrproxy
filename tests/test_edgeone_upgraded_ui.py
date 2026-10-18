@@ -3,7 +3,20 @@ import http.server
 import socketserver
 import threading
 import asyncio
-from playwright.async_api import async_playwright
+import sys
+import shutil
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    print("SKIP: playwright 未安装 (pip install playwright)")
+    sys.exit(0)
+
+# Fixture is a private, git-ignored dump of a real EdgeOne config (contains secrets).
+_FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "merged_edgeone_config.json")
+if not os.path.exists(_FIXTURE) and not os.path.exists("scratch/merged_edgeone_config.json"):
+    print("SKIP: 缺少 scratch/merged_edgeone_config.json 夹具 (git-ignored，需本地导出 EdgeOne 配置)")
+    sys.exit(0)
+_CHROMIUM = os.environ.get("CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -83,7 +96,7 @@ async def run_suite():
 
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await (p.chromium.launch(headless=True, executable_path=_CHROMIUM, args=['--no-sandbox']) if _CHROMIUM else p.chromium.launch(headless=True))
             page = await browser.new_page(viewport={"width": 1280, "height": 850})
             
             page.on("console", lambda msg: print(f"[Browser Console] {msg.type}: {msg.text}"))

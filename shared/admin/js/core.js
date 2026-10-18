@@ -239,7 +239,8 @@ async function login(){
     if(r.ok){
       state.key=k;
       sessionStorage.setItem('admin_key',k);
-      try { localStorage.setItem('ocrproxy_edge_token', k); } catch(_) {}
+      // VM 控制台只在 sessionStorage 保存管理员密码 (关闭标签页即失效)；不再明文长期写入 localStorage
+      try { localStorage.removeItem('ocrproxy_edge_token'); } catch(_) {}
       toast('登录成功','ok');
       await initAppAfterAuth();
     }
