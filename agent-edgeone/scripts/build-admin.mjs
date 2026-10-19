@@ -71,6 +71,14 @@ const css = readFileSync(cssPath, 'utf8');
 // 3. Read EdgeOne standalone JS & Bundle Shared Component: agent-models-ui.js
 const agentModelsUiPath = join(sharedRoot, 'js', 'agent-models-ui.js');
 let bundledJs = '';
+// Same host adapter as the VM console (HOST.api / HOST.buildTestBody), pinned to the EdgeOne kind.
+const hostJsPath = join(sharedRoot, 'js', 'host.js');
+if (!existsSync(hostJsPath)) {
+  console.error(`FATAL: Missing shared host adapter: ${hostJsPath}`);
+  process.exit(1);
+}
+bundledJs += "window.__HOST_KIND__ = 'edgeone';\n" + readFileSync(hostJsPath, 'utf8') + '\n\n';
+console.log(`[Component] Bundled shared host adapter: ${hostJsPath}`);
 if (existsSync(agentModelsUiPath)) {
   bundledJs += readFileSync(agentModelsUiPath, 'utf8') + '\n\n';
   console.log(`[Component] Bundled shared agent-models-ui component: ${agentModelsUiPath}`);

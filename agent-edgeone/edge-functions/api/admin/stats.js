@@ -11,6 +11,7 @@ import { agentNodeKey, readNodeStats } from '../../lib/nodestats.js';
 
 async function getStats(context) {
   const candStatus = {};
+  const activeKeys = {};
   try {
     const kv = resolveKvBinding(context)?.kv || null;
     const cfg = await loadConfig(context.env, kv);
@@ -36,7 +37,14 @@ async function getStats(context) {
       const now = Date.now();
       bindings.forEach((b, i) => {
         const nk = nodeKeys[i];
-        if (last[nk]) candStatus[nk] = { ...last[nk], category: 'agent', model: b.modelName };
+        if (last[nk]) {
+          candStatus[nk] = { ...last[nk], category: 'agent', model: b.modelName };
+          // "使用中" = the key that served this model's most recent successful call (same as VM active_keys).
+          if (last[nk].status === 200) {
+            const cur = activeKeys[b.modelName];
+            if (!cur || last[nk].time > cur.time) activeKeys[b.modelName] = { key: b.keyLabel, time: last[nk].time };
+          }
+        }
         const expiresAt = cooldowns.get(bindingId(b));
         if (expiresAt && expiresAt > now) {
           const prev = candStatus[nk];
@@ -59,7 +67,7 @@ async function getStats(context) {
   return {
     ok: true,
     agent: {
-      active_keys: {}
+      active_keys: Object.fromEntries(Object.entries(activeKeys).map(([m, v]) => [m, v.key]))
     },
     candidates_status: candStatus,
     error_logs: [],

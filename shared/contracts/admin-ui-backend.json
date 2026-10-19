@@ -1,0 +1,56 @@
+{
+  "$comment": "Backend contract the shared admin UI (shared/admin/js/agent-models-ui.js + host.js) relies on. Every backend (VM, EdgeOne) must satisfy it; tests/test_backend_contract.py runs the same scenarios against both. When the UI starts reading a new field, add it here first.",
+  "version": 1,
+  "host_glue": {
+    "$comment": "What the page hosting agent-models-ui.js must provide (VM: shared/admin/js/core.js; EdgeOne: agent-edgeone/admin.js).",
+    "globals": ["HOST.api.config", "HOST.api.stats", "HOST.api.testKey", "HOST.buildTestBody", "state.config", "state.stats"],
+    "state.stats": "the last GET HOST.api.stats response, loaded together with the config"
+  },
+  "endpoints": {
+    "stats": {
+      "method": "GET",
+      "path_from": "HOST.api.stats",
+      "time_granularity_ms": 10000,
+      "$time_granularity": "EdgeOne rewrites an unchanged status at most every 10s per isolate (KV write budget); a status change is written at once. VM is exact.",
+      "response": {
+        "candidates_status": {
+          "key_pattern": "agent:<agent_model>:<provider>:<key_label>",
+          "entry": {
+            "status": "int (HTTP status of the last attempt; 200 = ok)",
+            "latency_ms": "int >= 0 or null",
+            "time": "int, epoch ms of the last attempt",
+            "is_quota": "bool"
+          }
+        },
+        "agent.active_keys": "object: agent_model -> key_label of the key that served the last successful call"
+      }
+    },
+    "test_key": {
+      "method": "POST",
+      "path_from": "HOST.api.testKey",
+      "request_from": "HOST.buildTestBody(binding, upstream_model, provider, agent_model)",
+      "response": {
+        "success|ok": "bool",
+        "status": "int (upstream HTTP status) when the upstream answered",
+        "latency_ms": "int",
+        "error|verdict": "string when not ok"
+      },
+      "side_effect": "stats.candidates_status[agent:<agent_model>:<provider>:<key>] reflects this test"
+    },
+    "probe_models": {
+      "method": "POST",
+      "path": "/api/admin/probe-models",
+      "request": {"provider": "str", "base_url": "str", "key_label": "str", "key_labels": ["str"]},
+      "response": {"ok": "bool", "models": "list of upstream model ids (strings) or objects with id", "used_key_label": "str, optional", "error": "str when not ok"}
+    }
+  },
+  "scenarios": [
+    {"id": "S1", "title": "真实 chat 调用后，模型列表显示该 Key 的状态/耗时/时间", "do": "POST /v1/chat/completions model=claude (stream)", "expect": "stats entry agent:claude:up:k1 status=200, latency_ms>0, time>=t0"},
+    {"id": "S2", "title": "真实调用后「使用中」是实际在用的 Key", "do": "same as S1", "expect": "agent.active_keys.claude == k1"},
+    {"id": "S3", "title": "真实 messages 调用同样记录", "do": "POST /v1/messages model=claude", "expect": "stats entry agent:claude:up:k1 status=200, time updated"},
+    {"id": "S4", "title": "k1 被限流时切到 k2，两行状态各自正确", "do": "upstream returns 429 for k1; POST /v1/chat/completions", "expect": "k1 status=429, k2 status=200, active_keys.claude == k2"},
+    {"id": "S5", "title": "手动「测」写回同一条状态", "do": "POST HOST.api.testKey with HOST.buildTestBody for k2", "expect": "response success|ok true; stats entry agent:claude:up:k2 status=200, time>=t_test"},
+    {"id": "S6", "title": "探测上游模型列表", "do": "POST /api/admin/probe-models provider=up", "expect": "ok true, models contains mock-chat-1"},
+    {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""}
+  ]
+}

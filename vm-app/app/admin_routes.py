@@ -1344,6 +1344,10 @@ async def test_candidate_endpoint(request: Request):
 
     # HOST.buildTestBody (shared admin UI) sends `model_name`; older callers send `model`.
     model = model or model_name
+    # Stats key for agent tests: the agent model name (UI reads agent:<agent_model>:<provider>:<key>).
+    # `model_name` is the upstream model in HOST.buildTestBody, so prefer the explicit `agent_model`.
+    if category == "agent" and body.get("agent_model"):
+        model_name = str(body.get("agent_model"))
     if not provider_name or not key_label or not model:
         return JSONResponse(status_code=400, content={"error": "Missing provider, key, or model"})
 

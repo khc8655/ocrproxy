@@ -404,8 +404,24 @@ async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isSt
   }
 
   if (!isStream) {
-    clearTimeout(timer);
-    return { kind: 'success', response: resp };
+    // Re-wrap: a fetch() Response has immutable headers (the caller sets x-proxy-* on it, which
+    // threw "immutable" -> HTTP 500 for every non-stream /v1/messages call), and its body is already
+    // decoded, so upstream content-encoding/length must not be forwarded.
+    let rawBytes;
+    try {
+      rawBytes = await resp.arrayBuffer();
+    } finally {
+      clearTimeout(timer);
+    }
+    const outHeaders = new Headers();
+    outHeaders.set('content-type', resp.headers.get('content-type') || 'application/json; charset=utf-8');
+    outHeaders.set('cache-control', 'no-store');
+    outHeaders.set('access-control-allow-origin', '*');
+    outHeaders.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+    outHeaders.set('access-control-allow-headers', '*');
+    const reqId = resp.headers.get('request-id') || resp.headers.get('x-request-id');
+    if (reqId) outHeaders.set('request-id', reqId);
+    return { kind: 'success', response: new Response(rawBytes, { status: resp.status, statusText: resp.statusText, headers: outHeaders }) };
   }
 
   clearTimeout(timer);
