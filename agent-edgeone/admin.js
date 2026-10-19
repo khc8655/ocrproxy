@@ -6,6 +6,18 @@ let stateData = [];
 let ipData = {};
 let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
+// Runtime stats from /api/admin/stats (last call per key, active key), same source as the VM console.
+let edgeStats = { candidates_status: {}, agent: { active_keys: {} } };
+// Host glue required by shared/admin/js/agent-models-ui.js (see shared/contracts/admin-ui-backend.json):
+// `state.config` / `state.stats`, exactly like the VM console's core.js state.
+const _edgeProbingKeys = new Set();
+const _edgeProbingModels = new Set();
+if (!Object.getOwnPropertyDescriptor(window, 'state')) {
+  Object.defineProperty(window, 'state', {
+    configurable: true,
+    get() { return { config: cfg, stats: edgeStats, probingKeys: _edgeProbingKeys, probingModels: _edgeProbingModels }; },
+  });
+}
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
 const BUILD_VERSION = 'v2026.10.19-03';
@@ -387,10 +399,18 @@ function clearLoginCacheAndReload() {
 // ---- Data Fetching -------------------------------------------------------
 async function loadAllData() {
   try {
-    const [cfgRes, healthRes] = await Promise.all([
+    const [cfgRes, healthRes, statsRes] = await Promise.all([
       api('GET', '/api/config'),
       api('GET', '/health').catch(() => ({})),
+      api('GET', '/api/admin/stats').catch(() => null),
     ]);
+    if (statsRes && typeof statsRes === 'object') {
+      edgeStats = {
+        ...statsRes,
+        candidates_status: statsRes.candidates_status || {},
+        agent: { active_keys: {}, ...(statsRes.agent || {}) },
+      };
+    }
 
     cfg = cfgRes.config || cfgRes;
     cfgMeta = {
@@ -413,8 +433,6 @@ function renderAll() {
   try { renderAgentModels(); } catch (e) { console.error('renderAgentModels failed:', e); }
   try { renderProviders(); } catch (e) { console.error('renderProviders failed:', e); }
   try { renderSettings(); } catch (e) { console.error('renderSettings failed:', e); }
-  try { renderRawJson(); } catch (e) { console.error('renderRawJson failed:', e); }
-  try { renderAccess(); } catch (e) { console.error('renderAccess failed:', e); }
 }
 
 function renderSettings() {

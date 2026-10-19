@@ -59,7 +59,9 @@
         category: binding.category || 'agent',
         provider: binding.provider || provName,
         key: binding.key,
-        model_name: targetModel || binding.model || binding.model_name || ''
+        model_name: targetModel || binding.model || binding.model_name || '',
+        // Agent model name: the test result is stored as this binding's last call (agent:<agent_model>:<prov>:<key>).
+        agent_model: agentModel || ''
       };
     },
 
