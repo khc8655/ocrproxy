@@ -466,11 +466,17 @@ async def get_presets_catalog_endpoint(request: Request):
     if not force and _CATALOG_CACHE["data"] and _CATALOG_CACHE["expires_at"] > now:
         return JSONResponse(content={"ok": True, "source": "cache", "catalog": _CATALOG_CACHE["data"]})
 
-    catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
-    source = "remote"
-    if not catalog_data:
+    catalog_data = None
+    source = "local"
+    if force:
+        catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
+        source = "remote"
+    if not catalog_data or not catalog_data.get("providers"):
         catalog_data = _get_local_catalog()
-        source = "local_fallback"
+        source = "local"
+    if not catalog_data or not catalog_data.get("providers"):
+        catalog_data = await _fetch_remote_json(_CDN_CATALOG_URLS, timeout=2.0)
+        source = "remote"
 
     _CATALOG_CACHE["data"] = catalog_data
     _CATALOG_CACHE["expires_at"] = now + 600.0
@@ -485,7 +491,7 @@ async def get_presets_catalog_endpoint(request: Request):
 
 @router.get("/presets/detail")
 async def get_preset_detail_endpoint(request: Request, id: str = ""):
-    """Fetch complete preset definition for a single provider on demand."""
+    """Fetch complete preset definition for a single provider (local disk first)."""
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
@@ -498,12 +504,19 @@ async def get_preset_detail_endpoint(request: Request, id: str = ""):
     if not force and cached:
         return JSONResponse(content={"ok": True, "source": "cache", "preset": cached})
 
-    urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
-    preset_data = await _fetch_remote_json(urls, timeout=2.0)
-    source = "remote"
+    preset_data = None
+    source = "local"
+    if force:
+        urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
+        preset_data = await _fetch_remote_json(urls, timeout=2.0)
+        source = "remote"
     if not preset_data:
         preset_data = _get_local_preset(pid)
-        source = "local_fallback"
+        source = "local"
+    if not preset_data:
+        urls = [f"{base}/{pid}.json" for base in _CDN_PRESET_BASE_URLS]
+        preset_data = await _fetch_remote_json(urls, timeout=2.0)
+        source = "remote"
 
     if not preset_data:
         return JSONResponse(status_code=404, content={"error": f"Preset '{pid}' not found"})
@@ -2236,6 +2249,25 @@ async def vault_sync_endpoint(request: Request):
                     p_cfg["cached_models"] = r_p["models"]
                 if r_p.get("rpm_per_key"):
                     p_cfg["rpm_per_key"] = r_p["rpm_per_key"]
+
+                # 预设与规则版本信息落库（中枢与本地预设回退双重保障）
+                preset_id = r_p.get("preset_id") or p_cfg.get("preset_id")
+                preset_version = r_p.get("preset_version") or r_p.get("version") or p_cfg.get("preset_version")
+                preset_updated_at = r_p.get("preset_updated_at") or r_p.get("updated_at") or p_cfg.get("preset_updated_at")
+                local_preset = _get_local_preset(preset_id or p_id)
+                if local_preset:
+                    if not preset_id:
+                        preset_id = local_preset.get("id", p_id)
+                    if not preset_version:
+                        preset_version = local_preset.get("version")
+                    if not preset_updated_at:
+                        preset_updated_at = local_preset.get("updated_at")
+                if preset_id:
+                    p_cfg["preset_id"] = preset_id
+                if preset_version:
+                    p_cfg["preset_version"] = preset_version
+                if preset_updated_at:
+                    p_cfg["preset_updated_at"] = preset_updated_at
 
                 # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key，且过滤本地删除墓碑）
                 remote_key_labels = r_p.get("keys") or []

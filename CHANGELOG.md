@@ -4,6 +4,31 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v2026.10.19-10] - 2026-10-19
+
+### 预设下拉协议规范化、列表版本徽章真理源回显与中枢资产本地持久化
+- **预设下拉选项协议纯净化与标准化**：
+  - 彻底移除添加供应商下拉框中混杂的规则版本号与更新日期杂质，严格遵循设计规约收敛为 `厂商名称 (协议)` 格式（如 `MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`）；
+  - 下拉选项统一收敛于 `<optgroup label="官方预设供应商">`，版本与日期仅在选定后的详情说明中呈现。
+- **列表卡片规则版本与日期小标签真理源回显**：
+  - 在供应商卡片 Header 恢复并规范规则小标签 `[规则 v{version} · {updated_at}]`（例如 `规则 v1.4.0 · 2026-10-18`）；
+  - 建立三级回退真理源解析算法：`持久化属性 (preset_id/version/updated_at)` $\to$ `本地 16 套预设库精准索引` $\to$ `自定义规则/默认`；
+  - 补齐 `FALLBACK_PRESETS` 为 16 款完整官方适配规则（补全 cline, deepseek, nvidia, openai, openrouter 等），彻底杜绝官方预设丢失规则版本或错误显示为「默认」的问题。
+- **中枢拉取资产本地持久化与本地磁盘优先秒级直出**：
+  - 落实“从中枢拉下来就是本地的”原则，EdgeOne Vault Hub 清单输出完整携带 `preset_id`、`preset_version`、`preset_updated_at`；
+  - VM 端 `/vault/sync` 存储并持久化预设元数据入库；
+  - VM 端 `/presets/catalog` 与 `/presets/detail` 调整为本地磁盘优先秒读，消除向 GitHub 探测造成的 2 秒卡顿或外网超时失败。
+- **极简发版质量硬门禁 (Lean Release Gatekeeper v2.0)**：
+  - 建立 `tests/verify_release_gate.py`，涵盖 G1~G5 黄金法则（版本强一致、EdgeOne 专属身份强断言、安装脚本零漂移、SSOT 编译一致、零明文密钥泄漏），<0.3s 极速拦截；
+  - 强断言 EdgeOne 专属身份（`<title>OCRProxy EdgeOne 控制台</title>`、`EdgeOne 边缘版`、`window.__HOST_KIND__ = 'edgeone'`）与金库中枢常驻，彻底防止部署或编译为 VM Agent 版本。
+- **四层全矩阵自动化测试套件 100% 全绿**：
+  - Layer 1 Unit: 199 项 ESM 单元测试全绿；
+  - Layer 2 Contract: VM 与 EdgeOne S1~S6/U1 后端契约全绿；
+  - Layer 3 Security: 零内联事件处理器与配置加密审计全绿；
+  - Layer 4 E2E: Playwright 浏览器端到端 76 项断言全部 100% 通过。
+
+---
+
 ## [v2026.10.19-09] - 2026-10-19
 
 ### 落地方案 A 单一真理源编译器与 14 项界面及排版深度缺陷彻底根治

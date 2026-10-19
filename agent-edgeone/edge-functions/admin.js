@@ -720,7 +720,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-09</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-10</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -1227,7 +1227,7 @@ function pageHtml() {
       <div class="form-group" id="p_preset_wrap">
         <label class="form-label">供应商模板与类型 (自定义或官方预设)</label>
         <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
-          <option value="">-- 自定义供应商 (本地内置·手动填写) --</option>
+          <option value="">-- 自定义供应商 (手动填写) --</option>
         </select>
         <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
       </div>
@@ -3201,6 +3201,41 @@ function getProviderPermissions(provName, provObj) {
   };
 }
 
+function getProviderPresetMeta(provName, provObj) {
+  const p = provObj || (state.config && state.config.providers && state.config.providers[provName]) || {};
+  let ver = p.preset_version;
+  let date = p.preset_updated_at;
+
+  const presetKey = (p.preset_id || provName || '').toLowerCase().trim();
+  const preset = (state.cachedPresets && state.cachedPresets[presetKey])
+    || (state.presetCatalog && state.presetCatalog.find(x => x.id && x.id.toLowerCase() === presetKey))
+    || FALLBACK_PRESETS[presetKey];
+
+  if (preset) {
+    if (!ver) ver = preset.version;
+    if (!date) date = preset.updated_at;
+  }
+  return { version: ver, updated_at: date, isPreset: Boolean(preset) };
+}
+
+function getPresetProtocolLabel(p) {
+  if (!p) return 'openai';
+  const rawProtos = p.protocols || (Array.isArray(p.protocols) ? p.protocols : null);
+  const isAnthropic = Boolean(
+    p.anthropic_base_url ||
+    p.anthropic_messages ||
+    (p.features && p.features.anthropic_messages) ||
+    (rawProtos && (rawProtos.includes('messages') || rawProtos.includes('anthropic')))
+  );
+  const isResponses = Boolean(
+    p.protocol === 'responses' ||
+    (rawProtos && rawProtos.includes('responses'))
+  );
+  if (isResponses) return 'openai+responses';
+  if (isAnthropic) return 'openai+message';
+  return 'openai';
+}
+
 function renderProviders(){
   const box = document.getElementById('providersBox');
   const rail = document.getElementById('alphabetNavRail');
@@ -3297,8 +3332,16 @@ function renderProviders(){
       const provRpmBadge = (provRpmVal && Number(provRpmVal) > 0)
         ? \`<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">\${provRpmVal} RPM</span>\`
         : '';
-      const ver = prov.preset_version ? \`规则 v\${prov.preset_version}\` : (prov.adapter_rules ? '自定义规则' : '默认');
-      const dateText = prov.preset_updated_at ? \` · \${prov.preset_updated_at}\` : '';
+      const meta = getProviderPresetMeta(name, prov);
+      let ver = '';
+      if (meta.version) {
+        ver = \`规则 v\${meta.version}\`;
+      } else if (prov.adapter_rules) {
+        ver = '自定义规则';
+      } else {
+        ver = '默认';
+      }
+      const dateText = meta.updated_at ? \` · \${meta.updated_at}\` : '';
       const verBadge = \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本与更新日期">\${esc(ver + dateText)}</span>\`;
       
       const lockIcon = \`<svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>\`;
@@ -3346,155 +3389,171 @@ function renderProviders(){
 
 
 const FALLBACK_PRESETS = {
-  minimax: {
-    id: 'minimax',
-    name: 'MiniMax',
-    version: '1.1.0',
-    base_url: 'https://api.minimaxi.com/v1',
-    anthropic_base_url: 'https://api.minimax.cn/anthropic',
-    protocols: ['chat', 'messages'],
-    description: 'MiniMax 官方开放平台，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通。',
-    recommended_models: [
-      { name: 'MiniMax-M3', upstream: 'MiniMax-M3', desc: 'MiniMax-M3 旗舰多模态模型 (支持超长思考，Messages 原生兼容)', checked: true, kb_type: 'chat' }
-    ]
-  },
-  bai: {
-    id: 'bai',
-    name: 'B.AI',
-    version: '1.1.0',
-    base_url: 'https://api.b.ai/v1',
-    anthropic_base_url: 'https://api.b.ai/v1',
-    protocols: ['chat', 'messages'],
-    description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。',
-    recommended_models: [
-      { name: 'deepseek-v4-flash-vision-exp', upstream: 'deepseek-v4-flash-vision-exp', desc: 'DeepSeek V4 Flash 视觉/推理增强模型', checked: true, kb_type: 'chat' },
-      { name: 'qwen3.8-flash', upstream: 'qwen3.8-flash', desc: '通义千问 3.8 Flash 高速推理模型', checked: true, kb_type: 'chat' },
-      { name: 'claude-3-5-sonnet', upstream: 'claude-3-5-sonnet', desc: 'Claude 3.5 Sonnet 编程模型', checked: false, kb_type: 'chat' },
-      { name: 'deepseek-v3', upstream: 'deepseek-v3', desc: 'DeepSeek V3 全能大模型', checked: false, kb_type: 'chat' }
-    ]
-  },
   agnes: {
     id: 'agnes',
     name: 'Agnes AI',
-    version: '1.2.0',
+    version: '1.4.0',
+    updated_at: '2026-10-18',
     base_url: 'https://apihub.agnes-ai.com/v1',
-    protocols: ['chat'],
+    anthropic_base_url: 'https://apihub.agnes-ai.com/v1',
+    protocols: ['chat', 'messages'],
     description: 'Agnes AI 平台，支持 agnes-3.0-flash 等高并发轻量 Agent 模型 (512K 上下文)。',
-    recommended_models: [
-      { name: 'agnes-3.0-flash', upstream: 'agnes-3.0-flash', desc: 'Agnes 3.0 Flash 全新一代旗舰开源推理模型 (512K 上下文)', checked: true, kb_type: 'chat' },
-      { name: 'agnes-2.5-flash', upstream: 'agnes-2.5-flash', desc: 'Agnes 2.5 Flash 旗舰高速模型 (512K 上下文)', checked: false, kb_type: 'chat' },
-      { name: 'agnes-2.0-flash', upstream: 'agnes-2.0-flash', desc: 'Agnes 2.0 Flash 兼容回退模型', checked: false, kb_type: 'chat' }
-    ]
-  },
-  google: {
-    id: 'google',
-    name: 'Google AI Studio',
-    version: '1.1.0',
-    base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    protocols: ['chat'],
-    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射。',
-    recommended_models: [
-      { name: 'gemini-3.5-flash', upstream: 'gemini-3.5-flash', desc: '最新高性价比推理模型 (支持 low/medium/high 思考等级)', checked: true, kb_type: 'chat' },
-      { name: 'gemini-3.5-pro', upstream: 'gemini-3.5-pro', desc: '最新旗舰强推理模型 (支持 low/high 思考等级)', checked: true, kb_type: 'chat' },
-      { name: 'gemini-2.5-flash', upstream: 'gemini-2.5-flash', desc: '经典多模态快速模型', checked: false, kb_type: 'ocr' }
-    ]
-  },
-  sensenova: {
-    id: 'sensenova',
-    name: 'SenseNova',
-    version: '1.1.0',
-    base_url: 'https://token.sensenova.cn/v1',
-    protocols: ['chat'],
-    description: '商汤 SenseNova 开放平台，支持 GLM-5.2、DeepSeek-V3/R1、多模态 OCR 等。',
-    recommended_models: [
-      { name: 'glm-5.2', upstream: 'GLM-5.2', desc: '商汤/智谱 GLM-5.2 旗舰推理大模型', checked: true, kb_type: 'chat' },
-      { name: 'sensenova-6.8-flash-lite', upstream: 'sensenova-6.8-flash-lite', desc: 'SenseNova 多模态 OCR 高速识别模型', checked: false, kb_type: 'ocr' }
-    ]
-  },
-  stepfun: {
-    id: 'stepfun',
-    name: 'StepFun',
-    version: '1.1.0',
-    base_url: 'https://api.stepfun.com/v1',
-    protocols: ['chat'],
-    description: '阶跃星辰 StepFun 大模型平台，系统内置 reasoning_effort none->low 降级兼容与 deepseek 思考格式注入。',
-    recommended_models: [
-      { name: 'step-3.7-flash', upstream: 'step-3.7-flash', desc: 'Step-3.7-Flash 闪电高速推理大模型', checked: true, kb_type: 'chat' },
-      { name: 'step-2-16k', upstream: 'step-2-16k', desc: 'Step-2 旗舰大模型', checked: false, kb_type: 'chat' }
-    ]
-  },
-  siliconflow: {
-    id: 'siliconflow',
-    name: 'SiliconFlow',
-    version: '1.1.0',
-    base_url: 'https://api.siliconflow.cn/v1',
-    protocols: ['chat'],
-    description: '硅基流动 SiliconFlow 高并发推理平台，包含 DeepSeek、Qwen 等开源模型及向量/重排模型。',
-    recommended_models: [
-      { name: 'deepseek-ai/DeepSeek-V3', upstream: 'deepseek-ai/DeepSeek-V3', desc: 'DeepSeek-V3 全尺寸旗舰模型', checked: true, kb_type: 'chat' },
-      { name: 'deepseek-ai/DeepSeek-R1', upstream: 'deepseek-ai/DeepSeek-R1', desc: 'DeepSeek-R1 全尺寸深度思考模型', checked: false, kb_type: 'chat' },
-      { name: 'Qwen/Qwen2.5-72B-Instruct', upstream: 'Qwen/Qwen2.5-72B-Instruct', desc: '通义千问 72B Instruct 指令模型', checked: false, kb_type: 'chat' },
-      { name: 'Qwen/Qwen3-Embedding-4B', upstream: 'Qwen/Qwen3-Embedding-4B', desc: '通义千问高性能向量嵌入模型', checked: false, kb_type: 'embedding' },
-      { name: 'Qwen/Qwen3-Reranker-0.6B', upstream: 'Qwen/Qwen3-Reranker-0.6B', desc: '通义千问高精度检索重排序模型', checked: false, kb_type: 'reranker' }
-    ]
-  },
-  tokenrhythm: {
-    id: 'tokenrhythm',
-    name: 'TokenRhythm',
-    version: '1.1.0',
-    base_url: 'https://api.tokenrhythm.com/v1',
-    protocols: ['chat'],
-    description: 'TokenRhythm 聚合大模型路由网关，系统内置 tool_choice 对象转字符串自动清洗。',
-    recommended_models: [
-      { name: 'claude-3-5-sonnet-20241022', upstream: 'claude-3-5-sonnet-20241022', desc: 'Claude 3.5 Sonnet 强编程模型', checked: true, kb_type: 'chat' },
-      { name: 'gpt-4o', upstream: 'gpt-4o', desc: 'OpenAI GPT-4o 旗舰全能模型', checked: false, kb_type: 'chat' }
-    ]
+    features: { native_thinking: true, tools: true, multimodal: true, anthropic_messages: true }
   },
   amd: {
     id: 'amd',
     name: 'AMD Radeon Cloud',
-    version: '1.1.0',
+    version: '2026.10.19',
+    updated_at: '2026-10-19',
     base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     anthropic_base_url: 'https://developer.amd.com.cn/radeon/api/v1',
     protocols: ['chat', 'messages'],
-    description: 'AMD 官方开发者平台，基于高性能推理集群。网关已全自动适配 reasoning_effort 深度思考、Anthropic output_config 与 system 消息置顶。',
-    recommended_models: [
-      { name: 'deepseek-v4-flash', upstream: 'DeepSeek-V4-Flash', desc: 'DeepSeek V4 Flash 原生百万上下文大模型 (自动注入 reasoning_effort 开启深度思考)', checked: true, kb_type: 'chat' },
-      { name: 'qwen3.8-flash-next', upstream: 'Qwen3.8-Flash-Next', desc: '千问全新 QSA 稀疏注意力大模型 (26.2万上下文，自动适配 system 消息置顶与安全思考级别)', checked: true, kb_type: 'chat' }
-    ]
+    description: 'AMD 官方开发者平台，基于高性能推理集群。原生直通深度思考，自动适配 system 消息置顶规整与 reasoning 思考字段映射。',
+    features: { native_thinking: true, multimodal: false, tools: true, anthropic_messages: true }
+  },
+  bai: {
+    id: 'bai',
+    name: 'B.AI',
+    version: '1.4.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.b.ai/v1',
+    anthropic_base_url: 'https://api.b.ai/v1',
+    protocols: ['chat', 'messages'],
+    description: 'B.AI 统一大模型中转平台，原生兼容 OpenAI Chat Completions 与 Anthropic Messages 协议双通道。',
+    features: { native_thinking: true, tools: true, anthropic_messages: true }
+  },
+  cline: {
+    id: 'cline',
+    name: 'Cline',
+    version: '1.1.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.cline.bot/api/v1',
+    protocols: ['chat'],
+    description: 'Cline 官方大模型 API，基于 OpenRouter 聚合架构，支持 Claude、GPT-4o、Gemini 2.5 等多厂商模型。',
+    features: { native_thinking: true, tools: true, multimodal: true }
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek 官方开放平台',
+    version: '1.2.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.deepseek.com/v1',
+    protocols: ['chat'],
+    description: 'DeepSeek 官方 API，原生支持 reasoning_content 深度思考与前缀缓存。',
+    features: { native_thinking: true, tools: true }
+  },
+  google: {
+    id: 'google',
+    name: 'Google AI Studio',
+    version: '1.2.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    protocols: ['chat'],
+    description: 'Google 官方 Gemini 系列大模型，支持 Gemini 2.5 / 3 / 3.5+。系统已内置 Thinking Config 思考等级映射。',
+    features: { native_thinking: true, multimodal: true, tools: true }
+  },
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax',
+    version: '1.4.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.minimaxi.com/v1',
+    anthropic_base_url: 'https://api.minimax.cn/anthropic',
+    protocols: ['chat', 'messages'],
+    description: 'MiniMax 官方开放平台，原生兼容 OpenAI Completions 与 Anthropic Messages 双协议直通。',
+    features: { native_thinking: true, multimodal: true, tools: true, anthropic_messages: true }
+  },
+  nvidia: {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    version: '2.0.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://integrate.api.nvidia.com/v1',
+    protocols: ['chat'],
+    description: 'NVIDIA NIM 官方加速平台，流式推理返回 reasoning_content，已加固自动关流防护。',
+    features: { multimodal: true, native_thinking: true, tools: true }
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI 官方',
+    version: '1.2.1',
+    updated_at: '2026-10-19',
+    base_url: 'https://api.openai.com/v1',
+    protocols: ['chat'],
+    description: 'OpenAI 官方 API 或标准兼容中转网关，纯中转零损耗极速透传，原生支持 reasoning_effort 思考控制。',
+    features: { native_thinking: true, tools: true, multimodal: true }
+  },
+  opencode: {
+    id: 'opencode',
+    name: 'OpenCode Zen',
+    version: '2.0.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://opencode.ai/zen/v1',
+    protocols: ['chat'],
+    description: 'OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。',
+    features: { multimodal: true, native_thinking: true, tools: true }
+  },
+  openrouter: {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    version: '1.0.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://openrouter.ai/api/v1',
+    anthropic_base_url: 'https://openrouter.ai/api/v1',
+    protocols: ['chat', 'messages'],
+    description: 'OpenRouter 全球模型聚合网关，原生支持 OpenAI 与 Anthropic 双协议。',
+    features: { anthropic_messages: true, multimodal: true, native_thinking: true, tools: true }
+  },
+  sensenova: {
+    id: 'sensenova',
+    name: '商汤日日新',
+    version: '1.3.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://token.sensenova.cn/v1',
+    anthropic_base_url: 'https://token.sensenova.cn/v1',
+    protocols: ['chat', 'messages'],
+    description: '商汤日日新大模型开放平台，支持 sensenova-6.8-flash-lite、deepseek-v4-flash、glm-5.2 等旗舰与轻量模型。',
+    features: { native_thinking: true, multimodal: true, tools: true, anthropic_messages: true }
+  },
+  siliconflow: {
+    id: 'siliconflow',
+    name: '硅基流动',
+    version: '1.2.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.siliconflow.cn/v1',
+    protocols: ['chat'],
+    description: '硅基流动高并发推理平台，包含 DeepSeek、Qwen 等开源模型及向量/重排模型。',
+    features: { native_thinking: true, tools: true }
+  },
+  stepfun: {
+    id: 'stepfun',
+    name: '阶跃星辰',
+    version: '1.2.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://api.stepfun.com/step_plan',
+    protocols: ['chat'],
+    description: '阶跃星辰 StepFun 大模型平台，系统内置 reasoning_effort none->low 降级兼容与 deepseek 思考格式注入。',
+    features: { native_thinking: true, multimodal: true, tools: true }
+  },
+  tokenrhythm: {
+    id: 'tokenrhythm',
+    name: 'TokenRhythm',
+    version: '1.2.0',
+    updated_at: '2026-10-18',
+    base_url: 'https://tokenrhythm.studio/v1',
+    protocols: ['chat'],
+    description: 'TokenRhythm 聚合大模型路由网关，系统内置 tool_choice 对象转字符串自动清洗。',
+    features: { native_thinking: true, tools: true }
   },
   vertex: {
     id: 'vertex',
     name: 'Google Vertex AI',
-    version: '1.0.0',
+    version: '1.1.0',
+    updated_at: '2026-10-18',
     base_url: 'https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi',
     protocols: ['chat'],
-    description: 'Google Cloud Vertex AI 官方大模型端点。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置',
-    recommended_models: [
-      { name: 'gemini-3.8-flash', upstream: 'google/gemini-3.8-flash', desc: 'Google Vertex AI 官方推荐主力推理模型 (端点强制 google/ 前缀)', checked: true, kb_type: 'chat' }
-    ],
-    adapter_rules: {
-      model_alias: { 'gemini-3.8-flash': 'google/gemini-3.8-flash' },
-      ensure_google_prefix: true,
-      reasoning: {
-        strategy: 'gemini_thinking_matrix',
-        none_action: 'include_thoughts_false',
-        headroom_elevation: true,
-        model_matrix: { flash: ['low', 'medium', 'high'] }
-      }
-    }
-  },
-  opencode: {
-    id: 'opencode',
-    name: 'OpenCode (标准版)',
-    version: '1.0.0',
-    base_url: 'https://opencode.ai/zen/v1',
-    protocols: ['chat'],
-    description: 'OpenCode 官方开放平台，纯净 OpenAI 协议直通透传，适用于个人已购配额或标准模型。',
-    recommended_models: [
-      { name: 'glm-4.5', upstream: 'glm-4.5', desc: '智谱 GLM-4.5 旗舰推理大模型', checked: true, kb_type: 'chat' },
-      { name: 'claude-3-7-sonnet', upstream: 'claude-3-7-sonnet', desc: 'Claude 3.7 Sonnet 强混合推理模型', checked: false, kb_type: 'chat' }
-    ]
+    description: 'Google Cloud Vertex AI 官方大模型端点。凭证、Project ID 与服务区域在新增 Key 时强绑定，自动规整 google/ 前缀与思考配置。',
+    features: { native_thinking: true, multimodal: true, tools: true }
   }
 };
 
@@ -3516,6 +3575,10 @@ async function loadPresetsCatalog() {
       id: k,
       name: FALLBACK_PRESETS[k].name,
       version: FALLBACK_PRESETS[k].version || '1.1.0',
+      updated_at: FALLBACK_PRESETS[k].updated_at || '2026-10-18',
+      protocols: FALLBACK_PRESETS[k].protocols,
+      features: FALLBACK_PRESETS[k].features,
+      anthropic_base_url: FALLBACK_PRESETS[k].anthropic_base_url,
       description: FALLBACK_PRESETS[k].description
     }));
   }
@@ -3548,17 +3611,16 @@ function populateCatalogSelect(select) {
     : Object.keys(FALLBACK_PRESETS).map(k => ({
         id: k,
         name: FALLBACK_PRESETS[k].name,
-        version: FALLBACK_PRESETS[k].version || '1.1.0',
-        updated_at: FALLBACK_PRESETS[k].updated_at || '2026-10-18',
-        update_notes: FALLBACK_PRESETS[k].update_notes || '',
-        description: FALLBACK_PRESETS[k].description
+        protocols: FALLBACK_PRESETS[k].protocols,
+        features: FALLBACK_PRESETS[k].features,
+        anthropic_base_url: FALLBACK_PRESETS[k].anthropic_base_url
       }));
 
-  select.innerHTML = '<option value="">-- 自定义供应商 (本地内置·手动填写) --</option>' +
-    '<optgroup label="官方预设厂商模板 (按需单选·按需拉取)">' +
+  select.innerHTML = '<option value="">-- 自定义供应商 (手动填写) --</option>' +
+    '<optgroup label="官方预设供应商">' +
     catalog.map(p => {
-      const dateText = p.updated_at ? \` · \${p.updated_at}\` : '';
-      return \`<option value="\${p.id}">\${p.name} (v\${p.version || '1.1.0'}\${dateText})</option>\`;
+      const protoLabel = getPresetProtocolLabel(p);
+      return \`<option value="\${p.id}">\${p.name} (\${protoLabel})</option>\`;
     }).join('') +
     '</optgroup>';
   if (cur !== undefined && cur !== null) select.value = cur;
@@ -3607,11 +3669,9 @@ async function onProviderPresetChange(){
     return;
   }
 
-  // Fetch preset detail on demand (Strictly on-demand: only fetch this single preset)
-  let preset = state.cachedPresets[presetId];
+  // Fetch preset detail (Prioritize local cache & built-in presets)
+  let preset = state.cachedPresets[presetId] || FALLBACK_PRESETS[presetId];
   if (!preset) {
-    descEl.textContent = '正在按需拉取云端厂商规则...';
-    descEl.style.display = 'block';
     try {
       const res = await fetch(\`/api/admin/presets/detail?id=\${encodeURIComponent(presetId)}\`, { headers: headers() });
       if (res.ok) {
@@ -3808,18 +3868,19 @@ function saveProvider(){
     }
   }
 
-  // Attach preset metadata and rules if created from preset
-  if(state.currentSelectedPreset && (state.currentSelectedPreset.id === name || !state.config.providers[name].preset_id)){
-    state.config.providers[name].preset_id = state.currentSelectedPreset.id;
-    state.config.providers[name].preset_version = state.currentSelectedPreset.version || '1.1.0';
-    if(state.currentSelectedPreset.updated_at){
-      state.config.providers[name].preset_updated_at = state.currentSelectedPreset.updated_at;
+  // Attach preset metadata and rules if created from preset or matches preset
+  const matchedPreset = state.currentSelectedPreset || FALLBACK_PRESETS[name.toLowerCase()] || (state.presetCatalog && state.presetCatalog.find(x => x.id && x.id.toLowerCase() === name.toLowerCase()));
+  if(matchedPreset && (matchedPreset.id === name.toLowerCase() || !state.config.providers[name].preset_id)){
+    state.config.providers[name].preset_id = matchedPreset.id;
+    state.config.providers[name].preset_version = matchedPreset.version || '1.1.0';
+    if(matchedPreset.updated_at){
+      state.config.providers[name].preset_updated_at = matchedPreset.updated_at;
     }
-    if(state.currentSelectedPreset.update_notes){
-      state.config.providers[name].preset_update_notes = state.currentSelectedPreset.update_notes;
+    if(matchedPreset.update_notes){
+      state.config.providers[name].preset_update_notes = matchedPreset.update_notes;
     }
-    if(state.currentSelectedPreset.adapter_rules){
-      state.config.providers[name].adapter_rules = state.currentSelectedPreset.adapter_rules;
+    if(matchedPreset.adapter_rules){
+      state.config.providers[name].adapter_rules = matchedPreset.adapter_rules;
     }
   }
 

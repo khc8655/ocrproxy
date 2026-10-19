@@ -262,6 +262,36 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | **Key 凭证** | **本地 (Local)** | **双端: 模型提供商页** | **✅ 允许** | **✅ 允许** | 芯片带有「本地」绿色徽章，显示「编辑」与「×」删除按钮 | 本地自建资产自由维护 |
 | **Key 凭证** | **本地 (Local)** | **双端: 模型管理 (Agent/KB)** | **✅ 允许** | **✅ 允许** | 胶囊带有「本地」绿色徽章，**带有红色「×」直接删除按钮** | 点击直接调用 `removeLocalKeyFromModal` 从底层凭据库安全物理擦除 |
 
+### 3.5 供应商预设规范、下拉格式与列表版本徽章真理源
+
+#### 1. 新增供应商下拉选项规范 (`#p_preset`)
+- **核心规约**：极简清爽，仅表达“厂商标识与调用协议”，**严禁**向下拉文本中塞入版本号、更新日期等杂质干扰选项。
+- **文案格式**：`${p.name} (${protoStr})`
+  - 示例：`MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`、`AMD Radeon Cloud (openai+message)`。
+- **分组规范**：
+  - `<option value="">-- 自定义供应商 (手动填写) --</option>`
+  - `<optgroup label="官方预设供应商">`（列出本地内置全部 16 款预设）
+- **本地读取保障**：
+  - 前端编译管线（`build-presets.mjs`）自动导出并注入全量 `catalog.json` 预设；
+  - VM 后端 `/api/admin/presets/catalog` 与 `/presets/detail` 严格优先读取本地磁盘 `shared/presets/`，0 网络往返直接返回，严禁优先向外网 GitHub 发起阻塞式探测。
+
+#### 2. 供应商卡片规则版本与日期徽章规范 (`verBadge`)
+- **展示位置**：仅且唯一存在于【供应商 (Providers)】主面板各供应商卡片的 Header 徽章行中。
+- **徽章格式**：`[规则 v{version} · {updated_at}]`
+  - 示例：`规则 v1.4.0 · 2026-10-18`；
+  - 若为自定义适配规则且无固定版本：显示 `[自定义规则]`；
+  - 若确实无任何规则：显示 `[默认]`。
+- **解析与回退机制（彻底杜绝版本与日期丢失）**：
+  1. 优先读取当前供应商配置对象中持久化的 `prov.preset_version` 与 `prov.preset_updated_at`；
+  2. 若缺失（如老旧配置、或中枢仅传输基础属性），自动以 `prov.preset_id || prov_name` 索引本地预设库（`CATALOG` / `PRESET_DEFINITIONS`），动态补全其官方适配版本号与更新日期；
+  3. 杜绝出现明明属于官方预设（如 `cline`、`minimax`）却错误显示为 `[默认]` 或漏掉更新日期的缺陷。
+
+#### 3. 中枢同步资产本地化规范 (Vault Sovereignty)
+- **“拉下来就是本地的”**：
+  - 从 EdgeOne 中枢拉取清单（`GET /api/vault/manifest`）时，中枢接口必须完整下发每个供应商的 `preset_id`、`preset_version`、`preset_updated_at`；
+  - VM 端在 `/api/admin/vault/sync` 执行同步时，必须完整将这三个字段写入持久化配置；
+  - 即使后续中枢断开，已同步的供应商与规则版本依然作为本地资产持久化保存在 VM 节点中，本地重启或离线完全可读。
+
 ---
 
 ## 4. 路由调度算法与频控状态机 (Scheduler & Rate Limiting)

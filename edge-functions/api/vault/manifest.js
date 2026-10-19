@@ -84,6 +84,11 @@ export async function onRequestGet(context) {
     manifestProviders[pId] = {
       id: pId,
       name: pCfg.name || preset?.name || pId,
+      preset_id: pCfg.preset_id || preset?.id || null,
+      preset_version: pCfg.preset_version || preset?.version || null,
+      preset_updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
+      version: pCfg.preset_version || preset?.version || null,
+      updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
       type: isSpecialized ? 'specialized' : 'standard',
       protocol: protoStr,
       protocols: rawProtos,

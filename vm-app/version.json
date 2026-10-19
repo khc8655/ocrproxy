@@ -1,14 +1,13 @@
 {
-  "version": "v2026.10.19-09",
+  "version": "v2026.10.19-10",
   "release_date": "2026-10-19",
   "commit": "HEAD",
-  "title": "方案 A 单一真理源编译器落地与 14 项布局深度缺陷彻底根除 (v2026.10.19-09)",
+  "title": "预设下拉协议规范化、列表版本徽章真理源回显与中枢资产本地持久化 (v2026.10.19-10)",
   "changelog": [
-    "单一真理源 (Single Source of Truth) 彻底落地：重构 build-admin.mjs 直接以内联编译 shared/admin/ 产出 EdgeOne 边缘函数与静态资源，严禁维护多套分叉页面；",
-    "根除卡片 5 布局变形与可见性污染：清理 [data-arch='vm'] 的积极 display 赋值，确立纯消极隐藏规则与消极覆盖优先级；",
-    "根除 core.js 内联 display 覆写与提示隐藏失效：将剩余的 style.display='block' 彻底清空并改用 el.hidden，移除 manual 提示的内联 style='display:none'，卡片 4 与提示恢复正常；",
-    "长密钥输入框通栏拉满与单项配置跨列拉长：为 Key 输入框建立 .settings-row-key，控制器 flex:1 展开至 640px+；单项配置 .settings-row-full 跨通栏展示；",
-    "实体边框规范恢复与移动端 0 溢出：补齐供应商操作按钮实体边框，解除 .settings-row-ctrl 的 flex-shrink:0，移动端 390px/600px 视口实现 0px 横向溢出；",
-    "四层测试矩阵全面升级通过：Layer 1 (199/199)、Layer 2 S1~S6/U1 双端契约、Layer 3 安全审计、Layer 4 全矩阵 Playwright E2E 扩充至 76 项断言全部 100% 通过。"
+    "预设下拉选项协议标准化：下拉选项彻底移除版本号与更新日期杂质，规范为「厂商名称 (协议)」格式（如 MiniMax (openai+message)），分组标为「官方预设供应商」；",
+    "列表卡片规则版本与日期徽章真理源回显：建立三级回退真理源解析算法，供应商卡片 Header 规范呈现「规则 v{version} · {updated_at}」，补齐 16 款官方预设兜底，彻底解决丢失或显示「默认」问题；",
+    "中枢资产本地持久化与本地优先直读：从 EdgeOne Vault Hub 拉取的厂商完整持久化 preset_id/preset_version/preset_updated_at，VM 端预设详情与目录直读本地磁盘（0ms 零外网超时）；",
+    "秒级发版质量硬门禁 (Lean Release Gatekeeper v2.0)：建立 tests/verify_release_gate.py 极简门禁，强断言 EdgeOne 专属身份与中枢大门常驻，防误部署为 VM Agent 版本；",
+    "四层测试矩阵全面验证：Layer 1 (199/199)、Layer 2 S1~S6/U1 契约、Layer 3 安全审计、Layer 4 全矩阵 Playwright E2E 76 项断言全部 100% 通过。"
   ]
 }
