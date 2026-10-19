@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "check:symbols": "node agent-edgeone/scripts/verify-frontend-symbols.mjs",
+    "check:release": "python3 tests/verify_release_gate.py",
     "test:ui": "node agent-edgeone/scripts/test-ui-smoke.mjs",
     "build:presets": "cd agent-edgeone && node scripts/build-presets.mjs",
-    "build:admin": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs && cp -R edge-functions/* ../edge-functions/ && cd .. && (if [ -f tests/test_phase3_phase4_audit.py ]; then python3 tests/test_phase3_phase4_audit.py; fi)",
-    "test": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && node agent-edgeone/scripts/test-ui-smoke.mjs && cd agent-edgeone && node scripts/build-presets.mjs && npm test && cd .. && node tests/test_security_hardening.mjs && node --test tests/test_edgeone_logging.mjs && node tests/test_edgeone_node_stats_and_stream.mjs && node tests/test_key_capsules.cjs && python3 vm-app/scripts/test_run_server_dual_stack.py && python3 tests/test_system_hardening_audit.py && python3 tests/test_budget_and_ui_consistency.py && python3 vm-app/scripts/test_backend_scheduler_resilience.py && python3 tests/test_phase1_security_and_cow.py && python3 tests/test_phase2_flow_and_lease.py && python3 tests/test_phase3_phase4_audit.py && python3 tests/test_vm_static_sync.py && python3 tests/test_admin_upstream_guard.py && python3 tests/test_stream_precommit.py && python3 tests/test_relay_passthrough_and_sticky.py && python3 tests/test_backend_contract.py && python3 tests/test_messages_pipeline.py && python3 tests/test_retryable_logic.py && python3 tests/test_rpm_limiter.py && python3 tests/test_agent_timeout_and_headers.py && python3 tests/test_secret_preservation.py && python3 tests/test_vault_dynamic_sync.py && python3 tests/test_preset_date_notes_and_ondemand_sync.py",
-    "test:e2e:vm": "python3 tests/test_vm_agent_ui_e2e.py"
+    "build:admin": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs && cp -R edge-functions/* ../edge-functions/ && cd .. && python3 tests/verify_release_gate.py",
+    "test": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && node agent-edgeone/scripts/test-ui-smoke.mjs && cd agent-edgeone && npm test && cd .. && python3 tests/run_tests.py --layer=all",
+    "test:e2e:vm": "python3 tests/test_vm_full_matrix_e2e.py"
   }
 }

@@ -109,7 +109,13 @@ if (modularScriptRegex.test(htmlBundled)) {
   htmlBundled = htmlBundled.replace('</body>', `<script>\n${bundledJs}\n</script>\n</body>`);
 }
 
-// 6. Inject dynamic version into bundled HTML and JS constants
+// 6. Inject dynamic version and EdgeOne exclusive static identity
+htmlBundled = htmlBundled.replace(/<title>[^<]+<\/title>/i, '<title>OCRProxy EdgeOne 控制台</title>');
+htmlBundled = htmlBundled.replace(
+  /<span class="brand-badge"[^>]*id="topModeBadge"[^>]*>[^<]+<\/span>/i,
+  '<span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>'
+);
+
 if (appVersion && appVersion !== 'latest') {
   htmlBundled = htmlBundled.replace(/(id="topVersionBadge"[^>]*>)[^<]+(<\/span>)/g, `$1v${appVersion}$2`);
   htmlBundled = htmlBundled.replace(/(id="statVersion"[^>]*>)[^<]+(<\/div>)/g, `$1v${appVersion}$2`);
@@ -117,6 +123,21 @@ if (appVersion && appVersion !== 'latest') {
 }
 
 // === Fail-Fast Quality Gate Assertions ===
+// 1. EdgeOne Identity & SSOT Gates (Prevent deploying as VM Agent version)
+if (!htmlBundled.includes('OCRProxy EdgeOne 控制台')) {
+  console.error('FATAL BUILD ERROR: EdgeOne console title missing from bundle! Potential VM Agent pollution.');
+  process.exit(1);
+}
+if (!htmlBundled.includes('EdgeOne 边缘版')) {
+  console.error('FATAL BUILD ERROR: EdgeOne edition badge missing from bundle! Potential VM Agent pollution.');
+  process.exit(1);
+}
+if (!htmlBundled.includes("window.__HOST_KIND__ = 'edgeone'")) {
+  console.error('FATAL BUILD ERROR: window.__HOST_KIND__ = \'edgeone\' missing from bundle!');
+  process.exit(1);
+}
+
+// 2. CSS & JS Inlining Completeness
 if (!htmlBundled.includes('<style>') || !htmlBundled.includes(css.slice(0, 40))) {
   console.error('FATAL BUILD ERROR: CSS was not properly inlined into bundled HTML!');
   process.exit(1);
@@ -130,7 +151,7 @@ if (/<script\b[^>]*src=["'][^"']*(?:admin\.js|\/js\/)/i.test(htmlBundled)) {
   process.exit(1);
 }
 if (!htmlBundled.includes('id="panel-providers"')) {
-  console.error('FATAL BUILD ERROR: Providers panel missing from bundle!');
+  console.error('FATAL BUILD ERROR: Providers panel missing from bundle! Vault Hub corrupted.');
   process.exit(1);
 }
 if (!htmlBundled.includes('renderAgentModels') || !htmlBundled.includes('saveAgentModel')) {
@@ -162,8 +183,19 @@ if (!htmlBundled.includes('id="s_maxRetries"')) {
 
 // 7. Emit EdgeOne edge functions & synced copies
 writeFileSync(join(root, 'admin.bundled.html'), htmlBundled, 'utf8');
-// Keep agent-edgeone/admin.html and admin.css synced with the single source of truth
-writeFileSync(join(root, 'admin.html'), html, 'utf8');
+
+// Prepare synced agent-edgeone/admin.html with EdgeOne static identity
+let eoHtmlTemplate = html.replace(/<title>[^<]+<\/title>/i, '<title>OCRProxy EdgeOne 控制台</title>');
+eoHtmlTemplate = eoHtmlTemplate.replace(
+  /<span class="brand-badge"[^>]*id="topModeBadge"[^>]*>[^<]+<\/span>/i,
+  '<span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>'
+);
+if (appVersion && appVersion !== 'latest') {
+  eoHtmlTemplate = eoHtmlTemplate.replace(/(id="topVersionBadge"[^>]*>)[^<]+(<\/span>)/g, `$1v${appVersion}$2`);
+  eoHtmlTemplate = eoHtmlTemplate.replace(/(\.js\?v=)[^"']+/g, `$1${appVersion}`);
+  eoHtmlTemplate = eoHtmlTemplate.replace(/(\.css\?v=)[^"']+/g, `$1${appVersion}`);
+}
+writeFileSync(join(root, 'admin.html'), eoHtmlTemplate, 'utf8');
 writeFileSync(join(root, 'admin.css'), css, 'utf8');
 
 const edgeFuncDir = join(root, 'edge-functions');

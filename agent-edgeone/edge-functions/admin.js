@@ -11,7 +11,7 @@ function pageHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OCRProxy 控制台</title>
+  <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
   <style>
 /* OCRProxy Unified Design System & Admin Stylesheet */
@@ -721,7 +721,7 @@ function pageHtml() {
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
       <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-09</span>
-      <span class="brand-badge" id="topModeBadge">Agent 模式</span>
+      <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
