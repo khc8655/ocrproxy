@@ -68,7 +68,10 @@ def run_layer_ui():
     print("### Layer 3: Headless UI Structure & Style Matrix")
     print("########################################################")
     # Validates UI single-source components and CSS styles
-    return run_command([PYTHON_EXE, "tests/test_phase1_security_and_cow.py"], "UI Event Delegation & No Inline Handler Assertions")
+    ok = run_command([PYTHON_EXE, "tests/test_phase1_security_and_cow.py"], "UI Event Delegation & No Inline Handler Assertions")
+    if not ok:
+        return False
+    return run_command([PYTHON_EXE, "tests/test_ui_no_horizontal_overflow.py"], "Narrow Viewport No Horizontal Overflow (VM vs EdgeOne)")
 
 
 def run_layer_e2e():

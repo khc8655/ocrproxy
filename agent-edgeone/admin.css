@@ -113,7 +113,7 @@
     .appbar { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 24px; height: 48px; display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow-sm); }
     .brand-title { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; white-space: nowrap; }
     .brand-logo { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--khc-primary-500), var(--khc-primary-700)); color: #fff; font-weight: 700; font-size: 16px; }
-    .brand-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); font-weight: 500; border: 1px solid var(--primary-border); }
+    .brand-badge { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45vw; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); font-weight: 500; border: 1px solid var(--primary-border); }
     .appbar nav { display: flex; gap: 4px; margin-left: auto; }
     .appbar nav button { padding: 6px 14px; border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 13px; font-weight: 500; transition: all .15s; white-space: nowrap; }
     .appbar nav button:hover { background: var(--khc-neutral-100); color: var(--text); }
@@ -150,7 +150,7 @@
     .btn-secondary:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); color: var(--text); }
     .btn-danger { color: var(--error); border-color: var(--error-border); background: var(--error-soft); }
     .btn-danger:hover:not(:disabled) { background: var(--error); color: #fff; border-color: var(--error); }
-    .btn-ghost { border-color: transparent; background: transparent; box-shadow: none; padding: 4px 8px; color: var(--text-secondary); }
+    .btn-ghost { white-space: nowrap; border-color: transparent; background: transparent; box-shadow: none; padding: 4px 8px; color: var(--text-secondary); }
     .btn-ghost:hover:not(:disabled) { background: var(--khc-neutral-100); color: var(--text); }
     .btn-sm { padding: 4px 10px; font-size: 12px; height: 28px; }
     .btn-xs { padding: 2px 7px; font-size: 11px; height: 22px; line-height: 1; border-radius: var(--radius-sm); }
@@ -190,6 +190,17 @@
     .model-card table { table-layout: fixed; width: 100%; }
     .model-card th, .model-card td { box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; vertical-align: middle; }
     .model-card .card-head { padding: 9px 16px; }
+    /* Narrow viewports: long names/upstream IDs ellipsize instead of widening the card;
+       the action column stays pinned while the key table scrolls horizontally. */
+    .model-card .card-head > div:first-child { min-width: 0; max-width: 100%; }
+    .model-card .model-id > span:first-child { overflow-wrap: anywhere; }
+    .model-card .model-id .badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-card th:last-child, .model-card td:last-child { position: sticky; right: 0; background: var(--bg-card, #fff); box-shadow: -1px 0 0 var(--border); }
+    #listAvailableModels { min-width: 0; max-width: 100%; }
+    #listAvailableModels .model-chip-clickable { max-width: 100%; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+    #listAvailableModels .model-chip-clickable > span:first-child { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+    .brand-title { min-width: 0; max-width: 100%; }
+    .brand-title .brand-badge { flex-shrink: 1; min-width: 0; }
     .model-card .btn-icon.btn-sm { width: 26px; height: 26px; }
     .model-card .btn-sm { height: 26px; padding: 2px 8px; font-size: 12px; }
 
@@ -633,6 +644,15 @@
       .settings-row-ctrl input[type="text"],
       .settings-row-ctrl input[type="password"] {
         width: 100%;
+      }
+      .settings-row.settings-row-key .settings-row-label {
+        flex: 1 1 100%;
+        min-width: 0;
+        max-width: none;
+      }
+      .settings-row.settings-row-key .settings-row-ctrl input[type="text"],
+      .settings-row.settings-row-key .settings-row-ctrl input[type="password"] {
+        min-width: 0;
       }
       .provider-row {
         flex-direction: column;
