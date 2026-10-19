@@ -139,8 +139,10 @@ def test_edgeone_and_vm_ui_timeout_parity():
         "Red Line Violated: 404 mirror xsk/ocrprox found in agent-edgeone/admin.js"
     )
 
-    # 2. EdgeOne compiled bundle: edge-functions/admin.js & index.js
-    for ef_name in ["admin.js", "index.js"]:
+    # 2. EdgeOne compiled bundle: edge-functions/admin.js (index.js only redirects / -> /admin)
+    idx = open(os.path.join(root_dir, "edge-functions", "index.js"), "r", encoding="utf-8").read()
+    assert '"/admin"' in idx and "302" in idx, "edge-functions/index.js must redirect / to /admin"
+    for ef_name in ["admin.js"]:
         ef_path = os.path.join(root_dir, "edge-functions", ef_name)
         assert os.path.exists(ef_path), f"edge-functions/{ef_name} must exist"
         bundle = open(ef_path, "r", encoding="utf-8").read()

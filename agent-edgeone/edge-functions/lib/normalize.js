@@ -530,11 +530,36 @@ export function rescueToolCallsFromText(content) {
 
 /**
  * Wraps an upstream ReadableStream or reader with pull-based backpressure and keep-alive SSE comments.
- * If no chunk is emitted for `intervalMs` (default 5000ms), an SSE comment ": keep-alive\n\n" is enqueued
- * to maintain the connection with downstream clients / edge gateways without buffering leaks.
- * Supports optional `initialChunk` from upstream chunk peeking or `pendingFirstChunkPromise`
- * when peeking was still in progress after the initial fast race window.
+ * If nothing has been emitted for `intervalMs` (default 5000ms), an SSE comment ": keep-alive\n\n" is
+ * enqueued so downstream clients / edge gateways keep the connection open.
+ * Supports an optional `initialChunk` (already peeked) and a `pendingFirstChunkPromise`
+ * (a reader.read() still in flight), which are emitted in that order before further reads.
+ *
+ * CPU notes (EdgeOne bills Edge Functions CPU time per invocation):
+ *  - one interval for the whole stream; each chunk only updates a timestamp
+ *    (no clearInterval/setInterval per chunk);
+ *  - "[DONE]" is detected on the last bytes of a chunk only, with one shared decoder;
+ *  - no keep-alive is queued while the client is not reading (desiredSize <= 0).
  */
+const _sseTailDecoder = new TextDecoder();
+const SSE_DONE_TAIL_BYTES = 64;
+
+function isSseDoneChunk(chunk) {
+  if (!chunk) return false;
+  try {
+    let text;
+    if (typeof chunk === 'string') {
+      text = chunk.slice(-SSE_DONE_TAIL_BYTES);
+    } else {
+      const len = chunk.byteLength || chunk.length || 0;
+      text = _sseTailDecoder.decode(len > SSE_DONE_TAIL_BYTES ? chunk.subarray(len - SSE_DONE_TAIL_BYTES) : chunk);
+    }
+    return text.includes('data: [DONE]') || text.includes('data:[DONE]');
+  } catch (e) {
+    return false;
+  }
+}
+
 export function createKeepAliveStream(bodyOrReader, intervalMs = 5000, initialChunk = null, pendingFirstChunkPromise = null) {
   if (!bodyOrReader) return null;
   const reader = typeof bodyOrReader.getReader === 'function' ? bodyOrReader.getReader() : bodyOrReader;
@@ -543,52 +568,75 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 5000, initialCh
   }
 
   const encoder = new TextEncoder();
+  const keepAliveBytes = encoder.encode(': keep-alive\n\n');
+  const tickMs = Math.max(250, Math.floor(intervalMs / 2));
   let timer = null;
+  let lastEmit = Date.now();
   let unconsumedInitial = initialChunk;
   let pendingPromise = pendingFirstChunkPromise;
 
-  const resetTimer = (controller) => {
-    if (timer) clearInterval(timer);
-    timer = setInterval(() => {
-      try {
-        controller.enqueue(encoder.encode(': keep-alive\n\n'));
-      } catch (e) {
-        if (timer) {
-          clearInterval(timer);
-          timer = null;
-        }
-      }
-    }, intervalMs);
+  const stopTimer = () => {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
   };
 
-  const isSseDone = (chunk) => {
-    if (!chunk) return false;
-    try {
-      const text = typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
-      return text.includes('data: [DONE]') || text.includes('data:[DONE]');
-    } catch (e) {
-      return false;
+  const emit = (controller, chunk) => {
+    lastEmit = Date.now();
+    controller.enqueue(chunk);
+    if (isSseDoneChunk(chunk)) {
+      stopTimer();
+      try { reader.cancel(); } catch (e) {}
+      controller.close();
+      return true;
     }
+    return false;
+  };
+
+  const emitError = (controller, err) => {
+    stopTimer();
+    try {
+      const errPayload = JSON.stringify({
+        error: {
+          type: 'upstream_error',
+          message: `Stream read error: ${err?.message || String(err)}`,
+          code: 'stream_exception',
+        },
+      });
+      controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`));
+    } catch (_) {}
+    try { controller.close(); } catch (_) {}
+  };
+
+  const handleRead = (controller, result) => {
+    const { done, value } = result || {};
+    if (done) {
+      stopTimer();
+      controller.close();
+      return;
+    }
+    if (value) emit(controller, value);
   };
 
   return new ReadableStream({
     start(controller) {
-      resetTimer(controller);
+      timer = setInterval(() => {
+        if (Date.now() - lastEmit < intervalMs) return;
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) return;
+        try {
+          controller.enqueue(keepAliveBytes);
+          lastEmit = Date.now();
+        } catch (e) {
+          stopTimer();
+        }
+      }, tickMs);
     },
     async pull(controller) {
       if (unconsumedInitial) {
         const chunk = unconsumedInitial;
         unconsumedInitial = null;
-        resetTimer(controller);
-        controller.enqueue(chunk);
-        if (isSseDone(chunk)) {
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-          try { reader.cancel(); } catch (e) {}
-          controller.close();
-        }
+        emit(controller, chunk);
         return;
       }
 
@@ -596,92 +644,21 @@ export function createKeepAliveStream(bodyOrReader, intervalMs = 5000, initialCh
         const p = pendingPromise;
         pendingPromise = null;
         try {
-          const { done, value } = await p;
-          if (done) {
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
-            controller.close();
-            return;
-          }
-          if (value) {
-            resetTimer(controller);
-            controller.enqueue(value);
-            if (isSseDone(value)) {
-              if (timer) {
-                clearInterval(timer);
-                timer = null;
-              }
-              try { reader.cancel(); } catch (e) {}
-              controller.close();
-              return;
-            }
-          }
+          handleRead(controller, await p);
         } catch (err) {
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-          try {
-            const errPayload = JSON.stringify({
-              error: {
-                type: 'upstream_error',
-                message: `Stream read error: ${err?.message || String(err)}`,
-                code: 'stream_exception',
-              },
-            });
-            controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`));
-          } catch (_) {}
-          controller.close();
-          return;
+          emitError(controller, err);
         }
         return;
       }
 
       try {
-        const { done, value } = await reader.read();
-        if (done) {
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-          controller.close();
-        } else if (value) {
-          resetTimer(controller);
-          controller.enqueue(value);
-          if (isSseDone(value)) {
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
-            try { reader.cancel(); } catch (e) {}
-            controller.close();
-          }
-        }
+        handleRead(controller, await reader.read());
       } catch (err) {
-        if (timer) {
-          clearInterval(timer);
-          timer = null;
-        }
-        try {
-          const errPayload = JSON.stringify({
-            error: {
-              type: 'upstream_error',
-              message: `Stream read error: ${err?.message || String(err)}`,
-              code: 'stream_exception',
-            },
-          });
-          controller.enqueue(encoder.encode(`event: error\ndata: ${errPayload}\n\n`));
-        } catch (_) {}
-        controller.close();
+        emitError(controller, err);
       }
     },
     cancel(reason) {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
+      stopTimer();
       try {
         return reader.cancel(reason);
       } catch (e) {}

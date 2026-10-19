@@ -14,6 +14,7 @@ import {
   checkAdminAuth,
   validateUpstreamUrl,
 } from '../lib/config.js';
+import { recordNodeStat } from '../lib/nodestats.js';
 
 function checkAuth(request, env) {
   return checkAdminAuth(request, env);
@@ -53,9 +54,11 @@ export async function onRequestPost(context) {
   }
 
   let config;
+  let kv = null;
   try {
     const kvRes = resolveKvBinding(context);
-    config = await loadConfig(context.env, kvRes?.kv);
+    kv = kvRes?.kv || null;
+    config = await loadConfig(context.env, kv);
   } catch (e) {
     if (e instanceof ConfigError) {
       return new Response(
@@ -183,6 +186,10 @@ export async function onRequestPost(context) {
 
     const results = await mapConcurrent(bindingsToProbe, PROBE_CONCURRENCY, probeBinding);
     const okCount = results.filter((r) => r.ok).length;
+    // Store each probe as the binding's last call so the model list shows it to every admin session.
+    await Promise.all(results.map((r) => (r && r.status) ? recordNodeStat(kv, {
+      model: modelName, provider: r.provider, keyLabel: r.key, status: r.status, latencyMs: r.latency_ms,
+    }, true) : null));
 
     return new Response(
       JSON.stringify({
@@ -248,12 +255,19 @@ export async function onRequestPost(context) {
         eo: { timeoutSetting: { connectTimeout: 8_000, readTimeout: 12_000, writeTimeout: 4_000 } },
       });
       if (chatResp && chatResp.status >= 200 && chatResp.status < 300) {
+        const chatLatency = Date.now() - chatStart;
+        const agentModel = String(body?.agent_model || '').trim();
+        if (agentModel && config.agent_models?.[agentModel]) {
+          await recordNodeStat(kv, {
+            model: agentModel, provider: providerName, keyLabel, status: chatResp.status, latencyMs: chatLatency,
+          }, true);
+        }
         return new Response(JSON.stringify({
           ok: true,
           verdict: `model ${targetModel} verified`,
           upstream: baseUrl,
           status: chatResp.status,
-          latency_ms: Date.now() - chatStart,
+          latency_ms: chatLatency,
         }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
       }
     } catch (_) {}

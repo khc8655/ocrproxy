@@ -2677,7 +2677,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
       const endpoint = (global.HOST && global.HOST.api && global.HOST.api.testKey) ? global.HOST.api.testKey : (isVm ? '/api/admin/test-candidate' : '/api/test');
       const body = (global.HOST && typeof global.HOST.buildTestBody === 'function')
-        ? global.HOST.buildTestBody(b, model, b.provider)
+        ? global.HOST.buildTestBody(b, model, b.provider, name)
         : (isVm 
             ? { provider: b.provider, key: b.key, model, type: 'chat', category: 'agent', model_name: name }
             : { provider: b.provider, key: b.key, model });
