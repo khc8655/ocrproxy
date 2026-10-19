@@ -66,7 +66,11 @@
     },
 
     applyCapabilities: function() {
-      // Toggle visibility based on data-cap
+      if (typeof document === 'undefined') return;
+      if (document.body) {
+        document.body.classList.toggle('arch-edgeone', HOST.isEdgeOne);
+        document.body.classList.toggle('arch-vm', HOST.isVm);
+      }
       document.querySelectorAll('[data-cap]').forEach(el => {
         const cap = el.getAttribute('data-cap');
         if (!cap) return;
@@ -74,11 +78,22 @@
         const capKey = negate ? cap.slice(1) : cap;
         const hasCap = !!HOST.capabilities[capKey];
         const shouldShow = negate ? !hasCap : hasCap;
-        el.style.display = shouldShow ? '' : 'none';
+        el.hidden = !shouldShow;
       });
     }
   };
 
   global.HOST = HOST;
+
+  if (typeof document !== 'undefined') {
+    const initHost = function() {
+      HOST.applyCapabilities();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initHost);
+    } else {
+      initHost();
+    }
+  }
 
 })(typeof window !== 'undefined' ? window : globalThis);

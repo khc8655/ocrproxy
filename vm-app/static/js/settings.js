@@ -96,12 +96,14 @@ function onRunModeChange(){
   const kbItem = document.getElementById('st-item-kb-routing');
   const agItem = document.getElementById('st-item-agent-routing');
   const kbTimeout = document.getElementById('st-item-kb-timeout');
-  if(kbItem) kbItem.style.display = isAgent ? 'none' : 'block';
-  if(agItem) agItem.style.display = isKb ? 'none' : 'block';
-  if(kbTimeout) kbTimeout.style.display = isAgent ? 'none' : 'block';
+  const kbConcurrency = document.getElementById('st-item-kb-concurrency');
+  if(kbItem) kbItem.hidden = isAgent;
+  if(agItem) agItem.hidden = isKb;
+  if(kbTimeout) kbTimeout.hidden = isAgent;
+  if(kbConcurrency) kbConcurrency.hidden = isAgent;
   ['st-item-ocr-inflight', 'st-item-ocr-queue'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.display = isAgent ? 'none' : 'block';
+    if (el) el.hidden = isAgent;
   });
 
   // Dynamic labels and values based on run mode
@@ -109,18 +111,18 @@ function onRunModeChange(){
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
   const inputChatTimeout = document.getElementById('s_chatTimeout');
   if (lblChatTimeout) {
-    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '智能体首字节等待超时 (agent_first_byte_timeout_sec)';
+    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '单次请求等待超时 (upstream_timeout_sec)';
   }
   if (hintChatTimeout) {
     hintChatTimeout.textContent = isKb
       ? '知识库模式下 Chat/Embedding/Reranker 处理时限（默认 15s）'
-      : '智能体等待首字节响应的时限，发生超时立即安全切换备用 Key';
+      : '5~300s，智能体等待首字节时限，超时立即切换备用 Key';
   }
   if (inputChatTimeout && state.config) {
     if (isKb) {
       inputChatTimeout.value = state.config.upstream_timeout_sec ?? state.config.upstream_timeout_chat ?? 15;
     } else {
-      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? 120;
+      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? state.config.upstream_timeout_sec ?? 120;
     }
   }
   updateRoutingSettingsState();
@@ -144,27 +146,27 @@ function updateRoutingSettingsState(){
   
   const tipEl = document.getElementById('manual-routing-tip');
   const hintEl = document.getElementById('agent-routing-hint');
-  if(tipEl) tipEl.style.display = isManual ? 'block' : 'none';
-  if(hintEl) hintEl.style.display = (isManual || isKb) ? 'none' : 'block';
+  if(tipEl) tipEl.hidden = !isManual;
+  if(hintEl) hintEl.hidden = (isManual || isKb);
 
   // In manual mode, retry counts and attempts are bypassed completely
   const manualHiddenIds = ['st-item-max-retries', 'st-item-max-attempts'];
   manualHiddenIds.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.display = isManual ? 'none' : 'block';
+    if (el) el.hidden = isManual;
   });
 
-  // Fast failover: only applies in KB mode, and never in manual mode
+  // Fast failover: never in manual mode
   const ffItem = document.getElementById('st-item-fast-failover');
   if (ffItem) {
-    ffItem.style.display = (isAgent || isManual) ? 'none' : 'block';
+    ffItem.hidden = isManual;
   }
 
   // Card 4: Cooldowns grid vs Manual Mode Tip
   const cooldownGrid = document.getElementById('st-grid-cooldowns');
   const cooldownTip = document.getElementById('manual-cooldown-tip');
-  if (cooldownGrid) cooldownGrid.style.display = isManual ? 'none' : 'grid';
-  if (cooldownTip) cooldownTip.style.display = isManual ? 'block' : 'none';
+  if (cooldownGrid) cooldownGrid.hidden = isManual;
+  if (cooldownTip) cooldownTip.hidden = !isManual;
 
   // Upstream timeout behavior
   const chatTimeoutEl = document.getElementById('s_chatTimeout');

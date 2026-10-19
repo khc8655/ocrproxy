@@ -33,7 +33,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-07</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-08</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -166,8 +166,18 @@
 
     <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
+      <!-- Hidden compatibility inputs for tests & dual lookup -->
       <input type="hidden" id="set_upstream_timeout_sec" max="300" value="120">
-      <input type="hidden" id="set_proxy_api_key" value="">
+      <input type="hidden" id="set_request_total_budget_sec" value="300">
+      <input type="hidden" id="set_max_retries" value="3">
+      <input type="hidden" id="set_max_attempts_per_provider" value="3">
+      <input type="hidden" id="set_fast_failover_provider_down" value="true">
+      <input type="hidden" id="set_cooldown_429_sec" value="60">
+      <input type="hidden" id="set_cooldown_5xx_sec" value="30">
+      <input type="hidden" id="set_circuit_break_threshold" value="3">
+      <input type="hidden" id="set_cooldown_403_sec" value="600">
+      <input type="hidden" id="set_routing_strategy" value="sticky_failover">
+
       <div class="section">
         <div style="margin-bottom:16px;">
           <div class="section-title">系统设置</div>
@@ -178,23 +188,37 @@
         <div class="card settings-card mb-3">
           <div class="settings-group-title">1. 运行模式与客户端鉴权 (Run Mode & Client Auth)</div>
           <div class="settings-grid">
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <!-- VM Client Key (Editable + Random Generator) -->
+            <div class="settings-row settings-row-full" data-arch="vm">
               <div class="settings-row-label">
-                <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint">Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥</span>
+                <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint" title="Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥">Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:480px;">
+              <div class="settings-row-ctrl">
                 <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-..." style="flex:1;">
                 <button class="btn btn-secondary btn-sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
               </div>
             </div>
-            <div class="settings-row" style="grid-column: 1 / -1;">
+
+            <!-- EdgeOne Client Key (Read-only Cloud Injection) -->
+            <div class="settings-row settings-row-full" data-arch="edgeone">
               <div class="settings-row-label">
-                <span class="settings-row-title">系统运行模式 (Running Mode)</span>
-                <span class="settings-row-hint">控制管理后台页面自适应展示以及 /v1/models 的暴露范围</span>
+                <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint" title="EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:440px;">
-                <select id="s_runMode" class="form-control form-control-compact" onchange="onRunModeChange()" style="width:100%;">
+              <div class="settings-row-ctrl">
+                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--bg-subtle);color:var(--text-secondary);cursor:not-allowed;">
+              </div>
+            </div>
+
+            <!-- VM Running Mode (Agent / KB) -->
+            <div class="settings-row settings-row-full" data-cap="runModes">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="系统运行模式 (Running Mode)">系统运行模式 (Running Mode)</span>
+                <span class="settings-row-hint" title="控制管理后台页面自适应展示以及 /v1/models 的暴露范围">控制管理后台页面自适应展示以及 /v1/models 的暴露范围</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <select id="s_runMode" class="form-control form-control-compact" onchange="onRunModeChange()">
                   <option value="agent">Agent 智能体直连模式 (专精 Cursor、Cline 真实模型)</option>
                   <option value="kb">KB 知识库入库模式 (4 大入库专用虚拟聚合模型)</option>
                 </select>
@@ -207,31 +231,31 @@
         <div class="card settings-card mb-3">
           <div class="settings-group-title">2. 核心分流调度策略 (Key Routing Strategy)</div>
           <div class="settings-grid">
-            <div class="settings-row" id="st-item-agent-routing" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full" id="st-item-agent-routing">
               <div class="settings-row-label">
-                <span class="settings-row-title">Agent 模式分流策略 (agent_routing_strategy)</span>
-                <span class="settings-row-hint" id="agent-routing-hint">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
+                <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
+                <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
                 <div id="manual-routing-tip" class="hint-box mt-1" style="display:none;color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
                   <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:440px;">
-                <select id="s_agentRouting" class="form-control form-control-compact" onchange="onAgentRoutingChange()" style="width:100%;">
-                  <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐，遇 429 顺延驻留</option>
-                  <option value="manual">纯手动直通 (manual) — 锁定当前 Key，绝不切换，纯透传</option>
+              <div class="settings-row-ctrl">
+                <select id="s_agentRouting" class="form-control form-control-compact" onchange="onAgentRoutingChange()">
+                  <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐</option>
+                  <option value="manual">纯手动直通 (manual) — 锁定当前 Key</option>
                 </select>
               </div>
             </div>
 
-            <div class="settings-row" id="st-item-kb-routing" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full" id="st-item-kb-routing" data-cap="kb">
               <div class="settings-row-label">
-                <span class="settings-row-title">KB 知识库分流策略 (kb_routing_strategy)</span>
-                <span class="settings-row-hint">知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力</span>
+                <span class="settings-row-title" title="KB 知识库分流策略 (kb_routing_strategy)">KB 知识库分流策略 (kb_routing_strategy)</span>
+                <span class="settings-row-hint" title="知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力">知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:440px;">
-                <select id="s_kbRouting" class="form-control form-control-compact" onchange="onKbRoutingChange()" style="width:100%;">
-                  <option value="round_robin">轮询负载均衡 (round_robin) — 推荐，原子分摊并发</option>
-                  <option value="manual">纯手动直通调试 (manual) — 锁定首个节点，不重试不切换</option>
+              <div class="settings-row-ctrl">
+                <select id="s_kbRouting" class="form-control form-control-compact" onchange="onKbRoutingChange()">
+                  <option value="round_robin">轮询负载均衡 (round_robin) — 推荐</option>
+                  <option value="manual">纯手动直通调试 (manual) — 锁定首节点</option>
                 </select>
               </div>
             </div>
@@ -244,90 +268,100 @@
           <div class="settings-grid">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title" id="lbl_chatTimeout">首字节/等待超时 (upstream_timeout_sec)</span>
-                <span class="settings-row-hint" id="hint_chatTimeout">智能体等待首字节响应的时限，发生超时立即安全切换备用 Key</span>
+                <span class="settings-row-title" id="lbl_chatTimeout" title="单次请求等待超时 (upstream_timeout_sec)">单次请求等待超时 (upstream_timeout_sec)</span>
+                <span class="settings-row-hint" id="hint_chatTimeout" title="5~300s，智能体等待首字节响应的时限，发生超时立即安全切换备用 Key">5~300s，智能体等待首字节时限，超时立即切换备用 Key</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_chatTimeout" class="form-control form-control-compact mono" placeholder="120" min="5" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
-              </div>
-            </div>
-            <input type="hidden" id="s_budget" value="">
-
-            <div class="settings-row" id="st-item-max-retries">
-              <div class="settings-row-label">
-                <span class="settings-row-title">单请求最大重试候选数 (max_retries)</span>
-                <span class="settings-row-hint">单次请求最多允许尝试的候选 Key 数量上限</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_maxRetries" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
-              </div>
-            </div>
-
-            <div class="settings-row" id="st-item-max-attempts">
-              <div class="settings-row-label">
-                <span class="settings-row-title">单厂商最大尝试次数 (max_attempts_per_provider)</span>
-                <span class="settings-row-hint">单厂商多个 Key 故障时最多重试次数</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_maxAttemptsPerProvider" class="form-control form-control-compact mono" placeholder="2" min="1" max="5" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
+                <input type="number" id="s_chatTimeout" data-alias="set_upstream_timeout_sec" class="form-control form-control-compact mono" placeholder="120" min="5" max="300" step="5" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
-                <span class="settings-row-hint">KB 模式单个 Key 的在途并发上限（默认 16）；Agent 模式默认不限，避免会话因 Key 繁忙被分流而丢失缓存</span>
+                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算 (request_total_budget_sec)</span>
+                <span class="settings-row-hint" title="10~900s，全局硬截止上限 (默认 300s)">10~900s，全局硬截止上限 (默认 300s)</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="16" min="1" max="100" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">个</span>
+                <input type="number" id="s_budget" data-alias="set_request_total_budget_sec" class="form-control form-control-compact mono" placeholder="300" min="10" max="900" step="10" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
-            <div class="settings-row" id="st-item-kb-timeout">
+            <div class="settings-row" id="st-item-max-retries">
               <div class="settings-row-label">
-                <span class="settings-row-title">KB 大文件/OCR 处理超时 (upstream_timeout_kb)</span>
-                <span class="settings-row-hint">长文本与大图片处理时限（默认 60s）</span>
+                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数 (max_retries)</span>
+                <span class="settings-row-hint" title="单次请求最多允许轮换尝试的候选 Key 数量上限（默认 3 次）">单次请求最多允许轮换尝试的候选 Key 数量上限</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
+                <input type="number" id="s_maxRetries" data-alias="set_max_retries" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
 
-            <div class="settings-row" id="st-item-ocr-inflight">
+            <div class="settings-row" id="st-item-max-attempts">
               <div class="settings-row-label">
-                <span class="settings-row-title">OCR 同时处理图片数 (ocr_max_inflight)</span>
-                <span class="settings-row-hint">OCR 并发处理图片数（超出的排队不占内存）</span>
+                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限 (max_attempts_per_provider)</span>
+                <span class="settings-row-hint" title="同厂商连续失败最多尝试 Key 数（默认 3 次）">同厂商连续失败最多尝试 Key 数（默认 3 次）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">张</span>
+                <input type="number" id="s_maxAttemptsPerProvider" data-alias="set_max_attempts_per_provider" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
 
-            <div class="settings-row" id="st-item-ocr-queue">
+            <div class="settings-row" id="st-item-kb-concurrency" data-cap="kb">
               <div class="settings-row-label">
-                <span class="settings-row-title">OCR 排队最长等待 (ocr_queue_timeout_sec)</span>
-                <span class="settings-row-hint">排队超过此时间返回 503 + Retry-After（默认 30s）</span>
+                <span class="settings-row-title" title="KB 单 Key 最大并发 (kb_max_concurrency_per_key)">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
+                <span class="settings-row-hint" title="KB 模式单 Key 在途并发上限（默认 16）；Agent 模式默认不限">KB 模式单个 Key 的在途并发上限（默认 16，Agent 不限）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
+                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="16" min="1" max="100" onwheel="this.blur()">
+                <span class="unit">个</span>
               </div>
             </div>
 
-            <div class="settings-row" id="st-item-fast-failover" style="grid-column: 1 / -1;">
+            <div class="settings-row" id="st-item-kb-timeout" data-cap="kb">
               <div class="settings-row-label">
-                <span class="settings-row-title">跨厂商快速熔断 (fast_failover_provider_down)</span>
-                <span class="settings-row-hint">遇 502/504/连接超时且有其他可用厂商时，跳过当前厂商剩余 Key 立即切走</span>
+                <span class="settings-row-title" title="KB 大文件/OCR 处理超时 (upstream_timeout_kb)">KB 处理超时 (upstream_timeout_kb)</span>
+                <span class="settings-row-hint" title="长文本与大图片处理时限（默认 60s）">长文本与大图片处理时限（默认 60s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-ocr-inflight" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="OCR 同时处理图片数 (ocr_max_inflight)">OCR 处理图片数 (ocr_max_inflight)</span>
+                <span class="settings-row-hint" title="OCR 并发处理图片数（超出的排队不占内存，默认 12 张）">OCR 并发处理图片数（超出的排队不占内存）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" onwheel="this.blur()">
+                <span class="unit">张</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-ocr-queue" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="OCR 排队最长等待 (ocr_queue_timeout_sec)">OCR 排队最长等待 (ocr_queue_timeout_sec)</span>
+                <span class="settings-row-hint" title="排队超过此时间返回 503 + Retry-After（默认 30s）">排队超过此时间返回 503 + Retry-After（默认 30s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-full" id="st-item-fast-failover">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="跨厂商快速熔断 (fast_failover_provider_down)">跨厂商快速熔断 (fast_failover_provider_down)</span>
+                <span class="settings-row-hint" title="遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
               </div>
               <div class="settings-row-ctrl">
                 <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                  <input type="checkbox" id="s_fastFailover" checked style="width:16px;height:16px;cursor:pointer;">
+                  <input type="checkbox" id="s_fastFailover" data-alias="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
                   <span style="font-weight:600;">已开启</span>
                 </label>
               </div>
@@ -341,45 +375,45 @@
           <div class="settings-grid mb-2" id="st-grid-cooldowns">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">429 限流冷却时长 (cooldown_429_sec)</span>
-                <span class="settings-row-hint">命中速率限制 (429/RPM) 时的临时避让时长</span>
+                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长 (cooldown_429_sec)</span>
+                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让（默认 60s）">cooldown_429_sec · 命中 RPM/TPM 限流避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown429" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
+                <input type="number" id="s_cooldown429" data-alias="set_cooldown_429_sec" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" step="5" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">5xx 故障冷却时长 (cooldown_5xx_sec)</span>
-                <span class="settings-row-hint">上游服务异常 (500/502/503/504) 避让时长</span>
+                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长 (cooldown_5xx_sec)</span>
+                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让（默认 30s）">cooldown_5xx_sec · 上游 500/502/503/504 错误避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown5xx" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
+                <input type="number" id="s_cooldown5xx" data-alias="set_cooldown_5xx_sec" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" step="5" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">断路器熔断连续失败阈值 (circuit_break_threshold)</span>
-                <span class="settings-row-hint">单 Key 连续失败达到阈值即触发熔断（默认 3 次）</span>
+                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器连续失败阈值 (circuit_break_threshold)</span>
+                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断（默认 3 次）">单 Key 连续失败达到阈值即触发熔断（默认 3 次）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_circuitThreshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
+                <input type="number" id="s_circuitThreshold" data-alias="set_circuit_break_threshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">403 鉴权失败/欠费隔离 (cooldown_403_sec)</span>
-                <span class="settings-row-hint">Key 无效或额度用尽时的主动隔离时长</span>
+                <span class="settings-row-title" title="403 鉴权失败/欠费隔离 (cooldown_403_sec)">403 鉴权失败隔离 (cooldown_403_sec)</span>
+                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离（默认 600s）">Key 无效或欠费的主动长效隔离（默认 600s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown403" class="form-control form-control-compact mono" placeholder="600" min="60" max="3600" style="width:80px;text-align:right;" onwheel="this.blur()">
-                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
+                <input type="number" id="s_cooldown403" data-alias="set_cooldown_403_sec" class="form-control form-control-compact mono" placeholder="600" min="30" max="3600" step="30" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
           </div>
@@ -389,25 +423,25 @@
         </div>
 
         <!-- Group 5: Vault Hub & Operations -->
-        <div class="card settings-card mb-3">
+        <div class="card settings-card mb-3" data-cap="vaultClient" data-arch="vm">
           <div class="settings-group-title">5. EdgeOne 凭据中枢与系统运维 (Vault Hub & Operations)</div>
           <div class="settings-grid mb-2">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">EdgeOne 中枢服务地址</span>
-                <span class="settings-row-hint">云端金库中枢的基础访问 URL</span>
+                <span class="settings-row-title" title="EdgeOne 中枢服务地址">EdgeOne 中枢服务地址</span>
+                <span class="settings-row-hint" title="云端金库中枢的基础访问 URL">云端金库中枢的基础访问 URL</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:260px;">
+              <div class="settings-row-ctrl">
                 <input type="text" id="cfg_vault_url" class="form-control form-control-compact" placeholder="https://api.example.com">
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">中枢访问 Token</span>
-                <span class="settings-row-hint">用于同步与拉取凭据的安全金钥</span>
+                <span class="settings-row-title" title="中枢访问 Token">中枢访问 Token</span>
+                <span class="settings-row-hint" title="用于同步与拉取凭据的安全金钥">用于同步与拉取凭据的安全金钥</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:260px;position:relative;">
+              <div class="settings-row-ctrl" style="position:relative;">
                 <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:32px;">
                 <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
                   <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -415,10 +449,10 @@
               </div>
             </div>
 
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title">中枢连通性诊断与增量同步</span>
-                <span class="settings-row-hint">测试中枢网络连接，或一键增量同步已配置的提供商端点与规则</span>
+                <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
+                <span class="settings-row-hint" title="测试中枢网络连接，或一键增量同步已配置的提供商端点与规则">测试中枢网络连接，或一键增量同步已配置的提供商端点与规则</span>
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
@@ -428,10 +462,10 @@
             </div>
             <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
 
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full" data-cap="systemUpdate">
               <div class="settings-row-label">
-                <span class="settings-row-title">系统版本检测与平滑重启</span>
-                <span class="settings-row-hint">检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程</span>
+                <span class="settings-row-title" title="系统版本检测与平滑重启">系统版本检测与平滑重启</span>
+                <span class="settings-row-hint" title="检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程">检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程</span>
               </div>
               <div class="settings-row-ctrl">
                 <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>

@@ -118,6 +118,11 @@ function pageHtml() {
   --space-5: 24px;
   --space-6: 32px;
 
+  /* Component Sizing Tokens */
+  --ctrl-height-sm: 28px;
+  --ctrl-height-md: 32px;
+  --row-height: 52px;
+
   /* Radius */
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -630,46 +635,104 @@ textarea.form-control {
 }
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3, 12px) var(--space-4, 16px);
+  align-items: stretch;
 }
-@media (max-width: 768px) {
+@media (max-width: 840px) {
   .settings-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 16px;
+  padding: 8px 14px;
   background: var(--color-bg-page);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  min-height: 48px;
+  min-height: var(--row-height, 52px);
+  height: var(--row-height, 52px);
+  box-sizing: border-box;
+}
+.settings-row.settings-row-full {
+  grid-column: 1 / -1;
 }
 .settings-row-label {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
-  flex: 1;
+  flex: 1 1 65%;
   min-width: 0;
 }
 .settings-row-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 .settings-row-hint {
   font-size: 11px;
   color: var(--color-text-3);
-  line-height: 1.25;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .settings-row-ctrl {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 clamp(160px, 35%, 260px);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.settings-row.settings-row-full .settings-row-ctrl {
+  flex: 0 1 clamp(240px, 40%, 420px);
+}
+.settings-row-ctrl select {
+  width: 100%;
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--color-border-strong, #CBD5E1);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text-1);
+  outline: none;
+}
+.settings-row-ctrl input[type="number"] {
+  width: 80px !important;
+  height: 32px;
+  text-align: right;
+  padding: 4px 8px !important;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  border: 1px solid var(--color-border-strong, #CBD5E1);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text-1);
+  outline: none;
+  flex-shrink: 0;
+}
+.settings-row-ctrl input[type="text"],
+.settings-row-ctrl input[type="password"] {
+  height: 32px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.settings-row-ctrl .unit, .settings-row-ctrl .text-secondary {
+  font-size: 12px;
+  color: var(--color-text-3);
+  min-width: 16px;
+  text-align: left;
   flex-shrink: 0;
 }
 
@@ -1286,7 +1349,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-07</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-08</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1324,7 +1387,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-07</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-08</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1412,23 +1475,23 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         <div class="card settings-card">
           <!-- Group 1: Auth & Routing -->
           <div class="settings-group-title">客户端鉴权与分流策略</div>
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-            <div class="settings-row">
+          <div class="settings-grid" style="margin-bottom:16px;">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
-              </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:420px;">
-                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="flex:1;background:var(--bg-subtle, #f6f8fa);color:var(--text-secondary, #57606a);cursor:not-allowed;">
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title">路由分流算法 (agent_routing_strategy)</span>
-                <span class="settings-row-hint">控制多 Key 之间的主备切换与调度规则</span>
+                <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint" title="EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl">
-                <select id="set_routing_strategy" class="form-control form-control-compact" style="width:230px;">
+                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--color-bg-page);color:var(--color-text-3);cursor:not-allowed;">
+              </div>
+            </div>
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="路由分流算法 (agent_routing_strategy)">路由分流算法 (agent_routing_strategy)</span>
+                <span class="settings-row-hint" title="控制多 Key 之间的主备切换与调度规则">控制多 Key 之间的主备切换与调度规则</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <select id="set_routing_strategy" class="form-control form-control-compact">
                   <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
                   <option value="manual">纯手动直通 (锁定当前 Key)</option>
                 </select>
@@ -1441,45 +1504,45 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           <div class="settings-grid" style="margin-bottom:16px;">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单次请求等待超时</span>
-                <span class="settings-row-hint">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
+                <span class="settings-row-title" title="单次请求等待超时 (upstream_timeout_sec)">单次请求等待超时</span>
+                <span class="settings-row-hint" title="upstream_timeout_sec · 5~300s，长思考推荐 ≥120s">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单请求全局总预算</span>
-                <span class="settings-row-hint">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
+                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算</span>
+                <span class="settings-row-hint" title="request_total_budget_sec · 全局硬截止上限 (默认 300s)">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单请求最大重试次数</span>
-                <span class="settings-row-hint">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
+                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数</span>
+                <span class="settings-row-hint" title="max_retries · 单次请求最多允许轮换尝试的 Key 数">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单厂商重试 Key 上限</span>
-                <span class="settings-row-hint">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
+                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限</span>
+                <span class="settings-row-hint" title="max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
           </div>
@@ -1487,14 +1550,14 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           <!-- Group 3: Fault Tolerance & Cooldowns -->
           <div class="settings-group-title" style="margin-top:16px;">容错熔断与冷却避让</div>
           <div class="settings-grid">
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title">跨厂商快速熔断 (fast_failover_provider_down)</span>
-                <span class="settings-row-hint">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
+                <span class="settings-row-title" title="跨厂商快速熔断 (fast_failover_provider_down)">跨厂商快速熔断 (fast_failover_provider_down)</span>
+                <span class="settings-row-hint" title="遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
               </div>
               <div class="settings-row-ctrl">
-                <label class="checkbox" style="font-size:13px;cursor:pointer;">
-                  <input type="checkbox" id="set_fast_failover_provider_down" checked>
+                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                  <input type="checkbox" id="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
                   <span style="font-weight:600;">已开启</span>
                 </label>
               </div>
@@ -1502,45 +1565,45 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">429 限流冷却时长</span>
-                <span class="settings-row-hint">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
+                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长</span>
+                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">5xx 故障冷却时长</span>
-                <span class="settings-row-hint">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
+                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长</span>
+                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">403 鉴权失败隔离</span>
-                <span class="settings-row-hint">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
+                <span class="settings-row-title" title="403 鉴权失败隔离 (cooldown_403_sec)">403 鉴权失败隔离</span>
+                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">断路器熔断连续失败阈值</span>
-                <span class="settings-row-hint">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
+                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器熔断连续失败阈值</span>
+                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
           </div>
@@ -1824,7 +1887,11 @@ window.__HOST_KIND__ = 'edgeone';
     },
 
     applyCapabilities: function() {
-      // Toggle visibility based on data-cap
+      if (typeof document === 'undefined') return;
+      if (document.body) {
+        document.body.classList.toggle('arch-edgeone', HOST.isEdgeOne);
+        document.body.classList.toggle('arch-vm', HOST.isVm);
+      }
       document.querySelectorAll('[data-cap]').forEach(el => {
         const cap = el.getAttribute('data-cap');
         if (!cap) return;
@@ -1832,12 +1899,23 @@ window.__HOST_KIND__ = 'edgeone';
         const capKey = negate ? cap.slice(1) : cap;
         const hasCap = !!HOST.capabilities[capKey];
         const shouldShow = negate ? !hasCap : hasCap;
-        el.style.display = shouldShow ? '' : 'none';
+        el.hidden = !shouldShow;
       });
     }
   };
 
   global.HOST = HOST;
+
+  if (typeof document !== 'undefined') {
+    const initHost = function() {
+      HOST.applyCapabilities();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initHost);
+    } else {
+      initHost();
+    }
+  }
 
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -3094,7 +3172,7 @@ if (!Object.getOwnPropertyDescriptor(window, 'state')) {
 }
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-07';
+const BUILD_VERSION = 'v2026.10.19-08';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',

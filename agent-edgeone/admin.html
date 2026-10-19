@@ -157,23 +157,23 @@
         <div class="card settings-card">
           <!-- Group 1: Auth & Routing -->
           <div class="settings-group-title">客户端鉴权与分流策略</div>
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-            <div class="settings-row">
+          <div class="settings-grid" style="margin-bottom:16px;">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
-              </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:420px;">
-                <input type="text" id="set_proxy_api_key" class="form-control mono form-control-compact" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="flex:1;background:var(--bg-subtle, #f6f8fa);color:var(--text-secondary, #57606a);cursor:not-allowed;">
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title">路由分流算法 (agent_routing_strategy)</span>
-                <span class="settings-row-hint">控制多 Key 之间的主备切换与调度规则</span>
+                <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint" title="EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl">
-                <select id="set_routing_strategy" class="form-control form-control-compact" style="width:230px;">
+                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--color-bg-page);color:var(--color-text-3);cursor:not-allowed;">
+              </div>
+            </div>
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="路由分流算法 (agent_routing_strategy)">路由分流算法 (agent_routing_strategy)</span>
+                <span class="settings-row-hint" title="控制多 Key 之间的主备切换与调度规则">控制多 Key 之间的主备切换与调度规则</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <select id="set_routing_strategy" class="form-control form-control-compact">
                   <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
                   <option value="manual">纯手动直通 (锁定当前 Key)</option>
                 </select>
@@ -186,45 +186,45 @@
           <div class="settings-grid" style="margin-bottom:16px;">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单次请求等待超时</span>
-                <span class="settings-row-hint">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
+                <span class="settings-row-title" title="单次请求等待超时 (upstream_timeout_sec)">单次请求等待超时</span>
+                <span class="settings-row-hint" title="upstream_timeout_sec · 5~300s，长思考推荐 ≥120s">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单请求全局总预算</span>
-                <span class="settings-row-hint">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
+                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算</span>
+                <span class="settings-row-hint" title="request_total_budget_sec · 全局硬截止上限 (默认 300s)">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单请求最大重试次数</span>
-                <span class="settings-row-hint">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
+                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数</span>
+                <span class="settings-row-hint" title="max_retries · 单次请求最多允许轮换尝试的 Key 数">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单厂商重试 Key 上限</span>
-                <span class="settings-row-hint">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
+                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限</span>
+                <span class="settings-row-hint" title="max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
           </div>
@@ -232,14 +232,14 @@
           <!-- Group 3: Fault Tolerance & Cooldowns -->
           <div class="settings-group-title" style="margin-top:16px;">容错熔断与冷却避让</div>
           <div class="settings-grid">
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title">跨厂商快速熔断 (fast_failover_provider_down)</span>
-                <span class="settings-row-hint">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
+                <span class="settings-row-title" title="跨厂商快速熔断 (fast_failover_provider_down)">跨厂商快速熔断 (fast_failover_provider_down)</span>
+                <span class="settings-row-hint" title="遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
               </div>
               <div class="settings-row-ctrl">
-                <label class="checkbox" style="font-size:13px;cursor:pointer;">
-                  <input type="checkbox" id="set_fast_failover_provider_down" checked>
+                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                  <input type="checkbox" id="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
                   <span style="font-weight:600;">已开启</span>
                 </label>
               </div>
@@ -247,45 +247,45 @@
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">429 限流冷却时长</span>
-                <span class="settings-row-hint">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
+                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长</span>
+                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">5xx 故障冷却时长</span>
-                <span class="settings-row-hint">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
+                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长</span>
+                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">403 鉴权失败隔离</span>
-                <span class="settings-row-hint">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
+                <span class="settings-row-title" title="403 鉴权失败隔离 (cooldown_403_sec)">403 鉴权失败隔离</span>
+                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" onwheel="this.blur()">
+                <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">断路器熔断连续失败阈值</span>
-                <span class="settings-row-hint">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
+                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器熔断连续失败阈值</span>
+                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <span class="unit">次</span>
               </div>
             </div>
           </div>

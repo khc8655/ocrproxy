@@ -4,6 +4,47 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v2026.10.19-08] - 2026-10-19
+
+### 系统设置统一流式比例规范与单一真理源重构
+- **根治 JS 运行时 display:block 内联覆盖破坏性缺陷**：
+  - 彻底杜绝 `shared/admin/js/settings.js` 中对 `.settings-row` 元素写入 `style.display = 'block'` 的破坏性行为（该内联样式曾将 Flex 布局强行压制为块级元素，导致单选/下拉框被粗暴挤压到第二行竖排，并拉伸破坏相邻卡片高度）；
+  - 全面升级为 HTML5 原生 `el.hidden = boolean` 配合 CSS `[hidden] { display: none !important; }`，彻底杜绝内联样式污染与布局破坏。
+- **吸收 design-system Token 建立 6.5:3.5 黄金流式比例与统一定高**：
+  - 汲取 `design-system` 核心设计语言与间距变量，为 `.settings-row` 设定统一标准定高 `52px`（`min-height: 52px;`）、水平无折行（`flex-wrap: nowrap;`）；
+  - 标签区（`.settings-row-label`）固定占 `65%` 并施加 `min-width: 0; text-overflow: ellipsis;`，文字超长自动省略截断，并全量注入原生 `title="..."` Tooltip 承载完整语义；
+  - 控件区（`.settings-row-ctrl`）占 `35%`（`clamp(160px, 35%, 260px)`），数字输入框统一定宽 `80px`（右对齐 + 紧凑单位），彻底消除各控件大小参差、卡片高度抖动的乱象。
+- **单一真理源 UI 与声明式架构自适应**：
+  - 严格落实用户指示，彻底杜绝为每个版本搞单独写死页面的分叉做法，将管理后台唯一真实源（Single Source of Truth）收敛至 `shared/admin/`；
+  - 采用声明式属性 `data-arch="vm|edgeone"` 与 `data-cap="runModes|kb|vaultClient|systemUpdate"` 驱动双端呈现，在 `agent-edgeone/scripts/build-admin.mjs` 中执行统一条件打包与编译注入，彻底杜绝代码碎片化。
+- **响应式断点平滑单列切换**：
+  - 在 `< 840px` 窄屏、平板或小窗口视口下，双列网格自动优雅平滑降级为 `1fr` 单列流式网格，内部控件保持单行对齐不折行。
+- **全量四层自动化测试全绿回归**：
+  - Layer 1 Core: EdgeOne ESM Pure-Logic 单元测试 (198/198) 全部通过；
+  - Layer 2 API: FastAPI 鉴权、级联删除与双端后端契约全套场景 S1~S6/U1 全部通过；
+  - Layer 3 UI: 无头组件事件委托与无内联 handler 安全审计全部通过；
+  - Layer 4 E2E: 全矩阵 Playwright 真实浏览器端到端测试 69 项验证项（包括 32px 紧凑控件、80px 数字框、流式比例、无折行）100% 全部通过。
+
+---
+
+## [v2026.10.19-07] - 2026-10-19
+
+### 合并 PR #14 & #15：落地共享 UI 双端后端契约规范与 EdgeOne 健壮性加固
+- **落地共享 UI 与两端后端契约规范（`shared/contracts/admin-ui-backend.json`）**：
+  - 统一候选节点状态键名 `agent:<model>:<provider>:<key>` 与 `active_keys` 口径，消弭异构后端实现漂移。
+- **修复 EdgeOne 300ms 首包竞速丢首字缺陷**：
+  - 首块为 ping 注释超时后不再遗弃挂起的 reader，将其传递给下游 keep-alive 流继续等待消费，彻底杜绝数据截断。
+- **修复 EdgeOne 非流式 /v1/messages 报 500 崩溃**：
+  - 不可变 Response Headers 导致的运行时错误已解决，重新构造标准可变响应体。
+- **EdgeOne 控制台接入真实调用状态与耗时**：
+  - 补齐 `/api/admin/stats` 接口调用与 `state.stats` 注入，真实调用状态与耗时实时上屏，并通过 throttle 策略保护 KV 写预算。
+- **VM 手动测 Key 键名校正**：
+  - 前端测试请求统一携带 `agent_model` 字段，后端以此精准回写 `candidates_status`，消除显示错位。
+- **建立全自动双端双轨契约测试套件（`tests/test_backend_contract.py`）**：
+  - 同一套真实场景覆盖 S1~S6 与 U1 浏览器渲染，双端全绿保障未来长期演进效率。
+
+---
+
 ## [v2026.10.19-03] - 2026-10-19
 
 ### 供应商删除级联模型清理、Vault 墓碑防复活、Agent 模式精简与分层测试体系
