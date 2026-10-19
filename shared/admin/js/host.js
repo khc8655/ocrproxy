@@ -44,12 +44,14 @@
       configExportImport: true
     },
 
-    buildTestBody: function(binding, targetModel, provName) {
+    buildTestBody: function(binding, targetModel, provName, agentModel) {
       if (kind === 'edgeone') {
         return {
           provider: binding.provider || provName,
           key: binding.key,
-          model: targetModel || binding.model || binding.model_name || ''
+          model: targetModel || binding.model || binding.model_name || '',
+          // Agent model name: lets /api/test store the result as this binding's last call.
+          agent_model: agentModel || ''
         };
       }
       return {

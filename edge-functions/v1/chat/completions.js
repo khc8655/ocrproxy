@@ -50,6 +50,7 @@ import {
   COOLDOWN_DURATIONS,
 } from '../../lib/cooldowns.js';
 import { edgeLogger } from '../../lib/logger.js';
+import { recordNodeStatBackground, nodeStatFromResult } from '../../lib/nodestats.js';
 
 const MAX_BODY_BYTES = 900 * 1024; // 900 KB Edge Function safe ingress limit (avoids 1MB hard crash)
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000; // 300s (5min) full EdgeOne fetch limit for deep reasoning models
@@ -262,6 +263,7 @@ export async function onRequestPost(context) {
     const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
     const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
 
+    const attemptStartMs = Date.now();
     const result = await forwardUpstream(
       resolved,
       attemptBody,
@@ -271,6 +273,8 @@ export async function onRequestPost(context) {
       perAttemptTimeoutMs,
       peekDeadlineMs
     );
+
+    recordNodeStatBackground(context, kv, nodeStatFromResult(body.model, binding, result, attemptStartMs));
 
     if (result.kind === 'success') {
       recordStickySuccess(body.model, binding, allBindings);
@@ -585,12 +589,20 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       let firstChunkText = new TextDecoder().decode(value);
       // If the first chunk only contained SSE comments (e.g. : ping), peek one more chunk to inspect real data
       const nonCommentLines = firstChunkText.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith(':'));
+      let pendingNextRead = null;
       if (nonCommentLines.length === 0 && value.length < 2048) {
         try {
+          // Keep the in-flight read: if the 300ms window passes, the chunk it later
+          // resolves with must still reach the client (handed to the keep-alive stream).
+          const nextReadPromise = reader.read();
+          nextReadPromise.catch(() => {}); // rejection is handled where it is awaited
+          let raceTimer = null;
           const nextRead = await Promise.race([
-            reader.read(),
-            new Promise(res => setTimeout(() => res(null), 300))
+            nextReadPromise,
+            new Promise(res => { raceTimer = setTimeout(() => res(null), 300); })
           ]);
+          if (raceTimer) clearTimeout(raceTimer);
+          if (nextRead === null) pendingNextRead = nextReadPromise;
           if (nextRead && !nextRead.done && nextRead.value && nextRead.value.length > 0) {
             const nextText = new TextDecoder().decode(nextRead.value);
             firstChunkText += '\n' + nextText;
@@ -612,7 +624,7 @@ async function forwardUpstream(resolved, body, isStream, request, env, perAttemp
       return {
         kind: 'success',
         status: upstreamResp.status,
-        response: new Response(createKeepAliveStream(reader, 5000, value, null), {
+        response: new Response(createKeepAliveStream(reader, 5000, value, pendingNextRead), {
           status: upstreamResp.status,
           headers: buildOutHeaders(upstreamResp),
         }),
