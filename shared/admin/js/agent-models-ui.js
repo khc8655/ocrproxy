@@ -168,8 +168,8 @@
   function keySourceBadge(src, size) {
     const fs = size || 10;
     if (src === 'public') return `<span class="badge badge-warning" style="font-size:${fs}px;padding:0 6px;">免Key兜底</span>`;
-    if (src === 'vault') return `<span class="badge badge-neutral" style="font-size:${fs}px;padding:1px 5px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>`;
-    return `<span class="badge badge-success" style="font-size:${fs}px;padding:1px 5px;font-weight:600;" title="本地加密存储">本地</span>`;
+    if (src === 'vault') return `<span class="badge badge-primary" style="font-size:${fs}px;padding:1px 6px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>`;
+    return `<span class="badge badge-primary" style="font-size:${fs}px;padding:1px 6px;font-weight:600;" title="本地加密存储">本地</span>`;
   }
 
 
@@ -618,7 +618,7 @@
     }
 
     if (allKeyLabels.length === 0) {
-      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方「+ 添加本地 Key」直接录入</div>';
+      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请前往「供应商」页面添加 Key 凭证</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const src = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, k) : 'local';
@@ -1032,7 +1032,7 @@
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
     const { probingKeys } = getCtx();
     const isProbing = probingKeys.has(probeKeyId);
-    const keyBadgeHtml = `<span class="badge badge-neutral">${_esc(key)}</span>`;
+    const keyBadgeHtml = `<span class="mono" style="font-weight:600;color:var(--text);font-size:12px;background:var(--bg-subtle);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">${_esc(key)}</span>`;
 
     const orderInputHtml = `<input type="number" min="1" max="${totalKeys}" value="${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
@@ -1147,9 +1147,9 @@
     if (event) event.stopPropagation();
     if (typeof resolveKeySource === 'function' && resolveKeySource(prov, label) === 'vault') {
       if (typeof _toast === 'function') {
-        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
       } else if (typeof toast === 'function') {
-        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
       }
       return;
     }

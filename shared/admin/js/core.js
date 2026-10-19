@@ -971,87 +971,14 @@ function triggerImportConfig() {
 }
 
 function renderAccessPanel() {
-  const origin = window.location.origin;
-  const base = `${origin}/v1`;
-  const cfg = state.config || {};
-  const models = Object.keys(cfg.agent_models || {});
-  const messagesModels = models.filter(m => (typeof getModelProtocols === 'function' ? getModelProtocols(m) : ['chat']).includes('messages'));
-  const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
-  const proxyKey = (cfg.proxy_api_key || state.key || 'YOUR_PROXY_API_KEY');
-
-  const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  setT('accBaseUrl', base);
-  setT('accModelsList', models.join(', ') || '—');
-
-  const protoContainer = document.getElementById('accProtocols');
-  if (protoContainer) {
-    const activeProtos = new Set(['chat']);
-    if (messagesModels.length || Object.entries(cfg.providers || {}).some(([n, p]) => (typeof getProviderProtocols === 'function' ? getProviderProtocols(n, p) : ['chat']).includes('messages'))) {
-      activeProtos.add('messages');
-    }
-    if (Object.entries(cfg.providers || {}).some(([n, p]) => (typeof getProviderProtocols === 'function' ? getProviderProtocols(n, p) : ['chat']).includes('responses'))) {
-      activeProtos.add('responses');
-    }
-    protoContainer.innerHTML = (typeof renderProtocolBadges === 'function') ? renderProtocolBadges(Array.from(activeProtos), false) : 'OpenAI Chat';
-  }
-
-  // 1. OpenAI Chat
-  const pySample = `from openai import OpenAI
-
-client = OpenAI(
-    api_key="${proxyKey}",
-    base_url="${base}"
-)
-
-response = client.chat.completions.create(
-    model="${models[0] || 'qwen3.8-flash'}",
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
-    stream=True
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)
-`;
-  setT('accPy', pySample);
-
-  // 2. Anthropic Messages
-  const messagesPySample = `import anthropic
-
-client = anthropic.Anthropic(
-    api_key="${proxyKey}",
-    base_url="${base}"
-)
-
-response = client.messages.create(
-    model="${demoMessages}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
-    stream=True
-)
-
-for chunk in response:
-    if chunk.type == "content_block_delta" and chunk.delta.text:
-        print(chunk.delta.text, end="", flush=True)
-`;
-  setT('accMessagesPy', messagesPySample);
-
-  // 3. cURL
-  const curlSample = `curl -X POST "${base}/chat/completions" \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${models[0] || 'qwen3.8-flash'}",
-    "messages": [{"role": "user", "content": "1+1=?"}],
-    "stream": false
-  }'`;
-  setT('accCurl', curlSample);
+  // 接入与 SDK 调用示例已彻底移除
 }
 
 function copySnippet(id) {
   const el = document.getElementById(id);
-  if (el && typeof copyText === 'function') copyText(el.textContent, '接入示例已复制到剪贴板');
+  if (el && typeof copyText === 'function') copyText(el.textContent, '已复制到剪贴板');
 }
+
 
 // 全局彻底拦截数字输入框的鼠标滚轮微调行为，防止页面上下滚动误触修改数值
 document.addEventListener('wheel', function(e) {

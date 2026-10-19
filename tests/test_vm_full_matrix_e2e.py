@@ -134,22 +134,11 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         check(await page.locator("#topNav >> text=接入指引").count() == 0, "主导航彻底移除独立「接入指引」Tab")
         check(await page.locator("#topNav >> text=JSON 配置").count() == 0, "主导航彻底移除独立「JSON 配置」Tab")
 
-        # 验证概览页内嵌接入指引折叠区与代码块高对比度深色样式
-        guide_details = page.locator("#accessGuideDetails")
-        check(await guide_details.count() == 1, "概览页内嵌规范的「客户端接入指引与代码示例」折叠区域")
-        await guide_details.evaluate("el => el.open = true")
-        curl_box = page.locator("#accCurl")
-        check(await curl_box.is_visible(), "接入指引正常生成 cURL 接入示例")
-        curl_val = await curl_box.inner_text()
-        check("curl" in curl_val and base_url in curl_val, f"cURL 示例内容动态渲染当前 Base URL: {curl_val[:40]}...")
-
-        # 验证代码块样式杜绝「白底白字」
-        curl_bg = await curl_box.evaluate("el => window.getComputedStyle(el).backgroundColor")
-        parent_bg = await curl_box.evaluate("el => window.getComputedStyle(el.parentElement).backgroundColor")
-        curl_color = await curl_box.evaluate("el => window.getComputedStyle(el).color")
-        is_dark_bg = any(k in curl_bg or k in parent_bg for k in ["15, 23, 42", "rgba(15, 23, 42", "#0f172a"])
-        check(is_dark_bg, f"代码块背景色严格为深色背景 (#0f172a): {curl_bg} / {parent_bg}")
-        check("226, 232, 240" in curl_color or "#e2e8f0" in curl_color, f"代码块文字颜色严格为浅色文本高对比度 (#e2e8f0): {curl_color}")
+        # 验证概览页接入网关与可用模型展示，彻底移除接入指引与 SDK 代码示例
+        check(await page.locator("#accessGuideDetails").count() == 0, "概览页彻底删除客户端接入与 SDK 调用示例代码块")
+        check(await page.locator("#panel-settings pre").count() == 0, "系统设置彻底杜绝客户端接入与 SDK 调用示例代码块")
+        check(await page.locator("#dbBaseUrl").is_visible(), "网关卡片正常展示 Base URL")
+        check(await page.locator("#gwClientKeyVal").is_visible(), "网关卡片正常展示 Client Key")
 
         os.makedirs(ROOT / "scratch", exist_ok=True)
         await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_dashboard_access_guide.png"))
@@ -270,12 +259,33 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
             active_badge = page.locator("span.badge-success:has-text('使用中')")
             check(await active_badge.count() > 0, "点击「设为主力」后目标 Key 状态切换为「使用中」")
 
+        # 验证添加模型弹窗彻底移除「添加本地 Key」按钮
+        await page.click("button:has-text('+ 新增 Agent 模型')")
+        await page.wait_for_selector("#agentModal", state="visible")
+        check(await page.locator("#a_keyArea button:has-text('添加本地 Key')").count() == 0, "Agent 模型弹窗中彻底移除「添加本地 Key」重复按钮")
+        await page.click("#agentModal .modal-close")
+        await page.wait_for_selector("#agentModal", state="hidden")
+
+        # 验证 Key 别名采用高对比度 mono 样式，来源徽章采用清晰品牌徽章，杜绝灰色不可用假象
+        key_alias_spans = page.locator("#agentModelsBox table td:nth-child(3) span.mono")
+        check(await key_alias_spans.count() > 0, f"模型列表中 Key 别名采用高对比度 mono 样式: count={await key_alias_spans.count()}")
+        source_badges = page.locator("#agentModelsBox table td:nth-child(4) span.badge-primary")
+        check(await source_badges.count() > 0, f"模型列表中来源徽章采用醒目 badge-primary: count={await source_badges.count()}")
+
+        # 验证全系统区块标题与菜单规范统一
+        prov_title = (await page.locator("#panel-providers .section-title").first.inner_text()).strip()
+        models_title = (await page.locator("#mtab-agents .section-title").first.inner_text()).strip()
+        check(prov_title == "供应商", f"供应商区块标题严格规范为「供应商」: {prov_title}")
+        check(models_title == "模型及路由", f"Agent 模型区块标题严格规范为「模型及路由」: {models_title}")
+
         # ==========================================
         # 4. 系统设置 (Settings Tab)
         # ==========================================
         await page.click("#topNav >> text=系统设置")
         await page.wait_for_selector("#panel-settings", state="visible")
         check(await page.is_visible("#panel-settings"), "成功切换至系统设置面板")
+        settings_title = (await page.locator("#panel-settings .section-title").first.inner_text()).strip()
+        check(settings_title == "系统设置", f"系统设置区块标题严格规范为「系统设置」: {settings_title}")
 
         # 验证紧凑双列与标准控件规范 (32px 控件 / 76px 数字框)
         settings_cards = page.locator("#panel-settings .settings-card")

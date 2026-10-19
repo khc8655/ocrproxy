@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-03</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-04</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -145,7 +145,7 @@
       <div class="section">
         <div class="section-head" style="margin-bottom:12px;">
           <div>
-            <div class="section-title">全局策略与超时控制</div>
+            <div class="section-title">系统设置</div>
             <div class="section-desc">调度策略、超时预算与跨厂商容错熔断配置</div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -438,10 +438,6 @@
       <div class="form-group mb-3" id="a_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromAgentModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
-            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>+ 添加本地 Key</span>
-          </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);min-height:46px;"></div>
       </div>

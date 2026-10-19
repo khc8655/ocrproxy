@@ -76,7 +76,7 @@ function renderKbBindingRow(idx, binding, type, i, status){
   const probeKeyId = 'kb:' + type + (binding.model ? ':' + binding.model : '') + ':' + binding.provider + ':' + binding.key;
   const isProbing = state.probingKeys.has(probeKeyId);
 
-  const keyBadgeHtml = `<span class="badge badge-neutral">${esc(binding.key)}</span>`;
+  const keyBadgeHtml = `<span class="mono" style="font-weight:600;color:var(--text);font-size:12px;background:var(--bg-subtle);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">${esc(binding.key)}</span>`;
   const totalCount = ((state.config.candidates || {})[type] || []).length;
 
   const orderInputHtml = `<input type="number" min="1" max="${totalCount}" value="${idx}" 
@@ -255,7 +255,7 @@ function renderCandidateKeyChecks(){
   const allKeyLabels = [...remoteKeys, ...purelyLocalKeys];
 
   if(allKeyLabels.length === 0){
-    box.innerHTML='<div class="hint">该供应商下暂无可用 Key</div>';
+    box.innerHTML='<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请前往「供应商」页面添加 Key 凭证</div>';
   } else {
     box.innerHTML=allKeyLabels.map((k, idx)=>{
       const src = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, k) : (remoteKeys.includes(k) ? 'vault' : 'local');
@@ -265,8 +265,8 @@ function renderCandidateKeyChecks(){
       const tag = (typeof keySourceBadge === 'function')
         ? keySourceBadge(src, 10)
         : (isVault 
-          ? `<span class="badge badge-neutral" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`
-          : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`);
+          ? `<span class="badge badge-primary" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`
+          : `<span class="badge badge-primary" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`);
 
       const deleteBtn = isLocal
         ? `<button type="button" class="btn-ghost" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key" onclick="removeLocalKeyFromModal('${esc(prov)}', '${esc(k)}', event)">×</button>`

@@ -1281,7 +1281,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-03</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-04</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1319,7 +1319,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-03</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-04</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1395,7 +1395,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <div class="section">
         <div class="section-head" style="margin-bottom:12px;">
           <div>
-            <div class="section-title">全局策略与超时控制</div>
+            <div class="section-title">系统设置</div>
             <div class="section-desc">调度策略、超时预算与跨厂商容错熔断配置</div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -1688,10 +1688,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <div class="form-group mb-3" id="a_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromAgentModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
-            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>+ 添加本地 Key</span>
-          </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);min-height:46px;"></div>
       </div>
@@ -1924,8 +1920,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   function keySourceBadge(src, size) {
     const fs = size || 10;
     if (src === 'public') return \`<span class="badge badge-warning" style="font-size:\${fs}px;padding:0 6px;">免Key兜底</span>\`;
-    if (src === 'vault') return \`<span class="badge badge-neutral" style="font-size:\${fs}px;padding:1px 5px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>\`;
-    return \`<span class="badge badge-success" style="font-size:\${fs}px;padding:1px 5px;font-weight:600;" title="本地加密存储">本地</span>\`;
+    if (src === 'vault') return \`<span class="badge badge-primary" style="font-size:\${fs}px;padding:1px 6px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>\`;
+    return \`<span class="badge badge-primary" style="font-size:\${fs}px;padding:1px 6px;font-weight:600;" title="本地加密存储">本地</span>\`;
   }
 
 
@@ -2374,7 +2370,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     }
 
     if (allKeyLabels.length === 0) {
-      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请点击上方「+ 添加本地 Key」直接录入</div>';
+      box.innerHTML = '<div class="hint" style="color:var(--text-secondary);font-size:12px;padding:8px;">该供应商下暂无可用 Key，请前往「供应商」页面添加 Key 凭证</div>';
     } else {
       box.innerHTML = allKeyLabels.map((k) => {
         const src = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, k) : 'local';
@@ -2788,7 +2784,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
     const { probingKeys } = getCtx();
     const isProbing = probingKeys.has(probeKeyId);
-    const keyBadgeHtml = \`<span class="badge badge-neutral">\${_esc(key)}</span>\`;
+    const keyBadgeHtml = \`<span class="mono" style="font-weight:600;color:var(--text);font-size:12px;background:var(--bg-subtle);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">\${_esc(key)}</span>\`;
 
     const orderInputHtml = \`<input type="number" min="1" max="\${totalKeys}" value="\${idx}" 
         style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
@@ -2903,9 +2899,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     if (event) event.stopPropagation();
     if (typeof resolveKeySource === 'function' && resolveKeySource(prov, label) === 'vault') {
       if (typeof _toast === 'function') {
-        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
       } else if (typeof toast === 'function') {
-        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「模型提供商」菜单', 'err');
+        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
       }
       return;
     }
@@ -2994,7 +2990,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-03';
+const BUILD_VERSION = 'v2026.10.19-04';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3756,8 +3752,8 @@ function renderProviders() {
 
           const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
           const sourceBadge = isLocalKey
-            ? \`<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>\`
-            : \`<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>\`;
+            ? \`<span class="badge badge-primary" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>\`
+            : \`<span class="badge badge-primary" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>\`;
 
           return \`
             <div class="key-chip">

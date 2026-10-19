@@ -2196,7 +2196,7 @@ async def vault_sync_endpoint(request: Request):
                     "ok": True,
                     "updated": 0,
                     "created": 0,
-                    "message": "当前本地尚未添加任何对应中枢提供商，无需同步。如需使用中枢供应商，请在模型路由中添加。"
+                    "message": "当前本地尚未添加任何对应中枢提供商，无需同步。如需使用中枢供应商，请前往「供应商」页面添加。"
                 })
 
             for p_id in target_pids:

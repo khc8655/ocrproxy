@@ -33,7 +33,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-03</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-04</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -70,48 +70,6 @@
             <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
           </div>
         </div>
-
-        <!-- Collapsible Access & SDK Calling Guides -->
-        <details id="accessGuideDetails" class="card card-pad mt-3" style="padding:12px 18px;border:1px solid var(--border);background:var(--bg-card);margin-top:12px;">
-          <summary style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
-            <span>📖 客户端接入与 SDK 调用示例 (OpenAI / Anthropic / cURL)</span>
-            <span style="font-size:11px;font-weight:400;color:var(--text-secondary);">点击展开/折叠</span>
-          </summary>
-          <div style="margin-top:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span class="text-secondary" style="font-size:12px;">已配置可用协议</span>
-              <span id="accProtocols" style="display:flex;gap:6px;">—</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-              <span class="text-secondary" style="font-size:12px;">模型别名列表</span>
-              <span class="mono" id="accModelsList" style="font-size:12px;">—</span>
-            </div>
-
-            <div class="section-title mb-2" style="font-size:13px;display:flex;align-items:center;gap:8px;">
-              <span>1. OpenAI 格式调用 (Chat Completions)</span>
-              <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
-            </div>
-            <div class="code-block mb-3">
-              <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accPy')">复制</button>
-              <pre id="accPy"></pre>
-            </div>
-
-            <div class="section-title mb-2" style="font-size:13px;display:flex;align-items:center;gap:8px;">
-              <span>2. Claude 格式调用 (Anthropic Messages)</span>
-              <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
-            </div>
-            <div class="code-block mb-3">
-              <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accMessagesPy')">复制</button>
-              <pre id="accMessagesPy"></pre>
-            </div>
-
-            <div class="section-title mb-2" style="font-size:13px;">3. cURL 命令示例</div>
-            <div class="code-block">
-              <button class="btn btn-secondary btn-xs" style="position:absolute;right:10px;top:10px;" onclick="copySnippet('accCurl')">复制</button>
-              <pre id="accCurl"></pre>
-            </div>
-          </div>
-        </details>
       </div>
 
       <!-- Section 1: Agent Metrics Overview -->
@@ -159,7 +117,7 @@
     <div id="panel-providers" class="panel">
       <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <div class="section-title">供应商与 Key 凭证库</div>
+          <div class="section-title">供应商</div>
           <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -183,7 +141,7 @@
       <div id="mtab-agents" class="model-subtab panel-agents active">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div class="section-title">Agent 模型管理</div>
+            <div class="section-title">模型及路由</div>
             <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -197,7 +155,7 @@
       <div id="mtab-kb" class="model-subtab">
         <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div class="section-title">知识库虚拟模型管理</div>
+            <div class="section-title">模型及路由</div>
             <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</div>
           </div>
         </div>
@@ -212,7 +170,7 @@
       <input type="hidden" id="set_proxy_api_key" value="">
       <div class="section">
         <div style="margin-bottom:16px;">
-          <div class="section-title">系统运行与可靠性参数</div>
+          <div class="section-title">系统设置</div>
           <div class="section-desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</div>
         </div>
 
@@ -665,10 +623,6 @@
       <div class="form-group mb-3" id="a_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromAgentModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
-            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>添加本地 Key</span>
-          </button>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
         <div id="a_selectedBindingsSummary" style="margin-top:8px;display:none;"></div>
@@ -732,10 +686,6 @@
       <div class="form-group mb-3" id="c_keyArea">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openKeyModalFromCandidateModal()" style="display:inline-flex;align-items:center;gap:4px;" title="为当前所选供应商直接录入本地 Key">
-            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>添加本地 Key</span>
-          </button>
         </div>
         <div id="c_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
       </div>
@@ -821,14 +771,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=2026.10.19-03"></script>
-  <script src="/static/js/settings-form.js?v=2026.10.19-03"></script>
-  <script src="/static/js/core.js?v=2026.10.19-03"></script>
-  <script src="/static/js/vault.js?v=2026.10.19-03"></script>
-  <script src="/static/js/providers.js?v=2026.10.19-03"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.19-03"></script>
-  <script src="/static/js/models.js?v=2026.10.19-03"></script>
-  <script src="/static/js/settings.js?v=2026.10.19-03"></script>
-  <script src="/static/js/app.js?v=2026.10.19-03"></script>
+  <script src="/static/js/host.js?v=2026.10.19-04"></script>
+  <script src="/static/js/settings-form.js?v=2026.10.19-04"></script>
+  <script src="/static/js/core.js?v=2026.10.19-04"></script>
+  <script src="/static/js/vault.js?v=2026.10.19-04"></script>
+  <script src="/static/js/providers.js?v=2026.10.19-04"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.19-04"></script>
+  <script src="/static/js/models.js?v=2026.10.19-04"></script>
+  <script src="/static/js/settings.js?v=2026.10.19-04"></script>
+  <script src="/static/js/app.js?v=2026.10.19-04"></script>
 </body>
 </html>

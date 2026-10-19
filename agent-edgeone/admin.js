@@ -770,8 +770,8 @@ function renderProviders() {
 
           const isLocalKey = (typeof val === 'object' && val !== null && val.is_local === true);
           const sourceBadge = isLocalKey
-            ? `<span class="badge badge-success" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
-            : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
+            ? `<span class="badge badge-primary" style="font-size:10px;padding:1px 5px;font-weight:600;">本地</span>`
+            : `<span class="badge badge-primary" style="font-size:10px;padding:1px 5px;font-weight:600;">中枢</span>`;
 
           return `
             <div class="key-chip">
