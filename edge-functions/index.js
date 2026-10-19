@@ -1281,7 +1281,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-02</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-03</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1319,7 +1319,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-02</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-03</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1543,53 +1543,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       </div>
     </div>
 
-    <!-- Panel 5: Raw JSON Editor -->
-    <div id="panel-raw" class="panel">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">JSON 配置</div>
-            <div class="section-desc">编辑完整路由与凭证 JSON，保存后写入 KV 生效</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-ghost btn-sm" onclick="exportConfigJson()">导出备份</button>
-            <button class="btn btn-ghost btn-sm" onclick="triggerImportConfig()">导入配置</button>
-            <button class="btn btn-ghost btn-sm" onclick="formatRawJson()">格式化 JSON</button>
-            <button class="btn btn-primary btn-sm" onclick="saveRawJson()">💾 保存配置并生效</button>
-          </div>
-        </div>
-        <div class="card card-pad">
-          <textarea id="rawJsonText" class="form-control" spellcheck="false" style="min-height:480px;font-family:var(--font-mono);font-size:12px;"></textarea>
-          <div id="rawJsonErr" style="display:none;margin-top:10px;color:var(--error);font-size:12px;"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Panel 6: Access & Docs -->
-    <div id="panel-access" class="panel">
-      <div class="section">
-        <div class="section-title mb-2">接入网关</div>
-        <div class="card card-pad mb-3">
-          <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBaseUrl">—</span></div>
-          <div class="flex-between mb-2"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModelsList">—</span></div>
-          <div class="flex-between"><span class="text-secondary">网关已支持协议</span><span id="accProtocols" style="display:flex;gap:6px;">—</span></div>
-        </div>
-        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
-          <span>1. OpenAI 格式调用 (Chat Completions)</span>
-          <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
-        </div>
-        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accPy')">复制</button><pre id="accPy"></pre></div>
-        
-        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
-          <span>2. Claude 格式调用 (Anthropic Messages)</span>
-          <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
-        </div>
-        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accMessagesPy')">复制</button><pre id="accMessagesPy"></pre></div>
-
-        <div class="section-title mb-2">cURL 示例</div>
-        <div class="code-block"><button class="copy-btn" onclick="copySnippet('accCurl')">复制</button><pre id="accCurl"></pre></div>
-      </div>
-    </div>
   </main>
 </div>
 
@@ -1837,8 +1790,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
         editAgentModel(model);
       } else if (action === 'delete-model') {
         deleteAgentModel(model);
-      } else if (action === 'probe-model-all') {
-        testAgentModelAll(model);
       } else if (action === 'set-active-key') {
         const key = btn.dataset.key;
         setActiveAgentKey(model, key);
@@ -2781,100 +2732,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   async function testAgentModelAll(name) {
-    const { isVm, probingModels } = getCtx();
-    if (probingModels.has(name)) return;
-    probingModels.add(name);
-
-    const btn = document.getElementById('probeAllBtn-' + name);
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 探测中...'; }
-
-    const box = document.getElementById('agentProbe-' + name);
-    if (box) {
-      box.style.display = 'block';
-      box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> 正在并发探测所有 Key 连通性</div>';
-    }
-
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-      const endpoint = (global.HOST && global.HOST.api && global.HOST.api.testModel) ? global.HOST.api.testModel : (isVm ? '/api/admin/test-agent-model' : '/api/test');
-
-      const r = await fetch(endpoint, {
-        method: 'POST',
-        headers: _getHeaders(),
-        body: JSON.stringify({ model: name }),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-      const d = await r.json();
-
-      if (!d.results && !d.ok && !d.success) {
-        if (box) box.innerHTML = \`<span style="color:var(--error, #f53f3f);">探活失败: \${d.error || '无响应数据'}</span>\`;
-        return;
-      }
-
-      const results = d.results || [];
-      const okCount = d.ok !== undefined ? d.ok : results.filter(x => x.ok).length;
-      const totalCount = d.total !== undefined ? d.total : results.length;
-
-      if (typeof window !== 'undefined' && Array.isArray(results)) {
-        window.modelLatencyCache = window.modelLatencyCache || {};
-        const now = Date.now();
-        results.forEach(res => {
-          const cacheEntry = {
-            ok: !!res.ok,
-            latency_ms: (res.latency_ms !== null && res.latency_ms !== undefined) ? res.latency_ms : null,
-            status: res.status || (res.ok ? 200 : 500),
-            time: now
-          };
-          window.modelLatencyCache[\`agent:\${name}:\${res.provider}:\${res.key}\`] = cacheEntry;
-          window.modelLatencyCache[\`model:\${name}:\${res.provider}:\${res.key}\`] = cacheEntry;
-          window.modelLatencyCache[\`prov:\${res.provider}:\${res.key}\`] = cacheEntry;
-        });
-        try {
-          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
-        } catch (_) {}
-      }
-
-      const chips = results.map(res => {
-        const lat = (res.latency_ms !== null && res.latency_ms !== undefined)
-          ? \` \${res.latency_ms >= 1000 ? (res.latency_ms/1000).toFixed(2)+'s' : res.latency_ms+'ms'}\`
-          : '';
-        return res.ok
-          ? \`<span class="badge badge-success" style="font-weight:600;">\${_esc(res.provider)}/\${_esc(res.key)}\${lat}</span>\`
-          : \`<span class="badge badge-error" title="\${_esc(res.error||'')}">\${_esc(res.provider)}/\${_esc(res.key)} (\${res.status||'ERR'})</span>\`;
-      }).join(' ');
-
-      const summaryHtml = \`
-        <div class="mb-2" style="font-weight:600;display:flex;align-items:center;justify-content:space-between;">
-          <span>可用性统计: <b>\${okCount} / \${totalCount}</b> 正常</span>
-          <span class="text-secondary" style="font-weight:400;font-size:11px;">探测时间: \${_esc(d.checked_at||'')}</span>
-        </div>
-        <div class="flex gap-2" style="flex-wrap:wrap;">\${chips || '<span>全部检测完成</span>'}</div>
-      \`;
-      if (typeof window !== 'undefined') {
-        window.modelProbeSummaryCache = window.modelProbeSummaryCache || {};
-        window.modelProbeSummaryCache[name] = summaryHtml;
-      }
-      if (box) {
-        box.innerHTML = summaryHtml;
-        box.style.display = 'block';
-      }
-      _toast(\`探活完成: \${name} (可用 \${okCount}/\${totalCount})\`, okCount > 0 ? 'ok' : 'err');
-    } catch(e) {
-      if (box) box.innerHTML = \`<span style="color:var(--error, #f53f3f);">探活异常或超时: \${_esc(e.message)}</span>\`;
-      _toast('探活异常: ' + e.message, 'err');
-    } finally {
-      probingModels.delete(name);
-      if (btn) { btn.disabled = false; btn.innerHTML = '全部探活'; }
-      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
-      try {
-        await reloadFn();
-      } catch (err) {
-        console.warn('Reload after probe warning:', err);
-        renderAgentModels();
-      }
-    }
+    // Deprecated: Batch probe removed in favor of direct single-Key probe
   }
 
 
@@ -3016,9 +2874,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="meta" style="margin-top:2px;font-size:12px;color:var(--text-secondary);">\${strategyLabel}</div>
           </div>
           <div class="flex gap-2" style="flex-wrap:wrap;display:flex;gap:6px;">
-            <button class="btn btn-secondary btn-sm" id="probeAllBtn-\${_esc(name)}" data-action="probe-model-all" data-model="\${_esc(name)}" \${isProbingAll ? 'disabled' : ''}>
-              \${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
-            </button>
             <button class="btn btn-secondary btn-sm" data-action="edit-model" data-model="\${_esc(name)}">编辑</button>
             <button class="btn btn-secondary-danger btn-sm" data-action="delete-model" data-model="\${_esc(name)}">删除</button>
           </div>
@@ -3038,7 +2893,6 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
-        <div id="agentProbe-\${_esc(name)}" style="\${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) ? 'display:block;' : 'display:none;'}padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;">\${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) || ''}</div>
       </div>\`;
     }).join('');
 
@@ -3140,7 +2994,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-02';
+const BUILD_VERSION = 'v2026.10.19-03';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3439,9 +3293,6 @@ function switchTab(tabId) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(\`panel-\${tabId}\`);
   if (panel) panel.classList.add('active');
-
-  if (tabId === 'raw') renderRawJson();
-  if (tabId === 'access') renderAccess();
 }
 
 // ---- Login Flow ----------------------------------------------------------
@@ -3978,85 +3829,6 @@ function scrollToAlphaGroup(ch) {
     void target.offsetWidth;
     target.classList.add('alpha-target-highlight');
   }
-}
-
-function renderRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  if (ta) ta.value = JSON.stringify(cfg, null, 2);
-}
-
-function renderAccess() {
-  const origin = window.location.origin;
-  const base = \`\${origin}/v1\`;
-  const models = Object.keys(cfg.agent_models || {});
-  const messagesModels = models.filter(m => getModelProtocols(m).includes('messages'));
-  const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
-  const proxyKey = getClientKey() || 'YOUR_PROXY_API_KEY';
-
-  const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  setT('accBaseUrl', base);
-  setT('accModelsList', models.join(', ') || '—');
-
-  const protoContainer = document.getElementById('accProtocols');
-  if (protoContainer) {
-    const activeProtos = new Set(['chat']);
-    if (messagesModels.length || Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('messages'))) {
-      activeProtos.add('messages');
-    }
-    if (Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('responses'))) {
-      activeProtos.add('responses');
-    }
-    protoContainer.innerHTML = renderProtocolBadges(Array.from(activeProtos), false);
-  }
-
-  // 1. OpenAI Chat
-  const pySample = \`from openai import OpenAI
-
-client = OpenAI(
-    api_key="\${proxyKey}",
-    base_url="\${base}"
-)
-
-response = client.chat.completions.create(
-    model="\${models[0] || 'qwen3.8-flash'}",
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
-    stream=True
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)
-\`;
-  setT('accPy', pySample);
-
-  // 2. Anthropic Messages
-  const messagesPySample = \`import anthropic
-
-client = anthropic.Anthropic(
-    api_key="\${proxyKey}",
-    base_url="\${base}"  # 直连本网关
-)
-
-# 使用支持 Messages 协议的模型（当前支持：\${messagesModels.join(', ') || demoMessages}）
-response = client.messages.create(
-    model="\${demoMessages}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}]
-)
-
-print(response.content[0].text)
-\`;
-  setT('accMessagesPy', messagesPySample);
-
-  const curlSample = \`curl -X POST \${base}/chat/completions \\\\
-  -H "Authorization: Bearer \${proxyKey}" \\\\
-  -H "Content-Type: application/json" \\\\
-  -d '{
-    "model": "\${models[0] || 'qwen3.8-flash'}",
-    "messages": [{"role": "user", "content": "1+1="}],
-    "stream": true
-  }'\`;
-  setT('accCurl', curlSample);
 }
 
 // ---- Key & Model Test ---------------------------------------------------
@@ -4899,34 +4671,6 @@ function handleConfigFileImport(event) {
     }
   };
   reader.readAsText(file);
-}
-
-// ---- Raw JSON ------------------------------------------------------------
-function formatRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  try {
-    const parsed = JSON.parse(ta.value);
-    ta.value = JSON.stringify(parsed, null, 2);
-    document.getElementById('rawJsonErr').style.display = 'none';
-  } catch (e) {
-    const errEl = document.getElementById('rawJsonErr');
-    errEl.textContent = 'JSON 格式错误: ' + e.message;
-    errEl.style.display = 'block';
-  }
-}
-
-async function saveRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  const errEl = document.getElementById('rawJsonErr');
-  try {
-    const parsed = JSON.parse(ta.value);
-    errEl.style.display = 'none';
-    cfg = parsed;
-    await persistConfig();
-  } catch (e) {
-    errEl.textContent = 'JSON 格式解析失败: ' + e.message;
-    errEl.style.display = 'block';
-  }
 }
 
 async function persistConfig() {

@@ -8,7 +8,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-02';
+const BUILD_VERSION = 'v2026.10.19-03';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -307,9 +307,6 @@ function switchTab(tabId) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(`panel-${tabId}`);
   if (panel) panel.classList.add('active');
-
-  if (tabId === 'raw') renderRawJson();
-  if (tabId === 'access') renderAccess();
 }
 
 // ---- Login Flow ----------------------------------------------------------
@@ -846,85 +843,6 @@ function scrollToAlphaGroup(ch) {
     void target.offsetWidth;
     target.classList.add('alpha-target-highlight');
   }
-}
-
-function renderRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  if (ta) ta.value = JSON.stringify(cfg, null, 2);
-}
-
-function renderAccess() {
-  const origin = window.location.origin;
-  const base = `${origin}/v1`;
-  const models = Object.keys(cfg.agent_models || {});
-  const messagesModels = models.filter(m => getModelProtocols(m).includes('messages'));
-  const demoMessages = messagesModels[0] || models[0] || 'qwen3.8-flash';
-  const proxyKey = getClientKey() || 'YOUR_PROXY_API_KEY';
-
-  const setT = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  setT('accBaseUrl', base);
-  setT('accModelsList', models.join(', ') || '—');
-
-  const protoContainer = document.getElementById('accProtocols');
-  if (protoContainer) {
-    const activeProtos = new Set(['chat']);
-    if (messagesModels.length || Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('messages'))) {
-      activeProtos.add('messages');
-    }
-    if (Object.entries(cfg.providers || {}).some(([n, p]) => getProviderProtocols(n, p).includes('responses'))) {
-      activeProtos.add('responses');
-    }
-    protoContainer.innerHTML = renderProtocolBadges(Array.from(activeProtos), false);
-  }
-
-  // 1. OpenAI Chat
-  const pySample = `from openai import OpenAI
-
-client = OpenAI(
-    api_key="${proxyKey}",
-    base_url="${base}"
-)
-
-response = client.chat.completions.create(
-    model="${models[0] || 'qwen3.8-flash'}",
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}],
-    stream=True
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)
-`;
-  setT('accPy', pySample);
-
-  // 2. Anthropic Messages
-  const messagesPySample = `import anthropic
-
-client = anthropic.Anthropic(
-    api_key="${proxyKey}",
-    base_url="${base}"  # 直连本网关
-)
-
-# 使用支持 Messages 协议的模型（当前支持：${messagesModels.join(', ') || demoMessages}）
-response = client.messages.create(
-    model="${demoMessages}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "你好，请介绍你自己。"}]
-)
-
-print(response.content[0].text)
-`;
-  setT('accMessagesPy', messagesPySample);
-
-  const curlSample = `curl -X POST ${base}/chat/completions \\
-  -H "Authorization: Bearer ${proxyKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${models[0] || 'qwen3.8-flash'}",
-    "messages": [{"role": "user", "content": "1+1="}],
-    "stream": true
-  }'`;
-  setT('accCurl', curlSample);
 }
 
 // ---- Key & Model Test ---------------------------------------------------
@@ -1767,34 +1685,6 @@ function handleConfigFileImport(event) {
     }
   };
   reader.readAsText(file);
-}
-
-// ---- Raw JSON ------------------------------------------------------------
-function formatRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  try {
-    const parsed = JSON.parse(ta.value);
-    ta.value = JSON.stringify(parsed, null, 2);
-    document.getElementById('rawJsonErr').style.display = 'none';
-  } catch (e) {
-    const errEl = document.getElementById('rawJsonErr');
-    errEl.textContent = 'JSON 格式错误: ' + e.message;
-    errEl.style.display = 'block';
-  }
-}
-
-async function saveRawJson() {
-  const ta = document.getElementById('rawJsonText');
-  const errEl = document.getElementById('rawJsonErr');
-  try {
-    const parsed = JSON.parse(ta.value);
-    errEl.style.display = 'none';
-    cfg = parsed;
-    await persistConfig();
-  } catch (e) {
-    errEl.textContent = 'JSON 格式解析失败: ' + e.message;
-    errEl.style.display = 'block';
-  }
 }
 
 async function persistConfig() {

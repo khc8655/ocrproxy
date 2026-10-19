@@ -190,18 +190,15 @@ async def run_ui(base, admin_pw, proxy_key, mock_url, shots):
         await el.click()
         await page.wait_for_timeout(2000)
         await shot("04_probe_key")
-        el = page.locator("#agentModelsBox [data-action='probe-model-all']").first
-        await el.click()
-        await page.wait_for_timeout(2500)
-        await shot("05_probe_all")
-        box = await page.inner_text("#agentModelsBox")
-        check("Blocked" not in box and "HTTPS" not in box, "探活结果不再被 HTTPS/SSRF 误拦", box[:300])
+        probe_all_cnt = await page.locator("#agentModelsBox [data-action='probe-model-all']").count()
+        check(probe_all_cnt == 0, "Agent 模式已彻底移除冗余「全部探活」按钮", f"count={probe_all_cnt}")
+        await shot("05_probe_all_removed")
 
         # 5b. verify deprecated live test button is completely removed
         live_btn_count = await page.locator("#agentModelsBox [data-action='live-test']").count()
         check(live_btn_count == 0, "废弃「实测 1+1」按钮已彻底拔除不存在", f"count={live_btn_count}")
 
-        # 5c. edit model: bind the second key as well -> two rows, probe-all reports 1/2
+        # 5c. edit model: bind the second key as well -> two rows
         await page.click("#agentModelsBox [data-action='edit-model']")
         await page.wait_for_timeout(500)
         caps = page.locator("#a_keyList .key-capsule")
@@ -212,11 +209,13 @@ async def run_ui(base, admin_pw, proxy_key, mock_url, shots):
         await page.wait_for_timeout(1200)
         rows = await page.locator("#agentModelsBox tbody tr").count()
         check(rows == 2, "编辑模型追加第二个 Key 绑定后出现两行", rows)
-        await page.click("#agentModelsBox [data-action='probe-model-all']")
-        await page.wait_for_timeout(2500)
+        probe_key2 = page.locator("#agentModelsBox tbody tr:nth-child(2) [data-action='probe-key']")
+        if await probe_key2.count() > 0:
+            await probe_key2.click()
+            await page.wait_for_timeout(2000)
+            status_cell = await page.locator("#agentModelsBox tbody tr:nth-child(2) td:nth-child(5)").inner_text()
+            check("401" in status_cell or "失败" in status_cell or "ERR" in status_cell or "invalid" in status_cell.lower(), "单 Key 测能精准定位到坏 Key 异常状态", status_cell)
         await shot("05b_two_keys")
-        box = await page.inner_text("#agentModelsBox")
-        check("401" in box or "invalid" in box.lower() or "失败" in box, "全部探活能定位到坏 Key", box[:400])
 
         # 6. real client call through the gateway, then dashboard shows it
         req = urllib.request.Request(base + "/v1/chat/completions", method="POST",

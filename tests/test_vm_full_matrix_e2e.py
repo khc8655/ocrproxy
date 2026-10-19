@@ -174,23 +174,46 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         # 核心后端安全强校验：直接通过 API 尝试篡改/删除 Vault 凭据，验证后端 403 强拦截
         import httpx
         async with httpx.AsyncClient() as client:
-            # 尝试通过后端保存接口篡改/删除中枢 Key
-            tampered_payload = {
-                "providers": {
-                    "vault_mock": {
-                        "base_url": f"{mock_url}/v1",
-                        "origin": "vault",
-                        "keys": {}  # 恶意清空中枢 Key
-                    }
-                }
+            # 验证供应商删除与级联模型清理：
+            cfg_res = await client.get(f"{base_url}/api/config", headers={"Authorization": f"Bearer {admin_pw}"})
+            temp_setup_payload = cfg_res.json()
+            temp_setup_payload.setdefault("providers", {})["temp_prov"] = {
+                "name": "Temp Prov",
+                "base_url": f"{mock_url}/v1",
+                "keys": {"k1": {"key": "sk-temp-123"}}
             }
-            resp_tamper = await client.post(
+            temp_setup_payload.setdefault("agent_models", {})["temp_model"] = {
+                "keys": [{"provider": "temp_prov", "key": "k1"}]
+            }
+            resp_setup = await client.post(
                 f"{base_url}/api/admin/config",
                 headers={"Authorization": f"Bearer {admin_pw}"},
-                json=tampered_payload
+                json=temp_setup_payload
             )
-            check(resp_tamper.status_code == 403, "后端安全拦截：非法篡改/删除中枢 Vault Key 严格返回 403 Forbidden", f"status={resp_tamper.status_code}")
-            check("中枢统一凭据不可在本地篡改" in resp_tamper.text, "后端返回明确中枢安全保护拦截文案")
+            check(resp_setup.status_code == 200, "添加临时供应商与模型成功", f"status={resp_setup.status_code}")
+
+            # 再次拉取最新版本配置后删除 temp_prov 供应商，验证返回 200 且级联删除关联模型
+            cfg_res2 = await client.get(f"{base_url}/api/config", headers={"Authorization": f"Bearer {admin_pw}"})
+            temp_del_payload = cfg_res2.json()
+            if "temp_prov" in temp_del_payload.get("providers", {}):
+                del temp_del_payload["providers"]["temp_prov"]
+            resp_del = await client.post(
+                f"{base_url}/api/admin/config",
+                headers={"Authorization": f"Bearer {admin_pw}"},
+                json=temp_del_payload
+            )
+            check(resp_del.status_code == 200, "删除供应商成功生效（200 OK，无 403 阻断）", f"status={resp_del.status_code}")
+
+            # 读取最新配置，断言 temp_prov 与 temp_model 均被彻底清理，且 tombstones 记录了 temp_prov
+            cfg_res = await client.get(f"{base_url}/api/config", headers={"Authorization": f"Bearer {admin_pw}"})
+            saved_cfg = cfg_res.json()
+            check("temp_prov" not in saved_cfg.get("providers", {}), "供应商已被彻底删除")
+            check("temp_model" not in saved_cfg.get("agent_models", {}), "关联模型已级联彻底清除")
+            check("temp_prov" in saved_cfg.get("tombstones", []), "本地删除墓碑 (tombstones) 成功记录已删除供应商")
+
+        # 刷新前端拉取最新配置状态
+        await page.click("button[onclick='loadData()']")
+        await page.wait_for_timeout(1000)
 
         # ==========================================
         # 3. 模型列表与严格对齐 (Models Tab)
@@ -235,13 +258,9 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         first_badge = await status_badges.first.inner_text()
         check("ms" in first_badge or "正常" in first_badge, f"探活后「响应耗时/状态」成功展示耗时或状态: {first_badge}")
 
-        # 测试「全部探活」功能
-        probe_all_btn = page.locator("button[data-action='probe-model-all']").first
-        check(await probe_all_btn.is_visible(), "模型卡片具备「全部探活」功能按钮")
-        await probe_all_btn.click()
-        await page.wait_for_timeout(2000)
-        probe_summary = page.locator("#agentProbe-test-agent-m1")
-        check(await probe_summary.is_visible(), "「全部探活」执行后呈现多 Key 统计汇总面板")
+        # 验证 Agent 模式已彻底移除冗余「全部探活」功能
+        probe_all_btns = await page.locator("button[data-action='probe-model-all']").count()
+        check(probe_all_btns == 0, "模型卡片已彻底移除「全部探活」冗余按钮", f"count={probe_all_btns}")
 
         # 测试设为主力 Key
         set_active_btn = page.locator("button[data-action='set-active-key']").first

@@ -34,8 +34,6 @@
         editAgentModel(model);
       } else if (action === 'delete-model') {
         deleteAgentModel(model);
-      } else if (action === 'probe-model-all') {
-        testAgentModelAll(model);
       } else if (action === 'set-active-key') {
         const key = btn.dataset.key;
         setActiveAgentKey(model, key);
@@ -978,100 +976,7 @@
   }
 
   async function testAgentModelAll(name) {
-    const { isVm, probingModels } = getCtx();
-    if (probingModels.has(name)) return;
-    probingModels.add(name);
-
-    const btn = document.getElementById('probeAllBtn-' + name);
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 探测中...'; }
-
-    const box = document.getElementById('agentProbe-' + name);
-    if (box) {
-      box.style.display = 'block';
-      box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> 正在并发探测所有 Key 连通性</div>';
-    }
-
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-      const endpoint = (global.HOST && global.HOST.api && global.HOST.api.testModel) ? global.HOST.api.testModel : (isVm ? '/api/admin/test-agent-model' : '/api/test');
-
-      const r = await fetch(endpoint, {
-        method: 'POST',
-        headers: _getHeaders(),
-        body: JSON.stringify({ model: name }),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-      const d = await r.json();
-
-      if (!d.results && !d.ok && !d.success) {
-        if (box) box.innerHTML = `<span style="color:var(--error, #f53f3f);">探活失败: ${d.error || '无响应数据'}</span>`;
-        return;
-      }
-
-      const results = d.results || [];
-      const okCount = d.ok !== undefined ? d.ok : results.filter(x => x.ok).length;
-      const totalCount = d.total !== undefined ? d.total : results.length;
-
-      if (typeof window !== 'undefined' && Array.isArray(results)) {
-        window.modelLatencyCache = window.modelLatencyCache || {};
-        const now = Date.now();
-        results.forEach(res => {
-          const cacheEntry = {
-            ok: !!res.ok,
-            latency_ms: (res.latency_ms !== null && res.latency_ms !== undefined) ? res.latency_ms : null,
-            status: res.status || (res.ok ? 200 : 500),
-            time: now
-          };
-          window.modelLatencyCache[`agent:${name}:${res.provider}:${res.key}`] = cacheEntry;
-          window.modelLatencyCache[`model:${name}:${res.provider}:${res.key}`] = cacheEntry;
-          window.modelLatencyCache[`prov:${res.provider}:${res.key}`] = cacheEntry;
-        });
-        try {
-          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
-        } catch (_) {}
-      }
-
-      const chips = results.map(res => {
-        const lat = (res.latency_ms !== null && res.latency_ms !== undefined)
-          ? ` ${res.latency_ms >= 1000 ? (res.latency_ms/1000).toFixed(2)+'s' : res.latency_ms+'ms'}`
-          : '';
-        return res.ok
-          ? `<span class="badge badge-success" style="font-weight:600;">${_esc(res.provider)}/${_esc(res.key)}${lat}</span>`
-          : `<span class="badge badge-error" title="${_esc(res.error||'')}">${_esc(res.provider)}/${_esc(res.key)} (${res.status||'ERR'})</span>`;
-      }).join(' ');
-
-      const summaryHtml = `
-        <div class="mb-2" style="font-weight:600;display:flex;align-items:center;justify-content:space-between;">
-          <span>可用性统计: <b>${okCount} / ${totalCount}</b> 正常</span>
-          <span class="text-secondary" style="font-weight:400;font-size:11px;">探测时间: ${_esc(d.checked_at||'')}</span>
-        </div>
-        <div class="flex gap-2" style="flex-wrap:wrap;">${chips || '<span>全部检测完成</span>'}</div>
-      `;
-      if (typeof window !== 'undefined') {
-        window.modelProbeSummaryCache = window.modelProbeSummaryCache || {};
-        window.modelProbeSummaryCache[name] = summaryHtml;
-      }
-      if (box) {
-        box.innerHTML = summaryHtml;
-        box.style.display = 'block';
-      }
-      _toast(`探活完成: ${name} (可用 ${okCount}/${totalCount})`, okCount > 0 ? 'ok' : 'err');
-    } catch(e) {
-      if (box) box.innerHTML = `<span style="color:var(--error, #f53f3f);">探活异常或超时: ${_esc(e.message)}</span>`;
-      _toast('探活异常: ' + e.message, 'err');
-    } finally {
-      probingModels.delete(name);
-      if (btn) { btn.disabled = false; btn.innerHTML = '全部探活'; }
-      const reloadFn = (typeof loadData === 'function') ? loadData : ((typeof loadAllData === 'function') ? loadAllData : renderAgentModels);
-      try {
-        await reloadFn();
-      } catch (err) {
-        console.warn('Reload after probe warning:', err);
-        renderAgentModels();
-      }
-    }
+    // Deprecated: Batch probe removed in favor of direct single-Key probe
   }
 
 
@@ -1213,9 +1118,6 @@
             <div class="meta" style="margin-top:2px;font-size:12px;color:var(--text-secondary);">${strategyLabel}</div>
           </div>
           <div class="flex gap-2" style="flex-wrap:wrap;display:flex;gap:6px;">
-            <button class="btn btn-secondary btn-sm" id="probeAllBtn-${_esc(name)}" data-action="probe-model-all" data-model="${_esc(name)}" ${isProbingAll ? 'disabled' : ''}>
-              ${isProbingAll ? '<span class="spinner"></span> 探测中...' : '全部探活'}
-            </button>
             <button class="btn btn-secondary btn-sm" data-action="edit-model" data-model="${_esc(name)}">编辑</button>
             <button class="btn btn-secondary-danger btn-sm" data-action="delete-model" data-model="${_esc(name)}">删除</button>
           </div>
@@ -1235,7 +1137,6 @@
             <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
-        <div id="agentProbe-${_esc(name)}" style="${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) ? 'display:block;' : 'display:none;'}padding:12px 18px;border-top:1px solid var(--border-subtle, var(--color-border));background:var(--bg-subtle, var(--color-bg-page));font-size:12px;">${(window.modelProbeSummaryCache && window.modelProbeSummaryCache[name]) || ''}</div>
       </div>`;
     }).join('');
 

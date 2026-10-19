@@ -2080,13 +2080,13 @@ test('bundled admin ui: has isolated EdgeOne vault hub admin UI per ARCHITECTURE
   truthy(content.includes('id="loginKey"'));
   truthy(content.includes('ocrproxy_edge_token'));
   truthy(content.includes('/api/config'));
-  // 2. Safe Vault isolation: 6 top-level panels must remain intact
+  // 2. Navigation tabs: 4 top-level panels intact, dead panels eliminated
   truthy(content.includes('id="panel-dashboard"'));
   truthy(content.includes('id="panel-agents"'));
   truthy(content.includes('id="panel-providers"'));
   truthy(content.includes('id="panel-settings"'));
-  truthy(content.includes('id="panel-raw"'));
-  truthy(content.includes('id="panel-access"'));
+  truthy(!content.includes('id="panel-raw"'));
+  truthy(!content.includes('id="panel-access"'));
   // 3. Independent version badge
   truthy(content.includes('id="topVersionBadge"'));
   // 4. Guaranteed agent model UI functions

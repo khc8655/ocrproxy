@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-02</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-03</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -293,53 +293,6 @@
       </div>
     </div>
 
-    <!-- Panel 5: Raw JSON Editor -->
-    <div id="panel-raw" class="panel">
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <div class="section-title">JSON 配置</div>
-            <div class="section-desc">编辑完整路由与凭证 JSON，保存后写入 KV 生效</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-ghost btn-sm" onclick="exportConfigJson()">导出备份</button>
-            <button class="btn btn-ghost btn-sm" onclick="triggerImportConfig()">导入配置</button>
-            <button class="btn btn-ghost btn-sm" onclick="formatRawJson()">格式化 JSON</button>
-            <button class="btn btn-primary btn-sm" onclick="saveRawJson()">💾 保存配置并生效</button>
-          </div>
-        </div>
-        <div class="card card-pad">
-          <textarea id="rawJsonText" class="form-control" spellcheck="false" style="min-height:480px;font-family:var(--font-mono);font-size:12px;"></textarea>
-          <div id="rawJsonErr" style="display:none;margin-top:10px;color:var(--error);font-size:12px;"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Panel 6: Access & Docs -->
-    <div id="panel-access" class="panel">
-      <div class="section">
-        <div class="section-title mb-2">接入网关</div>
-        <div class="card card-pad mb-3">
-          <div class="flex-between mb-2"><span class="text-secondary">Base URL 接口地址</span><span class="mono" id="accBaseUrl">—</span></div>
-          <div class="flex-between mb-2"><span class="text-secondary">已配置 Agent 模型</span><span class="mono" id="accModelsList">—</span></div>
-          <div class="flex-between"><span class="text-secondary">网关已支持协议</span><span id="accProtocols" style="display:flex;gap:6px;">—</span></div>
-        </div>
-        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
-          <span>1. OpenAI 格式调用 (Chat Completions)</span>
-          <span class="badge badge-success" style="font-size:11px;">OpenAI Chat</span>
-        </div>
-        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accPy')">复制</button><pre id="accPy"></pre></div>
-        
-        <div class="section-title mb-2" style="display:flex;align-items:center;gap:8px;">
-          <span>2. Claude 格式调用 (Anthropic Messages)</span>
-          <span class="badge badge-warning" style="font-size:11px;">Anthropic Messages</span>
-        </div>
-        <div class="code-block mb-3"><button class="copy-btn" onclick="copySnippet('accMessagesPy')">复制</button><pre id="accMessagesPy"></pre></div>
-
-        <div class="section-title mb-2">cURL 示例</div>
-        <div class="code-block"><button class="copy-btn" onclick="copySnippet('accCurl')">复制</button><pre id="accCurl"></pre></div>
-      </div>
-    </div>
   </main>
 </div>
 

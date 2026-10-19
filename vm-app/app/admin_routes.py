@@ -941,21 +941,18 @@ async def save_config_endpoint(request: Request):
         # When saving, unmask each key by restoring the actual secret from current_config.
         curr_providers = current_config.get("providers") or {}
         incoming_providers = body.get("providers")
+        deleted_providers = set()
+        deleted_keys_set = set()  # set of (p_name, k_lbl) tuples
+
         if isinstance(incoming_providers, dict) and isinstance(curr_providers, dict):
+            deleted_providers = set(curr_providers.keys()) - set(incoming_providers.keys())
+
             for p_name, curr_p in curr_providers.items():
                 if not isinstance(curr_p, dict):
                     continue
-                is_vault_prov = (curr_p.get("origin") == "vault")
                 curr_keys = curr_p.get("keys") or {}
                 if not isinstance(curr_keys, dict):
                     curr_keys = {}
-
-                # 严格拦截删除中枢托管供应商
-                if is_vault_prov and p_name not in incoming_providers:
-                    return JSONResponse(
-                        status_code=403,
-                        content={"error": f"中枢统一凭据不可在本地篡改：禁止删除中枢托管供应商「{p_name}」"}
-                    )
 
                 if p_name in incoming_providers:
                     in_p = incoming_providers[p_name]
@@ -963,18 +960,9 @@ async def save_config_endpoint(request: Request):
                     if not isinstance(in_keys, dict):
                         in_keys = {}
 
-                    # 严格拦截删除中枢 Key
-                    for k_lbl, orig_secret in curr_keys.items():
-                        is_vault_key = is_vault_prov or (
-                            isinstance(orig_secret, dict) and (
-                                orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
-                            )
-                        )
-                        if is_vault_key and k_lbl not in in_keys:
-                            return JSONResponse(
-                                status_code=403,
-                                content={"error": f"中枢统一凭据不可在本地篡改：禁止删除中枢 Key「{k_lbl}」"}
-                            )
+                    for k_lbl in curr_keys.keys():
+                        if k_lbl not in in_keys:
+                            deleted_keys_set.add((p_name, k_lbl))
 
             for p_name, p_data in incoming_providers.items():
                 if not isinstance(p_data, dict):
@@ -988,7 +976,7 @@ async def save_config_endpoint(request: Request):
                             orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
                         )
                         if is_vault_key:
-                            # 严格后端不可变校验：中枢下发的 Key 绝不允许在前端通过普通保存接口篡改明文，强制恢复中枢母本
+                            # 保持中枢 Key 不可篡改明文，强制恢复中枢母本
                             in_keys[k_lbl] = orig_secret
                             continue
                         if is_masked_secret(k_val):
@@ -1009,6 +997,51 @@ async def save_config_endpoint(request: Request):
                                     in_keys[k_lbl] = orig_secret.get("key") if isinstance(orig_secret, dict) else orig_secret
                                 else:
                                     in_keys.pop(k_lbl, None)
+
+        # 级联清理：删除供应商或 Key 时，必须级联删除已添加的关联模型与 Candidate
+        if deleted_providers or deleted_keys_set:
+            incoming_models = body.get("agent_models")
+            if isinstance(incoming_models, dict):
+                for m_name, m_data in list(incoming_models.items()):
+                    if isinstance(m_data, dict):
+                        m_keys = m_data.get("keys")
+                        if isinstance(m_keys, list):
+                            m_data["keys"] = [
+                                k for k in m_keys
+                                if isinstance(k, dict)
+                                and k.get("provider") not in deleted_providers
+                                and (k.get("provider"), k.get("key")) not in deleted_keys_set
+                            ]
+                            if not m_data["keys"]:
+                                del incoming_models[m_name]
+
+            incoming_candidates = body.get("candidates")
+            if isinstance(incoming_candidates, dict):
+                for cat, c_list in incoming_candidates.items():
+                    if isinstance(c_list, list):
+                        incoming_candidates[cat] = [
+                            c for c in c_list
+                            if isinstance(c, dict)
+                            and c.get("provider") not in deleted_providers
+                            and (c.get("provider"), c.get("key")) not in deleted_keys_set
+                        ]
+
+        # 墓碑标记 (Tombstones)：记录用户在本地主动删除的中枢供应商与 Key，杜绝后续同步死灰复燃
+        tombstones = set(current_config.get("tombstones") or [])
+        tombstone_keys = set(current_config.get("tombstone_keys") or [])
+        for dp in deleted_providers:
+            tombstones.add(dp)
+        for p_name, k_lbl in deleted_keys_set:
+            tombstone_keys.add(f"{p_name}:{k_lbl}")
+        if isinstance(incoming_providers, dict):
+            for ap in incoming_providers.keys():
+                tombstones.discard(ap)
+                in_keys = incoming_providers[ap].get("keys") or {}
+                if isinstance(in_keys, dict):
+                    for k_lbl in in_keys.keys():
+                        tombstone_keys.discard(f"{ap}:{k_lbl}")
+        body["tombstones"] = sorted(list(tombstones))
+        body["tombstone_keys"] = sorted(list(tombstone_keys))
 
         # 3. Rolling encrypted backups (keep last 20)
         try:
@@ -2145,20 +2178,17 @@ async def vault_sync_endpoint(request: Request):
             updated = 0
             created = 0
 
-            # 严格精准增量同步：仅同步当前本地已添加/使用的提供商配置，绝不强塞未配置的中枢提供商
+            # 严格精准增量同步：仅同步当前本地已配置的提供商，绝不强塞未配置的中枢提供商
+            # 严格遵守本地删除墓碑 (tombstones)，已被用户删除的提供商与 Key 绝不复活
+            tombstones = set(cfg.get("tombstones") or [])
+            tombstone_keys = set(cfg.get("tombstone_keys") or [])
             active_pids = set(local_providers.keys())
-            for m in (cfg.get("agent_models") or {}).values():
-                for b in (m.get("keys") or []):
-                    if isinstance(b, dict) and b.get("provider"):
-                        active_pids.add(b["provider"])
-            for c_list in (cfg.get("candidates") or {}).values():
-                for c in (c_list or []):
-                    if isinstance(c, dict) and c.get("provider"):
-                        active_pids.add(c["provider"])
 
             target_pids = [
                 p_id for p_id in remote_providers.keys()
-                if p_id in active_pids or p_id.lower() in [x.lower() for x in active_pids]
+                if (p_id in active_pids or p_id.lower() in [x.lower() for x in active_pids])
+                and p_id not in tombstones
+                and p_id.lower() not in [x.lower() for x in tombstones]
             ]
 
             if not target_pids:
@@ -2203,12 +2233,14 @@ async def vault_sync_endpoint(request: Request):
                 if r_p.get("rpm_per_key"):
                     p_cfg["rpm_per_key"] = r_p["rpm_per_key"]
 
-                # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key）
+                # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key，且过滤本地删除墓碑）
                 remote_key_labels = r_p.get("keys") or []
                 local_keys = p_cfg.setdefault("keys", {})
                 missing_labels = [
                     kl for kl in remote_key_labels
-                    if isinstance(kl, str) and (
+                    if isinstance(kl, str)
+                    and f"{p_id}:{kl}" not in tombstone_keys
+                    and (
                         kl not in local_keys or
                         not local_keys[kl] or
                         (isinstance(local_keys[kl], dict) and not local_keys[kl].get("is_local"))
