@@ -56,6 +56,36 @@ from .scheduler import (
 )
 from .logger_utils import vm_logger, clean_upstream_error_text
 
+# Client request headers that are NOT relayed upstream: hop-by-hop, framing,
+# credentials (the proxy sets the upstream key itself), client identity /
+# network metadata, and OpenAI org/project ids that belong to another account.
+# Everything else (anthropic-beta, user-agent, x-stainless-*, session ids, ...)
+# is passed through so the relay behaves like a direct call.
+_CLIENT_HEADER_DENYLIST = frozenset({
+    "host", "content-length", "content-type", "transfer-encoding", "connection",
+    "keep-alive", "proxy-authorization", "proxy-authenticate", "proxy-connection",
+    "te", "trailer", "trailers", "upgrade", "expect", "accept-encoding",
+    "authorization", "x-api-key", "api-key", "x-goog-api-key", "cookie",
+    "origin", "referer", "forwarded", "via", "x-real-ip", "true-client-ip",
+    "openai-organization", "openai-project",
+})
+_CLIENT_HEADER_DENY_PREFIXES = ("x-forwarded-", "cf-", "eo-", "x-edgeone-", "sec-", "x-proxy-")
+
+
+def _client_passthrough_headers(request: Request) -> dict:
+    """Client headers to relay upstream unchanged (see _CLIENT_HEADER_DENYLIST)."""
+    out = {}
+    try:
+        for k, v in request.headers.items():
+            lk = k.lower()
+            if lk in _CLIENT_HEADER_DENYLIST or lk.startswith(_CLIENT_HEADER_DENY_PREFIXES):
+                continue
+            out[lk] = v
+    except Exception:
+        return {}
+    return out
+
+
 def _resolve_dynamic_placeholder(val: str) -> str:
     """Resolve dynamic placeholders in header values or strings (e.g. ${random_session_id}, ${timestamp}, ${uuid})."""
     if not isinstance(val, str) or "${" not in val:
@@ -338,8 +368,10 @@ def _apply_request_adapter_rules(out: dict, rules: dict, is_agent_mode: bool, is
         else:
             out.pop(sp, None)
 
-    # Sanitize illegal reasoning.enabled (e.g. AMD rejects reasoning.enabled with 400)
-    if isinstance(out.get("reasoning"), dict):
+    # reasoning.enabled is rejected by some upstreams (AMD, OpenAI official) with 400.
+    # Provider-specific: only stripped when the adapter file asks for it, so
+    # gateways that use it (e.g. OpenRouter) receive the client's value untouched.
+    if rules.get("sanitization", {}).get("strip_reasoning_enabled") and isinstance(out.get("reasoning"), dict):
         out["reasoning"].pop("enabled", None)
         if not out["reasoning"]:
             out.pop("reasoning", None)
@@ -1172,6 +1204,7 @@ async def chat_completions(request: Request):
         if gemini_compat.is_gemini_rules(c.get("adapter_rules") or _get_preset_rules(c.get("provider", "")))
     }
     gemini_urls: set = set()
+    client_headers = _client_passthrough_headers(request)
 
     def build_request(cand, api_key, upstream_base_url):
         # Isolate top-level and nested mutable fields (messages, tools, extra_body) via copy-on-write
@@ -1186,11 +1219,11 @@ async def chat_completions(request: Request):
             gemini_urls.add(str(httpx.URL(url)))
         if is_gemini or signed_ids:
             gemini_compat.restore_signatures(out, keep=is_gemini)
-        headers = {
-            "Content-Type": "application/json",
-        }
+        # Client headers first; proxy-owned headers and adapter injections override.
+        headers = dict(client_headers)
+        headers["content-type"] = "application/json"
         if is_stream:
-            headers["Accept"] = "text/event-stream"
+            headers["accept"] = "text/event-stream"
         # 1. Declarative Auth Header (Config-driven, defaults to Authorization: Bearer {key})
         auth_header = rules.get("auth_header") if isinstance(rules, dict) else None
         auth_format = (rules.get("auth_format") if isinstance(rules, dict) else None) or "Bearer {key}"
@@ -1202,13 +1235,13 @@ async def chat_completions(request: Request):
                 auth_header = "Authorization"
 
         if api_key:
-            headers[auth_header] = auth_format.format(key=api_key)
+            headers[auth_header.lower()] = auth_format.format(key=api_key)
 
         # 2. Declarative Header Injection (Supports dynamic placeholders like ${random_session_id})
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
-                headers[str(hk)] = _resolve_dynamic_placeholder(str(hv))
+                headers[str(hk).lower()] = _resolve_dynamic_placeholder(str(hv))
 
         # Fast-Path: when target model is identical and provider/rules require zero mutation,
         # pass raw bytes directly to upstream without expensive re-serialization.
@@ -1435,6 +1468,7 @@ async def anthropic_messages(request: Request):
     }
 
     anthropic_version = request.headers.get("anthropic-version") or "2023-06-01"
+    client_headers = _client_passthrough_headers(request)
 
     def build_request(cand, api_key, upstream_base_url):
         out = _clone_request_payload(body)
@@ -1448,18 +1482,21 @@ async def anthropic_messages(request: Request):
         anthropic_base = prov_cfg.get("anthropic_base_url")
 
         url = build_messages_upstream(upstream_base_url, anthropic_base_url=anthropic_base, provider=provider)
-        headers = {
-            "Authorization": f"Bearer {api_key}",
+        # Client headers (anthropic-beta, user-agent, ...) first; proxy-owned
+        # headers and adapter injections override.
+        headers = dict(client_headers)
+        headers.update({
+            "authorization": f"Bearer {api_key}",
             "x-api-key": api_key,
             "anthropic-version": anthropic_version,
-            "Content-Type": "application/json",
-        }
+            "content-type": "application/json",
+        })
         if is_stream:
-            headers["Accept"] = "text/event-stream"
+            headers["accept"] = "text/event-stream"
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
-                headers[str(hk)] = str(hv)
+                headers[str(hk).lower()] = str(hv)
         return "POST", url, headers, out
 
     if is_stream:
@@ -1592,7 +1629,7 @@ async def embeddings(request: Request):
         inject_hdrs = rules.get("inject_headers") or rules.get("adapter_rules", {}).get("inject_headers")
         if isinstance(inject_hdrs, dict):
             for hk, hv in inject_hdrs.items():
-                headers[str(hk)] = str(hv)
+                headers[str(hk).lower()] = str(hv)
         return "POST", url, headers, out
 
     try:
@@ -1768,7 +1805,7 @@ def _replace_placeholder(obj, image: str):
 # taken before the body is read: a queued request costs ~64 KB (uvicorn pauses
 # the socket at its high-water mark), so batches wait in line instead of
 # piling up on the heap or bouncing off a 2 s 503.
-_OCR_DEFAULT_MAX_INFLIGHT = 6
+_OCR_DEFAULT_MAX_INFLIGHT = 12
 _OCR_DEFAULT_QUEUE_TIMEOUT_SEC = 30.0
 _ocr_semaphore: Optional[asyncio.Semaphore] = None
 _ocr_semaphore_limit: int = 0

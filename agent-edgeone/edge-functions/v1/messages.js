@@ -21,6 +21,7 @@ import {
   ConfigError,
   resolveKvBinding,
 } from '../lib/config.js';
+import { clientPassthroughHeaders } from '../lib/headers.js';
 import {
   shouldFailover,
   classifyFailure,
@@ -232,7 +233,8 @@ export async function onRequestPost(context) {
         body.stream === true,
         perAttemptTimeoutMs,
         customHeaders,
-        peekDeadlineMs
+        peekDeadlineMs,
+        clientPassthroughHeaders(request)
       );
 
       if (result.kind === 'success') {
@@ -318,8 +320,10 @@ function peekDeadlineFrom(startMs, settings) {
   return startMs + sec * 1000;
 }
 
-async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isStream, timeoutMs, customHeaders = null, peekDeadlineMs = Date.now() + 20000) {
+async function forwardMessagesUpstream(url, apiKey, anthropicVersion, body, isStream, timeoutMs, customHeaders = null, peekDeadlineMs = Date.now() + 20000, clientHeaders = null) {
+  // Client headers first (anthropic-beta, user-agent, ...); proxy-owned headers and adapter injections override.
   const headers = {
+    ...(clientHeaders || {}),
     'content-type': 'application/json',
     'authorization': `Bearer ${apiKey}`,
     'x-api-key': apiKey,

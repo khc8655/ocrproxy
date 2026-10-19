@@ -261,7 +261,7 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
         "fast_failover_provider_down",
         "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
         "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
-        "max_concurrency_per_key",
+        "max_concurrency_per_key", "kb_max_concurrency_per_key", "agent_max_concurrency_per_key",
         "cooldown_tpm_sec", "cooldown_quota_sec", "cooldown_5xx_sec",
         "cooldown_429_sec", "cooldown_403_sec", "cooldown_duration",
         "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing",
