@@ -27,9 +27,7 @@ const tabs = [
   { id: 'dashboard', label: '概览', sub: '接入规范、实时请求统计与错误日志' },
   { id: 'providers', label: '供应商', sub: '上游 Base URL、协议、RPM 限流与密钥凭证库' },
   { id: 'models', label: '模型及路由', sub: 'Agent 模型与知识库模型路由' },
-  { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' },
-  { id: 'access', label: '接入指引', sub: 'API 接口规范、SDK 接入示例与代码生成' },
-  { id: 'raw', label: 'JSON 配置', sub: '直接查看与编辑底层 JSON 配置' }
+  { id: 'settings', label: '系统设置', sub: '运行参数、调度策略与配置迁移' }
 ];
 const KB_TYPES = ['chat','embedding','reranker','ocr'];
 const KB_LABELS = { chat:'Chat 对话', embedding:'Embedding 向量', reranker:'Reranker 重排', ocr:'OCR 识图' };
@@ -92,7 +90,14 @@ function headers() { return { 'Authorization':'Bearer '+state.key, 'Content-Type
 function fmtTime(ms) {
   if (!ms) return '—';
   try {
-    const d = new Date(ms);
+    let num = Number(ms);
+    let d;
+    if (!isNaN(num) && num > 1000000000) {
+      if (num < 10000000000) num *= 1000;
+      d = new Date(num);
+    } else {
+      d = new Date(ms);
+    }
     if (isNaN(d.getTime())) return '—';
     const now = new Date();
     const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
@@ -464,10 +469,16 @@ function render(){
   if(aca) aca.style.display = (runMode === 'kb') ? 'none' : 'block';
   if(ack) ack.style.display = (runMode === 'agent') ? 'none' : 'block';
 
-  if(state.tab==='dashboard') renderDashboard();
+  if(state.tab==='dashboard') {
+    renderDashboard();
+    renderAccessPanel();
+  }
   if(state.tab==='providers') renderProviders();
   if(state.tab==='models') renderModels();
-  if(state.tab==='settings') renderSettings();
+  if(state.tab==='settings') {
+    renderSettings();
+    renderRawJsonPanel();
+  }
   if(state.tab==='access') renderAccessPanel();
   if(state.tab==='raw') renderRawJsonPanel();
 

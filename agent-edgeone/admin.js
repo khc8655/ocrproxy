@@ -8,7 +8,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.18-09';
+const BUILD_VERSION = 'v2026.10.19-02';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -45,6 +45,30 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function fmtTime(ms) {
+  if (!ms) return '—';
+  try {
+    let num = Number(ms);
+    let d;
+    if (!isNaN(num) && num > 1000000000) {
+      if (num < 10000000000) num *= 1000;
+      d = new Date(num);
+    } else {
+      d = new Date(ms);
+    }
+    if (isNaN(d.getTime())) return '—';
+    const now = new Date();
+    const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    const pad = n => String(n).padStart(2, '0');
+    const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    if (isToday) return timeStr;
+    const dateStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return `${dateStr} ${timeStr}`;
+  } catch (_) {
+    return '—';
+  }
 }
 
 // ---- Provider Presets Database & Dynamic Remote Catalog ------------------
@@ -200,7 +224,7 @@ const PRESET_DEFINITIONS = new Proxy({}, {
 });
 
 function getKey() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; }
 }
 
 function getClientKey() {
@@ -208,11 +232,11 @@ function getClientKey() {
 }
 
 function setKey(k) {
-  localStorage.setItem(TOKEN_KEY, k);
+  try { localStorage.setItem(TOKEN_KEY, k); } catch (_) {}
 }
 
 function clearKey() {
-  localStorage.removeItem(TOKEN_KEY);
+  try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
 }
 
 function toast(msg, type = 'ok') {

@@ -1281,15 +1281,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-01</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-02</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
       <button onclick="switchTab('providers')">供应商</button>
       <button onclick="switchTab('agents')">模型及路由</button>
       <button onclick="switchTab('settings')">系统设置</button>
-      <button onclick="switchTab('raw')">JSON 配置</button>
-      <button onclick="switchTab('access')">接入说明</button>
     </nav>
     <div class="actions">
       <button class="btn btn-secondary btn-sm" onclick="exportConfigJson()" title="导出当前完整配置为 JSON 备份文件">导出备份</button>
@@ -1321,7 +1319,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-01</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-02</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -2016,10 +2014,16 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
   }
 
   function _fmtTime(ts) {
-    if (typeof fmtTime === 'function') return fmtTime(ts);
     if (!ts) return '—';
     try {
-      const d = new Date(ts);
+      let num = Number(ts);
+      let d;
+      if (!isNaN(num) && num > 1000000000) {
+        if (num < 10000000000) num *= 1000;
+        d = new Date(num);
+      } else {
+        d = new Date(ts);
+      }
       if (isNaN(d.getTime())) return '—';
       const now = new Date();
       const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
@@ -2920,7 +2924,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       } else {
         badge = \`<span class="badge badge-error">\${_esc(ns.status)} 异常</span>\`;
       }
-      time = (typeof fmtTime === 'function') ? fmtTime(ns.time) : (ns.time || '—');
+      time = _fmtTime(ns.time);
     }
 
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;
@@ -3136,7 +3140,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-01';
+const BUILD_VERSION = 'v2026.10.19-02';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3173,6 +3177,30 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function fmtTime(ms) {
+  if (!ms) return '—';
+  try {
+    let num = Number(ms);
+    let d;
+    if (!isNaN(num) && num > 1000000000) {
+      if (num < 10000000000) num *= 1000;
+      d = new Date(num);
+    } else {
+      d = new Date(ms);
+    }
+    if (isNaN(d.getTime())) return '—';
+    const now = new Date();
+    const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    const pad = n => String(n).padStart(2, '0');
+    const timeStr = \`\${pad(d.getHours())}:\${pad(d.getMinutes())}:\${pad(d.getSeconds())}\`;
+    if (isToday) return timeStr;
+    const dateStr = \`\${pad(d.getMonth() + 1)}-\${pad(d.getDate())}\`;
+    return \`\${dateStr} \${timeStr}\`;
+  } catch (_) {
+    return '—';
+  }
 }
 
 // ---- Provider Presets Database & Dynamic Remote Catalog ------------------
@@ -3328,7 +3356,7 @@ const PRESET_DEFINITIONS = new Proxy({}, {
 });
 
 function getKey() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; }
 }
 
 function getClientKey() {
@@ -3336,11 +3364,11 @@ function getClientKey() {
 }
 
 function setKey(k) {
-  localStorage.setItem(TOKEN_KEY, k);
+  try { localStorage.setItem(TOKEN_KEY, k); } catch (_) {}
 }
 
 function clearKey() {
-  localStorage.removeItem(TOKEN_KEY);
+  try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
 }
 
 function toast(msg, type = 'ok') {

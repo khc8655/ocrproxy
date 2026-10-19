@@ -211,10 +211,16 @@
   }
 
   function _fmtTime(ts) {
-    if (typeof fmtTime === 'function') return fmtTime(ts);
     if (!ts) return '—';
     try {
-      const d = new Date(ts);
+      let num = Number(ts);
+      let d;
+      if (!isNaN(num) && num > 1000000000) {
+        if (num < 10000000000) num *= 1000;
+        d = new Date(num);
+      } else {
+        d = new Date(ts);
+      }
       if (isNaN(d.getTime())) return '—';
       const now = new Date();
       const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
@@ -1115,7 +1121,7 @@
       } else {
         badge = `<span class="badge badge-error">${_esc(ns.status)} 异常</span>`;
       }
-      time = (typeof fmtTime === 'function') ? fmtTime(ns.time) : (ns.time || '—');
+      time = _fmtTime(ns.time);
     }
 
     const probeKeyId = 'agent:' + modelName + ':' + prov + ':' + key;

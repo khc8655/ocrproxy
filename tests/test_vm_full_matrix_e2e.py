@@ -127,6 +127,33 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         mode_badge = page.locator("#topModeBadge")
         check(await mode_badge.is_visible(), "概览顶部模式标识正常显示")
 
+        # 严格验证 4 大 Canonical Tab 恒定常驻，绝无额外 Tab
+        nav_buttons = page.locator("#topNav button")
+        nav_texts = [t.strip() for t in await nav_buttons.all_inner_texts()]
+        check(nav_texts == ["概览", "供应商", "模型及路由", "系统设置"], f"顶部主导航严格收敛为 4 个标准 Tab: {nav_texts}")
+        check(await page.locator("#topNav >> text=接入指引").count() == 0, "主导航彻底移除独立「接入指引」Tab")
+        check(await page.locator("#topNav >> text=JSON 配置").count() == 0, "主导航彻底移除独立「JSON 配置」Tab")
+
+        # 验证概览页内嵌接入指引折叠区与代码块高对比度深色样式
+        guide_details = page.locator("#accessGuideDetails")
+        check(await guide_details.count() == 1, "概览页内嵌规范的「客户端接入指引与代码示例」折叠区域")
+        await guide_details.evaluate("el => el.open = true")
+        curl_box = page.locator("#accCurl")
+        check(await curl_box.is_visible(), "接入指引正常生成 cURL 接入示例")
+        curl_val = await curl_box.inner_text()
+        check("curl" in curl_val and base_url in curl_val, f"cURL 示例内容动态渲染当前 Base URL: {curl_val[:40]}...")
+
+        # 验证代码块样式杜绝「白底白字」
+        curl_bg = await curl_box.evaluate("el => window.getComputedStyle(el).backgroundColor")
+        parent_bg = await curl_box.evaluate("el => window.getComputedStyle(el.parentElement).backgroundColor")
+        curl_color = await curl_box.evaluate("el => window.getComputedStyle(el).color")
+        is_dark_bg = any(k in curl_bg or k in parent_bg for k in ["15, 23, 42", "rgba(15, 23, 42", "#0f172a"])
+        check(is_dark_bg, f"代码块背景色严格为深色背景 (#0f172a): {curl_bg} / {parent_bg}")
+        check("226, 232, 240" in curl_color or "#e2e8f0" in curl_color, f"代码块文字颜色严格为浅色文本高对比度 (#e2e8f0): {curl_color}")
+
+        os.makedirs(ROOT / "scratch", exist_ok=True)
+        await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_dashboard_access_guide.png"))
+
         # 刷新统计按钮
         refresh_btn = page.locator("header button:has-text('刷新')").first
         check(await refresh_btn.is_visible(), "顶部导航具备「刷新」功能按钮")
@@ -231,6 +258,12 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         await page.wait_for_selector("#panel-settings", state="visible")
         check(await page.is_visible("#panel-settings"), "成功切换至系统设置面板")
 
+        # 验证紧凑双列与标准控件规范 (32px 控件 / 76px 数字框)
+        settings_cards = page.locator("#panel-settings .settings-card")
+        check(await settings_cards.count() >= 4, f"系统设置采用 4 大紧凑模块分组卡片: count={await settings_cards.count()}")
+        compact_ctrls = page.locator("#panel-settings .form-control-compact")
+        check(await compact_ctrls.count() >= 6, f"系统设置广泛采用 32px 紧凑控件: count={await compact_ctrls.count()}")
+
         # 验证单底栏保存按钮
         save_settings_btn = page.locator("#panel-settings button:has-text('保存设置并生效')")
         check(await save_settings_btn.count() == 1, "系统设置面板保持单一清晰保存底栏按钮")
@@ -247,29 +280,72 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
             server_cfg = r.json()
             check(server_cfg.get("max_retries") == 5, f"前端修改系统设置通过单一底栏原子持久化至磁盘配置: max_retries={server_cfg.get('max_retries')}")
 
-        # ==========================================
-        # 5. JSON 配置模块 (JSON Config Tab)
-        # ==========================================
-        await page.click("#topNav >> text=JSON 配置")
-        await page.wait_for_selector("#panel-raw", state="visible")
-        check(await page.is_visible("#panel-raw"), "成功切换至原始 JSON 配置面板")
-
-        format_btn = page.locator("#panel-raw button:has-text('格式化 JSON')")
-        check(await format_btn.count() > 0, "JSON 面板具备「格式化 JSON」按钮")
-        await format_btn.first.click()
+        # 验证系统设置内嵌的底层 JSON 编辑器
+        raw_details = page.locator("#rawJsonDetails")
+        check(await raw_details.count() == 1, "系统设置底部收纳「高级底层配置编辑」可折叠区域")
+        await raw_details.evaluate("el => el.open = true")
+        format_btn = page.locator("#btnFormatRaw")
+        check(await format_btn.is_visible(), "JSON 模块具备「格式化 JSON」按钮")
+        await format_btn.click()
         await page.wait_for_timeout(300)
         raw_val = await page.input_value("#rawJsonText")
         check("test-agent-m1" in raw_val, "底层 JSON 编辑器正确填充了当前模型配置")
 
-        # ==========================================
-        # 6. 接入指南模块 (Access Guide Tab)
-        # ==========================================
-        await page.click("#topNav >> text=接入指引")
-        await page.wait_for_selector("#panel-access", state="visible")
-        check(await page.is_visible("#panel-access"), "成功切换至接入指南面板")
+        await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_settings.png"))
 
-        curl_box = page.locator("#accCurl")
-        check(await curl_box.is_visible(), "接入指南正常生成 cURL 接入示例")
+        # ==========================================
+        # 5. 时间戳格式化边界值严密断言
+        # ==========================================
+        time_tests = await page.evaluate("""() => {
+            const results = {};
+            const sampleMs = 1792366939692;
+            const sampleStr = "1792366939692";
+            const secMs = 1792366939;
+            results.num = (typeof fmtTime === 'function') ? fmtTime(sampleMs) : 'no_fmt';
+            results.str = (typeof fmtTime === 'function') ? fmtTime(sampleStr) : 'no_fmt';
+            results.sec = (typeof fmtTime === 'function') ? fmtTime(secMs) : 'no_fmt';
+            results.invalid = (typeof fmtTime === 'function') ? fmtTime("not_a_time") : 'no_fmt';
+            results.empty = (typeof fmtTime === 'function') ? fmtTime("") : 'no_fmt';
+            return results;
+        }""")
+        check(":" in time_tests["num"] and not time_tests["num"].isdigit(), f"纯毫秒数字正确格式化为时间字符串: {time_tests['num']}")
+        check(":" in time_tests["str"] and not time_tests["str"].isdigit(), f"纯数字字符串正确格式化为时间字符串: {time_tests['str']}")
+        check(":" in time_tests["sec"] and not time_tests["sec"].isdigit(), f"秒级时间戳自适应*1000正确格式化: {time_tests['sec']}")
+        check(time_tests["invalid"] == "—", f"非法时间戳优雅降级为短横线: {time_tests['invalid']}")
+        check(time_tests["empty"] == "—", f"空时间戳优雅展示短横线: {time_tests['empty']}")
+
+        # ==========================================
+        # 6. EdgeOne 边缘版控制台浏览器真实渲染与时间戳断言
+        # ==========================================
+        edge_admin_js = (ROOT / "edge-functions" / "admin.js").read_text(encoding="utf-8")
+        start = edge_admin_js.find("return `") + len("return `")
+        end = edge_admin_js.rfind("`;\n}")
+        check(start > 0 and end > start, "EdgeOne 独立运行时脚本中包含完整编译生成的控制台 HTML")
+        if start > 0 and end > start:
+            raw_html = edge_admin_js[start:end]
+            edge_html = raw_html.replace("\\`", "`").replace("\\${", "${")
+            edge_page = await browser.new_page()
+            await edge_page.set_content(edge_html)
+            edge_nav_buttons = edge_page.locator("#topNav button")
+            edge_nav_texts = [t.strip() for t in await edge_nav_buttons.all_inner_texts()]
+            check(edge_nav_texts == ["概览", "供应商", "模型及路由", "系统设置"], f"EdgeOne 顶部主导航严格收敛为 4 个标准 Tab: {edge_nav_texts}")
+            check(await edge_page.locator("#topNav >> text=接入指引").count() == 0, "EdgeOne 主导航彻底无「接入指引」Tab")
+            check(await edge_page.locator("#topNav >> text=JSON 配置").count() == 0, "EdgeOne 主导航彻底无「JSON 配置」Tab")
+
+            # 在 EdgeOne 页面上下文中测试 fmtTime 与 _fmtTime
+            edge_time_tests = await edge_page.evaluate("""() => {
+                const results = {};
+                results.fmt_exists = (typeof fmtTime === 'function');
+                results.sample_ms = (typeof fmtTime === 'function') ? fmtTime(1792366939692) : 'none';
+                results.sample_str = (typeof fmtTime === 'function') ? fmtTime("1792366939692") : 'none';
+                return results;
+            }""")
+            check(edge_time_tests["fmt_exists"], "EdgeOne 页面环境具备全局 fmtTime 函数")
+            check(":" in edge_time_tests["sample_ms"] and not edge_time_tests["sample_ms"].isdigit(), f"EdgeOne 环境下毫秒时间戳被格式化为时间字符串: {edge_time_tests['sample_ms']}")
+            check(":" in edge_time_tests["sample_str"] and not edge_time_tests["sample_str"].isdigit(), f"EdgeOne 环境下数字字符串被格式化为时间字符串: {edge_time_tests['sample_str']}")
+
+            await edge_page.screenshot(path=str(ROOT / "scratch" / "e2e_edgeone_admin.png"))
+            await edge_page.close()
 
         # ==========================================
         # 7. 全流程错误收集与完整性断言
@@ -439,6 +515,8 @@ def main():
                 kb_time_cells = page.locator(".model-card table td:nth-child(7)")
                 kb_first_time = await kb_time_cells.first.inner_text()
                 check(kb_first_time != "—" and ":" in kb_first_time, f"KB 候选节点探活后「最近调用」更新为时间戳: {kb_first_time}")
+
+                await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_kb_models.png"))
 
                 await browser.close()
 
