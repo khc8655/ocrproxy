@@ -233,15 +233,27 @@
       "hosts": ["vm", "edgeone"]
     },
     {
-      "key": "max_concurrency_per_key",
+      "key": "kb_max_concurrency_per_key",
       "group": "concurrency",
-      "label": "单 Key 最大并发请求数",
-      "hint": "单个 API Key 允许同时处理的最大在途请求数，超出则排队或调度至其他候选 Key",
+      "label": "KB 单 Key 最大并发",
+      "hint": "KB 模式单个 Key 的在途并发上限，超出则短暂排队或调度至其他候选 Key",
       "type": "int",
-      "default": 5,
+      "default": 16,
       "min": 1,
       "max": 100,
-      "modes": ["agent", "kb"],
+      "modes": ["kb"],
+      "hosts": ["vm"]
+    },
+    {
+      "key": "agent_max_concurrency_per_key",
+      "group": "concurrency",
+      "label": "Agent 单 Key 最大并发",
+      "hint": "0 = 不限（默认）。设限后粘性 Key 繁忙时会话会被分流到其他 Key，导致上游提示词缓存失效",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000,
+      "modes": ["agent"],
       "hosts": ["vm"]
     },
     {
@@ -250,7 +262,7 @@
       "label": "OCR 全局在途内存并发上限",
       "hint": "防止并发大图 Base64 导致内存爆满，严格限制同时执行的 OCR 请求数",
       "type": "int",
-      "default": 6,
+      "default": 12,
       "min": 1,
       "max": 30,
       "modes": ["kb"],

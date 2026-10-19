@@ -38,6 +38,7 @@ import {
   resolveKvBinding,
 } from '../../lib/config.js';
 import { normaliseForProvider, createKeepAliveStream } from '../../lib/normalize.js';
+import { clientPassthroughHeaders } from '../../lib/headers.js';
 import {
   shouldFailover,
   classifyFailure,
@@ -447,7 +448,9 @@ function peekDeadlineFrom(startMs, settings) {
 
 async function forwardUpstream(resolved, body, isStream, request, env, perAttemptTimeoutMs, peekDeadlineMs = Date.now() + 20000) {
   const url = buildChatUrl(resolved.baseUrl);
+  // Client headers first (pure relay); proxy-owned headers and adapter injections override.
   const upstreamHeaders = {
+    ...clientPassthroughHeaders(request),
     'content-type': 'application/json',
     accept: isStream ? 'text/event-stream' : 'application/json',
   };

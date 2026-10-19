@@ -463,7 +463,12 @@ export function orderBindings(bindings, model, strategy = 'sticky_failover', con
   // Agent mode supports only 'sticky_failover' and 'manual'; legacy values fall back to sticky.
   if (strategy !== 'manual') strategy = 'sticky_failover';
 
-  const activeKey = _stickyAgentActiveKeys.get(model) || configuredActiveKey;
+  // EdgeOne runs many isolates on many nodes, so an in-memory "last good key"
+  // diverges between them and one long task would hop between keys (losing the
+  // upstream prompt cache).  Order is therefore deterministic: the configured
+  // active_key first, then configured order; unhealthy keys are skipped by the
+  // KV-shared cooldowns, which every node sees.
+  const activeKey = configuredActiveKey;
 
   if (strategy === 'manual') {
     if (activeKey) {

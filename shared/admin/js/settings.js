@@ -25,8 +25,8 @@ function renderSettings(){
   set('s_maxRetries', c.max_retries ?? 3);
   set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 3);
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
-  set('s_concurrency', c.max_concurrency_per_key ?? 5);
-  set('s_ocrMaxInflight', c.ocr_max_inflight ?? 6);
+  set('s_concurrency', c.kb_max_concurrency_per_key ?? 16);
+  set('s_ocrMaxInflight', c.ocr_max_inflight ?? 12);
   set('s_ocrQueueTimeout', c.ocr_queue_timeout_sec ?? 30);
   const ffEl = document.getElementById('s_fastFailover');
   if (ffEl) ffEl.checked = c.fast_failover_provider_down !== undefined ? !!c.fast_failover_provider_down : true;
@@ -197,7 +197,7 @@ function restoreDefaultSettings(){
   set('s_maxRetries', 3);
   set('s_maxAttemptsPerProvider', 2);
   set('s_kbTimeout', 60);
-  set('s_concurrency', 5);
+  set('s_concurrency', 16);
   const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
   set('s_cooldown429', 60);
   set('s_cooldown5xx', 30);
@@ -531,9 +531,9 @@ async function saveSettings(silent=false){
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
   c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
   c.upstream_timeout_ocr = c.upstream_timeout_kb;
-  c.max_concurrency_per_key = Number(document.getElementById('s_concurrency').value) || 5;
+  c.kb_max_concurrency_per_key = Math.min(100, Math.max(1, Number(document.getElementById('s_concurrency').value) || 16));
   const ocrInflightEl = document.getElementById('s_ocrMaxInflight');
-  if (ocrInflightEl) c.ocr_max_inflight = Math.min(30, Math.max(1, Number(ocrInflightEl.value) || 6));
+  if (ocrInflightEl) c.ocr_max_inflight = Math.min(30, Math.max(1, Number(ocrInflightEl.value) || 12));
   const ocrQueueEl = document.getElementById('s_ocrQueueTimeout');
   if (ocrQueueEl) {
     const v = Number(ocrQueueEl.value);

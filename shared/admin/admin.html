@@ -278,11 +278,11 @@
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title">单 Key 最大并发保护 (max_concurrency_per_key)</span>
-                <span class="settings-row-hint">单个 API Key 允许的最大在途并发请求数</span>
+                <span class="settings-row-title">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
+                <span class="settings-row-hint">KB 模式单个 Key 的在途并发上限（默认 16）；Agent 模式默认不限，避免会话因 Key 繁忙被分流而丢失缓存</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="5" min="1" max="50" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="16" min="1" max="100" style="width:80px;text-align:right;" onwheel="this.blur()">
                 <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">个</span>
               </div>
             </div>
@@ -304,7 +304,7 @@
                 <span class="settings-row-hint">OCR 并发处理图片数（超出的排队不占内存）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="6" min="1" max="30" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" style="width:80px;text-align:right;" onwheel="this.blur()">
                 <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">张</span>
               </div>
             </div>

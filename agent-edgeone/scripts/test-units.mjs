@@ -204,21 +204,23 @@ test('orderBindings: priority_fallback maintains original list order', () => {
   eq(ordered[1].provider, 'p2');
 });
 
-test('orderBindings: sticky_failover starts at cursor and updates on success', () => {
+test('orderBindings: sticky_failover is deterministic across isolates (configured active_key, else config order)', () => {
   const list = [
     { provider: 'p1', keyLabel: 'k1' },
     { provider: 'p2', keyLabel: 'k2' },
     { provider: 'p3', keyLabel: 'k3' }
   ];
-  // Initial order
   let ordered = orderBindings(list, 'test-sticky-model', 'sticky_failover');
   eq(ordered[0].provider, 'p1');
 
-  // Record success on p2 -> sticky cursor updates to index 1
+  // A per-isolate failover success must NOT re-order this isolate only
+  // (other EdgeOne nodes would still start at p1 and the task would hop keys).
   recordStickySuccess('test-sticky-model', list[1], list);
-
-  // Subsequent call starts at p2
   ordered = orderBindings(list, 'test-sticky-model', 'sticky_failover');
+  eq(ordered[0].provider, 'p1');
+
+  // The configured active_key (shared via config) is honoured on every node.
+  ordered = orderBindings(list, 'test-sticky-model', 'sticky_failover', 'p2:k2');
   eq(ordered[0].provider, 'p2');
   eq(ordered[1].provider, 'p3');
   eq(ordered[2].provider, 'p1');
@@ -581,6 +583,12 @@ test('normalize: amd cleans illegal reasoning.enabled while keeping effort', () 
   normaliseForProvider(body, 'amd');
   eq(body.reasoning.enabled, undefined);
   eq(body.reasoning.effort, 'medium');
+});
+
+test('normalize: reasoning.enabled passes through untouched for providers that do not declare strip_reasoning_enabled (openrouter)', () => {
+  const body = { model: 'x-ai/grok', reasoning: { enabled: true } };
+  normaliseForProvider(body, 'openrouter');
+  eq(body.reasoning.enabled, true);
 });
 
 test('normalize: dynamic KV override rules take precedence over static baseline preset rules', () => {

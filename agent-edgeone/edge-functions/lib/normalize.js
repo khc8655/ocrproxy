@@ -131,8 +131,10 @@ export function applyAdapterRules(body, rules, isAgentMode = true, isAnthropic =
     }
   }
 
-  // Sanitize illegal reasoning.enabled (e.g. AMD and OpenAI rejects reasoning.enabled with 400)
-  if (body.reasoning && typeof body.reasoning === 'object') {
+  // reasoning.enabled is rejected by some upstreams (AMD, OpenAI official) with 400.
+  // Provider-specific: only stripped when the adapter file asks for it, so
+  // gateways that use it (e.g. OpenRouter) receive the client's value untouched.
+  if (rules.sanitization?.strip_reasoning_enabled && body.reasoning && typeof body.reasoning === 'object') {
     if ('enabled' in body.reasoning) {
       delete body.reasoning.enabled;
     }

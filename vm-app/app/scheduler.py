@@ -43,6 +43,8 @@ logger = logging.getLogger("scheduler")
 # Override with config key `kb_global_max_concurrency`.
 _GLOBAL_MAX_CONCURRENCY = 30
 _GLOBAL_QUEUE_TIMEOUT_SEC = 2.0
+_KB_DEFAULT_KEY_CONCURRENCY = 16
+_UNLIMITED_KEY_CONCURRENCY = 100000
 _global_semaphore: Optional[asyncio.Semaphore] = None
 _global_semaphore_limit: int = _GLOBAL_MAX_CONCURRENCY
 
@@ -744,6 +746,9 @@ _PROVIDER_LEVEL_EXC = (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError
                        httpx.RemoteProtocolError, httpx.WriteError, httpx.WriteTimeout,
                        httpx.PoolTimeout)
 _SAME_KEY_BACKOFF_SEC = (1.0, 2.0)
+# Longest Retry-After an Agent sticky key is waited out on a transient 429
+# before failing over to another key (and losing the upstream prompt cache).
+_AGENT_SOFT_429_MAX_WAIT_SEC = 20.0
 
 _STALE_CONN_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
 _STALE_RETRY_WINDOW_SEC = 5.0
@@ -1463,10 +1468,21 @@ async def schedule(
         upstream_timeout_sec = max(upstream_timeout_sec, 300.0)
         total_budget_sec = upstream_timeout_sec + 5.0
 
-    try:
-        concurrency_limit = max(1, int(config.get("max_concurrency_per_key", 5)))
-    except (ValueError, TypeError):
-        concurrency_limit = 5
+    # Per-key in-flight cap.  Agent: 0 (default) = no local cap, so a session
+    # never spills to another key just because the sticky key is busy (that
+    # loses the prompt cache); the upstream signals real limits with 429.
+    # KB: high default so ~10 parallel KB calls on one key are not serialised.
+    if category == "agent":
+        try:
+            _agent_cap = int(config.get("agent_max_concurrency_per_key", 0) or 0)
+        except (ValueError, TypeError):
+            _agent_cap = 0
+        concurrency_limit = _agent_cap if _agent_cap > 0 else _UNLIMITED_KEY_CONCURRENCY
+    else:
+        try:
+            concurrency_limit = max(1, int(config.get("kb_max_concurrency_per_key", _KB_DEFAULT_KEY_CONCURRENCY)))
+        except (ValueError, TypeError):
+            concurrency_limit = _KB_DEFAULT_KEY_CONCURRENCY
 
     try:
         kb_global_limit = max(1, int(config.get("kb_global_max_concurrency", _GLOBAL_MAX_CONCURRENCY)))
@@ -1575,15 +1591,20 @@ async def schedule(
     # time when a slot frees.  Kept out of `errors` (no upstream was tried).
     _rpm_blocked: Dict[str, float] = {}
 
-    def _maybe_retry_same_key(orig_idx_, cand_, cid_) -> bool:
+    _same_key_backoff_override: Dict[str, float] = {}
+
+    def _maybe_retry_same_key(orig_idx_, cand_, cid_, min_backoff: float = 0.0) -> bool:
         if category != "agent" or strategy != "sticky_failover" or same_key_retries <= 0:
             return False
         n = _same_key_retry_count.get(cid_, 0)
         if n >= same_key_retries:
             return False
-        backoff = _SAME_KEY_BACKOFF_SEC[min(n, len(_SAME_KEY_BACKOFF_SEC) - 1)]
+        base = _SAME_KEY_BACKOFF_SEC[min(n, len(_SAME_KEY_BACKOFF_SEC) - 1)]
+        backoff = max(base, float(min_backoff or 0.0))
         if deadline - time.monotonic() < backoff + 3.0:
             return False
+        if backoff > base:
+            _same_key_backoff_override[cid_] = backoff
         _same_key_retry_count[cid_] = n + 1
         _same_key_retry_ids.add(cid_)
         _queue.insert(_qi, (orig_idx_, cand_))
@@ -1624,7 +1645,7 @@ async def schedule(
             if _is_same_key_retry:
                 _same_key_retry_ids.discard(cand_id)
                 _n = _same_key_retry_count.get(cand_id, 1)
-                _bo = _SAME_KEY_BACKOFF_SEC[min(_n - 1, len(_SAME_KEY_BACKOFF_SEC) - 1)]
+                _bo = _same_key_backoff_override.pop(cand_id, None) or _SAME_KEY_BACKOFF_SEC[min(_n - 1, len(_SAME_KEY_BACKOFF_SEC) - 1)]
                 await asyncio.sleep(max(0.0, min(_bo, deadline - time.monotonic() - 1.0)))
 
             # Provider down fast failover
@@ -2178,7 +2199,19 @@ async def schedule(
                                        "has_alternatives": len(ordered_items) > 1},
                     )
 
-                    if eval_res.cooldown_sec > 0:
+                    # Agent sticky: a transient 429 (no quota keywords, short or no
+                    # Retry-After) is retried on the SAME key before switching, so a
+                    # long task keeps its upstream prompt cache instead of moving to
+                    # another key on the first rate-limit blip.
+                    _soft_429_retry = False
+                    if (is_agent and strategy == "sticky_failover" and status_code == 429
+                            and not eval_res.is_quota and not rpm_limit
+                            and (_retry_after is None or _retry_after <= _AGENT_SOFT_429_MAX_WAIT_SEC)):
+                        _soft_429_retry = _maybe_retry_same_key(orig_idx, cand, cand_id, min_backoff=_retry_after or 0.0)
+
+                    if _soft_429_retry:
+                        pass  # keep the key un-cooled and the sticky pointer where it is
+                    elif eval_res.cooldown_sec > 0:
                         _cooldown_until[cand_id] = time.time() + eval_res.cooldown_sec
                         # Three-tier cooldown: Key-level failure (401, non-model-specific 403, hard quota, key-issue 400)
                         # parks the entire key (all models bound to provider:key)
@@ -2188,7 +2221,8 @@ async def schedule(
                         _cooldown_until.pop(cand_id, None)
 
                     # Agent sticky mode: on 429 or auth/quota failure, proactively advance sticky pointer to next candidate
-                    if is_agent and strategy == "sticky_failover" and (status_code in (429, 401, 403) or eval_res.is_quota or _400_is_key_issue):
+                    if (not _soft_429_retry and is_agent and strategy == "sticky_failover"
+                            and (status_code in (429, 401, 403) or eval_res.is_quota or _400_is_key_issue)):
                         curr_active = _sticky_agent_active_keys.get(req_model_name)
                         if curr_active in (key_label, f"{provider_name}:{key_label}"):
                             for _, next_c in ordered_items[attempt_seq:]:

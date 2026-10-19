@@ -67,6 +67,7 @@ async def test_stream_concurrency_retention():
         "upstream_timeout_sec": 10.0,
         "schedule_total_budget": 10.0,
         "max_concurrency_per_key": 1,
+        "agent_max_concurrency_per_key": 1,
         "candidates": {
             "chat": [
                 {
@@ -201,6 +202,7 @@ async def test_monotonic_deadline_and_semaphore_timeout():
         "agent_first_byte_timeout_sec": 1.0,
         "request_total_budget_sec": 0.5,
         "max_concurrency_per_key": 1,
+        "agent_max_concurrency_per_key": 1,
         "candidates": {
             "chat": [
                 {

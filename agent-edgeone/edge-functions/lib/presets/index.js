@@ -5,7 +5,7 @@
 
 export const CATALOG = {
   "version": "2026.10.18",
-  "updated_at": "2026-10-18T14:23:38.771Z",
+  "updated_at": "2026-10-19T02:46:57.125Z",
   "providers": [
     {
       "id": "agnes",
@@ -30,10 +30,10 @@ export const CATALOG = {
     {
       "id": "amd",
       "name": "AMD Radeon Cloud",
-      "version": "2026.10.18",
-      "updated_at": "2026-10-18",
-      "update_notes": "AMD 开发者平台推理集群适配，system 消息置顶与 reasoning 字段映射",
-      "rule_hash": "23fbdf92a43f",
+      "version": "2026.10.19",
+      "updated_at": "2026-10-19",
+      "update_notes": "AMD 推理集群适配：system 消息置顶、reasoning 字段映射；reasoning.enabled 剥离改由本适配文件声明",
+      "rule_hash": "8beb737c0a71",
       "protocol": "openai",
       "base_url": "https://developer.amd.com.cn/radeon/api/v1",
       "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -164,10 +164,10 @@ export const CATALOG = {
     {
       "id": "openai",
       "name": "OpenAI 官方",
-      "version": "1.2.0",
-      "updated_at": "2026-10-18",
-      "update_notes": "OpenAI 官方及标准兼容端点纯净直通，完整支持 o1/o3-mini / GPT-4o 思考链与多模态视觉",
-      "rule_hash": "61ae3a7b32fb",
+      "version": "1.2.1",
+      "updated_at": "2026-10-19",
+      "update_notes": "OpenAI 官方端点纯净直通；reasoning.enabled（官方不支持）剥离改由本适配文件声明",
+      "rule_hash": "6d5b9ffdb7ac",
       "protocol": "openai",
       "base_url": "https://api.openai.com/v1",
       "anthropic_base_url": null,
@@ -374,9 +374,9 @@ export const PRESETS = [
   {
     "id": "amd",
     "name": "AMD Radeon Cloud",
-    "version": "2026.10.18",
-    "updated_at": "2026-10-18",
-    "update_notes": "AMD 开发者平台推理集群适配，system 消息置顶与 reasoning 字段映射",
+    "version": "2026.10.19",
+    "updated_at": "2026-10-19",
+    "update_notes": "AMD 推理集群适配：system 消息置顶、reasoning 字段映射；reasoning.enabled 剥离改由本适配文件声明",
     "protocol": "openai",
     "base_url": "https://developer.amd.com.cn/radeon/api/v1",
     "anthropic_base_url": "https://developer.amd.com.cn/radeon/api/v1",
@@ -434,7 +434,8 @@ export const PRESETS = [
         "strip_params": [
           "thinking",
           "chat_template_kwargs"
-        ]
+        ],
+        "strip_reasoning_enabled": true
       }
     }
   },
@@ -887,9 +888,9 @@ export const PRESETS = [
   {
     "id": "openai",
     "name": "OpenAI 官方",
-    "version": "1.2.0",
-    "updated_at": "2026-10-18",
-    "update_notes": "OpenAI 官方及标准兼容端点纯净直通，完整支持 o1/o3-mini / GPT-4o 思考链与多模态视觉",
+    "version": "1.2.1",
+    "updated_at": "2026-10-19",
+    "update_notes": "OpenAI 官方端点纯净直通；reasoning.enabled（官方不支持）剥离改由本适配文件声明",
     "protocol": "openai",
     "base_url": "https://api.openai.com/v1",
     "doc_url": "https://platform.openai.com/docs",
@@ -940,7 +941,8 @@ export const PRESETS = [
         "passthrough_user": true
       },
       "sanitization": {
-        "unsupported_params": []
+        "unsupported_params": [],
+        "strip_reasoning_enabled": true
       }
     }
   },

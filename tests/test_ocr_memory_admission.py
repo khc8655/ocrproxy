@@ -54,7 +54,7 @@ class TestOcrMemoryAdmission(unittest.TestCase):
     def test_ocr_limits_defaults_and_custom(self):
         # Default limits
         limit, wait = _ocr_limits({})
-        self.assertEqual(limit, 6)
+        self.assertEqual(limit, 12)
         self.assertEqual(wait, 30.0)
 
         # Custom valid limits
@@ -64,7 +64,7 @@ class TestOcrMemoryAdmission(unittest.TestCase):
 
         # Invalid formats fallback safely
         limit, wait = _ocr_limits({"ocr_max_inflight": "bad", "ocr_queue_timeout_sec": None})
-        self.assertEqual(limit, 6)
+        self.assertEqual(limit, 12)
         self.assertEqual(wait, 30.0)
 
     def test_ocr_semaphore_caching(self):
