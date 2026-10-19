@@ -1231,6 +1231,11 @@ tbody tr { transition: background .15s; }
 tbody tr:hover { background: var(--color-bg-hover); }
 tbody tr:last-child td { border-bottom: none; }
 td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); }
+.model-card table { table-layout: fixed; width: 100%; }
+.model-card th, .model-card td { box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; vertical-align: middle; }
+.model-card .card-head { padding: 9px 16px; }
+.model-card .btn-icon.btn-sm { width: 26px; height: 26px; }
+.model-card .btn-sm { height: 26px; padding: 2px 8px; font-size: 12px; }
 .btn-icon { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border-radius: 4px; }
 
 /* Spinners & Loaders */

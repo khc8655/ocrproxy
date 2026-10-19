@@ -599,8 +599,8 @@
       const badgeHtml = _renderProtocolBadges(provProtos);
       const provRpm = localProv?.rpm || localProv?.rpm_per_key || remoteProv?.rpm || remoteProv?.rpm_per_key;
       const rpmBadge = (provRpm && Number(provRpm) > 0)
-        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 ${provRpm} RPM</span>`
-        : `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>`;
+        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">${provRpm} RPM</span>`
+        : '';
       protoInfoEl.innerHTML = `<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">${badgeHtml} ${rpmBadge}</div>`;
     }
 
@@ -631,7 +631,7 @@
           ? `<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="${_esc(prov)}" data-key="${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>`
           : '';
 
-        const displayLabel = isPublic ? '🌟 公共匿名凭据 (免Key兜底)' : k;
+        const displayLabel = isPublic ? '公共匿名凭据 (免Key兜底)' : k;
 
         return `<div class="key-capsule ${isChecked ? 'checked' : ''}" data-action="toggle-key-capsule">
           <input type="checkbox" value="${_esc(k)}" data-provider="${_esc(prov)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">

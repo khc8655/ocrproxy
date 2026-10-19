@@ -204,6 +204,19 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         await page.click("button[onclick='loadData()']")
         await page.wait_for_timeout(1000)
 
+        # 验证彻底移除「无限流」标签
+        unlimited_badges = await page.locator(".badge:has-text('无限流')").count()
+        check(unlimited_badges == 0, f"供应商列表彻底移除「无限流」标签: count={unlimited_badges}")
+
+        # 验证 URL 具有单行溢出省略样式且按钮组具备 flex-shrink: 0
+        prov_url_overflow = await page.eval_on_selector(".provider-url", "el => window.getComputedStyle(el).textOverflow")
+        prov_url_wrap = await page.eval_on_selector(".provider-url", "el => window.getComputedStyle(el).whiteSpace")
+        check(prov_url_overflow == "ellipsis" and prov_url_wrap == "nowrap", "供应商 URL 样式规范强制单行溢出省略 (nowrap + ellipsis)")
+
+        prov_actions_shrink = await page.eval_on_selector(".provider-actions", "el => window.getComputedStyle(el).flexShrink")
+        check(prov_actions_shrink == "0", f"供应商操作按钮组规范设置 flex-shrink: 0 防挤压: {prov_actions_shrink}")
+        await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_providers.png"))
+
         # ==========================================
         # 3. 模型列表与严格对齐 (Models Tab)
         # ==========================================
@@ -272,11 +285,16 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         source_badges = page.locator("#agentModelsBox table td:nth-child(4) span.badge-primary")
         check(await source_badges.count() > 0, f"模型列表中来源徽章采用醒目 badge-primary: count={await source_badges.count()}")
 
+        # 验证模型列表单元格垂直内边距紧凑微调 (<= 8px)
+        td_pad_top = await page.eval_on_selector(".model-card td", "el => window.getComputedStyle(el).paddingTop")
+        check(int(float(td_pad_top.replace("px", ""))) <= 8, f"模型列表单元格内边距微调紧凑 (<= 8px): {td_pad_top}")
+
         # 验证全系统区块标题与菜单规范统一
         prov_title = (await page.locator("#panel-providers .section-title").first.inner_text()).strip()
         models_title = (await page.locator("#mtab-agents .section-title").first.inner_text()).strip()
         check(prov_title == "供应商", f"供应商区块标题严格规范为「供应商」: {prov_title}")
         check(models_title == "模型及路由", f"Agent 模型区块标题严格规范为「模型及路由」: {models_title}")
+        await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_models.png"))
 
         # ==========================================
         # 4. 系统设置 (Settings Tab)
@@ -286,12 +304,23 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         check(await page.is_visible("#panel-settings"), "成功切换至系统设置面板")
         settings_title = (await page.locator("#panel-settings .section-title").first.inner_text()).strip()
         check(settings_title == "系统设置", f"系统设置区块标题严格规范为「系统设置」: {settings_title}")
+        await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_settings_top.png"))
 
-        # 验证紧凑双列与标准控件规范 (32px 控件 / 76px 数字框)
+        # 验证紧凑双列与标准控件规范 (32px 控件 / 80px 数字框)
         settings_cards = page.locator("#panel-settings .settings-card")
         check(await settings_cards.count() >= 4, f"系统设置采用 4 大紧凑模块分组卡片: count={await settings_cards.count()}")
         compact_ctrls = page.locator("#panel-settings .form-control-compact")
         check(await compact_ctrls.count() >= 6, f"系统设置广泛采用 32px 紧凑控件: count={await compact_ctrls.count()}")
+        num_input_w = await page.eval_on_selector("#s_chatTimeout", "el => window.getComputedStyle(el).width")
+        check(num_input_w == "80px", f"系统设置数字输入框统一定宽 80px: {num_input_w}")
+
+        # 验证全站消除 Unicode Emoji 图标
+        emoji_count = await page.evaluate(r"""() => {
+            const re = /[\uD83C-\uDBFF\uDC00-\uDFFF\u2600-\u27bf\u2300-\u23ff\u2b50\u2b55\u200d\ufe0f\u2700-\u27bf]/g;
+            const matches = document.body.innerText.match(re);
+            return matches ? matches.length : 0;
+        }""")
+        check(emoji_count == 0, f"全站彻底消除 Unicode Emoji 图标 (已替换为内联 SVG 或规范文字): count={emoji_count}")
 
         # 验证单底栏保存按钮
         save_settings_btn = page.locator("#panel-settings button:has-text('保存设置并生效')")

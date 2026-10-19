@@ -252,7 +252,7 @@ async function testVaultConnection(){
           <span style="color:var(--text-secondary);">Google Key (${d.google_keys_count} 个):</span><span>${gKeys}</span>
         </div>
         <div style="margin-top:6px;color:var(--accent-green);font-size:11px;">
-          ✓ 中枢凭据已自动同步并持久化至本地加密配置，可在「模型及路由」中直接添加模型，或在「供应商」中管理凭据。
+          中枢凭据已自动同步并持久化至本地加密配置，可在「模型及路由」中直接添加模型，或在「供应商」中管理凭据。
         </div>`;
     }
     toast(`凭据中枢连接正常，延迟 ${d.latency_ms}ms，发现 ${d.providers_count} 个供应商`, 'ok');

@@ -818,11 +818,11 @@ function renderProviders() {
         : esc(p);
       card.innerHTML = `
         <div class="card-head">
-          <div>
+          <div style="flex:1;min-width:0;">
             <h3>${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">${protoBadges} ${verBadge} ${rpmBadge}</span></h3>
-            <div class="meta mono mt-2">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
+            <div class="meta mono mt-2" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${esc(prov.base_url || '—')}${messagesUrlPart}">${esc(prov.base_url || '—')}${messagesUrlPart} · ${keyLabels.length} 个 Key</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;white-space:nowrap;margin-left:12px;">
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('${esc(p)}')">${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('${esc(p)}')">${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('${esc(p)}')">${icon('trash')} 删除供应商</button>
@@ -1783,7 +1783,10 @@ async function checkEdgeOneRuleUpdates(manual = true) {
         alertEl.innerHTML = `
           <div style="background:var(--color-bg-page);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
             <div>
-              <strong style="color:var(--color-warning);font-size:13px;">🔄 发现 ${outOfDate.length} 家供应商有新适配规则可更新：</strong>
+              <strong style="color:var(--color-warning);font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                发现 ${outOfDate.length} 家供应商有新适配规则可更新：
+              </strong>
               <div style="font-size:12px;color:var(--color-text-2);margin-top:4px;">
                 ${outOfDate.map(x => `<span class="badge badge-warning" style="font-size:11px;margin-right:6px;">${esc(x.name)} (${esc(x.current_version)} → ${esc(x.latest_version)})</span>`).join('')}
               </div>
@@ -1796,7 +1799,10 @@ async function checkEdgeOneRuleUpdates(manual = true) {
         alertEl.style.display = 'block';
         alertEl.innerHTML = `
           <div style="background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--color-text-2);display:flex;align-items:center;justify-content:space-between;">
-            <span>✅ 当前所有已配置供应商的适配规则均为最新版本 (${catalogData?.version || '2026.10.18'})</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              当前所有已配置供应商的适配规则均为最新版本 (${catalogData?.version || '2026.10.18'})
+            </span>
             <button type="button" class="btn-ghost" onclick="document.getElementById('ruleUpdatesAlert').style.display='none'" style="font-size:14px;cursor:pointer;">×</button>
           </div>
         `;
@@ -1808,7 +1814,7 @@ async function checkEdgeOneRuleUpdates(manual = true) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '🔄 检查规则更新';
+      btn.innerHTML = '<svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 检查规则更新';
     }
   }
 }

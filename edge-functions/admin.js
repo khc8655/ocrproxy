@@ -1247,6 +1247,11 @@ tbody tr { transition: background .15s; }
 tbody tr:hover { background: var(--color-bg-hover); }
 tbody tr:last-child td { border-bottom: none; }
 td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); }
+.model-card table { table-layout: fixed; width: 100%; }
+.model-card th, .model-card td { box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; vertical-align: middle; }
+.model-card .card-head { padding: 9px 16px; }
+.model-card .btn-icon.btn-sm { width: 26px; height: 26px; }
+.model-card .btn-sm { height: 26px; padding: 2px 8px; font-size: 12px; }
 .btn-icon { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border-radius: 4px; }
 
 /* Spinners & Loaders */
@@ -1281,7 +1286,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-04</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-05</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -1319,7 +1324,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div class="stat-card">
             <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-04</div>
+            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">v2026.10.19-05</div>
             <div class="stat-sub">Edge V8 · 3200+ 节点</div>
           </div>
         </div>
@@ -1362,7 +1367,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
             <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()">🔄 检查规则更新</button>
+            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 检查规则更新</button>
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
@@ -1400,7 +1405,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 保存设置并生效</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存设置并生效</button>
           </div>
         </div>
 
@@ -1588,7 +1593,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProviderModal()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveProviderModal()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1633,7 +1638,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="m_key_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
         <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
@@ -1643,8 +1648,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
           <input type="text" id="m_key_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneKeyVertexParamChange()">
         </div>
-        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
-          🔗 动态计算 Base URL: <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
       <div class="form-group">
@@ -1657,7 +1662,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKeyModal()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveKeyModal()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1717,7 +1722,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -2351,8 +2356,8 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
       const badgeHtml = _renderProtocolBadges(provProtos);
       const provRpm = localProv?.rpm || localProv?.rpm_per_key || remoteProv?.rpm || remoteProv?.rpm_per_key;
       const rpmBadge = (provRpm && Number(provRpm) > 0)
-        ? \`<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 \${provRpm} RPM</span>\`
-        : \`<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>\`;
+        ? \`<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">\${provRpm} RPM</span>\`
+        : '';
       protoInfoEl.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap;">\${badgeHtml} \${rpmBadge}</div>\`;
     }
 
@@ -2383,7 +2388,7 @@ td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--color-tex
           ? \`<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="\${_esc(prov)}" data-key="\${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>\`
           : '';
 
-        const displayLabel = isPublic ? '🌟 公共匿名凭据 (免Key兜底)' : k;
+        const displayLabel = isPublic ? '公共匿名凭据 (免Key兜底)' : k;
 
         return \`<div class="key-capsule \${isChecked ? 'checked' : ''}" data-action="toggle-key-capsule">
           <input type="checkbox" value="\${_esc(k)}" data-provider="\${_esc(prov)}" data-is-local="\${isLocal}" \${isChecked ? 'checked' : ''} style="display:none;">
@@ -2990,7 +2995,7 @@ let activeTab = 'dashboard';
 var modelLatencyCache = window.modelLatencyCache = window.modelLatencyCache || {};
 
 const TOKEN_KEY = 'ocrproxy_edge_token';
-const BUILD_VERSION = 'v2026.10.19-04';
+const BUILD_VERSION = 'v2026.10.19-05';
 
 const ICONS = {
   refresh: '<path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>',
@@ -3800,11 +3805,11 @@ function renderProviders() {
         : esc(p);
       card.innerHTML = \`
         <div class="card-head">
-          <div>
+          <div style="flex:1;min-width:0;">
             <h3>\${displayName} <span style="display:inline-flex;gap:4px;vertical-align:middle;margin-left:4px;">\${protoBadges} \${verBadge} \${rpmBadge}</span></h3>
-            <div class="meta mono mt-2">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
+            <div class="meta mono mt-2" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="\${esc(prov.base_url || '—')}\${messagesUrlPart}">\${esc(prov.base_url || '—')}\${messagesUrlPart} · \${keyLabels.length} 个 Key</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;white-space:nowrap;margin-left:12px;">
             <button class="btn btn-ghost btn-sm" onclick="openEditProviderModal('\${esc(p)}')">\${icon('edit')} 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="openAddKeyModal('\${esc(p)}')">\${icon('plus')} 新增 Key</button>
             <button class="btn btn-secondary-danger btn-sm" onclick="deleteProvider('\${esc(p)}')">\${icon('trash')} 删除供应商</button>
@@ -4765,7 +4770,10 @@ async function checkEdgeOneRuleUpdates(manual = true) {
         alertEl.innerHTML = \`
           <div style="background:var(--color-bg-page);border:1px solid var(--color-warning);border-radius:var(--radius-md);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
             <div>
-              <strong style="color:var(--color-warning);font-size:13px;">🔄 发现 \${outOfDate.length} 家供应商有新适配规则可更新：</strong>
+              <strong style="color:var(--color-warning);font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                发现 \${outOfDate.length} 家供应商有新适配规则可更新：
+              </strong>
               <div style="font-size:12px;color:var(--color-text-2);margin-top:4px;">
                 \${outOfDate.map(x => \`<span class="badge badge-warning" style="font-size:11px;margin-right:6px;">\${esc(x.name)} (\${esc(x.current_version)} → \${esc(x.latest_version)})</span>\`).join('')}
               </div>
@@ -4778,7 +4786,10 @@ async function checkEdgeOneRuleUpdates(manual = true) {
         alertEl.style.display = 'block';
         alertEl.innerHTML = \`
           <div style="background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;color:var(--color-text-2);display:flex;align-items:center;justify-content:space-between;">
-            <span>✅ 当前所有已配置供应商的适配规则均为最新版本 (\${catalogData?.version || '2026.10.18'})</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              当前所有已配置供应商的适配规则均为最新版本 (\${catalogData?.version || '2026.10.18'})
+            </span>
             <button type="button" class="btn-ghost" onclick="document.getElementById('ruleUpdatesAlert').style.display='none'" style="font-size:14px;cursor:pointer;">×</button>
           </div>
         \`;
@@ -4790,7 +4801,7 @@ async function checkEdgeOneRuleUpdates(manual = true) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '🔄 检查规则更新';
+      btn.innerHTML = '<svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 检查规则更新';
     }
   }
 }

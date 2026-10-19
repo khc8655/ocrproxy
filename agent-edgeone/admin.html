@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-04</span></span>
+      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-05</span></span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
@@ -112,7 +112,7 @@
             <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()">🔄 检查规则更新</button>
+            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 检查规则更新</button>
             <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
           </div>
         </div>
@@ -150,7 +150,7 @@
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 保存设置并生效</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存设置并生效</button>
           </div>
         </div>
 
@@ -338,7 +338,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProviderModal()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveProviderModal()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -383,7 +383,7 @@
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="m_key_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
         <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
@@ -393,8 +393,8 @@
           <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
           <input type="text" id="m_key_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneKeyVertexParamChange()">
         </div>
-        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
-          🔗 动态计算 Base URL: <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
       <div class="form-group">
@@ -407,7 +407,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKeyModal()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveKeyModal()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -467,7 +467,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
     </div>
   </div>
 </div>

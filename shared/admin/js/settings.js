@@ -113,8 +113,8 @@ function onRunModeChange(){
   }
   if (hintChatTimeout) {
     hintChatTimeout.textContent = isKb
-      ? 'KB 知识库模式下 Chat / Embedding / Reranker 快速处理超时时限（秒，推荐 15s）。'
-      : 'Agent 智能体模式下等待上游模型返回首个字节（含思考帧）的等待上限（秒，推荐 120s）。发生超时立即安全切换备用 Key。';
+      ? '知识库模式下 Chat/Embedding/Reranker 处理时限（默认 15s）'
+      : '智能体等待首字节响应的时限，发生超时立即安全切换备用 Key';
   }
   if (inputChatTimeout && state.config) {
     if (isKb) {
@@ -175,15 +175,15 @@ function updateRoutingSettingsState(){
       chatTimeoutEl.placeholder = isKb ? '纯直通 (默认 15s)' : '纯直通已放宽至 300s';
       if (hintChatTimeout) {
         hintChatTimeout.textContent = isKb
-          ? '⚡ 纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
-          : '⚡ 纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
+          ? '纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
+          : '纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
       }
     } else {
       chatTimeoutEl.placeholder = isKb ? '默认 15' : '默认 120';
       if (hintChatTimeout) {
         hintChatTimeout.textContent = isKb
-          ? 'KB 知识库模式下 Chat / Embedding / Reranker 快速处理超时时限（秒，推荐 15s）。'
-          : 'Agent 智能体模式下等待上游模型返回首个字节（含思考帧）的等待上限（秒，推荐 120s）。发生超时立即安全切换备用 Key。';
+          ? '知识库模式下 Chat/Embedding/Reranker 处理时限（默认 15s）'
+          : '智能体等待首字节响应的时限，发生超时立即安全切换备用 Key';
       }
     }
   }
@@ -276,8 +276,9 @@ async function checkSystemUpdate(manual=true){
       infoBox.style.display = 'block';
       infoBox.innerHTML = `
         <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:10px 14px;margin-top:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <div style="color:var(--warning);font-weight:600;">
-            ⚠️ 未能连接到版本更新服务器 (网络超时)
+          <div style="color:var(--warning);font-weight:600;display:inline-flex;align-items:center;gap:6px;">
+            <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            未能连接到版本更新服务器 (网络超时)
             <span style="font-weight:normal;color:var(--text-secondary);margin-left:6px;">当前运行版本: ${esc(data.current_version || '')}</span>
           </div>
           <span style="font-size:11px;color:var(--text-secondary);">检测时间: ${esc(data.checked_at || '')}</span>
@@ -293,7 +294,7 @@ async function checkSystemUpdate(manual=true){
         <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:14px;margin-top:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div>
-              <span class="badge badge-warning" style="font-weight:700;">🚀 发现新程序版本: ${esc(data.latest_version)}</span>
+              <span class="badge badge-warning" style="font-weight:700;">发现新程序版本: ${esc(data.latest_version)}</span>
               <span style="font-size:12px;color:var(--text-secondary);margin-left:8px;">当前运行版本: ${esc(data.current_version)} (发布日期: ${esc(data.release_date)})</span>
             </div>
             <button class="btn btn-primary btn-sm" onclick="upgradeSystem('${esc(data.latest_version)}', '${esc(data.current_version)}')" style="font-weight:600;">一键在线平滑升级</button>
@@ -305,7 +306,7 @@ async function checkSystemUpdate(manual=true){
             </ul>
           ` : ''}
           <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
-            💡 升级过程为在线热更新并平滑重启守护进程，所有 Key、模型与环境配置 100% 保持无损。
+            升级过程为在线热更新并平滑重启守护进程，所有 Key、模型与环境配置 100% 保持无损。
           </div>
         </div>
       `;
@@ -314,8 +315,9 @@ async function checkSystemUpdate(manual=true){
       infoBox.style.display = 'block';
       infoBox.innerHTML = `
         <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;margin-top:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">
-          <div style="color:var(--text-secondary);">
-            ✅ 当前已是最新程序版本: <strong style="color:var(--primary);">${esc(data.current_version)}</strong> ${data.release_date ? `(${esc(data.release_date)})` : ''}
+          <div style="color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">
+            <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            当前已是最新程序版本: <strong style="color:var(--primary);">${esc(data.current_version)}</strong> ${data.release_date ? `(${esc(data.release_date)})` : ''}
           </div>
           <span style="font-size:11px;color:var(--text-secondary);">检测时间: ${esc(data.checked_at || '')}</span>
         </div>
@@ -381,12 +383,15 @@ async function upgradeSystem(targetVer, currVer){
           if (infoBox) {
             infoBox.innerHTML = `
               <div style="background:var(--bg-subtle);border:1px solid var(--success);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
-                <div style="font-weight:600;color:var(--success);font-size:14px;">🎉 系统在线平滑升级成功！</div>
+                <div style="font-weight:600;color:var(--success);font-size:14px;display:inline-flex;align-items:center;gap:6px;">
+                  <svg class="khc-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  系统在线平滑升级成功！
+                </div>
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">当前运行版本已刷新为: <strong style="color:var(--primary);">${esc(runningVer)}</strong></div>
               </div>
             `;
           }
-          toast('🎉 系统已成功平滑升级至 ' + runningVer + '！', 'ok');
+          toast('系统已成功平滑升级至 ' + runningVer + '！', 'ok');
           setTimeout(() => location.reload(), 1500);
           return;
         }
@@ -403,7 +408,7 @@ async function upgradeSystem(targetVer, currVer){
         if (infoBox) {
           infoBox.innerHTML = `
             <div style="background:var(--bg-subtle);border:1px solid var(--warning);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
-              <div style="font-weight:600;color:var(--warning);font-size:14px;">⚠️ 升级探测超时，当前版本未变</div>
+              <div style="font-weight:600;color:var(--warning);font-size:14px;">升级探测超时，当前版本未变</div>
               <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">版本仍为 ${esc(oldVer)}。可能权限受限或下载超时，建议在服务器执行 <code>ocrproxy upgrade</code> 或检查 journalctl 日志。</div>
             </div>
           `;
@@ -417,7 +422,7 @@ async function upgradeSystem(targetVer, currVer){
     if (infoBox) {
       infoBox.innerHTML = `
         <div style="background:var(--bg-subtle);border:1px solid var(--danger);border-radius:var(--radius-md);padding:12px 14px;margin-top:10px;text-align:center;">
-          <div style="font-weight:600;color:var(--danger);font-size:14px;">❌ 发起升级失败</div>
+          <div style="font-weight:600;color:var(--danger);font-size:14px;">发起升级失败</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${esc(e.message)}</div>
           <button class="btn btn-secondary btn-sm" onclick="checkSystemUpdate(true)" style="margin-top:8px;">重新检查</button>
         </div>
@@ -460,7 +465,10 @@ async function updateConfiguredPresetsFromSettings() {
       const failedTags = failed.length ? `<div style="color:var(--error);font-size:11px;margin-top:6px;">失败: ${failed.map(f => esc(f.provider_id)).join(', ')}</div>` : '';
       infoBox.innerHTML = `
         <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;font-size:12px;">
-          <div style="color:var(--text);font-weight:600;margin-bottom:6px;">✅ 已增量更新 ${updated.length} 家供应商规则：</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px;display:inline-flex;align-items:center;gap:6px;">
+            <svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            已增量更新 ${updated.length} 家供应商规则：
+          </div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;">${updatedTags || '<span class="text-secondary">无变动</span>'}</div>
           ${failedTags}
         </div>

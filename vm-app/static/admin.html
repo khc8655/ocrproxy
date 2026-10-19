@@ -33,7 +33,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-04</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-05</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav"></nav>
@@ -193,7 +193,7 @@
                 <span class="settings-row-title">系统运行模式 (Running Mode)</span>
                 <span class="settings-row-hint">控制管理后台页面自适应展示以及 /v1/models 的暴露范围</span>
               </div>
-              <div class="settings-row-ctrl" style="flex:1;max-width:380px;">
+              <div class="settings-row-ctrl" style="flex:1;max-width:440px;">
                 <select id="s_runMode" class="form-control form-control-compact" onchange="onRunModeChange()" style="width:100%;">
                   <option value="agent">Agent 智能体直连模式 (专精 Cursor、Cline 真实模型)</option>
                   <option value="kb">KB 知识库入库模式 (4 大入库专用虚拟聚合模型)</option>
@@ -245,11 +245,11 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title" id="lbl_chatTimeout">首字节/等待超时 (upstream_timeout_sec)</span>
-                <span class="settings-row-hint" id="hint_chatTimeout">向上游发起请求等待首字节的时限（秒），超时切备用 Key</span>
+                <span class="settings-row-hint" id="hint_chatTimeout">智能体等待首字节响应的时限，发生超时立即安全切换备用 Key</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_chatTimeout" class="form-control form-control-compact" placeholder="120" min="5" max="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_chatTimeout" class="form-control form-control-compact mono" placeholder="120" min="5" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
             <input type="hidden" id="s_budget" value="">
@@ -257,55 +257,55 @@
             <div class="settings-row" id="st-item-max-retries">
               <div class="settings-row-label">
                 <span class="settings-row-title">单请求最大重试候选数 (max_retries)</span>
-                <span class="settings-row-hint">单次请求最多允许尝试的候选 Key 数量上限（默认 3 次）</span>
+                <span class="settings-row-hint">单次请求最多允许尝试的候选 Key 数量上限</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_maxRetries" class="form-control form-control-compact" placeholder="3" min="1" max="10" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="s_maxRetries" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
               </div>
             </div>
 
             <div class="settings-row" id="st-item-max-attempts">
               <div class="settings-row-label">
                 <span class="settings-row-title">单厂商最大尝试次数 (max_attempts_per_provider)</span>
-                <span class="settings-row-hint">单厂商多个 Key 故障时最多尝试次数（默认 2 次）</span>
+                <span class="settings-row-hint">单厂商多个 Key 故障时最多重试次数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_maxAttemptsPerProvider" class="form-control form-control-compact" placeholder="2" min="1" max="5" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="s_maxAttemptsPerProvider" class="form-control form-control-compact mono" placeholder="2" min="1" max="5" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title">单 Key 最大并发保护 (max_concurrency_per_key)</span>
-                <span class="settings-row-hint">每个 API Key 在途最大并发保护，防止瞬间突发打崩配额</span>
+                <span class="settings-row-hint">单个 API Key 允许的最大在途并发请求数</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_concurrency" class="form-control form-control-compact" placeholder="5" min="1" max="50" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">个</span>
+                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="5" min="1" max="50" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">个</span>
               </div>
             </div>
 
             <div class="settings-row" id="st-item-kb-timeout">
               <div class="settings-row-label">
                 <span class="settings-row-title">KB 大文件/OCR 处理超时 (upstream_timeout_kb)</span>
-                <span class="settings-row-hint">大图片 OCR 视觉识别与长文档解析时限（默认 60s）</span>
+                <span class="settings-row-hint">长文本与大图片处理时限（默认 60s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_kbTimeout" class="form-control form-control-compact" placeholder="60" min="10" max="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
 
             <div class="settings-row" id="st-item-ocr-inflight">
               <div class="settings-row-label">
                 <span class="settings-row-title">OCR 同时处理图片数 (ocr_max_inflight)</span>
-                <span class="settings-row-hint">前置限流并发处理图片数（超出的排队不占内存）</span>
+                <span class="settings-row-hint">OCR 并发处理图片数（超出的排队不占内存）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact" placeholder="6" min="1" max="30" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">张</span>
+                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="6" min="1" max="30" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">张</span>
               </div>
             </div>
 
@@ -315,8 +315,8 @@
                 <span class="settings-row-hint">排队超过此时间返回 503 + Retry-After（默认 30s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact" placeholder="30" min="0" max="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
 
@@ -342,22 +342,22 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title">429 限流冷却时长 (cooldown_429_sec)</span>
-                <span class="settings-row-hint">命中 RPM/TPM 速率限制时的临时避让时长</span>
+                <span class="settings-row-hint">命中速率限制 (429/RPM) 时的临时避让时长</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown429" class="form-control form-control-compact" placeholder="60" min="5" max="600" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_cooldown429" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title">5xx 故障冷却时长 (cooldown_5xx_sec)</span>
-                <span class="settings-row-hint">上游 500/502/503/504 错误避让时长</span>
+                <span class="settings-row-hint">上游服务异常 (500/502/503/504) 避让时长</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown5xx" class="form-control form-control-compact" placeholder="30" min="5" max="300" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_cooldown5xx" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
 
@@ -367,8 +367,8 @@
                 <span class="settings-row-hint">单 Key 连续失败达到阈值即触发熔断（默认 3 次）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_circuitThreshold" class="form-control form-control-compact" placeholder="3" min="1" max="10" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">次</span>
+                <input type="number" id="s_circuitThreshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">次</span>
               </div>
             </div>
 
@@ -378,13 +378,13 @@
                 <span class="settings-row-hint">Key 无效或额度用尽时的主动隔离时长</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown403" class="form-control form-control-compact" placeholder="600" min="60" max="3600" style="width:76px;" onwheel="this.blur()">
-                <span class="text-secondary" style="font-size:12px;">秒</span>
+                <input type="number" id="s_cooldown403" class="form-control form-control-compact mono" placeholder="600" min="60" max="3600" style="width:80px;text-align:right;" onwheel="this.blur()">
+                <span class="unit" style="font-size:12px;color:var(--text-secondary);min-width:18px;">秒</span>
               </div>
             </div>
           </div>
           <div id="manual-cooldown-tip" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
-            ⚡ 纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
+            纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
           </div>
         </div>
 
@@ -463,13 +463,13 @@
 
           <details id="rawJsonDetails" class="card card-pad mb-1" style="border:1px dashed var(--border);background:var(--bg-subtle);padding:10px 14px;" ontoggle="if(this.open && typeof renderRawJsonPanel === 'function') renderRawJsonPanel();">
             <summary style="font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
-              <span>🛠️ 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
               <span style="font-size:11px;font-weight:400;color:var(--text-secondary);">点击展开/收起</span>
             </summary>
             <div style="margin-top:12px;">
               <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
                 <button class="btn btn-secondary btn-xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
-                <button class="btn btn-primary btn-xs" id="btnApplyRaw" onclick="saveRawJson()">💾 保存底层配置生效</button>
+                <button class="btn btn-primary btn-xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
               </div>
               <textarea id="rawJsonText" class="form-control mono" spellcheck="false" style="min-height:360px;font-family:var(--font-mono);font-size:12px;width:100%;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;border:1px solid #1e293b;"></textarea>
               <div id="rawJsonErr" style="display:none;margin-top:8px;color:var(--error);font-size:12px;"></div>
@@ -552,7 +552,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProvider()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveProvider()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -571,7 +571,7 @@
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="k_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span>🌐 Google Cloud Vertex AI 专属参数 (手动填写)</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--error);font-weight:bold;">*</span></label>
@@ -581,8 +581,8 @@
           <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
           <input type="text" id="k_vertex_location" class="form-control" placeholder="global" value="global" oninput="onKeyVertexParamChange()">
         </div>
-        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;">
-          🔗 动态计算 Base URL: <span id="k_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
@@ -592,7 +592,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKey()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveKey()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -653,7 +653,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -711,7 +711,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('candidateModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveCandidate()">✓ 保存并生效</button>
+      <button class="btn btn-primary" onclick="saveCandidate()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -771,14 +771,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=2026.10.19-04"></script>
-  <script src="/static/js/settings-form.js?v=2026.10.19-04"></script>
-  <script src="/static/js/core.js?v=2026.10.19-04"></script>
-  <script src="/static/js/vault.js?v=2026.10.19-04"></script>
-  <script src="/static/js/providers.js?v=2026.10.19-04"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.19-04"></script>
-  <script src="/static/js/models.js?v=2026.10.19-04"></script>
-  <script src="/static/js/settings.js?v=2026.10.19-04"></script>
-  <script src="/static/js/app.js?v=2026.10.19-04"></script>
+  <script src="/static/js/host.js?v=2026.10.19-05"></script>
+  <script src="/static/js/settings-form.js?v=2026.10.19-05"></script>
+  <script src="/static/js/core.js?v=2026.10.19-05"></script>
+  <script src="/static/js/vault.js?v=2026.10.19-05"></script>
+  <script src="/static/js/providers.js?v=2026.10.19-05"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.19-05"></script>
+  <script src="/static/js/models.js?v=2026.10.19-05"></script>
+  <script src="/static/js/settings.js?v=2026.10.19-05"></script>
+  <script src="/static/js/app.js?v=2026.10.19-05"></script>
 </body>
 </html>

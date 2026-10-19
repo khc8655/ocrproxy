@@ -129,21 +129,22 @@ function renderProviders(){
       }
       const provRpmVal = prov.rpm || prov.rpm_per_key;
       const provRpmBadge = (provRpmVal && Number(provRpmVal) > 0)
-        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">⚡ 默认 ${provRpmVal} RPM</span>`
-        : `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="未限制请求频率">⚡ 无限流</span>`;
+        ? `<span class="badge" style="font-size:11px;padding:2px 7px;background:rgba(59,130,246,0.12);color:var(--primary);font-weight:600;" title="每 Key 默认限流阈值">${provRpmVal} RPM</span>`
+        : '';
       const ver = prov.preset_version ? `规则 v${prov.preset_version}` : (prov.adapter_rules ? '自定义规则' : '默认');
       const dateText = prov.preset_updated_at ? ` · ${prov.preset_updated_at}` : '';
       const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本与更新日期">${esc(ver + dateText)}</span>`;
       
+      const lockIcon = `<svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
       let vaultBadge;
       if (isHostEdgeOne) {
         vaultBadge = (prov.origin === 'local')
-          ? `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="EdgeOne 本地自建供应商">💻 本地自建</span>`
-          : `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">🔒 中枢统一</span>`;
+          ? `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="EdgeOne 本地自建供应商">本地自建</span>`
+          : `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">${lockIcon} 中枢统一</span>`;
       } else {
         vaultBadge = isVaultManaged 
-          ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商同步自 EdgeOne 凭据中枢，可在本地随时维护或清理">🔒 中枢已同步</span>`
-          : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">💻 本地自建</span>`;
+          ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商同步自 EdgeOne 凭据中枢，可在本地随时维护或清理">${lockIcon} 中枢已同步</span>`
+          : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">本地自建</span>`;
       }
 
       const hasUpdate = state.ruleUpdatesMap && state.ruleUpdatesMap[name];
@@ -159,15 +160,15 @@ function renderProviders(){
       `;
 
       html += `<div class="provider-row" id="provider-card-${esc(name)}">
-        <div>
-          <div class="provider-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span style="font-size:14px;font-weight:700;">${esc(name)}</span>
-            <span style="display:inline-flex;gap:4px;">${protoBadges} ${provRpmBadge} ${verBadge} ${vaultBadge}</span>
-            <span class="provider-url">${esc(prov.base_url)}${messagesUrlPart}</span>
+        <div class="provider-main-info" style="flex:1;min-width:0;">
+          <div class="provider-header-line" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:14px;font-weight:700;color:var(--text);">${esc(name)}</span>
+            <span style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;">${protoBadges} ${provRpmBadge} ${verBadge} ${vaultBadge}</span>
           </div>
+          <div class="provider-url mono" style="font-size:12px;color:var(--text-secondary);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${esc(prov.base_url)}${messagesUrlPart}">${esc(prov.base_url)}${messagesUrlPart}</div>
           <div class="key-list" style="margin-top:6px;">${keyChips || '<span class="text-secondary text-sm">暂无 Key 凭证</span>'}</div>
         </div>
-        <div class="flex gap-2" style="align-items:center;">
+        <div class="provider-actions" style="display:flex;align-items:center;gap:8px;flex-shrink:0;white-space:nowrap;margin-left:12px;">
           ${updateBtn}
           ${actionButtons}
         </div>
@@ -472,11 +473,11 @@ async function onProviderPresetChange(){
   urlInput.value = preset.base_url;
   
   const dateBadge = preset.updated_at
-    ? `<span class="brand-badge badge-neutral" style="font-size:11px;margin-right:6px;">📅 更新日期: ${esc(preset.updated_at)}</span>`
+    ? `<span class="brand-badge badge-neutral" style="font-size:11px;margin-right:6px;">更新日期: ${esc(preset.updated_at)}</span>`
     : '';
   const verBadge = `<span class="brand-badge" style="font-size:11px;margin-right:6px;">v${esc(preset.version || '1.1.0')}</span>`;
   const noteBox = preset.update_notes
-    ? `<div style="margin-top:6px;font-size:12px;color:var(--text);background:var(--bg-card);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);"><strong>📝 适配说明：</strong>${esc(preset.update_notes)}</div>`
+    ? `<div style="margin-top:6px;font-size:12px;color:var(--text);background:var(--bg-card);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);"><strong>适配说明：</strong>${esc(preset.update_notes)}</div>`
     : '';
   descEl.innerHTML = `<div style="line-height:1.6;">${verBadge}${dateBadge}<strong>${esc(preset.name)}</strong>: ${esc(preset.description || '')}</div>${noteBox}`;
   descEl.style.display = 'block';
