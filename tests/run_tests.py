@@ -56,7 +56,11 @@ def run_layer_api():
     print("\n########################################################")
     print("### Layer 2: Backend API Routes & Lifecycle Integration")
     print("########################################################")
-    return run_command([PYTHON_EXE, "tests/test_api_layer.py"], "FastAPI API Auth, Cascade Deletion & Tombstones")
+    ok1 = run_command([PYTHON_EXE, "tests/test_api_layer.py"], "FastAPI API Auth, Cascade Deletion & Tombstones")
+    if not ok1:
+        return False
+    ok2 = run_command([PYTHON_EXE, "tests/test_backend_contract.py"], "Shared UI Backend Contract (VM vs EdgeOne)")
+    return ok2
 
 
 def run_layer_ui():

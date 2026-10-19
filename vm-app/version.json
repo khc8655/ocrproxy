@@ -1,13 +1,14 @@
 {
-  "version": "v2026.10.19-06",
+  "version": "v2026.10.19-07",
   "release_date": "2026-10-19",
   "commit": "HEAD",
-  "title": "合并 PR #13：客户端请求头透传、适配规则声明式字段清洗、Agent 缓存友好粘性软重试与 KB 10+ 并发解耦 (v2026.10.19-06)",
+  "title": "合并 PR #14 & #15：落地共享 UI 双端后端契约规范、修复 EdgeOne 丢首字与非流式500缺陷、建立全自动双端对照测试 (v2026.10.19-07)",
   "changelog": [
-    "客户端请求头标准透传：除严格拒绝 hop-by-hop、鉴权凭据与反代内部追踪头外，完整透传 anthropic-beta（支持 1M 上下文扩展与提示词缓存）、user-agent、x-session-id 等，贴近原生直连。",
-    "适配规则声明式请求体清洗：移除核心调度硬编码清洗，改由 shared/presets/ 适配文件声明 strip_reasoning_enabled，避免误伤 OpenRouter 等合法支持参数的上游。",
-    "Agent 缓存友好粘性软重试：遇到瞬态 429（无配额用尽关键词且 Retry-After <= 20s）在同一 Key 上执行短暂退避重试，避免过早轮换 Key 导致上游 Prompt Cache 丢失。",
-    "KB 与 Agent 并发模型解耦：新增 kb_max_concurrency_per_key（默认 16，消除多切片串行瓶颈）与 agent_max_concurrency_per_key（默认 0 不限单 Key 并发，交由上游反馈驱动），OCR 默认在途并发提升至 12。",
-    "EdgeOne 跨 Isolate 粘性确定性一致：以配置的 active_key 为全局确定性游标起点，消除边缘节点多 Isolate 内存状态不一致引起的跨 Key 随机漂移。"
+    "落地共享 UI 与两端后端契约规范（shared/contracts/admin-ui-backend.json）：统一候选节点状态键名 agent:<model>:<provider>:<key> 与 active_keys 口径，消弭异构后端实现漂移。",
+    "修复 EdgeOne 300ms 首包竞速丢首字缺陷：首块为 ping 注释超时后不再遗弃挂起的 reader，将其传递给下游 keep-alive 流继续等待消费，彻底杜绝数据截断。",
+    "修复 EdgeOne 非流式 /v1/messages 报 500 崩溃：不可变 Response Headers 导致的运行时错误已解决，重新构造标准可变响应体。",
+    "EdgeOne 控制台接入真实调用状态与耗时：补齐 /api/admin/stats 接口调用与 state.stats 注入，真实调用状态与耗时实时上屏，并通过 throttle 策略保护 KV 写预算。",
+    "VM 手动测 Key 键名校正：前端测试请求统一携带 agent_model 字段，后端以此精准回写 candidates_status，消除显示错位。",
+    "建立全自动双端双轨契约测试套件（tests/test_backend_contract.py）：同一套真实场景覆盖 S1~S6 与 U1 浏览器渲染，双端全绿保障未来长期演进效率。"
   ]
 }
