@@ -238,3 +238,33 @@ sudo journalctl --vacuum-time=3d
 curl -i http://127.0.0.1:8787/health
 ```
 正常响应：`HTTP/1.1 200 OK` 且内容为 `{"status":"ok", ...}`。
+
+---
+
+## 8. 秒级发版硬门禁核验 (Release Gatekeeper)
+
+在执行系统发版或提交重大更新前，必须运行极简质量硬门禁：
+
+```bash
+npm run check:release
+# 等价于: python3 tests/verify_release_gate.py
+```
+
+### 门禁核验标准（<0.3 秒）：
+1. **G1: 版本号 7 处强一致**（`version.json`、`vm-app/version.json`、`install.sh`、`vm-app/install.sh`、`shared/admin/admin.html`、`vm-app/static/admin.html`、`agent-edgeone/admin.html` & `edge-functions/admin.js`）；
+2. **G2: EdgeOne 专属身份强断言**（静态标题、Badge、`window.__HOST_KIND__ = 'edgeone'` 与供应商中枢大门常驻，杜绝误部署成 VM Agent 版本）；
+3. **G3: 安装脚本零代码漂移**（`install.sh` 与 `vm-app/install.sh` 100% 字节一致）；
+4. **G4: 单一真理源同步断言**（`shared/admin/` 编译同步至 `vm-app/static/`）；
+5. **G5: 零明文密钥泄漏审计**。
+
+---
+
+## 9. 研发纪律：前端 UI 冻结与声明式适配优先 (UI Freeze & Declarative Rules)
+
+> [!IMPORTANT]
+> **前端 UI 永久冻结守则**：  
+> 控制台前端界面（`shared/admin/`）结构已进入完备稳定态，**严禁在后续迭代中随意变动前端 HTML/CSS 结构与视觉布局**。
+> - **新增厂商适配**：直接在 `shared/presets/{厂商名}.json` 补充声明式规则并自动热加载，无需发版，严禁修改 UI；
+> - **微调请求头与字段**：在预设 JSON 中声明 `adapter_rules`，调度引擎自适应转换；
+> - **工作重心收敛**：全面转向生产运维可靠性、接口文档详尽度与测试套件覆盖率。
+

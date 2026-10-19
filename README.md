@@ -23,7 +23,7 @@ ocrprox (Monorepo)
 │   └── package.json                   # EdgeOne 构建与 191 项自动化测试套件
 │
 ├── shared/                            # 共享资源与唯一规范源
-│   ├── presets/                       # 14 大官方供应商标准预设 JSON 与目录索引 catalog.json
+│   ├── presets/                       # 16 大官方供应商标准预设 JSON 与目录索引 catalog.json
 │   ├── admin/                         # 全局唯一的前端开发真理源 (Single Source of Truth)
 │   │   ├── admin.html                 # 纯 HTML 语义骨架与弹窗容器
 │   │   ├── admin.css                  # 统一设计系统样式表 (Tokens, 栅格, 导航轨)
@@ -76,7 +76,13 @@ ocrprox (Monorepo)
 - **精准增量同步与本地凭据最高优先级保护 (Incremental Vault Sync & Local Key Sandboxing)**：
   - **精准增量落库 (`POST /api/admin/vault/sync`)**：杜绝全量强塞污染本地数据库。同步时严格仅增量同步当前本地已添加或已绑定模型/KB 的供应商，未配置的远端提供商绝不落库；
   - **本地自建 Key 绝对隔离与保护**：无论在 EdgeOne 还是 VM 端，在模型弹窗中点击「+ 添加本地 Key」录入的密钥均显式打上 `is_local: true` 标记。EdgeOne 中枢对外接口严格过滤防泄露；VM 执行中枢同步时，本地带有 `is_local: true` 的凭据享有最高保护，绝对不被中枢覆盖或清空；
-  - **结构化凭据防冲毁保护与运行时懒加载沙箱**：针对带有 RPM 限流覆盖的字典型 Key (`{ key, rpm, is_local }`)，Web 接口在脱敏下发时仅脱敏敏感密钥字段，完整保留运维元数据；在写盘与保存时由双层 Unmask Guard 严格还原真实密钥，杜绝假掩码覆写损坏；调度引擎异步懒加载中枢提供商时，严格保护本地自建 Key 不被覆盖，并完整同步供应商级 `rpm_per_key` 限流规则。
+- **中枢资产本地持久化与“拉下来就是本地的”自主权原则 (Vault Asset Local Persistence & Sovereignty)**：
+  - **同步资产全量落库**：从 EdgeOne Vault Hub 增量拉取或同步时，中枢 Manifest 完整下发厂商的 `preset_id`、`preset_version`、`preset_updated_at`，VM 端在 `/api/admin/vault/sync` 中将其完整落库持久化保存在本地加密配置 `proxy_config.enc` 中；
+  - **离线与断网可用性保障**：即使后续 EdgeOne 中枢离线或网络阻断，已同步的供应商与适配版本完全作为本地永久资产正常运行；
+  - **本地磁盘优先直读 (0ms 零外网超时)**：VM 控制台在读取预设目录（`/presets/catalog`）与预设详情（`/presets/detail`）时，严格优先读取本地磁盘 `shared/presets/`，彻底消除探测 GitHub 造成的 2 秒卡顿或外网波动异常。
+- **预设下拉协议标准化与卡片版本徽章真理源 (Preset Protocol & Version Badge SSOT)**：
+  - **下拉选项纯净协议展示**：添加供应商下拉框彻底剥离规则版本号与日期，统一呈现为规范的 `厂商名称 (协议)` 格式（如 `MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`），分组收敛为 `官方预设供应商`；
+  - **列表卡片规则小标签全覆盖**：供应商卡片 Header 规范呈现 `[规则 v{version} · {updated_at}]`（例如 `规则 v1.4.0 · 2026-10-18`），通过三级回退算法（持久化属性 $\to$ 本地 16 套预设库精准索引 $\to$ 自定义规则/默认），彻底杜绝丢失或错误显示为「默认」。
 
 ### 2. 精准每 Key 速率限制与零开销保障 (Per-Key RPM Rate Limiter)
 - **多 Key 免费额度精准压榨**：针对 AMD、InternLM（书生·浦语）等提供商的严苛限制（如免费账户仅 2 次/分），统一在供应商级别配置每分钟请求上限 (`rpm_per_key`)，作为该提供商名下所有 Key 的统一约束源，彻底告别单 Key 重复配置的混乱。
@@ -577,16 +583,46 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 
 ---
 
-## 📌 当前最新版本概览 (`v2026.10.19-02`)
+## 📌 当前最新版本概览 (`v2026.10.19-10`)
 
-- **主导航统一收敛为 4 大 Canonical Tab**：彻底从主导航中移除 `[接入指引]` 和 `[JSON 配置]`，主导航严格收敛为：`概览`、`供应商`、`模型及路由`、`系统设置`；
-- **VM 独立版系统设置工程化紧凑重构**：重组为 6 大紧凑模块卡片，全面采用 32px 紧凑表单控件与 76px 标准数字框，单一吸底浮动保存栏，内嵌可折叠底层 JSON 编辑器；
-- **接入指引内嵌与高对比度深色化**：接入指南下沉至概览 Dashboard 顶部的可折叠卡片，代码块统一深色主题（`background: #0f172a; color: #e2e8f0;`），杜绝白底白字无法看清的问题；
-- **EdgeOne 与 VM 端时间戳全局修复**：健全 `_fmtTime` 与 `fmtTime` 解析逻辑，纯数字/毫秒时间戳 100% 格式化为 `HH:MM:SS`，解决 EdgeOne 导出裸数字的问题；
-- **端到端全矩阵 Playwright 浏览器自动化断言**：新增 56 项真实 Chromium 真机与后端 API 测试套件（`tests/test_vm_full_matrix_e2e.py`）100% 验证通过。
+- **预设下拉选项协议纯净化与标准化**：添加供应商下拉框彻底剥离规则版本号与更新日期杂质，收敛为规范的 `厂商名称 (协议)` 格式（如 `MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`），分组标为 `官方预设供应商`，协议一目了然；
+- **供应商卡片规则版本与日期小标签真理源回显**：恢复并标准化供应商列表卡片 Header 的规则小标签 `[规则 v{version} · {updated_at}]`，建立三级回退真理源解析机制，补齐 16 款官方预设兜底，彻底杜绝丢失或错误显示为「默认」；
+- **中枢资产本地持久化与本地磁盘优先直读**：从 EdgeOne Vault Hub 增量拉取的供应商元数据完整落库持久化（`preset_id`、`preset_version`、`preset_updated_at`），VM 端预设目录与详情 0 网络往返本地磁盘秒级直出；
+- **方案 A 单一真理源编译器全量落地**：以 `shared/admin/` 作为全项目唯一开发源头，自动化构建编译注入 EdgeOne 内联单体与 VM 静态资源，彻底废除多分支手写分叉；
+- **秒级发版质量硬门禁 (Lean Release Gatekeeper v2.0)**：落实 `npm run check:release`（G1~G5 黄金法则），强断言 EdgeOne 专属身份与金库中枢常驻，彻底防止部署为 VM Agent 版本；
+- **四层全矩阵自动化测试套件 100% 全绿**：覆盖 199 单元测试、S1~S6/U1 双端契约测试、安全与 CoW 隔离测试，以及 76 项 Chromium 真机浏览器端到端测试。
+
+---
+
+## 🛑 前端 UI 永久冻结守则 (UI Freeze Policy)
+
+经过方案 A 单一真理源编译器重构、流式流向自适应、移动端 0 溢出与预设协议规范化，当前前端界面（`shared/admin/`）的布局、样式规范与契约交互已达到最成熟、完备的稳定状态。
+
+> [!IMPORTANT]
+> **后续所有迭代严禁再随意修改前端 UI 结构、排版与样式代码！**  
+> 所有开发重心全面转向：
+> 1. **系统文档与开发手册建设**（文档先行、API 契约维护）；
+> 2. **厂商适配与预设规则更新**（直接在 `shared/presets/` 维护声明式 JSON，不改动 UI）；
+> 3. **底层透明调度性能与契约测试稳定性**。
+
+---
+
+## 🧪 验证与自动化测试指南 (Testing & Quality Assurance)
+
+```bash
+# 1. 极简发版硬门禁（0.3 秒完成 G1~G5 五大黄金法则校验）
+npm run check:release
+
+# 2. 单独运行前端样式与 DOM 冒烟测试
+npm run test:ui
+
+# 3. 运行全层级自动化测试矩阵（199 单元 + S1~S6 契约 + 76 项 E2E 浏览器真机）
+python3 tests/run_tests.py --layer=all
+```
 
 > 📖 **查阅完整历史版本明细？**  
 > 请点击查阅全量发版档案：👉 **[CHANGELOG.md (完整历史更新记录)](CHANGELOG.md)**
+
 
 
 
