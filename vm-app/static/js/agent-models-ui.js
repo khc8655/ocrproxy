@@ -128,7 +128,10 @@
   function getCtx() {
     const st = _resolveState();
     const isVm = Boolean(global.HOST ? global.HOST.isVm : (st && st.config));
-    const cfgObj = (st && st.config) ? st.config : (typeof cfg !== 'undefined' ? cfg : {});
+    let cfgObj = (st && st.config) ? st.config : (typeof cfg !== 'undefined' ? cfg : {});
+    if (cfgObj && cfgObj.config && typeof cfgObj.config === 'object' && !cfgObj.providers && !cfgObj.agent_models) {
+      cfgObj = cfgObj.config;
+    }
     const statsObj = (st && st.stats) ? st.stats : { candidates_status: {} };
     const probingKeysSet = (st && st.probingKeys) ? st.probingKeys : (global._probingKeys = global._probingKeys || new Set());
     const probingModelsSet = (st && st.probingModels) ? st.probingModels : (global._probingModels = global._probingModels || new Set());

@@ -3,27 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OCRProxy EdgeOne 控制台</title>
+  <title>OCRProxy 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/admin.css">
+  <link rel="stylesheet" href="/static/admin.css?v=2026.10.18-07">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
 
-<!-- Login Overlay -->
+<!-- Login -->
 <div id="loginOverlay" class="login-overlay">
-  <form class="login-box" onsubmit="event.preventDefault(); doLogin();">
+  <form class="login-box" onsubmit="event.preventDefault(); login();">
     <h2>OCRProxy</h2>
-    <p>OCRProxy EdgeOne 控制台</p>
+    <p>OCRProxy 控制台</p>
     <div class="form-group">
       <label class="form-label" for="loginKey">管理员凭证</label>
       <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 管理员密码" autocomplete="current-password">
     </div>
     <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
-    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--color-danger-50);border:1px solid var(--color-danger-500);color:var(--color-danger-500);font-size:12px;text-align:center;"></div>
-    <button type="button" class="btn btn-ghost btn-sm" onclick="clearLoginCacheAndReload()" style="width:100%;margin-top:10px;font-size:12px;color:var(--color-text-3);">清除本地登录缓存并刷新</button>
+    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="clearLoginCacheAndReload()" style="width:100%;margin-top:10px;font-size:12px;color:var(--text-secondary, #8c8c8c);">清除本地登录缓存并刷新</button>
   </form>
 </div>
+
+<input type="file" id="configFileImportInput" accept=".json,application/json" style="display:none;" onchange="handleImportFile(event)">
 
 <!-- App -->
 <div id="app" class="app">
@@ -31,66 +33,39 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge">EdgeOne 边缘版 <span id="topVersionBadge" style="opacity:0.85;font-weight:normal;margin-left:4px;">v2026.10.19-05</span></span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-09</span>
+      <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
       <button onclick="switchTab('providers')">供应商</button>
-      <button onclick="switchTab('agents')">模型及路由</button>
+      <button onclick="switchTab('models')">模型及路由</button>
       <button onclick="switchTab('settings')">系统设置</button>
     </nav>
     <div class="actions">
-      <button class="btn btn-secondary btn-sm" onclick="exportConfigJson()" title="导出当前完整配置为 JSON 备份文件">导出备份</button>
-      <button class="btn btn-secondary btn-sm" onclick="triggerImportConfig()" title="从本地 JSON 备份文件恢复配置">导入配置</button>
-      <button class="btn btn-secondary btn-sm" onclick="loadAllData()" title="刷新数据">刷新</button>
-      <button class="btn btn-ghost btn-sm" onclick="doLogout()">退出</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
     </div>
-    <input type="file" id="configFileImportInput" accept=".json,application/json" style="display:none;" onchange="handleConfigFileImport(event)">
   </header>
 
   <main class="main">
-    <!-- Panel 1: Dashboard -->
+    <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
-      <div class="section mb-4">
-        <div class="section-head">
-          <div class="section-title">状态总览</div>
-          <span id="configSourceBadge" class="badge badge-success">KV 已同步</span>
-        </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-          <div class="stat-card">
-            <div class="stat-label">已纳管供应商</div>
-            <div class="stat-value" id="statProviderCount">0</div>
-            <div class="stat-sub">已就绪 · 可全量下发至 VM</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">已配置 Agent 模型</div>
-            <div class="stat-value" id="statModelCount">0</div>
-            <div class="stat-sub" id="statKeySub">多 Key 轮询池 (0 个 Key)</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">边缘架构与版本</div>
-            <div class="stat-value" style="font-size:20px;color:var(--color-success);" id="statVersion">—</div>
-            <div class="stat-sub">Edge V8 · 3200+ 节点</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Compact Gateway Access Strip -->
-      <div class="section">
+      <!-- Section 0: Gateway Access & Available Models -->
+      <div class="section mb-4" id="db-access-section">
         <div class="section-head">
           <div class="section-title">接入网关与可用模型</div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-secondary btn-sm" onclick="copyAllAvailableModels()">复制全部模型名</button>
-            <button class="btn btn-primary btn-sm" onclick="manageAllModels()">管理全部模型</button>
           </div>
         </div>
         <div class="gateway-card">
-          <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding-bottom:10px;">
+          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding-bottom:10px;">
             <span class="gateway-label">Base URL (网关地址)</span>
-            <span class="gateway-val" id="dbBaseUrl">—</span>
+            <span class="gateway-val mono" id="dbBaseUrl">—</span>
             <button class="btn btn-secondary btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
           </div>
-          <div class="gateway-row" style="border-bottom:1px solid var(--color-border);padding:10px 0;">
+          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding:10px 0;">
             <span class="gateway-label">客户端凭据 (Key)</span>
             <span class="gateway-val mono" id="gwClientKeyVal">—</span>
             <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
@@ -101,323 +76,571 @@
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Panel 2: Providers & Keys -->
-    <div id="panel-providers" class="panel">
+      <!-- Section 1: Agent Metrics Overview -->
+      <div class="section mb-4" id="db-section-agent">
+        <div class="section-head">
+          <div class="section-title">Agent 对话总览</div>
+          <span class="badge badge-success">真实路由</span>
+        </div>
+        <div class="stats-grid" id="agentStatsGrid"></div>
+        <div id="agentTopModelsStrip" class="card card-pad mt-3" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 18px;background:var(--bg-subtle);"></div>
+      </div>
+
+      <!-- Section 2: KB Metrics Overview -->
+      <div class="section mb-4" id="db-section-kb">
+        <div class="section-head">
+          <div class="section-title">知识库入库总览</div>
+          <span class="badge badge-neutral">虚拟别名</span>
+        </div>
+        <div class="stats-grid" id="kbStatsGrid"></div>
+      </div>
+
+      <!-- Section 3: Categorized Error Logs -->
       <div class="section">
         <div class="section-head">
-          <div>
-            <div class="section-title">供应商</div>
-            <div class="section-desc">配置上游 Base URL 与 API Key · 适配规则与主程序完全解耦</div>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="section-title">最近错误日志</div>
+            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;">
+              <button class="btn btn-sm btn-ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
+              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
+              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" id="btnEdgeOneCheckUpdates" onclick="checkEdgeOneRuleUpdates()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 检查规则更新</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddProviderModal()">新增供应商</button>
-          </div>
+          <button class="btn btn-danger btn-sm" onclick="resetStats()">清空错误日志</button>
         </div>
-        <div id="ruleUpdatesAlert" style="display:none;margin-bottom:14px;"></div>
-        <div class="providers-layout">
-          <div id="providersBox" class="providers-list-col"></div>
-          <aside class="alphabet-nav-rail" id="alphabetNavRail" aria-label="字母快速索引" style="display:none;">
-            <div class="alpha-rail-inner" id="alphaRailInner"></div>
-          </aside>
+        <div class="card table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>分类</th><th>模型 / 类型</th><th>供应商</th><th>Key 别名</th><th>状态</th><th>错误详情</th></tr></thead>
+            <tbody id="logsBody"></tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- Panel 3: Models & Routing -->
-    <div id="panel-agents" class="panel">
-      <div class="section">
-        <div class="section-head">
+    <!-- Panel: Providers -->
+    <div id="panel-providers" class="panel">
+      <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="section-title">供应商</div>
+          <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 从凭据中枢同步</button>
+          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
+        </div>
+      </div>
+      <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
+        <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
+        <!-- Alphabet Nav Rail -->
+        <div id="alphabetNavRail" class="alphabet-nav-rail" style="display:none;">
+          <div class="alpha-rail-inner" id="alphaRailInner"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel: Models -->
+    <div id="panel-models" class="panel">
+      <div id="panel-agents" style="display:contents;">
+      <!-- Sub-tab: Agent Models -->
+      <div id="mtab-agents" class="model-subtab panel-agents active">
+        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div class="section-title">模型及路由</div>
-            <div class="section-desc">配置 Agent 模型与候选 Key 绑定</div>
+            <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddModelModal()">新增模型</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
+          </div>
         </div>
         <div id="agentModelsBox"></div>
       </div>
-    </div>
 
-    <!-- Panel: Global Settings -->
-    <div id="panel-settings" class="panel">
-      <div class="section">
-        <div class="section-head" style="margin-bottom:12px;">
+      <!-- Sub-tab: KB View -->
+      <div id="mtab-kb" class="model-subtab">
+        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div class="section-title">系统设置</div>
-            <div class="section-desc">调度策略、超时预算与跨厂商容错熔断配置</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost btn-sm" onclick="resetSettingsToDefault()">恢复推荐默认值</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存设置并生效</button>
+            <div class="section-title">模型及路由</div>
+            <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</div>
           </div>
         </div>
+        <div id="kbModelsBox"></div>
+      </div>
+      </div>
+    </div>
 
-        <div class="card settings-card">
-          <!-- Group 1: Auth & Routing -->
-          <div class="settings-group-title">客户端鉴权与分流策略</div>
-          <div class="settings-grid" style="margin-bottom:16px;">
-            <div class="settings-row settings-row-full">
+    <!-- Panel 4: System Settings -->
+    <div id="panel-settings" class="panel">
+      <!-- Hidden compatibility inputs for tests & dual lookup -->
+      <input type="hidden" id="set_upstream_timeout_sec" max="300" value="120">
+      <input type="hidden" id="set_request_total_budget_sec" value="300">
+      <input type="hidden" id="set_max_retries" value="3">
+      <input type="hidden" id="set_max_attempts_per_provider" value="3">
+      <input type="hidden" id="set_fast_failover_provider_down" value="true">
+      <input type="hidden" id="set_cooldown_429_sec" value="60">
+      <input type="hidden" id="set_cooldown_5xx_sec" value="30">
+      <input type="hidden" id="set_circuit_break_threshold" value="3">
+      <input type="hidden" id="set_cooldown_403_sec" value="600">
+      <input type="hidden" id="set_routing_strategy" value="sticky_failover">
+
+      <div class="section">
+        <div style="margin-bottom:16px;">
+          <div class="section-title">系统设置</div>
+          <div class="section-desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</div>
+        </div>
+
+        <!-- Group 1: Run Mode & Client Auth -->
+        <div class="card settings-card mb-3">
+          <div class="settings-group-title">1. 运行模式与客户端鉴权 (Run Mode & Client Auth)</div>
+          <div class="settings-grid">
+            <!-- VM Client Key (Editable + Random Generator) -->
+            <div class="settings-row settings-row-full settings-row-key" data-arch="vm">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
-                <span class="settings-row-hint" title="EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne Serverless 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
+                <span class="settings-row-hint" title="Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥">Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--color-bg-page);color:var(--color-text-3);cursor:not-allowed;">
+                <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-..." style="flex:1;">
+                <button class="btn btn-secondary btn-sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
               </div>
             </div>
-            <div class="settings-row settings-row-full">
+
+            <!-- EdgeOne Client Key (Read-only Cloud Injection) -->
+            <div class="settings-row settings-row-full settings-row-key" data-arch="edgeone">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="路由分流算法 (agent_routing_strategy)">路由分流算法 (agent_routing_strategy)</span>
-                <span class="settings-row-hint" title="控制多 Key 之间的主备切换与调度规则">控制多 Key 之间的主备切换与调度规则</span>
+                <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
+                <span class="settings-row-hint" title="EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl">
-                <select id="set_routing_strategy" class="form-control form-control-compact">
-                  <option value="sticky_failover">粘性故障转移 (默认推荐)</option>
-                  <option value="manual">纯手动直通 (锁定当前 Key)</option>
+                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--bg-subtle);color:var(--text-secondary);cursor:not-allowed;">
+              </div>
+            </div>
+
+            <!-- VM Running Mode (Agent / KB) -->
+            <div class="settings-row settings-row-full" data-cap="runModes">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="系统运行模式 (Running Mode)">系统运行模式 (Running Mode)</span>
+                <span class="settings-row-hint" title="控制管理后台页面自适应展示以及 /v1/models 的暴露范围">控制管理后台页面自适应展示以及 /v1/models 的暴露范围</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <select id="s_runMode" class="form-control form-control-compact" onchange="onRunModeChange()">
+                  <option value="agent">Agent 智能体直连模式 (专精 Cursor、Cline 真实模型)</option>
+                  <option value="kb">KB 知识库入库模式 (4 大入库专用虚拟聚合模型)</option>
                 </select>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Group 2: Timeout & Budget -->
-          <div class="settings-group-title" style="margin-top:16px;">超时预算与重试控制</div>
-          <div class="settings-grid" style="margin-bottom:16px;">
-            <div class="settings-row">
+        <!-- Group 2: Key Routing Policy -->
+        <div class="card settings-card mb-3">
+          <div class="settings-group-title">2. 核心分流调度策略 (Key Routing Strategy)</div>
+          <div class="settings-grid">
+            <div class="settings-row settings-row-full" id="st-item-agent-routing">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="单次请求等待超时 (upstream_timeout_sec)">单次请求等待超时</span>
-                <span class="settings-row-hint" title="upstream_timeout_sec · 5~300s，长思考推荐 ≥120s">upstream_timeout_sec · 5~300s，长思考推荐 ≥120s</span>
+                <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
+                <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
+                <div id="manual-routing-tip" class="hint-box mt-1" hidden style="color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
+                  <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
+                </div>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_upstream_timeout_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="120" onwheel="this.blur()">
-                <span class="unit">秒</span>
+                <select id="s_agentRouting" data-alias="set_routing_strategy" class="form-control form-control-compact" onchange="onAgentRoutingChange()">
+                  <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐</option>
+                  <option value="manual">纯手动直通 (manual) — 锁定当前 Key</option>
+                </select>
               </div>
             </div>
 
-            <div class="settings-row">
+            <div class="settings-row settings-row-full" id="st-item-kb-routing" data-cap="kb">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算</span>
-                <span class="settings-row-hint" title="request_total_budget_sec · 全局硬截止上限 (默认 300s)">request_total_budget_sec · 全局硬截止上限 (默认 300s)</span>
+                <span class="settings-row-title" title="KB 知识库分流策略 (kb_routing_strategy)">KB 知识库分流策略 (kb_routing_strategy)</span>
+                <span class="settings-row-hint" title="知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力">知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_request_total_budget_sec" class="form-control form-control-compact" min="10" max="900" step="10" value="300" onwheel="this.blur()">
-                <span class="unit">秒</span>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数</span>
-                <span class="settings-row-hint" title="max_retries · 单次请求最多允许轮换尝试的 Key 数">max_retries · 单次请求最多允许轮换尝试的 Key 数</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="set_max_retries" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
-                <span class="unit">次</span>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限</span>
-                <span class="settings-row-hint" title="max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数">max_attempts_per_provider · 同厂商连续失败最多尝试 Key 数</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="set_max_attempts_per_provider" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
-                <span class="unit">次</span>
+                <select id="s_kbRouting" class="form-control form-control-compact" onchange="onKbRoutingChange()">
+                  <option value="round_robin">轮询负载均衡 (round_robin) — 推荐</option>
+                  <option value="manual">纯手动直通调试 (manual) — 锁定首节点</option>
+                </select>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Group 3: Fault Tolerance & Cooldowns -->
-          <div class="settings-group-title" style="margin-top:16px;">容错熔断与冷却避让</div>
+        <!-- Group 3: Timeouts & Concurrency -->
+        <div class="card settings-card mb-3">
+          <div class="settings-group-title">3. 超时时钟与重试预算 (Timeouts & Concurrency)</div>
           <div class="settings-grid">
-            <div class="settings-row settings-row-full">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title" id="lbl_chatTimeout" title="单次请求等待超时 (agent_first_byte_timeout_sec)">单次请求等待超时 (agent_first_byte_timeout_sec)</span>
+                <span class="settings-row-hint" id="hint_chatTimeout" title="5~300s，智能体等待首字节响应的时限，发生超时立即安全切换备用 Key">5~300s，智能体等待首字节时限，超时立即切换备用 Key</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_chatTimeout" data-alias="set_upstream_timeout_sec" class="form-control form-control-compact mono" placeholder="120" min="5" max="300" step="5" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算 (request_total_budget_sec)</span>
+                <span class="settings-row-hint" title="10~900s，全局硬截止上限 (默认 300s)">10~900s，全局硬截止上限 (默认 300s)</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_budget" data-alias="set_request_total_budget_sec" class="form-control form-control-compact mono" placeholder="300" min="10" max="900" step="10" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-max-retries">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数 (max_retries)</span>
+                <span class="settings-row-hint" title="单次请求最多允许轮换尝试的候选 Key 数量上限（默认 3 次）">单次请求最多允许轮换尝试的候选 Key 数量上限</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_maxRetries" data-alias="set_max_retries" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <span class="unit">次</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-max-attempts">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限 (max_attempts_per_provider)</span>
+                <span class="settings-row-hint" title="同厂商连续失败最多尝试 Key 数（默认 3 次）">同厂商连续失败最多尝试 Key 数（默认 3 次）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_maxAttemptsPerProvider" data-alias="set_max_attempts_per_provider" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <span class="unit">次</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-kb-concurrency" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="KB 单 Key 最大并发 (kb_max_concurrency_per_key)">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
+                <span class="settings-row-hint" title="KB 模式单 Key 在途并发上限（默认 16）；Agent 模式默认不限">KB 模式单个 Key 的在途并发上限（默认 16，Agent 不限）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="16" min="1" max="100" onwheel="this.blur()">
+                <span class="unit">个</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-kb-timeout" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="KB 大文件/OCR 处理超时 (upstream_timeout_kb)">KB 处理超时 (upstream_timeout_kb)</span>
+                <span class="settings-row-hint" title="长文本与大图片处理时限（默认 60s）">长文本与大图片处理时限（默认 60s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-ocr-inflight" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="OCR 同时处理图片数 (ocr_max_inflight)">OCR 处理图片数 (ocr_max_inflight)</span>
+                <span class="settings-row-hint" title="OCR 并发处理图片数（超出的排队不占内存，默认 12 张）">OCR 并发处理图片数（超出的排队不占内存）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" onwheel="this.blur()">
+                <span class="unit">张</span>
+              </div>
+            </div>
+
+            <div class="settings-row" id="st-item-ocr-queue" data-cap="kb">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="OCR 排队最长等待 (ocr_queue_timeout_sec)">OCR 排队最长等待 (ocr_queue_timeout_sec)</span>
+                <span class="settings-row-hint" title="排队超过此时间返回 503 + Retry-After（默认 30s）">排队超过此时间返回 503 + Retry-After（默认 30s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-full" id="st-item-fast-failover">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="跨厂商快速熔断 (fast_failover_provider_down)">跨厂商快速熔断 (fast_failover_provider_down)</span>
                 <span class="settings-row-hint" title="遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
               </div>
               <div class="settings-row-ctrl">
                 <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                  <input type="checkbox" id="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
+                  <input type="checkbox" id="s_fastFailover" data-alias="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
                   <span style="font-weight:600;">已开启</span>
                 </label>
               </div>
             </div>
+          </div>
+        </div>
 
+        <!-- Group 4: Fault Tolerance & Cooldowns -->
+        <div class="card settings-card mb-3">
+          <div class="settings-group-title">4. 容错熔断与冷却避让 (Fault Tolerance & Cooldowns)</div>
+          <div class="settings-grid mb-2" id="st-grid-cooldowns">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长</span>
-                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让">cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让</span>
+                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长 (cooldown_429_sec)</span>
+                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让（默认 60s）">cooldown_429_sec · 命中 RPM/TPM 限流避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_429_sec" class="form-control form-control-compact" min="5" max="600" step="5" value="60" onwheel="this.blur()">
+                <input type="number" id="s_cooldown429" data-alias="set_cooldown_429_sec" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" step="5" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长</span>
-                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让">cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让</span>
+                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长 (cooldown_5xx_sec)</span>
+                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让（默认 30s）">cooldown_5xx_sec · 上游 500/502/503/504 错误避让</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_5xx_sec" class="form-control form-control-compact" min="5" max="300" step="5" value="30" onwheel="this.blur()">
+                <input type="number" id="s_cooldown5xx" data-alias="set_cooldown_5xx_sec" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" step="5" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
 
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="403 鉴权失败隔离 (cooldown_403_sec)">403 鉴权失败隔离</span>
-                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离">cooldown_403_sec · Key 无效或欠费的主动长效隔离</span>
+                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器连续失败阈值 (circuit_break_threshold)</span>
+                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断（默认 3 次）">单 Key 连续失败达到阈值即触发熔断（默认 3 次）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="set_cooldown_403_sec" class="form-control form-control-compact" min="30" max="3600" step="30" value="600" onwheel="this.blur()">
-                <span class="unit">秒</span>
-              </div>
-            </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器熔断连续失败阈值</span>
-                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断">circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="set_circuit_break_threshold" class="form-control form-control-compact" min="1" max="10" step="1" value="3" onwheel="this.blur()">
+                <input type="number" id="s_circuitThreshold" data-alias="set_circuit_break_threshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
                 <span class="unit">次</span>
               </div>
             </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="403 鉴权失败/欠费隔离 (cooldown_403_sec)">403 鉴权失败隔离 (cooldown_403_sec)</span>
+                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离（默认 600s）">Key 无效或欠费的主动长效隔离（默认 600s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_cooldown403" data-alias="set_cooldown_403_sec" class="form-control form-control-compact mono" placeholder="600" min="30" max="3600" step="30" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
           </div>
+          <div id="manual-cooldown-tip" hidden style="padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+            纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
+          </div>
+        </div>
+
+        <!-- Group 5: Vault Hub & Operations -->
+        <div class="card settings-card mb-3" data-cap="vaultClient" data-arch="vm">
+          <div class="settings-group-title">5. EdgeOne 凭据中枢与系统运维 (Vault Hub & Operations)</div>
+          <div class="settings-grid mb-2">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="EdgeOne 中枢服务地址">EdgeOne 中枢服务地址</span>
+                <span class="settings-row-hint" title="云端金库中枢的基础访问 URL">云端金库中枢的基础访问 URL</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="text" id="cfg_vault_url" class="form-control form-control-compact" placeholder="https://api.example.com">
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="中枢访问 Token">中枢访问 Token</span>
+                <span class="settings-row-hint" title="用于同步与拉取凭据的安全金钥">用于同步与拉取凭据的安全金钥</span>
+              </div>
+              <div class="settings-row-ctrl" style="position:relative;">
+                <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:32px;">
+                <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
+                  <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
+                <span class="settings-row-hint" title="测试中枢网络连接，或一键增量同步已配置的提供商端点与规则">测试中枢网络连接，或一键增量同步已配置的提供商端点与规则</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
+              </div>
+            </div>
+            <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
+
+            <div class="settings-row settings-row-full" data-cap="systemUpdate">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="系统版本检测与平滑重启">系统版本检测与平滑重启</span>
+                <span class="settings-row-hint" title="检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程">检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
+                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
+                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
+              </div>
+            </div>
+            <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
+            <div id="presetsUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Group 6: Data & Raw JSON Config -->
+        <div class="card settings-card mb-3">
+          <div class="settings-group-title">6. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
+          <div class="settings-grid mb-3">
+            <div class="settings-row" style="grid-column: 1 / -1;">
+              <div class="settings-row-label">
+                <span class="settings-row-title">系统配置导出与导入</span>
+                <span class="settings-row-hint">导出带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <button class="btn btn-secondary btn-sm" onclick="exportConfig()">导出配置备份</button>
+                <button class="btn btn-primary btn-sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
+                <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+              </div>
+            </div>
+          </div>
+
+          <details id="rawJsonDetails" class="card card-pad mb-1" style="border:1px dashed var(--border);background:var(--bg-subtle);padding:10px 14px;" ontoggle="if(this.open && typeof renderRawJsonPanel === 'function') renderRawJsonPanel();">
+            <summary style="font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+              <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
+              <span style="font-size:11px;font-weight:400;color:var(--text-secondary);">点击展开/收起</span>
+            </summary>
+            <div style="margin-top:12px;">
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-secondary btn-xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
+                <button class="btn btn-primary btn-xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
+              </div>
+              <textarea id="rawJsonText" class="form-control mono" spellcheck="false" style="min-height:360px;font-family:var(--font-mono);font-size:12px;width:100%;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;border:1px solid #1e293b;"></textarea>
+              <div id="rawJsonErr" style="display:none;margin-top:8px;color:var(--error);font-size:12px;"></div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Settings Bottom Sticky Action Bar -->
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
+          <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">
+            <svg class="khc-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>保存设置并生效</span>
+          </button>
         </div>
       </div>
     </div>
-
   </main>
 </div>
 
-<!-- Modal: Provider -->
-<div id="providerModal" class="modal">
-  <div class="modal-box" style="width:560px;max-height:90vh;overflow-y:auto;">
+<!-- Modals -->
+<div class="modal" id="providerModal">
+  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head">
-      <h3 id="providerModalTitle">新增供应商</h3>
-      <button class="modal-close" onclick="closeModal('providerModal')">关闭</button>
+      <h3 id="providerModalTitle">供应商</h3>
+      <button class="modal-close" onclick="closeModal('providerModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="modal-body">
-      <div class="form-group" id="m_prov_preset_wrap">
-        <label class="form-label">供应商模板与类型 (官方预设或自定义)</label>
-        <select id="m_prov_preset" class="form-control" onchange="onEdgeOnePresetChange()">
-          <option value="">-- 自定义供应商 (手动填写) --</option>
+      <div class="form-group" id="p_preset_wrap">
+        <label class="form-label">供应商模板与类型 (自定义或官方预设)</label>
+        <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
+          <option value="">-- 自定义供应商 (本地内置·手动填写) --</option>
         </select>
-        <div id="m_prov_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--color-text-2);padding:8px 12px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);line-height:1.5;"></div>
+        <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
+        <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Base URL 接口基础地址</label>
+        <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">
       </div>
       <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">供应商英文标识 (ID，如 vertex, deepseek, my-proxy)</label>
-        <input type="text" id="m_prov_name" class="form-control" placeholder="如 vertex 或 deepseek">
+        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_chat" checked>
+            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
+            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_messages">
+            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
+            <span class="text-secondary text-sm">(/v1/messages)</span>
+          </label>
+          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="p_proto_responses">
+            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
+            <span class="text-secondary text-sm">(/v1/responses)</span>
+          </label>
+        </div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">OpenAI Base URL (协议标识: openai)</label>
-        <input type="text" id="m_prov_url_openai" class="form-control" placeholder="如 https://aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/global/endpoints/openapi">
-        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Chat 协议 (/v1/chat/completions)</div>
-      </div>
-      <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">Message Base URL (协议标识: message)</label>
-        <input type="text" id="m_prov_url_message" class="form-control" placeholder="如 https://api.minimax.chat/v1 或 https://api.b.ai/v1">
-        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 Anthropic Messages 协议 (/v1/messages)</div>
-      </div>
-      <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">Responses Base URL (协议标识: responses)</label>
-        <input type="text" id="m_prov_url_responses" class="form-control" placeholder="如 https://api.openai.com/v1">
-        <div class="text-secondary text-sm mt-1">留空表示未启用该协议；填写地址即启用 OpenAI Responses 协议 (/v1/responses)</div>
+      <div class="form-group" id="p_custom_url_wrap" style="margin-top:14px;">
+        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="p_custom_url_toggle" onchange="onCustomUrlToggleChange()">
+          <span>自定义协议独立端点 / 路径 (高级配置)</span>
+        </label>
+        <div id="p_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL</label>
+          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
+          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
+        </div>
       </div>
       <div class="form-group" style="margin-top:14px;">
         <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
-        <input type="number" id="m_prov_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
-        <div class="text-secondary text-sm mt-1">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
+        <input type="number" id="p_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
+        <div class="text-secondary text-xs mt-1" style="font-size:11px;">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过，不再请求上游；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProviderModal()">保存并生效</button>
+      <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveProvider()">保存并生效</button>
     </div>
   </div>
 </div>
 
-<!-- Modal: Danger Delete Provider Confirm -->
-<div id="deleteConfirmModal" class="modal">
-  <div class="modal-box" style="width:500px;max-height:90vh;overflow-y:auto;border:2px solid var(--color-danger);">
-    <div class="modal-head" style="background:var(--color-danger-50);border-bottom:1px solid var(--color-danger);">
-      <h3 style="color:var(--color-danger);display:flex;align-items:center;gap:8px;">
-        <span>彻底删除供应商确认</span>
-      </h3>
-      <button class="modal-close" onclick="closeModal('deleteConfirmModal')">关闭</button>
-    </div>
-    <div class="modal-body">
-      <div id="deleteConfirmAlert" style="background:var(--color-danger-50);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:12px 14px;color:var(--color-danger);font-size:13px;line-height:1.6;margin-bottom:16px;">
-        <strong>【不可逆警告】</strong> EdgeOne 已与 GitHub 规则源完全解耦。在此删除供应商将从 <strong>EdgeOne KV 存储中彻底物理销毁</strong> 该厂商及其名下的全部凭据，系统将<strong>绝不会</strong>再从 GitHub 自动恢复或拉回！此操作无法撤销。
-      </div>
-      <div id="deleteConfirmDetails" style="font-size:13px;color:var(--color-text-1);background:var(--color-bg-page);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px;"></div>
-    </div>
-    <div class="modal-foot" style="background:var(--color-bg-subtle);">
-      <button class="btn btn-ghost" onclick="closeModal('deleteConfirmModal')">取消</button>
-      <button class="btn btn-danger" id="btnExecuteDeleteProvider">确认彻底删除</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: Key -->
-<div id="keyModal" class="modal">
-  <div class="modal-box">
+<div class="modal" id="keyModal">
+  <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto;">
     <div class="modal-head">
-      <h3 id="keyModalTitle">新增 API Key</h3>
-      <button class="modal-close" onclick="closeModal('keyModal')">关闭</button>
+      <h3 id="keyModalTitle">Key 凭证</h3>
+      <button class="modal-close" onclick="closeModal('keyModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="m_key_prov">
-      <input type="hidden" id="m_key_old_label">
-      <div id="m_key_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);"></div>
-      <div class="form-group">
-        <label class="form-label">Key 别名</label>
-        <input type="text" id="m_key_label" class="form-control" placeholder="如 自己">
-      </div>
+      <input type="hidden" id="k_provider">
+      <input type="hidden" id="k_oldLabel">
+      <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
-      <div id="m_key_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--color-bg-2);border-radius:var(--radius-sm);border:1px solid var(--color-border);">
-        <div style="font-size:12px;font-weight:700;color:var(--color-text-1);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <div id="k_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
           <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
-          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--color-danger);font-weight:bold;">*</span></label>
-          <input type="text" id="m_key_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onEdgeOneKeyVertexParamChange()">
+          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--error);font-weight:bold;">*</span></label>
+          <input type="text" id="k_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onKeyVertexParamChange()">
         </div>
-        <div class="form-group mb-1" style="margin-top:10px;">
+        <div class="form-group mb-1">
           <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
-          <input type="text" id="m_key_vertex_location" class="form-control" placeholder="global" value="global" oninput="onEdgeOneKeyVertexParamChange()">
+          <input type="text" id="k_vertex_location" class="form-control" placeholder="global" value="global" oninput="onKeyVertexParamChange()">
         </div>
         <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="m_key_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">API Key 密钥明文 (sk-...)</label>
-        <input type="text" id="m_key_val" class="form-control" placeholder="sk-...">
-      </div>
-      <label class="checkbox"><input type="checkbox" id="m_key_skip"> <span>跳过连通性在线校验</span></label>
-      <div id="m_key_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
-      <div id="m_key_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-bg-page);"></div>
+      <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
+      <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
+      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
+      <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKeyModal()">保存并生效</button>
+      <button class="btn btn-secondary" onclick="closeModal('keyModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveKey()">保存并生效</button>
     </div>
   </div>
 </div>
 
-<!-- Modal: Agent Model (Unified 3-Step Capsule Flow) -->
 <div class="modal" id="agentModal">
   <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
     <div class="modal-head">
-      <h3 id="agentModalTitle">新增 Agent 模型</h3>
-      <button class="modal-close" onclick="closeModal('agentModal')">关闭</button>
+      <h3 id="agentModalTitle">Agent 模型配置</h3>
+      <button class="modal-close" onclick="closeModal('agentModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="a_oldName">
@@ -429,7 +652,8 @@
           <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
         </div>
         <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
-          <optgroup label="已配置供应商" id="a_optgroup_local"></optgroup>
+          <optgroup label="本地已配置供应商" id="a_optgroup_local"></optgroup>
+          <optgroup label="EdgeOne 凭据中枢托管 (按需拉取)" id="a_optgroup_vault"></optgroup>
         </select>
         <div id="a_model_proto_info" class="text-secondary text-sm" style="margin: 8px 0 12px 0; min-height: 24px; display: flex; align-items: center; gap: 6px;"></div>
       </div>
@@ -439,7 +663,8 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
         </div>
-        <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--color-bg-page);border-radius:var(--radius-sm);border:1px solid var(--color-border);min-height:46px;"></div>
+        <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
+        <div id="a_selectedBindingsSummary" style="margin-top:8px;display:none;"></div>
       </div>
 
       <!-- Step 3: 模型快捷标签与探测 -->
@@ -454,20 +679,78 @@
       </div>
 
       <!-- 详细参数 (由标签或探测弹窗点选自动填充) -->
-      <div style="background:var(--color-bg-subtle);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--color-border);">
+      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div class="form-group mb-2">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
           <input type="text" id="a_name" class="form-control" placeholder="点击探测弹窗选择或手动输入，例如 deepseek-v4-flash">
         </div>
         <div class="form-group mb-0">
           <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>
-          <input type="text" id="a_upstream" class="form-control" placeholder="例如 deepseek-v4-flash-0731">
+          <input type="text" id="a_upstream" class="form-control" placeholder="例如 deepseek-ai/DeepSeek-V3">
         </div>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal('agentModal')">取消</button>
+      <button class="btn" onclick="closeModal('agentModal')">取消</button>
       <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="candidateModal">
+  <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-head">
+      <h3 id="candidateModalTitle">挂载候选节点</h3>
+      <button class="modal-close" onclick="closeModal('candidateModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="c_editCat">
+      <input type="hidden" id="c_editIdx">
+      <input type="hidden" id="c_type" value="chat">
+      <input type="hidden" id="c_provider">
+
+      <!-- Step 1: 供应商下拉选择 -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
+        </div>
+        <select id="c_providerSelect" class="form-control" onchange="onCandidateProviderSelectChange(this.value)">
+          <optgroup label="本地已配置供应商" id="c_optgroup_local"></optgroup>
+          <optgroup label="EdgeOne 凭据中枢托管 (按需拉取)" id="c_optgroup_vault"></optgroup>
+        </select>
+        <div id="c_model_proto_info" class="text-secondary text-sm" style="margin: 8px 0 12px 0; min-height: 24px; display: flex; align-items: center; gap: 6px;"></div>
+      </div>
+
+      <!-- Step 2: Key 绑定 -->
+      <div class="form-group mb-3" id="c_keyArea">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
+        </div>
+        <div id="c_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
+      </div>
+
+      <!-- Step 3: 模型选择与探测 -->
+      <div class="form-group mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
+            <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>探测上游可用模型</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 上游实际模型 ID -->
+      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div class="form-group mb-0">
+          <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (例如 Qwen/Qwen2.5-72B-Instruct)</label>
+          <input type="text" id="c_model" class="form-control" placeholder="点击探测弹窗选择或手动输入实际模型 ID">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('candidateModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveCandidate()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -480,25 +763,61 @@
         <svg class="khc-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <h3 id="probedModalTitle" style="margin:0;font-size:15px;">选择上游可用模型</h3>
       </div>
-      <button class="modal-close" onclick="closeModal('probedListModal')">关闭</button>
+      <button class="modal-close" onclick="closeModal('probedListModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
-    <div style="padding:12px 16px 8px 16px;border-bottom:1px solid var(--color-border);background:var(--color-bg-subtle);">
+    <div style="padding:12px 16px 8px 16px;border-bottom:1px solid var(--border);background:var(--bg-subtle);">
       <input type="text" id="probedSearchInput" class="form-control" placeholder="输入关键字模糊过滤模型 (如 deepseek, qwen)..." oninput="filterProbedModels(this.value)">
     </div>
     <div class="modal-body" style="flex:1;overflow-y:auto;padding:12px 16px;">
       <div id="probedModelsList" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
     <div class="modal-foot" style="display:flex;justify-content:space-between;align-items:center;">
-      <span class="text-secondary text-sm" id="probedCountHint" style="font-size:12px;color:var(--color-text-3);">共 0 个模型</span>
+      <span class="text-secondary text-sm" id="probedCountHint">共 0 个模型</span>
       <button class="btn btn-secondary btn-sm" onclick="closeModal('probedListModal')">关闭</button>
     </div>
   </div>
 </div>
 
-<!-- Toast Container -->
-<div id="toastContainer" class="toast-container"></div>
+<div class="modal" id="importModal">
+  <div class="modal-box">
+    <div class="modal-head"><h3>导入配置确认</h3><button class="modal-close" onclick="closeModal('importModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-body">
+      <div id="importPreview" class="hint-box mb-3" style="line-height:1.7;"></div>
+      <div class="form-group"><label class="form-label">选择导入合并策略</label>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+          <label class="checkbox">
+            <input type="radio" name="importMode" value="overwrite" checked>
+            <div>
+              <div style="font-weight:600;color:var(--text);">完全覆盖 (Overwrite)</div>
+              <div class="text-secondary text-sm">使用导入文件的配置完全替换当前系统（导入前服务端自动生成快照备份）</div>
+            </div>
+          </label>
+          <label class="checkbox">
+            <input type="radio" name="importMode" value="merge">
+            <div>
+              <div style="font-weight:600;color:var(--text);">增量合并 (Merge)</div>
+              <div class="text-secondary text-sm">保留现有供应商与 Key，仅追加新节点与新模型</div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn-primary" onclick="confirmImport()">确认导入</button></div>
+  </div>
+</div>
 
-<script>window.HOST = { isEdgeOne: true, isVm: false };</script>
-<script src="/admin.js"></script>
+<div class="toast-container" id="toasts"></div>
+
+
+  <!-- Modular Scripts with Cache-Busting -->
+  <script src="/static/js/host.js?v=2026.10.19-09"></script>
+  <script src="/static/js/settings-form.js?v=2026.10.19-09"></script>
+  <script src="/static/js/core.js?v=2026.10.19-09"></script>
+  <script src="/static/js/vault.js?v=2026.10.19-09"></script>
+  <script src="/static/js/providers.js?v=2026.10.19-09"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.19-09"></script>
+  <script src="/static/js/models.js?v=2026.10.19-09"></script>
+  <script src="/static/js/settings.js?v=2026.10.19-09"></script>
+  <script src="/static/js/app.js?v=2026.10.19-09"></script>
 </body>
 </html>

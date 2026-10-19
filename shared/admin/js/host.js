@@ -76,8 +76,15 @@
         if (!cap) return;
         const negate = cap.startsWith('!');
         const capKey = negate ? cap.slice(1) : cap;
-        const hasCap = !!HOST.capabilities[capKey];
+        const capVal = HOST.capabilities[capKey];
+        const hasCap = Array.isArray(capVal) ? (capVal.length > 1) : !!capVal;
         const shouldShow = negate ? !hasCap : hasCap;
+        el.hidden = !shouldShow;
+      });
+      document.querySelectorAll('[data-arch]').forEach(el => {
+        const arch = el.getAttribute('data-arch');
+        if (!arch) return;
+        const shouldShow = (arch === HOST.kind);
         el.hidden = !shouldShow;
       });
     }

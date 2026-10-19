@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=2026.10.18-07">
+  <link rel="stylesheet" href="/static/admin.css?v=2026.10.19-09">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -33,10 +33,15 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-08</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v2026.10.19-09</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
-    <nav id="topNav"></nav>
+    <nav id="topNav">
+      <button class="active" onclick="switchTab('dashboard')">概览</button>
+      <button onclick="switchTab('providers')">供应商</button>
+      <button onclick="switchTab('models')">模型及路由</button>
+      <button onclick="switchTab('settings')">系统设置</button>
+    </nav>
     <div class="actions">
       <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
@@ -189,7 +194,7 @@
           <div class="settings-group-title">1. 运行模式与客户端鉴权 (Run Mode & Client Auth)</div>
           <div class="settings-grid">
             <!-- VM Client Key (Editable + Random Generator) -->
-            <div class="settings-row settings-row-full" data-arch="vm">
+            <div class="settings-row settings-row-full settings-row-key" data-arch="vm">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
                 <span class="settings-row-hint" title="Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥">Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥</span>
@@ -201,7 +206,7 @@
             </div>
 
             <!-- EdgeOne Client Key (Read-only Cloud Injection) -->
-            <div class="settings-row settings-row-full" data-arch="edgeone">
+            <div class="settings-row settings-row-full settings-row-key" data-arch="edgeone">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="客户端调用密钥 (PROXY_API_KEY)">客户端调用密钥 (PROXY_API_KEY)</span>
                 <span class="settings-row-hint" title="EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
@@ -235,12 +240,12 @@
               <div class="settings-row-label">
                 <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
                 <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
-                <div id="manual-routing-tip" class="hint-box mt-1" style="display:none;color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
+                <div id="manual-routing-tip" class="hint-box mt-1" hidden style="color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
                   <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
               <div class="settings-row-ctrl">
-                <select id="s_agentRouting" class="form-control form-control-compact" onchange="onAgentRoutingChange()">
+                <select id="s_agentRouting" data-alias="set_routing_strategy" class="form-control form-control-compact" onchange="onAgentRoutingChange()">
                   <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐</option>
                   <option value="manual">纯手动直通 (manual) — 锁定当前 Key</option>
                 </select>
@@ -268,7 +273,7 @@
           <div class="settings-grid">
             <div class="settings-row">
               <div class="settings-row-label">
-                <span class="settings-row-title" id="lbl_chatTimeout" title="单次请求等待超时 (upstream_timeout_sec)">单次请求等待超时 (upstream_timeout_sec)</span>
+                <span class="settings-row-title" id="lbl_chatTimeout" title="单次请求等待超时 (agent_first_byte_timeout_sec)">单次请求等待超时 (agent_first_byte_timeout_sec)</span>
                 <span class="settings-row-hint" id="hint_chatTimeout" title="5~300s，智能体等待首字节响应的时限，发生超时立即安全切换备用 Key">5~300s，智能体等待首字节时限，超时立即切换备用 Key</span>
               </div>
               <div class="settings-row-ctrl">
@@ -417,7 +422,7 @@
               </div>
             </div>
           </div>
-          <div id="manual-cooldown-tip" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+          <div id="manual-cooldown-tip" hidden style="padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
             纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
           </div>
         </div>
@@ -805,14 +810,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=2026.10.19-08"></script>
-  <script src="/static/js/settings-form.js?v=2026.10.19-08"></script>
-  <script src="/static/js/core.js?v=2026.10.19-08"></script>
-  <script src="/static/js/vault.js?v=2026.10.19-08"></script>
-  <script src="/static/js/providers.js?v=2026.10.19-08"></script>
-  <script src="/static/js/agent-models-ui.js?v=2026.10.19-08"></script>
-  <script src="/static/js/models.js?v=2026.10.19-08"></script>
-  <script src="/static/js/settings.js?v=2026.10.19-08"></script>
-  <script src="/static/js/app.js?v=2026.10.19-08"></script>
+  <script src="/static/js/host.js?v=2026.10.19-09"></script>
+  <script src="/static/js/settings-form.js?v=2026.10.19-09"></script>
+  <script src="/static/js/core.js?v=2026.10.19-09"></script>
+  <script src="/static/js/vault.js?v=2026.10.19-09"></script>
+  <script src="/static/js/providers.js?v=2026.10.19-09"></script>
+  <script src="/static/js/agent-models-ui.js?v=2026.10.19-09"></script>
+  <script src="/static/js/models.js?v=2026.10.19-09"></script>
+  <script src="/static/js/settings.js?v=2026.10.19-09"></script>
+  <script src="/static/js/app.js?v=2026.10.19-09"></script>
 </body>
 </html>

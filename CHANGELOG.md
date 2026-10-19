@@ -4,6 +4,38 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v2026.10.19-09] - 2026-10-19
+
+### 落地方案 A 单一真理源编译器与 14 项界面及排版深度缺陷彻底根治
+- **“方案 A 单一真理源”彻底落地，废除分叉维护**：
+  - 重构 `agent-edgeone/scripts/build-admin.mjs`，彻底废除 “NEVER overwrite agent-edgeone” 的历史妥协，将 `shared/admin/` 确立为全项目**唯一单一真理源**（Single Source of Truth）；
+  - 构建脚本直接读取 `shared/admin/` 下的 HTML/CSS/JS，自动在 EdgeOne JS 头部注入 `window.__HOST_KIND__ = 'edgeone'`，一键内联编译至 `edge-functions/admin.js`、`agent-edgeone/edge-functions/admin.js` 及 `agent-edgeone/admin.bundled.html`，并同步分发至 `agent-edgeone/admin.html` 与 `vm-app/static/`；
+  - 杜绝针对 EdgeOne 独立手写页面导致的样式漂移与死代码。
+- **排版与可见性规则彻底解耦（根治卡片 5 变形与伪显示）**：
+  - 移除 `shared/admin/admin.css` 中 `[data-arch="vm"] { display: flex }` 对可见性的粗暴赋值，消除对 `.card` 类名原本垂直流布局的破坏；
+  - 确立纯消极隐藏规则 `body.arch-edgeone [data-arch="vm"] { display: none !important; }`，杜绝其优先级压制原生 `[hidden]` 导致的隐藏元素强行复显；
+  - 清理 `shared/admin/js/core.js` 中遗留的 `style.display = 'block'/'none'`，全量替换为现代 `el.hidden = boolean`。
+- **手动模式提示恢复与卡片 4 丰满呈现**：
+  - 清除 `#manual-routing-tip` 与 `#manual-cooldown-tip` 上写死的行内 `style="display:none"`，改由原生属性 `hidden` 控制，解决 JS 移除 hidden 却因内联 style 仍被隐藏导致的空卡问题。
+- **Key 输入框通栏拉长与单项配置全宽展开**：
+  - 新增 `.settings-row.settings-row-key` 样式规则，控制区 `flex: 1` 自适应拉满，客户端长密钥输入框横向拉长至 640px+；
+  - 运行模式、分流策略等单项配置统一标记为 `.settings-row-full`（`grid-column: 1 / -1; width: 100%`），控制器弹性适配（`clamp(280px, 50%, 540px)`），不再局限于半栏窄框。
+- **供应商操作按钮实体边框与样式规范规范恢复**：
+  - 为供应商列表中的「编辑」与「+Key」操作按钮补齐 `btn-secondary` 类，并在 `admin.css` 中赋予 `.btn` 基础 `1px solid var(--border)` 实体边框，消除悬空视觉。
+- **双端多视口响应式防横向溢出（390px 溢出量归零）**：
+  - 将 `.settings-row` 调整为 `min-height: 52px; height: auto;`，彻底解除 `.settings-row-ctrl` 的 `flex-shrink: 0;`；
+  - 移动端 Appbar 增加 `height: auto; min-height: 48px;`，真机与模拟器在 390px、600px、1366px 视口下横向溢出彻底归零。
+- **超时键名与 data-cap 唯一收口校准**：
+  - 统一修正 Agent 模式超时标签为 `单次请求等待超时 (agent_first_byte_timeout_sec)`；
+  - 清理 CSS 中对 `data-cap` 的硬编码隐藏，统一收口至 `host.js` 的 `HOST.capabilities` 与 `applyCapabilities()` 运行时驱动。
+- **全矩阵自动化测试套件扩充与 100% 全绿**：
+  - Layer 1 Unit: 199 项 ESM 单元测试全部通过；
+  - Layer 2 Contract: VM 与 EdgeOne S1~S6/U1 后端契约全部通过；
+  - Layer 3 Security: 无内联 handler 与 CoW 安全审计全部通过；
+  - Layer 4 E2E: Playwright 浏览器端到端测试新增移动端 0 溢出、卡片非 flex、手动模式提示可见、Key 通栏拉长等断言，总验证项扩充至 76 项，全部通过。
+
+---
+
 ## [v2026.10.19-08] - 2026-10-19
 
 ### 系统设置统一流式比例规范与单一真理源重构

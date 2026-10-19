@@ -97,15 +97,10 @@
     /* HTML5 Standard Hidden Support */
     [hidden] { display: none !important; }
 
-    /* Architecture-Adaptive Declarative Visibility */
-    [data-arch="edgeone"] { display: none !important; }
-    [data-arch="vm"] { display: flex; }
+    /* Architecture Visibility (Pure Negative: only hide, never force display on visible cards/elements) */
     body.arch-edgeone [data-arch="vm"] { display: none !important; }
-    body.arch-edgeone [data-arch="edgeone"] { display: flex !important; }
-    body.arch-edgeone [data-cap="runModes"] { display: none !important; }
-    body.arch-edgeone [data-cap="kb"] { display: none !important; }
-    body.arch-edgeone [data-cap="vaultClient"] { display: none !important; }
-    body.arch-edgeone [data-cap="systemUpdate"] { display: none !important; }
+    body.arch-vm [data-arch="edgeone"],
+    body:not(.arch-edgeone) [data-arch="edgeone"] { display: none !important; }
 
     /* Login */
     .login-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 1000; }
@@ -146,7 +141,7 @@
     .card-head .meta { font-size: 12px; color: var(--text-secondary); }
 
     /* Buttons */
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px; height: 32px; border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--bg); font-size: 13px; font-weight: 500; color: var(--text); box-shadow: var(--shadow-sm); transition: all .15s; user-select: none; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; font-weight: 500; color: var(--text); box-shadow: var(--shadow-sm); transition: all .15s; user-select: none; }
     .btn:hover:not(:disabled) { background: var(--khc-neutral-100); border-color: var(--border-strong); }
     .btn:active:not(:disabled) { transform: scale(0.98); }
     .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -455,7 +450,7 @@
     }
 
     @media (max-width: 860px) {
-      .appbar { flex-wrap: wrap; padding: 12px 16px; }
+      .appbar { flex-wrap: wrap; padding: 12px 16px; height: auto; min-height: 48px; gap: 8px; }
       .appbar nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
       .main { padding: 16px; }
       .stats-grid, .settings-grid { grid-template-columns: 1fr; }
@@ -510,18 +505,19 @@
       border: 1px solid var(--border, var(--khc-neutral-200));
       border-radius: var(--radius-sm, 2px);
       min-height: var(--row-height, 52px);
-      height: var(--row-height, 52px);
+      height: auto;
       box-sizing: border-box;
     }
     .settings-row.settings-row-full {
       grid-column: 1 / -1;
+      width: 100%;
     }
     .settings-row-label {
       display: flex;
       flex-direction: column;
       justify-content: center;
       gap: 2px;
-      flex: 1 1 65%;
+      flex: 1 1 50%;
       min-width: 0;
     }
     .settings-row-title {
@@ -546,12 +542,29 @@
       align-items: center;
       justify-content: flex-end;
       gap: 8px;
-      flex: 0 1 clamp(160px, 35%, 260px);
-      flex-shrink: 0;
+      flex: 0 1 clamp(160px, 40%, 280px);
+      min-width: 0;
       white-space: nowrap;
     }
     .settings-row.settings-row-full .settings-row-ctrl {
-      flex: 0 1 clamp(240px, 40%, 420px);
+      flex: 0 1 clamp(280px, 50%, 540px);
+    }
+    /* Key row stretching (PROXY_API_KEY, Vault Token, etc.) */
+    .settings-row.settings-row-key .settings-row-label {
+      flex: 0 0 auto;
+      min-width: 200px;
+      max-width: 340px;
+    }
+    .settings-row.settings-row-key .settings-row-ctrl {
+      flex: 1 1 auto;
+      max-width: none;
+      width: auto;
+    }
+    .settings-row.settings-row-key .settings-row-ctrl input[type="text"],
+    .settings-row.settings-row-key .settings-row-ctrl input[type="password"] {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 180px;
     }
     .settings-row-ctrl select {
       width: 100%;
@@ -590,6 +603,46 @@
       min-width: 16px;
       text-align: left;
       flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+      .settings-row {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 52px;
+        padding: 10px 12px;
+        gap: 8px;
+      }
+      .settings-row-label {
+        flex: 1 1 100%;
+        white-space: normal;
+      }
+      .settings-row-title,
+      .settings-row-hint {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+      }
+      .settings-row-ctrl {
+        flex: 1 1 100% !important;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        max-width: none !important;
+      }
+      .settings-row-ctrl select,
+      .settings-row-ctrl input[type="text"],
+      .settings-row-ctrl input[type="password"] {
+        width: 100%;
+      }
+      .provider-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .provider-actions {
+        justify-content: flex-start;
+        margin-left: 0 !important;
+      }
     }
 
     /* Fixed Dark Code Block Theme */

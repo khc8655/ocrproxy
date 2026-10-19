@@ -297,7 +297,10 @@ async function loadData(){
     if (cr && cr.status === 401) { logout(); return; }
     if (!cr || !cr.ok) throw new Error('HTTP ' + (cr ? cr.status : 'unknown'));
 
-    state.config = await cr.json();
+    const resData = await cr.json();
+    state.config = (resData && resData.config && typeof resData.config === 'object' && !resData.providers && !resData.agent_models)
+      ? { ...resData.config, _version: resData._version ?? resData.config._version }
+      : resData;
 
     // Stats defense: gracefully fallback to empty stats on serverless / 404
     if (sr && sr.ok) {
@@ -409,8 +412,8 @@ function render(){
   // Dashboard visibility
   const sa = document.getElementById('db-section-agent');
   const sk = document.getElementById('db-section-kb');
-  if(sa) sa.style.display = (runMode === 'kb') ? 'none' : 'block';
-  if(sk) sk.style.display = (runMode === 'agent') ? 'none' : 'block';
+  if(sa) sa.hidden = (runMode === 'kb');
+  if(sk) sk.hidden = (runMode === 'agent');
 
   // Models Panel Direct View (No subtabs!)
   const isAgent = runMode === 'agent';
@@ -425,14 +428,14 @@ function render(){
     if (panelDesc) panelDesc.textContent = '对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 粘性故障转移';
     if (primaryBtn) {
       primaryBtn.innerHTML = icon('plus') + ' 新增 Agent 模型';
-      primaryBtn.style.display = 'inline-flex';
+      primaryBtn.hidden = false;
     }
     if (mtabAgents) {
-      mtabAgents.style.display = 'block';
+      mtabAgents.hidden = false;
       mtabAgents.classList.add('active');
     }
     if (mtabKb) {
-      mtabKb.style.display = 'none';
+      mtabKb.hidden = true;
       mtabKb.classList.remove('active');
     }
   } else {
@@ -440,14 +443,14 @@ function render(){
     if (panelDesc) panelDesc.textContent = '4 个入库专用聚合别名（chat / embedding / reranker / ocr），每个支持挂载多个供应商模型并发轮询';
     if (primaryBtn) {
       primaryBtn.innerHTML = icon('plus') + ' 挂载候选节点';
-      primaryBtn.style.display = 'inline-flex';
+      primaryBtn.hidden = false;
     }
     if (mtabAgents) {
-      mtabAgents.style.display = 'none';
+      mtabAgents.hidden = true;
       mtabAgents.classList.remove('active');
     }
     if (mtabKb) {
-      mtabKb.style.display = 'block';
+      mtabKb.hidden = false;
       mtabKb.classList.add('active');
     }
   }
@@ -455,19 +458,19 @@ function render(){
   // Settings visibility
   const sta = document.getElementById('st-group-agent');
   const stk = document.getElementById('st-group-kb');
-  if(sta) sta.style.display = (runMode === 'kb') ? 'none' : 'block';
-  if(stk) stk.style.display = (runMode === 'agent') ? 'none' : 'block';
+  if(sta) sta.hidden = (runMode === 'kb');
+  if(stk) stk.hidden = (runMode === 'agent');
 
   const star = document.getElementById('st-item-agent-routing');
   const stkr = document.getElementById('st-item-kb-routing');
-  if(star) star.style.display = (runMode === 'kb') ? 'none' : 'block';
-  if(stkr) stkr.style.display = (runMode === 'agent') ? 'none' : 'block';
+  if(star) star.hidden = (runMode === 'kb');
+  if(stkr) stkr.hidden = (runMode === 'agent');
 
   // Access guide visibility
   const aca = document.getElementById('acc-section-agent');
   const ack = document.getElementById('acc-section-kb');
-  if(aca) aca.style.display = (runMode === 'kb') ? 'none' : 'block';
-  if(ack) ack.style.display = (runMode === 'agent') ? 'none' : 'block';
+  if(aca) aca.hidden = (runMode === 'kb');
+  if(ack) ack.hidden = (runMode === 'agent');
 
   if(state.tab==='dashboard') {
     renderDashboard();

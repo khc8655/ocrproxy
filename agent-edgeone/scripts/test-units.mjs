@@ -2308,8 +2308,8 @@ test('admin UI alignment: routing strategy restricted to 2 options, proxy key di
   const adminHtml = readFileSync(new URL('../admin.html', import.meta.url), 'utf8');
 
   // 1. Check routing strategy has only sticky_failover and manual
-  const stratMatch = adminHtml.match(/<select id="set_routing_strategy"[\s\S]*?<\/select>/);
-  truthy(stratMatch, 'Must find set_routing_strategy select element');
+  const stratMatch = adminHtml.match(/<select\b[^>]*(?:id="set_routing_strategy"|id="s_agentRouting"|data-alias="set_routing_strategy")[\s\S]*?<\/select>/);
+  truthy(stratMatch, 'Must find routing strategy select element');
   const options = stratMatch[0].match(/<option\b[^>]*value="([^"]+)"/g) || [];
   eq(options.length, 2, 'Routing strategy must have exactly 2 options');
   truthy(stratMatch[0].includes('value="sticky_failover"'));

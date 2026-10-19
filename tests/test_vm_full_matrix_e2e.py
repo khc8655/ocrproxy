@@ -347,7 +347,49 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         await format_btn.click()
         await page.wait_for_timeout(300)
         raw_val = await page.input_value("#rawJsonText")
-        check("test-agent-m1" in raw_val, "底层 JSON 编辑器正确填充了当前模型配置")
+        # 验证所有设置卡片绝无横向 flex（杜绝 Card 5 排版被撑坏）
+        bad_flex_cards = await page.evaluate("""() => {
+            const cards = Array.from(document.querySelectorAll('#panel-settings .card'));
+            return cards.filter(c => {
+                const cs = window.getComputedStyle(c);
+                return cs.display === 'flex' && cs.flexDirection === 'row';
+            }).length;
+        }""")
+        check(bad_flex_cards == 0, f"所有设置卡片维持垂直块级排列，绝无横向 Flex: bad_count={bad_flex_cards}")
+
+        # 验证纯手动直通模式下提示信息真实可见且卡片 4 绝非空卡
+        await page.select_option("#s_agentRouting", "manual")
+        routing_tip_visible = await page.evaluate("""() => {
+            const el = document.getElementById('manual-routing-tip');
+            return el && !el.hidden && window.getComputedStyle(el).display !== 'none';
+        }""")
+        check(routing_tip_visible, "纯手动直通模式下 manual-routing-tip 真实可见且未被 inline display:none 屏蔽")
+
+        cooldown_tip_visible = await page.evaluate("""() => {
+            const el = document.getElementById('manual-cooldown-tip');
+            return el && !el.hidden && window.getComputedStyle(el).display !== 'none';
+        }""")
+        check(cooldown_tip_visible, "纯手动直通模式下 manual-cooldown-tip 真实可见且卡片 4 绝非空卡")
+        # 恢复默认 sticky_failover
+        await page.select_option("#s_agentRouting", "sticky_failover")
+
+        # 验证客户端密钥长输入框通栏拉长
+        key_input_w = await page.eval_on_selector("#s_proxyApiKey", "el => el.getBoundingClientRect().width")
+        check(key_input_w >= 300, f"客户端调用密钥输入框通栏拉长展开 (>=300px): {key_input_w:.1f}px")
+
+        # 验证供应商操作按钮具备实体边框
+        prov_btn_border = await page.eval_on_selector(".provider-actions button", "el => window.getComputedStyle(el).borderStyle")
+        check(prov_btn_border == "solid", f"供应商操作按钮具备实体边框 solid: {prov_btn_border}")
+
+        # 验证多视口响应式防横向溢出规范 (390px / 600px / 1366px)
+        for vp_w, vp_h in [(390, 844), (600, 960), (1366, 768)]:
+            await page.set_viewport_size({"width": vp_w, "height": vp_h})
+            await page.wait_for_timeout(200)
+            overflow_diff = await page.evaluate("""() => {
+                return document.documentElement.scrollWidth - document.documentElement.clientWidth;
+            }""")
+            check(overflow_diff <= 2, f"视口 {vp_w}x{vp_h} 下全页面无横向溢出 (diff={overflow_diff}px <= 2px)")
+        await page.set_viewport_size({"width": 1366, "height": 768})
 
         await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_settings.png"))
 

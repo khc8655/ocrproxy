@@ -1,13 +1,14 @@
 {
-  "version": "v2026.10.19-08",
+  "version": "v2026.10.19-09",
   "release_date": "2026-10-19",
   "commit": "HEAD",
-  "title": "系统设置统一流式比例规范与单一真理源重构：根治 display:block 内联覆盖、6.5:3.5 黄金比例自适应、多端声明式条件编译 (v2026.10.19-08)",
+  "title": "方案 A 单一真理源编译器落地与 14 项布局深度缺陷彻底根除 (v2026.10.19-09)",
   "changelog": [
-    "根除运行时 JS display:block 内联覆盖缺陷：彻底杜绝 settings.js 对 .settings-row 写入 style.display='block' 破坏 flex 布局，全面升级为 HTML5 原生 el.hidden 与 [hidden] { display:none !important; } 工业级防破坏方案。",
-    "吸收 design-system Token 建立 6.5:3.5 黄金流式比例与统一定高：.settings-row 统一定高 52px，标签区占 65% 并增加 text-overflow: ellipsis + title 原生悬浮气泡，控件区占 35%（clamp(160px, 35%, 260px)），输入框统一定宽 80px，彻底杜绝竖排折行与参差拉高。",
-    "单一真理源 UI 与声明式架构自适应：将管理后台唯一收口至 shared/admin/，通过 data-arch='vm|edgeone' 与 data-cap='runModes|kb|vaultClient|systemUpdate' 声明式条件呈现，消除多套硬编码分叉。",
-    "响应式断点平滑单列切换：在 < 840px 窄屏与平板视口下自动优雅降级为 1fr 单列流式网格，保持单行横向对齐不折行。",
-    "全量四层自动化测试全绿回归：Layer 1 纯逻辑 (198/198)、Layer 2 API 与双端后端契约 (7/7)、Layer 3 无内联事件安全审计、Layer 4 全矩阵 Playwright E2E 真实浏览器渲染 (69/69) 全部通过。"
+    "单一真理源 (Single Source of Truth) 彻底落地：重构 build-admin.mjs 直接以内联编译 shared/admin/ 产出 EdgeOne 边缘函数与静态资源，严禁维护多套分叉页面；",
+    "根除卡片 5 布局变形与可见性污染：清理 [data-arch='vm'] 的积极 display 赋值，确立纯消极隐藏规则与消极覆盖优先级；",
+    "根除 core.js 内联 display 覆写与提示隐藏失效：将剩余的 style.display='block' 彻底清空并改用 el.hidden，移除 manual 提示的内联 style='display:none'，卡片 4 与提示恢复正常；",
+    "长密钥输入框通栏拉满与单项配置跨列拉长：为 Key 输入框建立 .settings-row-key，控制器 flex:1 展开至 640px+；单项配置 .settings-row-full 跨通栏展示；",
+    "实体边框规范恢复与移动端 0 溢出：补齐供应商操作按钮实体边框，解除 .settings-row-ctrl 的 flex-shrink:0，移动端 390px/600px 视口实现 0px 横向溢出；",
+    "四层测试矩阵全面升级通过：Layer 1 (199/199)、Layer 2 S1~S6/U1 双端契约、Layer 3 安全审计、Layer 4 全矩阵 Playwright E2E 扩充至 76 项断言全部 100% 通过。"
   ]
 }

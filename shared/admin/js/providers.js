@@ -154,8 +154,8 @@ function renderProviders(){
         : '';
 
       const actionButtons = `
-        <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
-        <button class="btn btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
+        <button class="btn btn-secondary btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
+        <button class="btn btn-secondary btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(name)}')">删除</button>
       `;
 

@@ -57,10 +57,10 @@ function renderSettings(){
   // EdgeOne Environment Adaptations: hide remote vault config
   if (typeof IS_EDGEONE !== 'undefined' && IS_EDGEONE) {
     const vaultCard = document.getElementById('cfg_vault_url')?.closest('.card');
-    if (vaultCard) vaultCard.style.display = 'none';
+    if (vaultCard) vaultCard.hidden = true;
     if (modeEl) {
       Array.from(modeEl.options).forEach(opt => {
-        if (opt.value !== 'agent') opt.style.display = 'none';
+        if (opt.value !== 'agent') opt.hidden = true;
       });
       modeEl.value = 'agent';
     }
@@ -111,7 +111,7 @@ function onRunModeChange(){
   const hintChatTimeout = document.getElementById('hint_chatTimeout');
   const inputChatTimeout = document.getElementById('s_chatTimeout');
   if (lblChatTimeout) {
-    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '单次请求等待超时 (upstream_timeout_sec)';
+    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '单次请求等待超时 (agent_first_byte_timeout_sec)';
   }
   if (hintChatTimeout) {
     hintChatTimeout.textContent = isKb
