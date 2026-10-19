@@ -171,8 +171,8 @@ class TestPresetDateNotesAndOnDemandSync(unittest.TestCase):
         """Verify providers.js UI renders updated_at and uses on-demand pull."""
         providers_js = REPO_ROOT / "shared" / "admin" / "js" / "providers.js"
         content = providers_js.read_text(encoding="utf-8")
-        self.assertIn("📅 更新日期:", content)
-        self.assertIn("📝 适配说明：", content)
+        self.assertIn("更新日期:", content)
+        self.assertIn("适配说明：", content)
         self.assertIn("一键更新本地已存供应商规则", content)
         self.assertIn("/api/admin/presets/detail?id=", content)
         self.assertIn("preset_updated_at", content)

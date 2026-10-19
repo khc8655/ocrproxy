@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v2026.10.19-05"
+SCRIPT_VERSION="v2026.10.19-06"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
