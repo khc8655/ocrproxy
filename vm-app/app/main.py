@@ -41,6 +41,11 @@ async def lifespan(app: FastAPI):
         logger.warning("PROXY_API_KEY is not set — every /v1 request will be rejected with 401.")
     yield
     # Clean up resources on shutdown.
+    try:
+        from . import agent_metrics
+        agent_metrics.flush()  # keep today's dashboard summary across restarts
+    except Exception:
+        pass
     await close_client()
     logger.info("OCRProxy shutdown complete.")
 

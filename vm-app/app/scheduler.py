@@ -17,6 +17,7 @@ from typing import Optional, Any, Callable, Dict, Set, Tuple, List, Deque
 from dataclasses import dataclass
 
 from . import stats
+from . import agent_metrics
 from .config_store import get_config_version
 from .logger_utils import clean_upstream_error_text
 
@@ -1232,6 +1233,9 @@ async def schedule(
     Records stats directly to in-memory stats module with Agent vs KB isolation.
     """
     req_model_name = request_model or model_type
+    _metrics_tr = agent_metrics.current() if category == "agent" else None
+    if _metrics_tr is not None:
+        _metrics_tr.note_schedule(req_model_name)
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
@@ -1805,6 +1809,8 @@ async def schedule(
 
                         routed_via = f"{provider_name}/{key_label}"
                         cand_latency = time.time() - cand_start
+                        if _metrics_tr is not None:
+                            _metrics_tr.note_success(attempt_seq - 1)
 
                         # Record latency for smart candidate ordering
                         _record_latency(cand_id, cand_latency)

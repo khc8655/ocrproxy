@@ -65,6 +65,16 @@ def _get_empty_stats() -> dict:
 _stats: dict = _get_empty_stats()
 
 
+def _agent_summary() -> dict:
+    # Per-request day summary for the Agent dashboard (agent_metrics.py). Imported
+    # lazily; it has its own lock, so calling it under _lock cannot deadlock.
+    try:
+        from . import agent_metrics
+        return agent_metrics.snapshot()
+    except Exception:
+        return {}
+
+
 def get_stats() -> dict:
     """Return a snapshot of current statistics."""
     with _lock:
@@ -78,6 +88,7 @@ def get_stats() -> dict:
 
         kb_copy = {k: dict(v) for k, v in _stats["kb"].items()}
 
+        agent_copy["summary"] = _agent_summary()
         return {
             "agent": agent_copy,
             "kb": kb_copy,
@@ -359,5 +370,10 @@ def reset():
     with _lock:
         _stats.clear()
         _stats.update(_get_empty_stats())
+    try:
+        from . import agent_metrics
+        agent_metrics.clear()
+    except Exception:
+        pass
 
 

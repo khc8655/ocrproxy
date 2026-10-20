@@ -532,6 +532,20 @@ vm-app/static/        agent-edgeone/
 | **模型新增本地 Key 胶囊** | 徽章：**`[本地]`**<br>删除叉：**有 (`×`)** | 徽章：**`[本地]`**<br>删除叉：**有 (`×`)** | 仅模型弹窗点击「+ 添加本地 Key」存入的凭据标记为本地，允许删除。 |
 | **置灰优先原则** | 遵循 | 遵循 | 未启用或只读项以中性灰色 Disabled 呈现，**严禁粗暴 `display: none` 导致功能失踪**。 |
 
+### 6.2.1 首页「Agent 对话总览」统计口径
+
+两端共用 `core.js` 的同一份渲染，由后端是否返回 `stats.agent.summary` 决定显示什么（契约见 `shared/contracts/admin-ui-backend.json`，场景 S7 / U3）：
+
+| | VM | EdgeOne |
+|---|---|---|
+| 数据 | `vm-app/app/agent_metrics.py` 按请求累计，北京时间自然日，每 30s 及关停时写 `CONFIG_DIR/agent_summary.json`（重启不清零，「重置统计」清零） | 不做累计（多 isolate、KV 无原子自增，成本不值），不返回 `summary` |
+| 卡片 1 | 今日 Token 总量（输入 / 输出 / 用量覆盖率） | 可用 Key（最近正常 + 未调用 / 总数） |
+| 卡片 2 | 平均首字延迟（副：平均总耗时） | 冷却 / 故障中的 Key |
+| 卡片 3 | 失败请求（副：总请求、切 Key 救回次数） | 最近响应耗时（各 Key 最近一次成功调用的平均） |
+| Top 3 | 今日按调用量，带 Token 与首字延迟 | 不显示 |
+
+口径：只统计进入调度的 Agent 请求（鉴权 / 参数错误、KB 流量不计）；首字延迟按客户端实际收到的第一个非注释字节计（跳过 SSE keep-alive）；200 流里的 error 帧算失败，客户端主动断开不算失败；Token 取响应里的 usage（Anthropic 输入含 cache read / creation）。OpenAI chat 流只有客户端带 `stream_options.include_usage` 才有 usage，**网关不注入**（保持直通），所以卡片显示用量覆盖率。
+
 ### 6.3 静态文件强制镜像同步门禁 (`test_vm_static_sync.py`)
 
 由于系统安装与升级脚本（`install.sh`）直接打包并拷贝 `vm-app/static/`，为了确保开发真理源 `shared/admin/` 的任何改动 100% 毫无遗漏地同步至 VM 生产环境：

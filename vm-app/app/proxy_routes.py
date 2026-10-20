@@ -43,6 +43,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse, Response
 from . import gemini_compat
+from . import agent_metrics
 
 from .config_store import get_config, clear_cache
 from .scheduler import (
@@ -1035,6 +1036,47 @@ def _get_active_run_mode(config: dict) -> str:
     return mode if mode in ("agent", "kb") else "agent"
 
 
+async def _with_agent_metrics(request: Request, impl):
+    """Feed the per-request Agent dashboard summary (agent_metrics) around a route.
+
+    Only requests that reach schedule() with category=agent are recorded (the
+    scheduler marks the tracker); auth / validation errors and KB traffic are not.
+    Streams are measured on the bytes the client actually receives: TTFT skips SSE
+    comments (keep-alives), usage is read from frames carrying "usage", an error
+    frame inside a 200 stream counts as a failure, a client disconnect does not.
+    """
+    tr = agent_metrics.begin()
+    try:
+        resp = await impl(request)
+    except Exception:
+        tr.finish(False)
+        raise
+    if not tr.scheduled:
+        return resp
+    status_ok = getattr(resp, "status_code", 500) < 400
+    if isinstance(resp, StreamingResponse):
+        inner = resp.body_iterator
+
+        async def _measured():
+            failed = False
+            try:
+                async for c in inner:
+                    tr.on_chunk(c if isinstance(c, (bytes, bytearray)) else str(c).encode())
+                    yield c
+            except (asyncio.CancelledError, GeneratorExit):
+                raise
+            except Exception:
+                failed = True
+                raise
+            finally:
+                tr.finish(status_ok and not failed)
+        resp.body_iterator = _measured()
+    else:
+        tr.on_body(getattr(resp, "body", b"") or b"")
+        tr.finish(status_ok)
+    return resp
+
+
 @router.get("/models")
 async def list_models(request: Request):
     """List all available models according to active RUN_MODE."""
@@ -1097,6 +1139,10 @@ async def reload_config(request: Request):
 
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
+    return await _with_agent_metrics(request, _chat_completions_impl)
+
+
+async def _chat_completions_impl(request: Request):
     config = await get_config()
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
@@ -1381,6 +1427,10 @@ def _anthropic_error(status_code: int, err_type: str, message: str) -> JSONRespo
 
 @router.post("/messages")
 async def anthropic_messages(request: Request):
+    return await _with_agent_metrics(request, _anthropic_messages_impl)
+
+
+async def _anthropic_messages_impl(request: Request):
     config = await get_config()
     if not verify_proxy_auth(request, config):
         return _anthropic_error(401, "authentication_error", "Invalid or missing proxy API key")
