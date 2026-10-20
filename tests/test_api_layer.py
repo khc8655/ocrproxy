@@ -232,6 +232,83 @@ async def test_vault_pull_once_rules_only_sync():
         restore()
 
 
+async def test_vault_add_keys_explicit():
+    """Layer 2: 「+ Key → 从中枢添加」：给已拉取的中枢供应商显式补拉选中的 Key。
+    只新增不覆盖、不碰规则和已有绑定；本地自建供应商不允许；中枢没有的 label 报 missing。
+    """
+    import json as _j
+    from app.main import app
+    hub_keys = {"k1": "sk-q1", "k2": "sk-q2"}
+    fetch_bodies = []
+
+    def handler(req):
+        if req.url.path.endswith("/api/vault/fetch"):
+            body = _j.loads(req.content or b"{}")
+            fetch_bodies.append(body)
+            want = body.get("keys") or list(hub_keys)
+            got = {k: hub_keys[k] for k in want if k in hub_keys}
+            if body.get("credentials_only"):
+                return httpx.Response(200, json={"ok": True, "provider": body["provider"], "keys": got})
+            return httpx.Response(200, json={"ok": True, "provider": body["provider"], "provider_config": {
+                "name": "Hub Q", "protocol": "openai", "base_url": "https://q.example.com/v1", "keys": got}})
+        return httpx.Response(404)
+
+    restore = _mock_vault(handler)
+    transport = httpx.ASGITransport(app=app)
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+            from app.config_store import get_config
+            r = await c.post("/api/admin/vault/fetch-key", headers=H, json={"provider": "hub_q"})
+            assert r.status_code == 200, r.text
+
+            # bind k1 into KB + Agent, delete k2, add a local key
+            cur = (await c.get("/api/config", headers=H)).json()
+            cur = cur.get("config", cur)
+            cur["edgeone_vault"] = {"edgeone_url": "https://hub.example.com", "token": "t"}
+            cur["providers"]["hub_q"]["keys"].pop("k2")
+            cur["providers"]["hub_q"]["keys"]["mykey"] = {"key": "sk-mine", "origin": "local", "is_local": True}
+            cur.setdefault("candidates", {}).setdefault("chat", []).append(
+                {"provider": "hub_q", "key": "k1", "model": "m-q", "enabled": True})
+            cur.setdefault("agent_models", {})["agent-q"] = {"keys": [{"provider": "hub_q", "key": "k1", "model": "m-q"}]}
+            assert (await c.post("/api/admin/config", headers=H, json=cur)).status_code == 200
+
+            # hub gains k3
+            hub_keys["k3"] = {"key": "sk-q3"}
+            fetch_bodies.clear()
+            r = await c.post("/api/admin/vault/add-keys", headers=H,
+                             json={"provider": "hub_q", "keys": ["k3", "k1", "mykey", "ghost"]})
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["added"] == ["k3"] and set(d["skipped"]) == {"k1", "mykey"} and d["missing"] == ["ghost"], d
+            assert fetch_bodies and set(fetch_bodies[-1]["keys"]) == {"k3", "ghost"}, fetch_bodies
+            cfg = await get_config()
+            keys = cfg["providers"]["hub_q"]["keys"]
+            assert keys["k3"]["key"] == "sk-q3" and keys["k3"]["origin"] == "vault" and keys["k3"]["is_local"] is False
+            assert keys["k1"]["key"] == "sk-q1" and keys["mykey"]["key"] == "sk-mine"
+            assert "k2" not in keys, "deleted key must not come back unless picked"
+            assert any(x.get("key") == "k1" and x.get("provider") == "hub_q" for x in cfg["candidates"]["chat"]), "KB binding kept"
+            assert cfg["agent_models"]["agent-q"]["keys"][0]["key"] == "k1", "Agent binding kept"
+
+            # explicitly picking a deleted key brings it back
+            r = await c.post("/api/admin/vault/add-keys", headers=H, json={"provider": "hub_q", "keys": ["k2"]})
+            assert r.status_code == 200 and r.json()["added"] == ["k2"], r.text
+
+            # local provider / unknown provider / empty selection rejected
+            cur = (await c.get("/api/config", headers=H)).json()
+            cur = cur.get("config", cur)
+            cur["providers"]["mine_q"] = {"name": "Mine Q", "origin": "local", "base_url": "https://m.example.com", "keys": {}}
+            assert (await c.post("/api/admin/config", headers=H, json=cur)).status_code == 200
+            r = await c.post("/api/admin/vault/add-keys", headers=H, json={"provider": "mine_q", "keys": ["k1"]})
+            assert r.status_code == 400, r.text
+            r = await c.post("/api/admin/vault/add-keys", headers=H, json={"provider": "nope", "keys": ["k1"]})
+            assert r.status_code == 404, r.text
+            r = await c.post("/api/admin/vault/add-keys", headers=H, json={"provider": "hub_q", "keys": []})
+            assert r.status_code == 400, r.text
+    finally:
+        restore()
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -260,6 +337,10 @@ async def _run_all_tests():
         print("  -> test_vault_pull_once_rules_only_sync...")
         await test_vault_pull_once_rules_only_sync()
         print("     PASS: test_vault_pull_once_rules_only_sync")
+
+        print("  -> test_vault_add_keys_explicit...")
+        await test_vault_add_keys_explicit()
+        print("     PASS: test_vault_add_keys_explicit")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:

@@ -2144,6 +2144,118 @@ async def vault_fetch_key_endpoint(request: Request):
         return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: {str(e)}"})
 
 
+@router.post("/vault/add-keys")
+async def vault_add_keys_endpoint(request: Request):
+    """Explicitly add selected hub keys to an already-pulled (origin=vault) provider.
+
+    Body: {"provider": str, "keys": [label, ...]}
+
+    Rules (VM side):
+      * only for providers that exist locally with origin=vault (pulled from the hub);
+      * add-only: a label that already exists locally (hub or local key) is skipped,
+        never overwritten;
+      * rules and existing keys are untouched, so KB candidates / Agent bindings survive;
+      * added keys are {"key": ..., "origin": "vault", "is_local": False} (read-only, deletable);
+      * the user picks the labels, so a key the user deleted earlier only comes back when
+        the user picks it again; no tombstones needed.
+    """
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    provider = str(body.get("provider") or "").strip()
+    raw_labels = body.get("keys")
+    if not provider:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "Missing provider"})
+    if not isinstance(raw_labels, list) or not raw_labels:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "请至少选择一个中枢 Key"})
+    labels = []
+    for lbl in raw_labels:
+        lbl = str(lbl or "").strip()
+        if lbl and lbl not in labels:
+            labels.append(lbl)
+
+    cur_cfg = await get_config()
+    local_p = (cur_cfg.get("providers") or {}).get(provider)
+    if not isinstance(local_p, dict):
+        return JSONResponse(status_code=404, content={"ok": False, "error": f"本地不存在供应商「{provider}」，请先在「新增供应商」中从中枢拉取"})
+    if local_p.get("origin") != "vault":
+        return JSONResponse(status_code=400, content={"ok": False, "error": f"供应商「{provider}」是本地自建的，不能从中枢添加 Key"})
+
+    existing = set((local_p.get("keys") or {}).keys())
+    wanted = [l for l in labels if l not in existing]
+    skipped = [l for l in labels if l in existing]
+    if not wanted:
+        return JSONResponse(content={"ok": True, "provider": provider, "added": [], "skipped": skipped, "missing": []})
+
+    edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.post(
+                f"{edgeone_url}/api/vault/fetch",
+                headers=headers,
+                json={"provider": provider, "keys": wanted, "credentials_only": True},
+            )
+            if res.status_code == 401:
+                return JSONResponse(status_code=401, content={
+                    "ok": False,
+                    "error": "EdgeOne 中枢凭据鉴权失败 (HTTP 401)。请核对中枢访问 Token 是否与 EdgeOne 环境变量 VAULT_ACCESS_TOKEN 完全一致。"
+                })
+            if not res.is_success:
+                return JSONResponse(status_code=res.status_code, content={
+                    "ok": False, "error": f"EdgeOne 中枢返回 HTTP {res.status_code}: {res.text[:150]}"})
+            data = res.json()
+            if not data.get("ok"):
+                return JSONResponse(status_code=400, content=data)
+            remote_keys = data.get("keys")
+            if not isinstance(remote_keys, dict):
+                remote_keys = (data.get("provider_config") or {}).get("keys") or {}
+    except httpx.ConnectError:
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取中枢 Key 失败: 无法连接至 {edgeone_url}"})
+    except httpx.TimeoutException:
+        return JSONResponse(status_code=504, content={"ok": False, "error": f"拉取中枢 Key 超时 (>10s): {edgeone_url}"})
+    except Exception as e:
+        logger.error("Failed to add keys from EdgeOne Vault: %s", e)
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取中枢 Key 失败: {str(e)}"})
+
+    # Re-read config after the network call so concurrent edits are not lost.
+    cfg = await get_config()
+    p = (cfg.get("providers") or {}).get(provider)
+    if not isinstance(p, dict) or p.get("origin") != "vault":
+        return JSONResponse(status_code=409, content={"ok": False, "error": f"供应商「{provider}」已被删除或修改，请刷新后重试"})
+    keys = p.setdefault("keys", {})
+    added, missing = [], []
+    for lbl in wanted:
+        if lbl in keys:
+            skipped.append(lbl)
+            continue
+        val = remote_keys.get(lbl)
+        if not val:
+            missing.append(lbl)
+            continue
+        k_obj = dict(val) if isinstance(val, dict) else {"key": str(val)}
+        if not k_obj.get("key"):
+            missing.append(lbl)
+            continue
+        k_obj["origin"] = "vault"
+        k_obj["is_local"] = False
+        keys[lbl] = k_obj
+        added.append(lbl)
+    if added:
+        await save_config(cfg)
+    return JSONResponse(content={"ok": True, "provider": provider, "added": added,
+                                 "skipped": skipped, "missing": missing})
+
+
 @router.post("/vault/sync")
 async def vault_sync_endpoint(request: Request):
     """Manually sync rules and metadata for active providers from EdgeOne Hub."""

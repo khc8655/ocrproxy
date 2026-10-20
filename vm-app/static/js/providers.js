@@ -958,6 +958,73 @@ async function applyRuleUpdates(providerIds){
 let _onKeySavedCallback = null;
 let _isLocalKeyMode = false;
 
+// ---- 从中枢添加 Key (VM 等「中枢客户端」部署；EdgeOne 本身是中枢，能力位为 false 不显示) ----
+function canPullKeysFromVault(prov){
+  const caps = (typeof HOST !== 'undefined' && HOST && HOST.capabilities) || {};
+  const p = state.config?.providers?.[prov];
+  return Boolean(caps.vaultClient && p && p.origin === 'vault');
+}
+
+function hideVaultKeyPicker(){
+  const sec = document.getElementById('k_vault_section');
+  if (sec) sec.style.display = 'none';
+}
+
+async function renderVaultKeyPicker(prov){
+  const sec = document.getElementById('k_vault_section');
+  const list = document.getElementById('k_vault_list');
+  const btn = document.getElementById('k_vault_btn');
+  if (!sec || !list) return;
+  if (!canPullKeysFromVault(prov)) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  if (btn) btn.disabled = true;
+  list.innerHTML = '<span class="text-secondary">正在读取中枢清单…</span>';
+  const manifest = (typeof fetchVaultManifest === 'function') ? await fetchVaultManifest(true) : null;
+  if (document.getElementById('k_provider').value !== prov) return; // modal reopened for another provider
+  const remote = manifest && manifest.providers && manifest.providers[prov];
+  if (!remote) {
+    list.innerHTML = `<span class="text-secondary">${esc(state.lastVaultError ? ('读取中枢清单失败：' + state.lastVaultError) : '中枢里已没有这个供应商')}</span>`;
+    return;
+  }
+  const localKeys = (state.config.providers[prov] && state.config.providers[prov].keys) || {};
+  const labels = (remote.keys || []).filter(l => !(l in localKeys));
+  if (!labels.length) {
+    list.innerHTML = '<span class="text-secondary">中枢的 Key 本地都已经有了</span>';
+    return;
+  }
+  list.innerHTML = labels.map(l =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="k-vault-pick" value="${esc(l)}"> <span class="mono">${esc(l)}</span></label>`
+  ).join('');
+  if (btn) btn.disabled = false;
+}
+
+async function addKeysFromVault(){
+  const prov = document.getElementById('k_provider').value;
+  const picked = Array.from(document.querySelectorAll('#k_vault_list .k-vault-pick:checked')).map(el => el.value);
+  if (!picked.length) { toast('请先勾选要拉取的中枢 Key', 'err'); return; }
+  const btn = document.getElementById('k_vault_btn');
+  if (btn) { btn.disabled = true; btn.textContent = '拉取中…'; }
+  try {
+    const res = await fetch('/api/admin/vault/add-keys', {
+      method: 'POST', headers: headers(), body: JSON.stringify({ provider: prov, keys: picked })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { toast('从中枢添加 Key 失败: ' + (data.error || `HTTP ${res.status}`), 'err'); return; }
+    const added = data.added || [];
+    const missing = data.missing || [];
+    let msg = `已从中枢添加 ${added.length} 个 Key`;
+    if (missing.length) msg += `，${missing.length} 个中枢已不存在`;
+    toast(msg, added.length ? 'ok' : 'err');
+    await loadData();
+    closeModal('keyModal');
+    if (added.length && typeof _onKeySavedCallback === 'function') { const cb = _onKeySavedCallback; _onKeySavedCallback = null; try { cb(prov, added[0]); } catch (_) {} }
+  } catch (e) {
+    toast('从中枢添加 Key 异常: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '拉取选中 Key'; }
+  }
+}
+
 function isVertexProvider(prov){
   const p = state.config?.providers?.[prov];
   return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
@@ -983,6 +1050,8 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
+
+  renderVaultKeyPicker(prov);
 
   const vSec = document.getElementById('k_vertex_section');
   if (isVertexProvider(prov) && vSec) {
@@ -1020,6 +1089,7 @@ function editKey(prov, label){
     keyVal = String(currentKeyObj || '');
   }
 
+  hideVaultKeyPicker();
   _isLocalKeyMode = isLocal;
   document.getElementById('keyModalTitle').textContent = isLocal
     ? `编辑本地 Key 凭证 - ${prov} (${label})`

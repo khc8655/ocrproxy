@@ -216,6 +216,15 @@ async def run_ui(b: Backend):
                 "(() => { if (typeof renderAgentModels === 'function') renderAgentModels();"
                 " return (document.getElementById('agentModelsBox') || {}).innerHTML.includes('k1'); })()",
                 timeout=10000, polling=300)
+            # the per-key stats arrive in a separate request after config; wait for them too
+            # (without this U1 was flaky on both backends), then assert on the final html below
+            try:
+                await page.wait_for_function(
+                    "(() => { if (typeof renderAgentModels === 'function') renderAgentModels();"
+                    " return (document.getElementById('agentModelsBox') || {}).innerHTML.includes('最近响应耗时'); })()",
+                    timeout=8000, polling=300)
+            except Exception:
+                pass
             html = await page.evaluate("document.getElementById('agentModelsBox').innerHTML")
             # the k1 row: from its key badge to the next row
             i = html.find(">k1<")
@@ -224,6 +233,13 @@ async def run_ui(b: Backend):
             row = row[:nxt] if nxt > 0 else row
             ok = ('最近响应耗时' in html[max(0, i - 4000):i] or '最近响应耗时' in row) and not errors
             b.record("U1", ok, "k1 行无耗时徽章（显示「未调用」）" if not ok else "")
+            # U2: same UI, capability decides whether 「从中枢添加」 shows
+            disp = await page.evaluate(
+                "(() => { const p = state.config.providers.up; p.origin = 'vault'; openKeyModal('up');"
+                " const d = getComputedStyle(document.getElementById('k_vault_section')).display;"
+                " closeModal('keyModal'); return d; })()")
+            want = "block" if b.kind == "vm" else "none"
+            b.record("U2", disp == want, f"#k_vault_section display={disp}, 期望 {want}" if disp != want else "")
             if errors:
                 b.results["U1"] = ("FAIL", "pageerror: " + "; ".join(errors[:2]))
         except Exception as e:

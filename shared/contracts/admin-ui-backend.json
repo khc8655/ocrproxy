@@ -51,6 +51,7 @@
     {"id": "S4", "title": "k1 被限流时切到 k2，两行状态各自正确", "do": "upstream returns 429 for k1; POST /v1/chat/completions", "expect": "k1 status=429, k2 status=200, active_keys.claude == k2"},
     {"id": "S5", "title": "手动「测」写回同一条状态", "do": "POST HOST.api.testKey with HOST.buildTestBody for k2", "expect": "response success|ok true; stats entry agent:claude:up:k2 status=200, time>=t_test"},
     {"id": "S6", "title": "探测上游模型列表", "do": "POST /api/admin/probe-models provider=up", "expect": "ok true, models contains mock-chat-1"},
-    {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""}
+    {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""},
+    {"id": "U2", "title": "浏览器里：「+ Key」弹窗的「从中枢添加」只在 VM 的中枢供应商上出现，EdgeOne 不出现", "do": "real browser: mark provider up origin=vault in state, openKeyModal('up'), read #k_vault_section display", "expect": "VM: block; EdgeOne: none (HOST.capabilities.vaultClient)"}
   ]
 }
