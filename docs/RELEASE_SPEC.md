@@ -1,7 +1,7 @@
 # OCRProxy 极简发版规约与防遗漏自动化门禁 (Release Specification v2.0)
 
-> **起效版本**：`v2026.10.19-09`  
-> **核心原则**：将繁琐臃肿的长篇规则收敛为**“三大发版铁律、一个秒级门禁命令、三步极简 SOP”**，杜绝规则过长导致 AI 模型与开发者遗漏关键检查。
+> **起效版本**：`v2026.10.19-09`（分层门禁自本次工具链分层改造起）  
+> **核心原则**：将繁琐臃肿的长篇规则收敛为**“三大发版铁律、四层分层门禁、三步极简 SOP”**，按变更范围只跑必要层级，杜绝规则过长导致 AI 模型与开发者遗漏关键检查，也避免日常迭代被全量浏览器矩阵拖慢。
 
 ---
 
@@ -29,23 +29,36 @@
 
 ---
 
-## 二、秒级自动化硬门禁 (Automated Gatekeeper)
+## 二、四层分层门禁 (Tiered Quality Gates)
 
-本项目将所有发版红线固化为可执行代码，**无需人工翻阅冗长文档**，发版前只需运行单条指令：
+所有发版红线仍固化为可执行代码，但按**成本与覆盖范围**拆成 4 层：日常迭代跑便宜层，正式发版才跑满（且并行执行）。旧版每次发版固定串行跑全套浏览器矩阵 ≈ 60s，现在发版全套 ≈ **20s**，纯逻辑迭代 ≈ **0.5s**。
 
-```bash
-npm run check:release
-# 等价于: python3 tests/verify_release_gate.py
-```
+| 层级 | 内容 | 命令 | 耗时（本机实测） | 何时必跑 |
+| :--- | :--- | :--- | :---: | :--- |
+| **T0 静态门禁** | G1~G5：版本号 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT 同步 / 零明文密钥 | `npm run check:release` | ~0.2s | **任何变更**（含纯文档） |
+| **T1 逻辑层** | 199 ESM 单元、CoW 安全、Agent 统计口径、API 路由与 Vault 拉取规约、SSOT 镜像 | `npm run test:fast` | ~0.5s | 逻辑 / 后端 / 预设 / 测试 |
+| **T2 契约层** | 真实 VM + EdgeOne 服务 + Chromium：S1~S7 / U1~U3 双端契约、中枢 vs 本地 Key 权限矩阵 | `npm run test:contract` | ~16s | 后端 / 契约 / 共享 UI / 权限 |
+| **T3 矩阵层** | 窄屏 0 溢出（VM + EdgeOne × 3 视口 × 4 Tab）、全矩阵 Playwright E2E 76 项 | `npm run test:matrix` | ~18s | UI / 布局 / 发版 |
 
-### 门禁断言清单（0.3 秒极速校验）：
+### 变更范围 → 层级映射（`npm run test:auto` 自动判断）
+
+| 改动范围 | 必跑层级 | 参考耗时 |
+| :--- | :--- | :---: |
+| 仅文档（`*.md` / `docs/` / `README` / `CHANGELOG`） | T0 | ~0.2s |
+| 预设适配（`shared/presets/`）、纯测试 / 脚本 | T0 + T1 | ~0.7s |
+| 后端逻辑 / 协议 / 契约（`vm-app/app/`、`shared/contracts/`、EdgeOne `api/`） | T0 + T1 + T2 | ~17s |
+| 共享 UI / 控制台产物 / 发版元数据（`shared/admin/`、`vm-app/static/`、`admin.js`、`version.json`、`install.sh`） | T0 + T1 + T2 + T3（= 发版全套） | ~20s |
+
+> `python3 tests/run_tests.py --layer=auto` 会读取工作区改动 + `origin/main...HEAD` 的 diff 自动选层并打印依据；无法归类的改动自动回退到发版全套。`--layer=all --parallel` 为正式发版命令，T1/T2/T3 各检查通过独立进程并行执行（各自使用空闲端口与临时目录，互不干扰，失败时输出对应检查的完整日志）。
+
+### T0 门禁断言清单（~0.2s，永久保留）：
 - **[PASS] G1: Version parity verified across all 7 targets**（7 处版本号强一致比对）
 - **[PASS] G2: EdgeOne exclusive identity & Vault Hub guard verified**（EdgeOne Title/Badge/宿主标记/供应商面板强断言）
 - **[PASS] G3: Install scripts zero-drift verified**（安装脚本 100% 字节一致性）
 - **[PASS] G4: SSOT assets synchronization verified**（`shared/admin/` 与 `vm-app/static/` 同步校验）
 - **[PASS] G5: Zero plaintext secret leakage verified**（代码与配置零明文 Key 泄漏审计）
 
-> **门禁阻断机制**：任何一项失败，脚本立即以红色高亮指出具体不匹配的文件与内容，并阻断构建与部署。
+> **门禁阻断机制**：任何一层失败立即以红色高亮指出具体层级/检查与失败输出，并以非 0 退出码阻断提交与部署；正式发版**不允许**降级跳过 T1~T3（文档-only 提交除外，且其不升版本、不触发发版）。
 
 ---
 
@@ -56,19 +69,22 @@ npm run check:release
 ### Step 1: 升级版本元数据
 修改 `version.json` 中的 `version` 字段，并在 `CHANGELOG.md` 顶部记录本次版本的新增与修复项。
 
-### Step 2: 执行一键打包构建
+### Step 2: 执行一键打包构建（~0.3s）
 ```bash
 npm run build:admin
 ```
 构建脚本会自动：
 - 自动同步 `shared/admin/` 至 `vm-app/static/`，并自动注入最新版本号；
 - 自动为 EdgeOne 边缘函数注入专属 Title、Badge、`__HOST_KIND__` 并内联编译；
-- **自动触发 G1~G5 极简发版硬门禁**，校验未通过立即 `exit(1)` 中断。
+- **自动触发 T0 G1~G5 极简发版硬门禁**，校验未通过立即 `exit(1)` 中断。
 
-### Step 3: 全层级测试验证并提交推送
+### Step 3: 分层全量验证并提交推送（~20s）
 ```bash
-# 运行四层全量测试（Layer 1~4，199 单元测试 + S1~S7 契约 + 76 项 E2E 浏览器渲染）
-python3 tests/run_tests.py --layer=all
+# 正式发版：T1 + T2 + T3 全套并行（199 单元 + S1~S7/U1~U3 契约 + 76 项 E2E）
+npm run test:full
+
+# 日常迭代（不发版）：按改动自动选层，文档-only 只需 T0
+npm run test:auto
 
 # 校验通过后提交并推送至 GitHub，自动触发 EdgeOne 边缘部署
 git commit -m "feat(release): bump version to vYYYY.MM.DD-NN ..."

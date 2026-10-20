@@ -6,6 +6,24 @@
 
 ---
 
+## 〇、 分层执行与发版门禁 (Tiered Runner)
+
+`tests/run_tests.py` 按成本把检查拆成 4 层，日常迭代不必每次都跑浏览器矩阵：
+
+| 层级 | 命令 | 说明 | 耗时 |
+| :--- | :--- | :--- | :---: |
+| T0 | `npm run check:release` | 静态发版门禁 G1~G5 | ~0.2s |
+| T1 | `npm run test:fast` | 纯逻辑/API/安全（无浏览器） | ~0.5s |
+| T2 | `npm run test:contract` | 双端后端契约 + 权限矩阵（Chromium） | ~16s |
+| T3 | `npm run test:matrix` | 窄屏 0 溢出 + 全矩阵 E2E | ~18s |
+| 全套 | `npm run test:full` | T1+T2+T3 并行 | ~20s |
+
+- `npm run test:auto`：按 `git diff`（工作区 + `origin/main...HEAD`）自动选层；纯文档改动只要求 T0。
+- 正式发版必须跑 `npm run test:full`，不允许跳层；`--parallel` 下各检查使用独立空闲端口与临时 `CONFIG_DIR`，互不干扰。
+- 查看全部检查与预设：`python3 tests/run_tests.py --list`。
+
+---
+
 ## 一、 测试套件矩阵与职责总览
 
 ```

@@ -615,16 +615,29 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 
 ## 🧪 验证与自动化测试指南 (Testing & Quality Assurance)
 
+测试按成本分层，**日常迭代只跑便宜层，正式发版才跑满（且并行执行）**：
+
+| 层级 | 命令 | 覆盖内容 | 耗时 |
+| :--- | :--- | :--- | :---: |
+| **T0 静态门禁** | `npm run check:release` | G1~G5：版本号 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT 同步 / 零明文密钥 | ~0.2s |
+| **T1 逻辑层** | `npm run test:fast` | 199 ESM 单元、CoW 安全、Agent 统计口径、API/Vault 规约、SSOT 镜像（无浏览器） | ~0.5s |
+| **T2 契约层** | `npm run test:contract` | 真实 VM + EdgeOne + Chromium：S1~S7 / U1~U3 双端契约、中枢/本地 Key 权限矩阵 | ~16s |
+| **T3 矩阵层** | `npm run test:matrix` | 窄屏 0 溢出（双端 × 3 视口 × 4 Tab）、全矩阵 Playwright E2E 76 项 | ~18s |
+| **发版全套** | `npm run test:full` | T1+T2+T3 并行执行 | **~20s** |
+
 ```bash
-# 1. 极简发版硬门禁（0.3 秒完成 G1~G5 五大黄金法则校验）
-npm run check:release
+# 日常迭代：自动读取 git diff 选择必要层级（纯文档改动只需 T0）
+npm run test:auto
 
-# 2. 单独运行前端样式与 DOM 冒烟测试
-npm run test:ui
+# 正式发版：T1~T3 全套并行 + T0 门禁（发版不允许跳层）
+npm run build:admin && npm run test:full
 
-# 3. 运行全层级自动化测试矩阵（199 单元 + S1~S7/U1~U3 契约 + 76 项 E2E 浏览器真机）
-python3 tests/run_tests.py --layer=all
+# 前端符号 / DOM 冒烟可单独运行
+npm run check:symbols && npm run test:ui
 ```
+
+> 需要指定 Python 解释器（如项目 venv）时：`PYTHON=.venv/bin/python npm run test:full`。  
+> 完整层级/检查清单：`python3 tests/run_tests.py --list`（实现见 [tests/run_tests.py](tests/run_tests.py)）。
 
 > 📖 **查阅完整历史版本明细？**  
 > 请点击查阅全量发版档案：👉 **[CHANGELOG.md (完整历史更新记录)](CHANGELOG.md)**
