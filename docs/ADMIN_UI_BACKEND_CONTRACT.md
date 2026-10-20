@@ -109,6 +109,7 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 | **U1** | 真实浏览器渲染核验 | 真实 Chromium 打开控制台 | 对应 Key 行显示「最近响应耗时」徽章，无报错无白屏 |
 | **U2** | 「从中枢添加」能力位 | 真实浏览器：将 `up` 标记 `origin=vault` 后 `openKeyModal('up')`，读取 `#k_vault_section` 显隐 | VM：显示；EdgeOne：不显示（由 `HOST.capabilities.vaultClient` 控制） |
 | **U3** | 首页 Agent 卡片双端呈现 | 真实浏览器：`renderDashboard()` 后读取 `#agentStatsGrid` | VM 含「今日 Token 总量」；EdgeOne 含「可用 Key」；均无 `NaN`/`undefined` |
+| **U4** | 新增供应商下拉只表达来源 | 真实浏览器：`openProviderModal()` 后读取 `#p_preset` 的 options/optgroups | 首项为自定义（`""`）；不含官方预设 id；无「官方预设供应商」分组 |
 
 ---
 

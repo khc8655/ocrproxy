@@ -83,8 +83,8 @@ ocrprox (Monorepo)
   - **同步资产全量落库**：从 EdgeOne Vault Hub 增量拉取或同步时，中枢 Manifest 完整下发厂商的 `preset_id`、`preset_version`、`preset_updated_at`，VM 端在 `/api/admin/vault/sync` 中将其完整落库持久化保存在本地加密配置 `proxy_config.enc` 中；
   - **离线与断网可用性保障**：即使后续 EdgeOne 中枢离线或网络阻断，已同步的供应商与适配版本完全作为本地永久资产正常运行；
   - **本地磁盘优先直读 (0ms 零外网超时)**：VM 控制台在读取预设目录（`/presets/catalog`）与预设详情（`/presets/detail`）时，严格优先读取本地磁盘 `shared/presets/`，彻底消除探测 GitHub 造成的 2 秒卡顿或外网波动异常。
-- **预设下拉协议标准化与卡片版本徽章真理源 (Preset Protocol & Version Badge SSOT)**：
-  - **下拉选项纯净协议展示**：添加供应商下拉框彻底剥离规则版本号与日期，统一呈现为规范的 `厂商名称 (协议)` 格式（如 `MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`），分组收敛为 `官方预设供应商`；
+- **新增供应商来源分层与卡片版本徽章真理源 (Provider Source & Version Badge SSOT)**：
+  - **下拉只表达来源、不展示预设目录**：双端新增供应商下拉统一为「自定义供应商（手动填写）」+（VM）「EdgeOne 凭据中枢托管 (按需拉取)」两类来源；**官方预设不再作为下拉选项出现**，而是在输入与预设同 id/同名的供应商标识时自动带入 Base URL、协议、RPM 与规则说明（配置到本地后自动落地 `adapter_rules` 与 `preset_id/version/updated_at`）；协议文案统一为 `(openai)` / `(openai+message)`，严禁混入版本号与日期；
   - **列表卡片规则小标签全覆盖**：供应商卡片 Header 规范呈现 `[规则 v{version} · {updated_at}]`（例如 `规则 v1.4.0 · 2026-10-18`），通过三级回退算法（持久化属性 $\to$ 本地 16 套预设库精准索引 $\to$ 自定义规则/默认），彻底杜绝丢失或错误显示为「默认」。
 
 ### 2. 精准每 Key 速率限制与零开销保障 (Per-Key RPM Rate Limiter)
@@ -587,7 +587,7 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 
 ---
 
-## 📌 当前最新版本概览 (`v20261020-04`)
+## 📌 当前最新版本概览 (`v20261020-05`)
 
 - **Agent 首页今日统计（VM 端）**：今日 Token 总量（输入 / 输出 / 用量覆盖率）、平均首字延迟（TTFT）、失败请求（含 200 流内 error 帧）与切 Key 救回次数，按北京时间自然日累计，30s 节流落盘、重启不清零，Top 3 按今日调用量排行；
 - **EdgeOne 首页当前快照**：后端零改动、不写 KV，前端以各 Key 最近一次调用与冷却状态计算「可用 Key / 冷却或故障 Key / 最近平均耗时」三卡，双端共用同一份渲染；
@@ -595,9 +595,10 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 - **同步只更新规则**：「同步中枢规则」仅刷新 `origin=vault` 供应商的协议 / URL / 适配规则 / 模型 / RPM，不再拉取或复活 Key，也不再误改本地同名自建供应商；
 - **按需补拉中枢 Key**：「+ Key → 从中枢添加」（`HOST.capabilities.vaultClient` 控制）只新增不覆盖、保留既有模型绑定；
 - **移除墓碑与请求路径懒拉取**：删除即删除，旧数据在同步时自动补 `origin=vault` 标记；
+- **新增供应商 UI 收敛**：下拉只表达来源（EdgeOne：自定义；VM：自定义 + 中枢未导入项），官方预设不再作为选项重复出现；预设规则改为在输入供应商名称后自动匹配并随保存落地（preset_id/version/updated_at + adapter_rules）；
 - **严重缺陷修复**：「从中枢按需拉取供应商」此前被误判为「编辑已有供应商」，`/api/admin/vault/fetch-key` 不会被调用，只落成 0 Key 的本地空壳；现改为显式编辑态标记，KB / Agent 双模式均可正确拉取中枢规则与 Key，并新增真实浏览器回归测试；
 - **独立评审修复与稳健性收口**：中枢拉取/同步/补 Key/中枢配置写入统一自增 `_version` 并生成滚动备份（旧标签页保存返回 409，不再静默覆盖刚拉取的供应商）；旧数据未标记中枢 Key 保持只读；首页快照按 `provider:key` 聚合（同一 Key 多模型不重复计数）；`cooldown_until` 契约化并双端一致；错误帧按 SSE 事件解析、重置统计返回最新载荷；`/probe-models` 中枢明文 Key 仅发往中枢声明端点；
-- **全套自动化测试 100% 通过**：Layer 1 (199 单元 + Python 安全/统计)、Layer 2 S1~S7/U1~U3 双端契约、Layer 3 架构审计、Layer 4 全矩阵 Playwright E2E 76 项断言全部通过。
+- **全套自动化测试 100% 通过**：Layer 1 (199 单元 + Python 安全/统计)、Layer 2 S1~S7/U1~U4 双端契约、Layer 3 架构审计、Layer 4 全矩阵 Playwright E2E 76 项断言全部通过。
 
 ---
 
@@ -623,7 +624,7 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 | **T0 静态门禁** | `npm run check:release` | G1~G5：版本 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT 同步 / 零明文密钥 | ~0.2s | 否 |
 | **T1 逻辑层** | `npm run test:fast` | 199 ESM 单元、CoW 安全、Agent 统计口径、API/Vault 规约、SSOT 镜像、**静态 UI 契约**（id/内联 handler/host 标记/bundle 身份/CSS 不变式） | ~0.5s | 否 |
 | **T2a API 契约** | `npm run test:contract:api` | 真实服务 + Mock 上游，S1~S7 后端契约 | ~6.7s | 否 |
-| **T2b UI 契约** | `npm run test:contract` | S1~S7 + U1~U3（登录、host 能力位、首页卡片）+ Key 权限矩阵 | ~16s | 是 |
+| **T2b UI 契约** | `npm run test:contract` | S1~S7 + U1~U4（登录、host 能力位、首页卡片）+ Key 权限矩阵 | ~16s | 是 |
 | **T3 矩阵层** | `npm run test:matrix` | 窄屏 0 溢出（双端 × 3 视口 × 4 Tab）+ 全矩阵 Playwright E2E 76 项 | ~18s | 是 |
 | **发版全套** | `npm run test:full` | T1 + T2b + T3 并行 | **~20s** | 是 |
 

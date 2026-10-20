@@ -147,6 +147,38 @@ async def run_browser(mode, port):
             await page.wait_for_function(
                 "Array.from(document.querySelectorAll('#p_preset option'))"
                 ".some(o => o.value.startsWith('vault:hubonly'))", timeout=12000)
+
+            # dropdown is a SOURCE selector: custom + (VM) unimported hub providers.
+            # Official presets must not be rendered as options (they are rules templates that
+            # auto-apply after the provider is configured locally).
+            selector = await page.evaluate(
+                "(() => { const s = document.getElementById('p_preset');"
+                " return { opts: Array.from(s.options).map(o => o.value),"
+                "          groups: Array.from(s.querySelectorAll('optgroup')).map(g => g.label) }; })()")
+            preset_ids = {"agnes", "amd", "bai", "cline", "deepseek", "google", "minimax",
+                          "nvidia", "openai", "opencode", "openrouter", "sensenova",
+                          "siliconflow", "stepfun", "tokenrhythm", "vertex"}
+            leaked = sorted(set(selector["opts"]) & preset_ids)
+            bad_groups = [g for g in selector["groups"] if "官方预设" in g]
+            if leaked or bad_groups:
+                raise AssertionError(
+                    f"add-provider dropdown must not list official presets: leaked={leaked} groups={bad_groups}")
+            if selector["opts"][:1] != [""]:
+                raise AssertionError(f"first option must be the custom provider: {selector['opts'][:3]}")
+            if not any(o.startswith("vault:") for o in selector["opts"]):
+                raise AssertionError(f"unimported hub provider missing from dropdown: {selector['opts']}")
+
+            # typing a preset id fills URL/protocol/rules without showing presets in the dropdown
+            await page.fill("#p_name", "siliconflow")
+            await page.dispatch_event("#p_name", "input")
+            await page.wait_for_timeout(200)
+            autofill = await page.evaluate(
+                "(() => ({ url: document.getElementById('p_url').value,"
+                "          desc: document.getElementById('p_desc').innerText,"
+                "          chat: document.getElementById('p_proto_chat').checked }))()")
+            if "siliconflow" not in autofill["url"] or "已匹配本地预设规则" not in autofill["desc"]:
+                raise AssertionError(f"preset rules were not auto-applied by provider name: {autofill}")
+            await page.evaluate("document.getElementById('p_name').value=''")
             await page.evaluate(
                 "document.getElementById('p_preset').value='vault:hubonly';"
                 "onProviderPresetChange()")

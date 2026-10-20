@@ -64,6 +64,7 @@
     {"id": "S6", "title": "探测上游模型列表", "do": "POST /api/admin/probe-models provider=up", "expect": "ok true, models contains mock-chat-1"},
     {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""},
     {"id": "U2", "title": "浏览器里：「+ Key」弹窗的「从中枢添加」只在 VM 的中枢供应商上出现，EdgeOne 不出现", "do": "real browser: mark provider up origin=vault in state, openKeyModal('up'), read #k_vault_section display", "expect": "VM: block; EdgeOne: none (HOST.capabilities.vaultClient)"},
-    {"id": "U3", "title": "浏览器里：首页 Agent 卡片 VM 显示今日累计、EdgeOne 显示快照", "do": "real browser: renderDashboard(), read #agentStatsGrid", "expect": "VM contains 今日 Token 总量; EdgeOne contains 可用 Key; no NaN/undefined"}
+    {"id": "U3", "title": "浏览器里：首页 Agent 卡片 VM 显示今日累计、EdgeOne 显示快照", "do": "real browser: renderDashboard(), read #agentStatsGrid", "expect": "VM contains 今日 Token 总量; EdgeOne contains 可用 Key; no NaN/undefined"},
+    {"id": "U4", "title": "「新增供应商」下拉只表达来源（自定义 / 中枢按需拉取），不列官方预设", "do": "real browser: openProviderModal(), read #p_preset options + optgroups", "expect": "first option is custom (''); no official preset ids (agnes/amd/bai/cline/deepseek/google/minimax/nvidia/openai/opencode/openrouter/sensenova/siliconflow/stepfun/tokenrhythm/vertex); no optgroup labeled 官方预设供应商"}
   ]
 }

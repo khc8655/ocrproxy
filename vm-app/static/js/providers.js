@@ -441,16 +441,6 @@ async function loadPresetsCatalog() {
 
 function populateCatalogSelect(select) {
   const cur = select.value;
-  const catalog = (state.presetCatalog && state.presetCatalog.length > 0)
-    ? state.presetCatalog
-    : Object.keys(FALLBACK_PRESETS).map(k => ({
-        id: k,
-        name: FALLBACK_PRESETS[k].name,
-        protocols: FALLBACK_PRESETS[k].protocols,
-        features: FALLBACK_PRESETS[k].features,
-        anthropic_base_url: FALLBACK_PRESETS[k].anthropic_base_url
-      }));
-
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   let vaultGroupHtml = '';
   if (!isHostEdgeOne && typeof getVaultProviderList === 'function') {
@@ -473,15 +463,61 @@ function populateCatalogSelect(select) {
     }
   }
 
-  select.innerHTML = '<option value="">-- 自定义供应商 (手动填写) --</option>' +
-    '<optgroup label="官方预设供应商">' +
-    catalog.map(p => {
-      const protoLabel = getPresetProtocolLabel(p);
-      return `<option value="${p.id}">${p.name} (${protoLabel})</option>`;
-    }).join('') +
-    '</optgroup>' +
-    vaultGroupHtml;
+  // 新增供应商下拉只表达「来源」：自定义（本地）或从中枢按需拉取。
+  // 官方预设不是供应商来源、不再出现在 UI 中：它们是本地适配规则模板，
+  // 只在供应商配置到本地后按 id/名称自动匹配并随保存落地（见 applyPresetForProviderName）。
+  select.innerHTML = '<option value="">-- 自定义供应商 (手动填写) --</option>' + vaultGroupHtml;
   if (cur !== undefined && cur !== null) select.value = cur;
+}
+
+// 预设适配规则按「本地配置后的供应商名称」自动匹配：预设不进入下拉，
+// 但输入与官方预设同名/同 id 的供应商标识时，自动带入 URL、协议、RPM 与规则说明。
+function applyPresetForProviderName(){
+  if (state.providerEditName || state.currentSelectedVaultProvider) return;
+  const nameEl = document.getElementById('p_name');
+  const key = (nameEl?.value || '').trim().toLowerCase();
+  if (!key) { state.currentSelectedPreset = null; return; }
+  const preset = (state.cachedPresets && state.cachedPresets[key])
+    || FALLBACK_PRESETS[key]
+    || ((state.presetCatalog || []).find(p => p && (String(p.id || '').toLowerCase() === key
+         || String(p.name || '').toLowerCase() === key)));
+  state.currentSelectedPreset = preset || null;
+  if (!preset) return;
+
+  const urlInput = document.getElementById('p_url');
+  if (urlInput && !urlInput.value.trim() && preset.base_url) urlInput.value = preset.base_url;
+
+  const protos = Array.isArray(preset.protocols) && preset.protocols.length
+    ? preset.protocols
+    : (preset.features && preset.features.anthropic_messages ? ['chat', 'messages']
+      : (preset.protocol === 'messages' ? ['chat', 'messages'] : ['chat']));
+  const chatEl = document.getElementById('p_proto_chat');
+  const msgEl = document.getElementById('p_proto_messages');
+  const respEl = document.getElementById('p_proto_responses');
+  if (chatEl) chatEl.checked = protos.includes('chat') || protos.includes('openai');
+  if (msgEl) msgEl.checked = protos.includes('messages') || protos.includes('anthropic') || Boolean(preset.anthropic_messages);
+  if (respEl) respEl.checked = protos.includes('responses');
+
+  const anthropicUrl = preset.anthropic_base_url || '';
+  const toggle = document.getElementById('p_custom_url_toggle');
+  const section = document.getElementById('p_custom_url_section');
+  if (anthropicUrl && toggle && section) {
+    toggle.checked = true;
+    section.style.display = 'block';
+    document.getElementById('p_anthropic_url').value = anthropicUrl;
+  }
+  const rpmInput = document.getElementById('p_rpm');
+  const provRpm = preset.rpm_per_key || preset.rpm;
+  if (rpmInput && !rpmInput.value.trim() && provRpm) rpmInput.value = String(provRpm);
+
+  const descEl = document.getElementById('p_desc');
+  if (descEl) {
+    descEl.style.display = 'block';
+    descEl.style.background = 'var(--bg-subtle)';
+    descEl.style.color = 'var(--text-secondary)';
+    const ver = preset.version ? `（内置规则 v${esc(preset.version)}${preset.updated_at ? ' · ' + esc(preset.updated_at) : ''}）` : '';
+    descEl.innerHTML = `${icon('zap')} <strong>已匹配本地预设规则${ver}</strong>：${esc(preset.description || '保存后自动套用该厂商的适配规则。')}`;
+  }
 }
 
 // Vertex AI dynamic Base URL computation (Key Level)
@@ -571,69 +607,11 @@ async function onProviderPresetChange(){
     return;
   }
 
+  // 下拉只剩两种来源：自定义（本地）与从中枢按需拉取；官方预设不再作为选项，
+  // 适配规则由用户在「供应商标识」中输入名称后自动匹配（见 applyPresetForProviderName）。
   state.currentSelectedVaultProvider = null;
+  state.currentSelectedPreset = null;
   nameInput.disabled = false;
-
-  // Fetch preset detail (Prioritize local cache & built-in presets)
-  let preset = state.cachedPresets[presetId] || FALLBACK_PRESETS[presetId];
-  if (!preset) {
-    try {
-      const res = await fetch(`/api/admin/presets/detail?id=${encodeURIComponent(presetId)}`, { headers: headers() });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.ok && data.preset) {
-          preset = data.preset;
-          state.cachedPresets[presetId] = preset;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch preset detail:', e);
-    }
-  }
-  if (!preset && FALLBACK_PRESETS[presetId]) {
-    preset = FALLBACK_PRESETS[presetId];
-  }
-
-  if (!preset) {
-    toast(`未能获取模板「${presetId}」规则`, 'err');
-    return;
-  }
-
-  state.currentSelectedPreset = preset;
-  nameInput.value = preset.id;
-  urlInput.value = preset.base_url;
-  
-  const dateBadge = preset.updated_at
-    ? `<span class="brand-badge badge-neutral" style="font-size:11px;margin-right:6px;">更新日期: ${esc(preset.updated_at)}</span>`
-    : '';
-  const verBadge = `<span class="brand-badge" style="font-size:11px;margin-right:6px;">v${esc(preset.version || '1.1.0')}</span>`;
-  const noteBox = preset.update_notes
-    ? `<div style="margin-top:6px;font-size:12px;color:var(--text);background:var(--bg-card);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);"><strong>适配说明：</strong>${esc(preset.update_notes)}</div>`
-    : '';
-  descEl.innerHTML = `<div style="line-height:1.6;">${verBadge}${dateBadge}<strong>${esc(preset.name)}</strong>: ${esc(preset.description || '')}</div>${noteBox}`;
-  descEl.style.display = 'block';
-
-  // Preset protocols sync
-  const presetProtos = preset.protocols || (preset.anthropic_base_url ? ['chat', 'messages'] : ['chat']);
-  document.getElementById('p_proto_chat').checked = presetProtos.includes('chat');
-  document.getElementById('p_proto_messages').checked = presetProtos.includes('messages');
-  document.getElementById('p_proto_responses').checked = presetProtos.includes('responses');
-
-  // Custom Anthropic URL
-  if(preset.anthropic_base_url && preset.anthropic_base_url !== preset.base_url){
-    document.getElementById('p_custom_url_toggle').checked = true;
-    document.getElementById('p_custom_url_section').style.display = 'block';
-    document.getElementById('p_anthropic_url').value = preset.anthropic_base_url;
-  } else {
-    document.getElementById('p_custom_url_toggle').checked = false;
-    document.getElementById('p_custom_url_section').style.display = 'none';
-    document.getElementById('p_anthropic_url').value = '';
-  }
-
-  const rpmInput = document.getElementById('p_rpm');
-  if(rpmInput){
-    rpmInput.value = preset.rpm_per_key ? String(preset.rpm_per_key) : '';
-  }
 }
 
 // Key & Provider Actions

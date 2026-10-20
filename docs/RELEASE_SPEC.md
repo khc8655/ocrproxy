@@ -59,8 +59,8 @@
 | :--- | :--- | :--- | :---: | :---: |
 | **T0 静态门禁** | G1~G5：版本 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT / 零明文密钥 | `npm run check:release` | ~0.2s | 否 |
 | **T1 逻辑层** | 199 ESM 单元、CoW 安全、Agent 统计、API/Vault 规约、SSOT 镜像、**静态 UI 契约** | `npm run test:fast` | ~0.5s | 否 |
-| **T2a API 契约** | 真服务 + Mock 上游，S1~S7（U1~U3 SKIP） | `npm run test:contract:api` | ~6.7s | 否 |
-| **T2b UI 契约** | S1~S7 + U1~U3（真 Chromium：登录、能力位、首页卡片）+ Key 权限矩阵 | `npm run test:contract` | ~16s | 是 |
+| **T2a API 契约** | 真服务 + Mock 上游，S1~S7（U1~U4 SKIP） | `npm run test:contract:api` | ~6.7s | 否 |
+| **T2b UI 契约** | S1~S7 + U1~U4（真 Chromium：登录、能力位、首页卡片）+ Key 权限矩阵 | `npm run test:contract` | ~16s | 是 |
 | **T3a 布局矩阵** | VM + EdgeOne × 1280/768/390 视口 × 4 Tab 零横向溢出 | `npm run test:matrix` 的一部分 | ~12s | 是 |
 | **T3b E2E** | 全矩阵 Playwright E2E 76 项（登录、设置保存、模型/Key、KB 模式） | `npm run test:matrix` 的一部分 | ~16s | 是 |
 | **全套** | T1 + T2b + T3（并行） | `npm run test:full` | **~20s** | 是 |

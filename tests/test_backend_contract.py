@@ -279,6 +279,21 @@ async def run_ui(b: Backend):
             else:
                 ok3 = ("可用 Key" in info3["text"] and "冷却中" in info3["text"]
                        and info3["unique"] > 0 and info3["shownTotal"] == info3["unique"] and clean3)
+            # U4: 「新增供应商」下拉只表达来源（自定义 / 中枢按需拉取），不得再列出官方预设
+            sel = await page.evaluate(
+                "(() => { if (typeof openProviderModal === 'function') openProviderModal();"
+                " const s = document.getElementById('p_preset');"
+                " const r = { opts: Array.from(s.options).map(o => o.value),"
+                "             groups: Array.from(s.querySelectorAll('optgroup')).map(g => g.label) };"
+                " if (typeof closeModal === 'function') closeModal('providerModal'); return r; })()")
+            preset_ids = {"agnes", "amd", "bai", "cline", "deepseek", "google", "minimax",
+                          "nvidia", "openai", "opencode", "openrouter", "sensenova",
+                          "siliconflow", "stepfun", "tokenrhythm", "vertex"}
+            leaked = sorted(set(sel["opts"]) & preset_ids)
+            bad_groups = [g for g in sel["groups"] if "官方预设" in g]
+            ok4 = (sel["opts"][:1] == [""] and not leaked and not bad_groups)
+            b.record("U4", ok4, f"leaked={leaked} groups={bad_groups} opts={sel['opts'][:6]}")
+
             b.record("U3", ok3,
                      f"kind={b.kind} unique={info3['unique']} shownTotal={info3['shownTotal']} "
                      f"summaryRequests={info3['summaryRequests']} text={info3['text'][:160]!r}")
