@@ -615,29 +615,34 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 
 ## 🧪 验证与自动化测试指南 (Testing & Quality Assurance)
 
-测试按成本分层，**日常迭代只跑便宜层，正式发版才跑满（且并行执行）**：
+测试按成本分层。**浏览器不再是"改界面就跑"的默认项**：UI 已收敛为单一真理源（`shared/admin/` 编译到 VM + EdgeOne），两端割裂由静态契约门禁兜底；真实浏览器只为「布局/视口」与「运行时 DOM 行为」保留。
 
-| 层级 | 命令 | 覆盖内容 | 耗时 |
-| :--- | :--- | :--- | :---: |
-| **T0 静态门禁** | `npm run check:release` | G1~G5：版本号 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT 同步 / 零明文密钥 | ~0.2s |
-| **T1 逻辑层** | `npm run test:fast` | 199 ESM 单元、CoW 安全、Agent 统计口径、API/Vault 规约、SSOT 镜像（无浏览器） | ~0.5s |
-| **T2 契约层** | `npm run test:contract` | 真实 VM + EdgeOne + Chromium：S1~S7 / U1~U3 双端契约、中枢/本地 Key 权限矩阵 | ~16s |
-| **T3 矩阵层** | `npm run test:matrix` | 窄屏 0 溢出（双端 × 3 视口 × 4 Tab）、全矩阵 Playwright E2E 76 项 | ~18s |
-| **发版全套** | `npm run test:full` | T1+T2+T3 并行执行 | **~20s** |
+| 层级 | 命令 | 覆盖内容 | 耗时 | 浏览器 |
+| :--- | :--- | :--- | :---: | :---: |
+| **T0 静态门禁** | `npm run check:release` | G1~G5：版本 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT 同步 / 零明文密钥 | ~0.2s | 否 |
+| **T1 逻辑层** | `npm run test:fast` | 199 ESM 单元、CoW 安全、Agent 统计口径、API/Vault 规约、SSOT 镜像、**静态 UI 契约**（id/内联 handler/host 标记/bundle 身份/CSS 不变式） | ~0.5s | 否 |
+| **T2a API 契约** | `npm run test:contract:api` | 真实服务 + Mock 上游，S1~S7 后端契约 | ~6.7s | 否 |
+| **T2b UI 契约** | `npm run test:contract` | S1~S7 + U1~U3（登录、host 能力位、首页卡片）+ Key 权限矩阵 | ~16s | 是 |
+| **T3 矩阵层** | `npm run test:matrix` | 窄屏 0 溢出（双端 × 3 视口 × 4 Tab）+ 全矩阵 Playwright E2E 76 项 | ~18s | 是 |
+| **发版全套** | `npm run test:full` | T1 + T2b + T3 并行 | **~20s** | 是 |
 
 ```bash
-# 日常迭代：自动读取 git diff 选择必要层级（纯文档改动只需 T0）
+# 发版/日常默认：读取 git diff 自动选层（纯文档/纯文案/后端/元数据改动不启动浏览器）
 npm run test:auto
 
-# 正式发版：T1~T3 全套并行 + T0 门禁（发版不允许跳层）
+# 仅后端/契约改动（无浏览器） / 仅布局改动
+npm run test:contract:api
+npm run test:matrix
+
+# 大范围 UI/交互发版或保守场景：全套并行
 npm run build:admin && npm run test:full
 
-# 前端符号 / DOM 冒烟可单独运行
+# 前端符号 / DOM 冒烟（无浏览器）
 npm run check:symbols && npm run test:ui
 ```
 
-> 需要指定 Python 解释器（如项目 venv）时：`PYTHON=.venv/bin/python npm run test:full`。  
-> 完整层级/检查清单：`python3 tests/run_tests.py --list`（实现见 [tests/run_tests.py](tests/run_tests.py)）。
+> 需要指定 Python 解释器（如项目 venv）时：`PYTHON=.venv/bin/python npm run test:auto`。  
+> 完整层级/检查清单：`python3 tests/run_tests.py --list`（实现见 [tests/run_tests.py](tests/run_tests.py)）；浏览器使用边界见 [docs/RELEASE_SPEC.md](docs/RELEASE_SPEC.md)。
 
 > 📖 **查阅完整历史版本明细？**  
 > 请点击查阅全量发版档案：👉 **[CHANGELOG.md (完整历史更新记录)](CHANGELOG.md)**

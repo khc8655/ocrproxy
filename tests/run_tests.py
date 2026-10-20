@@ -33,6 +33,7 @@ origin/main, falling back to main / HEAD~1).
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -74,14 +75,25 @@ CHECKS = {
         "desc": "SSOT static mirror (shared/admin == vm-app/static)",
         "cmd": [PYTHON_EXE, "tests/test_vm_static_sync.py"],
     },
+    "admin_static": {
+        "tier": "T1",
+        "desc": "Admin UI static DOM/JS contract (ids, handlers, host tokens, bundle)",
+        "cmd": [PYTHON_EXE, "tests/test_admin_ui_static_contract.py"],
+    },
     "key_capsules": {
         "tier": "T2",
         "desc": "Hub vs Local key capsule permission matrix (Chromium)",
         "cmd": ["node", "tests/test_key_capsules.cjs"],
     },
-    "contract": {
+    "contract_api": {
         "tier": "T2",
-        "desc": "Shared UI Backend Contract (VM vs EdgeOne, S1~S7 / U1~U3)",
+        "desc": "Backend contract, API-only (S1~S7, no browser)",
+        "cmd": [PYTHON_EXE, "tests/test_backend_contract.py"],
+        "env": {"CONTRACT_NO_BROWSER": "1"},
+    },
+    "contract_ui": {
+        "tier": "T2",
+        "desc": "Backend contract incl. browser U1~U3 (VM vs EdgeOne)",
         "cmd": [PYTHON_EXE, "tests/test_backend_contract.py"],
     },
     "overflow": {
@@ -100,14 +112,15 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "api_layer", "static_sync"],
-    "api": ["api_layer", "contract"],
-    "contract": ["contract", "key_capsules"],
+    "logic": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static"],
+    "api": ["api_layer", "contract_ui"],
+    "contract_api": ["contract_api"],
+    "contract": ["contract_ui", "key_capsules"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "api_layer", "static_sync",
-            "key_capsules", "contract", "overflow", "e2e"],
+    "all": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static",
+            "key_capsules", "contract_ui", "overflow", "e2e"],
 }
 
 TIER_TITLES = {
@@ -126,15 +139,16 @@ def _run_one(check_id, capture=False):
     print(f"{COLOR_BOLD}▶ [{check_id}] {spec['desc']}{COLOR_RESET}")
     print(f"  Command: {' '.join(spec['cmd'])}")
     t0 = time.time()
+    env = {**os.environ, **(spec.get("env") or {})}
     if capture:
         out = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
-        res = subprocess.run(spec["cmd"], cwd=REPO_ROOT, stdout=out, stderr=subprocess.STDOUT)
+        res = subprocess.run(spec["cmd"], cwd=REPO_ROOT, env=env, stdout=out, stderr=subprocess.STDOUT)
         elapsed = time.time() - t0
         out.seek(0)
         text = out.read()
         out.close()
         return check_id, res.returncode == 0, elapsed, text
-    res = subprocess.run(spec["cmd"], cwd=REPO_ROOT)
+    res = subprocess.run(spec["cmd"], cwd=REPO_ROOT, env=env)
     elapsed = time.time() - t0
     return check_id, res.returncode == 0, elapsed, ""
 
@@ -161,7 +175,8 @@ def _run_parallel(ids):
         log = tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8", errors="replace",
                                           prefix=f"ocrprox-{cid}-", suffix=".log", delete=False)
         t0 = time.time()
-        p = subprocess.Popen(spec["cmd"], cwd=REPO_ROOT, stdout=log, stderr=subprocess.STDOUT)
+        env = {**os.environ, **(spec.get("env") or {})}
+        p = subprocess.Popen(spec["cmd"], cwd=REPO_ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         procs.append((cid, p, log, t0))
         print(f"  started [{cid}] {spec['desc']}")
 
@@ -223,63 +238,179 @@ def _pick_base(explicit):
     return "HEAD"
 
 
-# Path -> tiers that must run. First matching rule wins.
-_AUTO_RULES = [
-    # docs only: no code path can change behaviour, T0 static gate is enough
-    (("README.md", "CHANGELOG.md", "docs/", "LOCAL_", "ARCHITECTURE_STANDARDS"), "docs"),
-    # release metadata / installers / edge config: run the release set
-    (("version.json", "vm-app/version.json", "install.sh", "vm-app/install.sh",
-      "edgeone.json", "package.json", "agent-edgeone/package.json"), "all"),
-    # UI single source or generated console: full browser matrix
-    (("shared/admin/", "vm-app/static/", "agent-edgeone/admin.html",
-      "agent-edgeone/edge-functions/admin.js", "edge-functions/admin.js",
-      "agent-edgeone/scripts/build-admin.mjs", "agent-edgeone/scripts/test-ui-smoke.mjs"),
-     "all"),
-    # presets: units cover the catalog/adapters
-    (("shared/presets/", "agent-edgeone/edge-functions/lib/presets/", "edge-functions/lib/presets/"),
-     "logic"),
-    # backend / protocol / contract changes: logic + cross-backend contract
-    (("vm-app/app/", "vm-app/run_server.py", "shared/contracts/",
-      "agent-edgeone/edge-functions/api/", "edge-functions/api/", "agent-edgeone/lib/"),
-     "logic+contract"),
-    # tests / dev scripts: logic tier is enough
-    (("tests/", "agent-edgeone/scripts/", "shared/docs/"), "logic"),
-]
+# ── change-scope -> tiers ────────────────────────────────────────────────────
+# The single-source compiler (shared/admin -> vm-app/static + EdgeOne bundle) removed
+# the historical UI fragmentation, so a browser is only needed when the change can
+# actually change *layout* or *runtime DOM behaviour*:
+#
+#   logic           T1 static: preselected for every non-doc change (includes the
+#                   static admin DOM/JS contract: ids, handlers, host tokens, bundle)
+#   contract_api    T2a: backend/protocol contract without a browser (S1~S7)
+#   contract_ui     T2b: contract incl. real browser U1~U3 (login, host caps, dashboard)
+#   overflow        T3a: layout/viewport matrix (CSS or structural HTML)
+#   e2e             T3b: full click-through flows (login/settings/models/KB)
+#
+# Copy/formatting-only HTML edits do not launch a browser: the static contract + DOM
+# smoke covers them. Any unknown file falls back to the full browser set.
 
-_TIER_SETS = {
-    "docs": [],
-    "logic": ["logic"],
-    "logic+contract": ["logic", "contract"],
-    "all": ["all"],
+LOGIC = "logic"
+CONTRACT_API = "contract_api"
+CONTRACT_UI = "contract_ui"
+OVERFLOW = "overflow"
+E2E = "e2e"
+ALL = "all"
+
+_RELEASE_META = ("version.json", "vm-app/version.json", "install.sh", "vm-app/install.sh",
+                 "edgeone.json", "package.json", "agent-edgeone/package.json")
+_BACKEND = ("vm-app/app/", "vm-app/run_server.py", "shared/contracts/",
+            "agent-edgeone/edge-functions/api/", "edge-functions/api/", "agent-edgeone/lib/")
+_PRESETS = ("shared/presets/", "agent-edgeone/edge-functions/lib/presets/",
+            "edge-functions/lib/presets/")
+# UI JS modules -> tiers. Rendered markup/DOM behaviour needs the browser U checks;
+# settings/model flows are only exercised end-to-end by T3b.
+_UI_JS_TIERS = {
+    "shared/admin/js/host.js": [CONTRACT_UI],
+    "shared/admin/js/app.js": [CONTRACT_UI, E2E],
+    "shared/admin/js/core.js": [CONTRACT_UI],
+    "shared/admin/js/providers.js": [CONTRACT_UI, "key_capsules"],
+    "shared/admin/js/vault.js": [CONTRACT_UI, "key_capsules"],
+    "shared/admin/js/agent-models-ui.js": [CONTRACT_UI, "key_capsules"],
+    "shared/admin/js/settings.js": [E2E],
+    "shared/admin/js/settings-form.js": [E2E],
+    "shared/admin/js/models.js": [E2E],
 }
+_CONSOLE_HTML = ("shared/admin/admin.html", "vm-app/static/admin.html",
+                 "agent-edgeone/admin.html", "edge-functions/admin.js",
+                 "agent-edgeone/edge-functions/admin.js")
+
+# Structure signature: tags and identity attributes (values included). Text nodes are
+# deliberately NOT part of it, so a copy-only edit is not mistaken for a structural one.
+_STRUCT_TOKENS = re.compile(
+    r"<\/?[a-zA-Z][\w-]*"
+    r"|(?:id|class|style|href|src|data-[\w-]+|on\w+|hidden)\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)")
+_DOM_API = re.compile(
+    r"\b(?:getElementById|querySelector(?:All)?|innerHTML|outerHTML|classList|dataset|"
+    r"addEventListener|insertAdjacentHTML|hidden\s*=|style\.[a-zA-Z]+)\b")
 
 
-def _classify(files):
-    """Map changed paths to the tier presets they require (pure, unit-testable)."""
+def _git(*args):
+    try:
+        out = subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True,
+                             text=True, timeout=30)
+        return out.stdout if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _git_changed_files(base):
+    """Files that differ from base, including uncommitted and untracked work."""
+    files = set()
+    for line in _git("diff", "--name-only", base).splitlines():
+        if line.strip():
+            files.add(line.strip())
+    for line in _git("status", "--porcelain").splitlines():
+        if line.startswith("?? ") and len(line) > 3:
+            files.add(line[3:].strip())
+        elif len(line) > 3:
+            files.add(line[3:].strip())
+    return sorted(f for f in files if f)
+
+
+def _file_diff_text(base, path):
+    if path in {f for f in _git("status", "--porcelain") if f.startswith("?? ")}:
+        try:
+            return (REPO_ROOT / path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+    return _git("diff", "-U0", base, "--", path)
+
+
+def _diff_is_structural(text):
+    """True when a diff changes tags/attributes/DOM wiring rather than just copy text.
+
+    Both sides are reduced to a structure signature (tags + identity attributes with
+    values, e.g. id/class/data-*/on*/href). A pure copy edit keeps the same signature
+    on the `+` and `-` side, so it does not need a browser. DOM API changes are always
+    structural.
+    """
+    if not text.strip():
+        return True  # unreadable/new file: be conservative
+    plus, minus = [], []
+    for line in text.splitlines():
+        if line.startswith(("+++", "---")) or not line:
+            continue
+        if line[0] not in ("+", "-"):
+            continue
+        body = line[1:]
+        if _DOM_API.search(body):
+            return True
+        tokens = _STRUCT_TOKENS.findall(body)
+        (plus if line[0] == "+" else minus).extend(tokens)
+    return sorted(plus) != sorted(minus)
+
+
+def _classify(files, base=None):
+    """Map changed files to the tiers they can actually break (pure, testable).
+
+    Returns (wanted_tiers, unknown_files).
+    """
     wanted, unknown = set(), []
+    fileset = set(files)
     for f in files:
         if f.endswith(".md") or f in ("README.md", "CHANGELOG.md"):
-            wanted.update(_TIER_SETS["docs"])
+            continue  # docs-only: T0 static gate is enough
+        if f in _RELEASE_META or f.startswith("agent-edgeone/scripts/") or f.startswith("tests/") \
+                or f.startswith("shared/docs/"):
+            wanted.add(LOGIC)
             continue
-        for prefixes, kind in _AUTO_RULES:
-            if any(f == p or f.startswith(p) for p in prefixes):
-                wanted.update(_TIER_SETS[kind])
-                break
-        else:
-            unknown.append(f)
+        if f.startswith(_PRESETS):
+            wanted.add(LOGIC)
+            continue
+        if f.startswith(_BACKEND):
+            wanted.update({LOGIC, CONTRACT_API})
+            continue
+        if f.endswith("admin.css") and (f.startswith("shared/admin/") or f.startswith("vm-app/static/")):
+            wanted.update({LOGIC, OVERFLOW})  # layout always needs the viewport matrix
+            continue
+        if f == "shared/admin/admin.html":
+            # The single source console. Text/copy-only edits are covered by the static
+            # DOM contract + build smoke; only structural edits need a real browser.
+            text = _file_diff_text(base, f) if base else ""
+            if _diff_is_structural(text):
+                wanted.update({LOGIC, CONTRACT_UI, OVERFLOW})
+            else:
+                wanted.add(LOGIC)
+            continue
+        if f in _CONSOLE_HTML:
+            # Generated consoles/bundles: the shared source decides the tier; a
+            # standalone artifact diff is covered by static_sync / admin_static / G2.
+            wanted.add(LOGIC)
+            continue
+        if f in _UI_JS_TIERS:
+            wanted.add(LOGIC)
+            wanted.update(_UI_JS_TIERS[f])
+            continue
+        if f.startswith(("vm-app/static/", "edge-functions/", "agent-edgeone/edge-functions/")) \
+                or f in ("agent-edgeone/admin.css", "agent-edgeone/admin.bundled.html"):
+            # generated artifacts: covered by the source rule when the source changed
+            wanted.add(LOGIC)
+            continue
+        unknown.append(f)
     return wanted, unknown
 
 
 def _checks_for_tiers(wanted):
-    if "all" in wanted:
+    if ALL in wanted:
         return list(LAYERS["all"])
     checks, seen = [], set()
-    for layer in ("logic", "contract"):
-        if layer in wanted:
-            for cid in LAYERS[layer]:
-                if cid not in seen:
-                    seen.add(cid)
-                    checks.append(cid)
+    order = [LOGIC, CONTRACT_API, CONTRACT_UI, "key_capsules", OVERFLOW, E2E]
+    for tier in order:
+        if tier not in wanted:
+            continue
+        for cid in LAYERS.get(tier, [tier]):
+            if cid not in seen:
+                seen.add(cid)
+                checks.append(cid)
     return checks
 
 
@@ -289,11 +420,11 @@ def _auto_layers(base):
         print(f"{COLOR_YELLOW}No changes detected against {base}: nothing to run "
               f"(T0 static gate only).{COLOR_RESET}")
         return [], files
-    wanted, unknown = _classify(files)
+    wanted, unknown = _classify(files, base)
     if unknown:
         print(f"{COLOR_YELLOW}Unclassified change(s) -> falling back to release set: "
               f"{', '.join(unknown[:6])}{COLOR_RESET}")
-        wanted.update(_TIER_SETS["all"])
+        wanted.add(ALL)
     checks = _checks_for_tiers(wanted)
     print(f"{COLOR_BOLD}Changed files ({len(files)}) -> tiers: "
           f"{', '.join(sorted(wanted)) or 'none (docs-only)'}{COLOR_RESET}")
@@ -355,7 +486,7 @@ def main():
         _list()
         return 0
 
-    print(f"{COLOR_BOLD}=== OCRProxy tiered test runner ==={COLOR_RESET}")
+    print(f"{COLOR_BOLD}=== OCRProxy tiered test runner ==={COLOR_RESET}", flush=True)
     if args.layer == "auto":
         base = _pick_base(args.base)
         checks, changed = _auto_layers(base)
@@ -363,7 +494,7 @@ def main():
             print(f"{COLOR_GREEN}✓ Docs-only/no-op change: static gate (npm run check:release) "
                   f"is enough. Nothing else to run.{COLOR_RESET}")
             return 0
-        print(f"Auto-selected {len(checks)} check(s): {', '.join(checks)}")
+        print(f"Auto-selected {len(checks)} check(s): {', '.join(checks)}", flush=True)
     else:
         checks = _resolve([args.layer])
 
@@ -372,7 +503,7 @@ def main():
         return 0
 
     print(f"Mode: {'parallel' if args.parallel else 'sequential'} | "
-          f"{len(checks)} check(s): {', '.join(checks)}")
+          f"{len(checks)} check(s): {', '.join(checks)}", flush=True)
 
     total_t0 = time.time()
     if args.parallel and len(checks) > 1:

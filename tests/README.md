@@ -8,18 +8,21 @@
 
 ## 〇、 分层执行与发版门禁 (Tiered Runner)
 
-`tests/run_tests.py` 按成本把检查拆成 4 层，日常迭代不必每次都跑浏览器矩阵：
+`tests/run_tests.py` 按成本与"是否需要真实浏览器"分层：
 
-| 层级 | 命令 | 说明 | 耗时 |
-| :--- | :--- | :--- | :---: |
-| T0 | `npm run check:release` | 静态发版门禁 G1~G5 | ~0.2s |
-| T1 | `npm run test:fast` | 纯逻辑/API/安全（无浏览器） | ~0.5s |
-| T2 | `npm run test:contract` | 双端后端契约 + 权限矩阵（Chromium） | ~16s |
-| T3 | `npm run test:matrix` | 窄屏 0 溢出 + 全矩阵 E2E | ~18s |
-| 全套 | `npm run test:full` | T1+T2+T3 并行 | ~20s |
+| 层级 | 命令 | 说明 | 耗时 | 浏览器 |
+| :--- | :--- | :--- | :---: | :---: |
+| T0 | `npm run check:release` | 静态发版门禁 G1~G5 | ~0.2s | 否 |
+| T1 | `npm run test:fast` | 单元/安全/API/统计 + **静态 UI 契约**（id、内联 handler、host 标记、SSOT、bundle、CSS 不变式） | ~0.5s | 否 |
+| T2a | `npm run test:contract:api` | 后端契约 S1~S7（无浏览器） | ~6.7s | 否 |
+| T2b | `npm run test:contract` | 契约 S1~S7 + U1~U3 + Key 权限矩阵 | ~16s | 是 |
+| T3 | `npm run test:matrix` | 窄屏 0 溢出 + 全矩阵 E2E | ~18s | 是 |
+| 全套 | `npm run test:full` | T1+T2b+T3 并行 | ~20s | 是 |
 
-- `npm run test:auto`：按 `git diff`（工作区 + `origin/main...HEAD`）自动选层；纯文档改动只要求 T0。
-- 正式发版必须跑 `npm run test:full`，不允许跳层；`--parallel` 下各检查使用独立空闲端口与临时 `CONFIG_DIR`，互不干扰。
+为什么不再"改界面就跑浏览器"：UI 已是单一真理源（`shared/admin/` 编译到 VM + EdgeOne），两端割裂由 T1 静态契约兜底；浏览器只为**布局/视口**（CSS、HTML 结构改动 → overflow）和**运行时 DOM 行为**（登录、能力位、渲染/点击流 → contract UI / E2E）保留。纯文案 HTML、预设、测试、发版元数据、后端改动都不会启动浏览器。
+
+- `npm run test:auto`：按 `git diff`（工作区 + `origin/main`）自动选层；`admin.html` 用结构签名区分"纯文案"与"结构改动"。
+- 正式发版跑 `npm run test:auto`（自动含受影响层级）；大范围 UI/交互发版建议补 `npm run test:full`。`--parallel` 下各检查使用独立空闲端口与临时 `CONFIG_DIR`，互不干扰。
 - 查看全部检查与预设：`python3 tests/run_tests.py --list`。
 
 ---

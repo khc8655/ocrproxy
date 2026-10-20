@@ -10,6 +10,7 @@
     "build:presets": "cd agent-edgeone && node scripts/build-presets.mjs",
     "build:admin": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs && cp -R edge-functions/* ../edge-functions/ && cd .. && python3 tests/verify_release_gate.py",
     "test:fast": "${PYTHON:-python3} tests/run_tests.py --layer=logic",
+    "test:contract:api": "${PYTHON:-python3} tests/run_tests.py --layer=contract_api",
     "test:contract": "${PYTHON:-python3} tests/run_tests.py --layer=contract",
     "test:matrix": "${PYTHON:-python3} tests/run_tests.py --layer=matrix",
     "test:full": "${PYTHON:-python3} tests/run_tests.py --layer=all --parallel",

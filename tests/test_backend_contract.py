@@ -296,7 +296,13 @@ async def run_ui(b: Backend):
 async def drive(b: Backend, mock_url):
     async with httpx.AsyncClient(timeout=30, trust_env=False) as c:
         host = await run_api_scenarios(b, mock_url, c)
-        await run_ui(b)
+        # CONTRACT_NO_BROWSER=1: API-only contract (S1~S7). Backend/protocol changes do
+        # not need a real browser; U1~U3 (DOM/lifecycle) are covered by the UI tier.
+        if os.environ.get("CONTRACT_NO_BROWSER") == "1":
+            for sid in ("U1", "U2", "U3"):
+                b.results[sid] = ("SKIP", "CONTRACT_NO_BROWSER=1")
+        else:
+            await run_ui(b)
         await run_api_scenarios_after_ui(b, mock_url, c, host)
 
 
