@@ -235,10 +235,11 @@ class TestPlaywrightBrowserUIBehavior(unittest.TestCase):
             reset_logs_btn = page.locator("button:has-text('清空错误日志')").count()
             self.assertEqual(reset_logs_btn, 1, "Expected 清空错误日志 button in Dashboard logs header")
 
-            # 6. Assert providers tab has btnSyncVault with label 从凭据中枢同步
-            sync_btn = page.locator("#btnSyncVault")
-            self.assertTrue(sync_btn.is_visible() or sync_btn.count() > 0)
-            self.assertIn("从凭据中枢同步", sync_btn.inner_text())
+            # 6. Providers panel: the ambiguous「从凭据中枢同步」button is gone (rules come from
+            #    adapter scripts; hub sync only remains in Settings / API). The add button stays.
+            self.assertEqual(page.locator("#btnSyncVault").count(), 0,
+                             "ambiguous hub-sync button must not appear on the providers panel")
+            self.assertGreaterEqual(page.locator("#panel-providers button:has-text('新增供应商')").count(), 1)
 
             browser.close()
 

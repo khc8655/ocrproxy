@@ -4,6 +4,25 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-06] - 2026-10-21
+
+### 新增供应商信息区精简、协议按适配脚本预选、移除多余的中枢同步按钮
+- **中枢托管来源信息区只保留两条判断**（`#p_desc`）：
+  - `中枢 N 个 Key`（来自中枢 manifest 的 Key 数量）；
+  - `适配脚本 v{version} · {updated_at}`，无适配脚本时明确显示 `无适配脚本`；
+  - 原「一次性整体拉取 / 重新拉取需先删除 / 中枢 Key 只读可删」长段落收敛到 Tooltip，不再占用正文。
+- **协议默认值按本地适配脚本预选**（`#p_proto_hint`）：
+  - 选中中枢供应商或输入命中的「供应商标识」时，按本地适配脚本声明自动勾选 OpenAI Chat / Anthropic Messages / OpenAI Responses；
+  - 协议区提示 `已按适配脚本预选：…（可手动调整）`；无适配脚本时回退中枢 manifest 的 `protocols`；
+  - 修正「只勾 Chat 却填了 Messages 独立端点」的不一致：仅在选中 Messages 且存在 `anthropic_base_url` 时才展开独立端点。
+- **移除「供应商」页「从凭据中枢同步」按钮**：Key 并不能通过它同步，规则又与本地适配脚本重复，语义不清；
+  - 规则升级统一走供应商卡片「升级至 vX」；
+  - 系统设置「增量同步中枢规则」与 `POST /api/admin/vault/sync` 保留为 API / 兜底入口。
+- **确认过滤行为**：已从中枢拉取过的供应商不会再出现在「新增供应商 → 中枢按需拉取」列表（按 provider id 大小写不敏感过滤），避免重复拉取与 409。
+- **测试与文档**：`test_vm_vault_provider_ui` 新增信息区仅两条/协议按适配脚本预选/无脚本回退的断言；`test_behavioral_real_suite` 改为断言同步按钮已移除；静态 UI 契约更新所需 id；SYSTEM_DESIGN_SPEC §3.4/§3.5.1 与 README 同步；四层全量测试与 G1~G5 门禁全绿。
+
+---
+
 ## [v20261020-05] - 2026-10-20
 
 ### 新增供应商 UI 收敛为「来源选择」，预设规则改为本地自动匹配

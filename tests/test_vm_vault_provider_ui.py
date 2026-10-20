@@ -43,6 +43,14 @@ HUB_PROVIDER = {
     "base_url": "https://hub-only.example/v1",
     "keys": {"hk1": "sk-hub-only-1", "hk2": "sk-hub-only-2"},
 }
+# a hub provider that also has a local adapter script (官方预设 sensenova: openai+message)
+HUB_PRESET_PROVIDER = {
+    "name": "商汤日日新",
+    "protocol": "openai",
+    "protocols": ["chat"],
+    "base_url": "https://token.sensenova.cn/v1",
+    "keys": {"p1": "sk-p1", "p2": "sk-p2"},
+}
 
 
 class _Hub(BaseHTTPRequestHandler):
@@ -64,11 +72,19 @@ class _Hub(BaseHTTPRequestHandler):
         if not self._authed():
             return self._send(401, {"ok": False, "error": "unauthorized"})
         if self.path.split("?")[0] == "/api/vault/manifest":
-            return self._send(200, {"ok": True, "providers": {"hubonly": {
-                "id": "hubonly", "name": HUB_PROVIDER["name"],
-                "protocol": HUB_PROVIDER["protocol"], "protocols": HUB_PROVIDER["protocols"],
-                "base_url": HUB_PROVIDER["base_url"], "keys": list(HUB_PROVIDER["keys"]),
-            }}})
+            providers = {
+                "hubonly": {"id": "hubonly", "name": HUB_PROVIDER["name"],
+                             "protocol": HUB_PROVIDER["protocol"],
+                             "protocols": HUB_PROVIDER["protocols"],
+                             "base_url": HUB_PROVIDER["base_url"],
+                             "keys": list(HUB_PROVIDER["keys"])},
+                "sensenova": {"id": "sensenova", "name": HUB_PRESET_PROVIDER["name"],
+                               "protocol": HUB_PRESET_PROVIDER["protocol"],
+                               "protocols": HUB_PRESET_PROVIDER["protocols"],
+                               "base_url": HUB_PRESET_PROVIDER["base_url"],
+                               "keys": list(HUB_PRESET_PROVIDER["keys"])},
+            }
+            return self._send(200, {"ok": True, "providers": providers})
         return self._send(404, {"ok": False, "error": "not found"})
 
     def do_POST(self):
@@ -76,12 +92,14 @@ class _Hub(BaseHTTPRequestHandler):
             return self._send(401, {"ok": False, "error": "unauthorized"})
         n = int(self.headers.get("content-length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
-        if body.get("provider") != "hubonly":
+        pid = body.get("provider")
+        provider = {"hubonly": HUB_PROVIDER, "sensenova": HUB_PRESET_PROVIDER}.get(pid)
+        if not provider:
             return self._send(404, {"ok": False, "error": "no such provider"})
-        return self._send(200, {"ok": True, "provider": "hubonly", "provider_config": {
-            "name": HUB_PROVIDER["name"], "protocol": HUB_PROVIDER["protocol"],
-            "protocols": HUB_PROVIDER["protocols"], "base_url": HUB_PROVIDER["base_url"],
-            "keys": HUB_PROVIDER["keys"],
+        return self._send(200, {"ok": True, "provider": pid, "provider_config": {
+            "name": provider["name"], "protocol": provider["protocol"],
+            "protocols": provider["protocols"], "base_url": provider["base_url"],
+            "keys": provider["keys"],
         }})
 
 
@@ -168,7 +186,24 @@ async def run_browser(mode, port):
             if not any(o.startswith("vault:") for o in selector["opts"]):
                 raise AssertionError(f"unimported hub provider missing from dropdown: {selector['opts']}")
 
+            # hub provider with a local adapter script: description keeps only two facts
+            # (key count + adapter version) and protocols default to the adapter script.
+            await page.evaluate(
+                "document.getElementById('p_preset').value='vault:sensenova';onProviderPresetChange()")
+            await page.wait_for_timeout(200)
+            info = await page.evaluate(
+                "(() => ({ desc: document.getElementById('p_desc').innerText,"
+                "          chat: document.getElementById('p_proto_chat').checked,"
+                "          msg: document.getElementById('p_proto_messages').checked,"
+                "          hint: document.getElementById('p_proto_hint').innerText }))()")
+            assert "中枢 2 个 Key" in info["desc"], info
+            assert "适配脚本 v1.3.0" in info["desc"], info
+            assert len(info["desc"].strip().splitlines()) <= 3, f"source description too verbose: {info['desc']!r}"
+            assert info["chat"] and info["msg"], f"protocols must default from the adapter script: {info}"
+            assert "已按适配脚本预选" in info["hint"], info
+
             # typing a preset id fills URL/protocol/rules without showing presets in the dropdown
+            await page.evaluate("document.getElementById('p_preset').value='';onProviderPresetChange()")
             await page.fill("#p_name", "siliconflow")
             await page.dispatch_event("#p_name", "input")
             await page.wait_for_timeout(200)
@@ -176,7 +211,7 @@ async def run_browser(mode, port):
                 "(() => ({ url: document.getElementById('p_url').value,"
                 "          desc: document.getElementById('p_desc').innerText,"
                 "          chat: document.getElementById('p_proto_chat').checked }))()")
-            if "siliconflow" not in autofill["url"] or "已匹配本地预设规则" not in autofill["desc"]:
+            if "siliconflow" not in autofill["url"] or "适配脚本 v1.2.0" not in autofill["desc"]:
                 raise AssertionError(f"preset rules were not auto-applied by provider name: {autofill}")
             await page.evaluate("document.getElementById('p_name').value=''")
             await page.evaluate(

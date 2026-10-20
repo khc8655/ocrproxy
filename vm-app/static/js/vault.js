@@ -29,31 +29,6 @@ async function fetchVaultManifest(silent = true) {
   return null;
 }
 
-async function syncFromEdgeOneVault() {
-  const btn = document.getElementById('btnSyncVault');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 同步中...'; }
-  try {
-    const res = await fetch('/api/admin/vault/sync', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({})
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data && data.ok) {
-      toast(`已成功从中枢同步 ${data.updated_count || 0} 个供应商规则并立即生效`, 'ok');
-      await fetchVaultManifest(true);
-      await loadData();
-    } else {
-      toast('同步失败: ' + (data?.error || `HTTP ${res.status}`), 'err');
-    }
-  } catch (e) {
-    toast('同步中枢异常: ' + e.message, 'err');
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = icon('refresh') + ' 同步中枢规则'; }
-  }
-}
-
-
 // Provider & Key Helpers for Capsule Flow
 function getVaultProviderList(){
   if (!state.vaultManifest || !state.vaultManifest.providers) return [];

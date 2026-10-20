@@ -740,7 +740,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-05</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-06</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -833,7 +833,6 @@ function pageHtml() {
           <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-secondary btn-sm" id="btnSyncVault" onclick="syncFromEdgeOneVault()" title="从 EdgeOne 凭据中枢拉取最新供应商适配与规则"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg> 从凭据中枢同步</button>
           <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
         </div>
       </div>
@@ -1278,6 +1277,7 @@ function pageHtml() {
             <span class="text-secondary text-sm">(/v1/responses)</span>
           </label>
         </div>
+        <div id="p_proto_hint" class="text-secondary" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
       </div>
       <div class="form-group" id="p_custom_url_wrap" style="margin-top:14px;">
         <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
@@ -2924,31 +2924,6 @@ async function fetchVaultManifest(silent = true) {
   return null;
 }
 
-async function syncFromEdgeOneVault() {
-  const btn = document.getElementById('btnSyncVault');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 同步中...'; }
-  try {
-    const res = await fetch('/api/admin/vault/sync', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({})
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data && data.ok) {
-      toast(\`已成功从中枢同步 \${data.updated_count || 0} 个供应商规则并立即生效\`, 'ok');
-      await fetchVaultManifest(true);
-      await loadData();
-    } else {
-      toast('同步失败: ' + (data?.error || \`HTTP \${res.status}\`), 'err');
-    }
-  } catch (e) {
-    toast('同步中枢异常: ' + e.message, 'err');
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = icon('refresh') + ' 同步中枢规则'; }
-  }
-}
-
-
 // Provider & Key Helpers for Capsule Flow
 function getVaultProviderList(){
   if (!state.vaultManifest || !state.vaultManifest.providers) return [];
@@ -3343,7 +3318,7 @@ function renderProviders(){
   const names = Object.keys(p).sort((a,b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
   if (!names.length){
-    box.innerHTML = '<div class="empty">暂无供应商配置，请点击右上角新增或从中枢同步</div>';
+    box.innerHTML = '<div class="empty">暂无供应商配置，请点击右上角「新增供应商」</div>';
     if (rail) rail.style.display = 'none';
     return;
   }
@@ -3733,38 +3708,106 @@ function populateCatalogSelect(select) {
   if (cur !== undefined && cur !== null) select.value = cur;
 }
 
+function normalizePresetProtocols(raw){
+  const norm = new Set();
+  (Array.isArray(raw) ? raw : []).forEach(x => {
+    const v = String(x).toLowerCase();
+    if (v.includes('openai') || v === 'chat') norm.add('chat');
+    if (v.includes('message') || v.includes('anthropic')) norm.add('messages');
+    if (v.includes('response')) norm.add('responses');
+  });
+  return norm;
+}
+
+// 适配脚本（本地预设文件）支持哪些协议：chat 恒有；Messages 由 features.anthropic_messages /
+// anthropic_base_url 声明；Responses 由 features.openai_responses 声明。
+function getPresetProtocols(preset){
+  if (!preset) return null;
+  const norm = normalizePresetProtocols(preset.protocols);
+  if (norm.size === 0) norm.add('chat');
+  const proto = String(preset.protocol || '').toLowerCase();
+  const feat = preset.features || {};
+  if (feat.anthropic_messages || preset.anthropic_base_url || proto.includes('messages')) norm.add('messages');
+  if (feat.openai_responses || proto.includes('responses')) norm.add('responses');
+  return Array.from(norm);
+}
+
+function findPresetForProvider(idOrName){
+  const key = String(idOrName || '').trim().toLowerCase();
+  if (!key) return null;
+  return (state.cachedPresets && state.cachedPresets[key])
+    || FALLBACK_PRESETS[key]
+    || ((state.presetCatalog || []).find(p => p && (
+        String(p.id || '').toLowerCase() === key || String(p.name || '').toLowerCase() === key)));
+}
+
+function _applyProviderProtocols(protocols, preset){
+  const set = new Set(protocols || []);
+  document.getElementById('p_proto_chat').checked = set.has('chat');
+  document.getElementById('p_proto_messages').checked = set.has('messages');
+  document.getElementById('p_proto_responses').checked = set.has('responses');
+  const hint = document.getElementById('p_proto_hint');
+  if (hint) {
+    const labels = [];
+    if (set.has('chat')) labels.push('OpenAI Chat');
+    if (set.has('messages')) labels.push('Anthropic Messages');
+    if (set.has('responses')) labels.push('OpenAI Responses');
+    hint.textContent = labels.length
+      ? \`已按\${preset ? '适配脚本' : '中枢返回'}预选：\${labels.join(' + ')}（可手动调整）\`
+      : '未匹配到协议，请手动勾选';
+  }
+}
+
+// 供应商来源说明只保留两条判断：中枢 Key 数量、是否有适配脚本及其版本。
+function _renderProviderSourceDesc(title, keyCount, preset){
+  const descEl = document.getElementById('p_desc');
+  if (!descEl) return;
+  const parts = [\`<strong>\${esc(title || '')}</strong>\`];
+  if (keyCount !== null && keyCount !== undefined) {
+    parts.push(\`<span class="badge badge-primary">中枢 \${keyCount} 个 Key</span>\`);
+  }
+  if (preset) {
+    const ver = preset.version ? \`v\${esc(preset.version)}\` : '已匹配';
+    const date = preset.updated_at ? \` · \${esc(preset.updated_at)}\` : '';
+    parts.push(\`<span class="badge badge-success">适配脚本 \${ver}\${date}</span>\`);
+  } else {
+    parts.push(\`<span class="badge badge-neutral">无适配脚本</span>\`);
+  }
+  descEl.style.display = 'block';
+  descEl.style.background = 'var(--bg-subtle)';
+  descEl.style.color = 'var(--text-primary)';
+  descEl.innerHTML = \`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">\${parts.join('')}</div>\`;
+}
+
 // 预设适配规则按「本地配置后的供应商名称」自动匹配：预设不进入下拉，
 // 但输入与官方预设同名/同 id 的供应商标识时，自动带入 URL、协议、RPM 与规则说明。
 function applyPresetForProviderName(){
   if (state.providerEditName || state.currentSelectedVaultProvider) return;
   const nameEl = document.getElementById('p_name');
   const key = (nameEl?.value || '').trim().toLowerCase();
-  if (!key) { state.currentSelectedPreset = null; return; }
-  const preset = (state.cachedPresets && state.cachedPresets[key])
-    || FALLBACK_PRESETS[key]
-    || ((state.presetCatalog || []).find(p => p && (String(p.id || '').toLowerCase() === key
-         || String(p.name || '').toLowerCase() === key)));
+  const hint = document.getElementById('p_proto_hint');
+  if (!key) {
+    state.currentSelectedPreset = null;
+    if (hint) hint.textContent = '';
+    return;
+  }
+  const preset = findPresetForProvider(key);
   state.currentSelectedPreset = preset || null;
-  if (!preset) return;
+  if (!preset) {
+    if (hint) hint.textContent = '未匹配到适配脚本，请手动选择协议';
+    return;
+  }
 
   const urlInput = document.getElementById('p_url');
   if (urlInput && !urlInput.value.trim() && preset.base_url) urlInput.value = preset.base_url;
 
-  const protos = Array.isArray(preset.protocols) && preset.protocols.length
-    ? preset.protocols
-    : (preset.features && preset.features.anthropic_messages ? ['chat', 'messages']
-      : (preset.protocol === 'messages' ? ['chat', 'messages'] : ['chat']));
-  const chatEl = document.getElementById('p_proto_chat');
-  const msgEl = document.getElementById('p_proto_messages');
-  const respEl = document.getElementById('p_proto_responses');
-  if (chatEl) chatEl.checked = protos.includes('chat') || protos.includes('openai');
-  if (msgEl) msgEl.checked = protos.includes('messages') || protos.includes('anthropic') || Boolean(preset.anthropic_messages);
-  if (respEl) respEl.checked = protos.includes('responses');
+  const protos = getPresetProtocols(preset);
+  _applyProviderProtocols(protos, preset);
 
   const anthropicUrl = preset.anthropic_base_url || '';
   const toggle = document.getElementById('p_custom_url_toggle');
   const section = document.getElementById('p_custom_url_section');
-  if (anthropicUrl && toggle && section) {
+  if (anthropicUrl && protos.includes('messages') && toggle && section) {
     toggle.checked = true;
     section.style.display = 'block';
     document.getElementById('p_anthropic_url').value = anthropicUrl;
@@ -3773,14 +3816,7 @@ function applyPresetForProviderName(){
   const provRpm = preset.rpm_per_key || preset.rpm;
   if (rpmInput && !rpmInput.value.trim() && provRpm) rpmInput.value = String(provRpm);
 
-  const descEl = document.getElementById('p_desc');
-  if (descEl) {
-    descEl.style.display = 'block';
-    descEl.style.background = 'var(--bg-subtle)';
-    descEl.style.color = 'var(--text-secondary)';
-    const ver = preset.version ? \`（内置规则 v\${esc(preset.version)}\${preset.updated_at ? ' · ' + esc(preset.updated_at) : ''}）\` : '';
-    descEl.innerHTML = \`\${icon('zap')} <strong>已匹配本地预设规则\${ver}</strong>：\${esc(preset.description || '保存后自动套用该厂商的适配规则。')}\`;
-  }
+  _renderProviderSourceDesc(preset.name || key, null, preset);
 }
 
 // Vertex AI dynamic Base URL computation (Key Level)
@@ -3824,6 +3860,8 @@ async function onProviderPresetChange(){
     document.getElementById('p_custom_url_toggle').checked = false;
     document.getElementById('p_custom_url_section').style.display = 'none';
     document.getElementById('p_anthropic_url').value = '';
+    const pHint = document.getElementById('p_proto_hint');
+    if (pHint) pHint.textContent = '';
     return;
   }
 
@@ -3843,15 +3881,17 @@ async function onProviderPresetChange(){
     urlInput.value = vaultProv.base_url || '';
     urlInput.disabled = true; // 以中枢为准，拉取时不使用弹窗里的值
 
-    const protos = vaultProv.protocols || ['chat'];
-    document.getElementById('p_proto_chat').checked = protos.includes('chat') || protos.includes('openai');
-    document.getElementById('p_proto_messages').checked = protos.includes('messages') || protos.includes('anthropic');
-    document.getElementById('p_proto_responses').checked = protos.includes('responses');
+    // 协议以本地适配脚本为准（中枢 manifest 的 protocols 仅在无适配脚本时兜底）
+    const matchedPreset = findPresetForProvider(vaultProv.id || vaultProv.name || realProvId);
+    const presetProtos = getPresetProtocols(matchedPreset);
+    const hubProtos = Array.from(normalizePresetProtocols(vaultProv.protocols || ['chat']));
+    _applyProviderProtocols(presetProtos || hubProtos, matchedPreset);
 
-    if(vaultProv.anthropic_base_url){
+    const anthropicUrl = (matchedPreset && matchedPreset.anthropic_base_url) || vaultProv.anthropic_base_url || '';
+    if (anthropicUrl && (presetProtos || hubProtos).includes('messages')) {
       document.getElementById('p_custom_url_toggle').checked = true;
       document.getElementById('p_custom_url_section').style.display = 'block';
-      document.getElementById('p_anthropic_url').value = vaultProv.anthropic_base_url;
+      document.getElementById('p_anthropic_url').value = anthropicUrl;
     } else {
       document.getElementById('p_custom_url_toggle').checked = false;
       document.getElementById('p_custom_url_section').style.display = 'none';
@@ -3859,14 +3899,13 @@ async function onProviderPresetChange(){
     }
 
     const rpmInput = document.getElementById('p_rpm');
-    const provRpm = vaultProv.rpm_per_key || vaultProv.rpm;
+    const provRpm = (matchedPreset && (matchedPreset.rpm_per_key || matchedPreset.rpm)) || vaultProv.rpm_per_key || vaultProv.rpm;
     if(rpmInput) rpmInput.value = provRpm ? String(provRpm) : '';
 
     const keyCount = Array.isArray(vaultProv.keys) ? vaultProv.keys.length : (vaultProv.keys ? Object.keys(vaultProv.keys).length : 0);
-    descEl.style.display = 'block';
-    descEl.style.background = 'rgba(59,130,246,0.08)';
-    descEl.style.color = 'var(--text-primary)';
-    descEl.innerHTML = \`\${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后一次性拉取该供应商规则及名下 <strong>\${keyCount}</strong> 个 Key。之后「同步中枢规则」只更新规则不再拉 Key；中枢 Key 只读可删，自己加的 Key 为本地可编辑。需要重新拉取时，先删除该供应商再拉。\`;
+    const cleanName = (typeof cleanProviderLabel === 'function') ? cleanProviderLabel(vaultProv.name || vaultProv.id) : (vaultProv.name || vaultProv.id);
+    _renderProviderSourceDesc(cleanName, keyCount, matchedPreset);
+    descEl.title = '保存后一次性拉取该供应商规则与全部 Key；中枢 Key 只读可删，自建 Key 为本地。需要重新拉取时先删除该供应商。';
     return;
   }
 
@@ -3895,6 +3934,8 @@ function openProviderModal(sourceModal){
   document.getElementById('p_proto_chat').checked = true;
   document.getElementById('p_proto_messages').checked = false;
   document.getElementById('p_proto_responses').checked = false;
+  const pHint = document.getElementById('p_proto_hint');
+  if (pHint) pHint.textContent = '';
   document.getElementById('p_custom_url_toggle').checked = false;
   document.getElementById('p_custom_url_section').style.display = 'none';
   document.getElementById('p_anthropic_url').value = '';
