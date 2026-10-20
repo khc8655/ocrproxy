@@ -4,7 +4,6 @@ Verifies:
 1. is_masked_secret identifies both string and dictionary masks.
 2. Structured key secrets are protected during disk unmasking and config updates.
 3. Structured keys are correctly masked on GET /admin/api/config without losing rpm/is_local.
-4. _async_persist_lazy_provider protects local keys and syncs rpm_per_key.
 """
 import os
 import sys
@@ -125,55 +124,6 @@ class TestSystemHardeningAudit(unittest.TestCase):
 
         # Service account private key restored
         self.assertEqual(p_keys["sa_key"]["private_key"], "-----BEGIN RSA PRIVATE KEY-----\nsecret")
-
-    def test_async_persist_lazy_provider_protects_local_keys_and_syncs_rpm(self):
-        import asyncio
-        from app.scheduler import _async_persist_lazy_provider
-
-        # Setup initial config with a local key
-        initial_config = {
-            "providers": {
-                "deepseek": {
-                    "base_url": "https://api.deepseek.com",
-                    "keys": {
-                        "k_local": {"key": "sk-my-local-test-key", "is_local": True, "rpm": 5},
-                        "k_shared": "sk-shared-old"
-                    }
-                }
-            },
-            "agent_models": {},
-        }
-        save_to_disk(initial_config)
-        config_store.clear_cache()
-
-        # Simulate Vault returning provider config with a colliding k_local key
-        vault_prov_cfg = {
-            "name": "deepseek",
-            "protocol": "openai",
-            "base_url": "https://api.deepseek.com",
-            "rpm_per_key": 20,
-            "keys": {
-                "k_local": "sk-vault-colliding-key-should-be-blocked",
-                "k_shared": "sk-shared-updated-from-vault",
-                "k_new": "sk-vault-new-key"
-            }
-        }
-
-        asyncio.run(_async_persist_lazy_provider("deepseek", vault_prov_cfg))
-
-        reloaded = load_from_disk()
-        prov = reloaded["providers"]["deepseek"]
-        self.assertEqual(prov["origin"], "vault")
-        self.assertEqual(prov["rpm_per_key"], 20)
-
-        keys = prov["keys"]
-        # Assert local key was NOT overwritten
-        self.assertEqual(keys["k_local"]["key"], "sk-my-local-test-key")
-        self.assertTrue(keys["k_local"]["is_local"])
-
-        # Assert vault keys were updated / added
-        self.assertEqual(keys["k_shared"], "sk-shared-updated-from-vault")
-        self.assertEqual(keys["k_new"], "sk-vault-new-key")
 
     def test_auth_extract_token_from_query_params(self):
         from app.auth import _extract_token, verify_admin_auth

@@ -186,7 +186,7 @@ function renderProviders(){
           : `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">${lockIcon} 中枢统一</span>`;
       } else {
         vaultBadge = isVaultManaged 
-          ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商同步自 EdgeOne 凭据中枢，可在本地随时维护或清理">${lockIcon} 中枢已同步</span>`
+          ? `<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="从 EdgeOne 凭据中枢拉取：规则随「同步中枢规则」更新；中枢 Key 只读可删，自加 Key 为本地">${lockIcon} 来自中枢</span>`
           : `<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">本地自建</span>`;
       }
 
@@ -541,7 +541,7 @@ async function onProviderPresetChange(){
     nameInput.value = vaultProv.id || realProvId;
     nameInput.disabled = true;
     urlInput.value = vaultProv.base_url || '';
-    urlInput.disabled = false;
+    urlInput.disabled = true; // 以中枢为准，拉取时不使用弹窗里的值
 
     const protos = vaultProv.protocols || ['chat'];
     document.getElementById('p_proto_chat').checked = protos.includes('chat') || protos.includes('openai');
@@ -566,7 +566,7 @@ async function onProviderPresetChange(){
     descEl.style.display = 'block';
     descEl.style.background = 'rgba(59,130,246,0.08)';
     descEl.style.color = 'var(--text-primary)';
-    descEl.innerHTML = `${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后将按需拉取该供应商配置及名下 <strong>${keyCount}</strong> 个凭据 Key 到本地。拉取后即为本地资产，可在本地随时维护或清理。`;
+    descEl.innerHTML = `${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后一次性拉取该供应商规则及名下 <strong>${keyCount}</strong> 个 Key。之后「同步中枢规则」只更新规则不再拉 Key；中枢 Key 只读可删，自己加的 Key 为本地可编辑。需要重新拉取时，先删除该供应商再拉。`;
     return;
   }
 
@@ -664,7 +664,8 @@ function editProvider(name){
   state.currentSelectedPreset = null;
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
-  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  // VM：只有「从中枢拉取」的供应商 (origin=vault) 算中枢来源；本地同名自建不算
+  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local');
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
 
   document.getElementById('providerModalTitle').textContent = isVaultReadOnly
@@ -708,7 +709,7 @@ async function saveProvider(){
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const isEdit = document.getElementById('p_name').disabled;
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
-  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local') || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
+  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local'));
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
   const isFromModelModal = (state.providerModalSource === 'agent' || state.providerModalSource === 'candidate');
 

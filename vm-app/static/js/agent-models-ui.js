@@ -154,11 +154,13 @@
     }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
-    const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-    const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-    if (remoteKeys.includes(keyLabel)) return 'vault';
-    if (localProv && localProv.origin === 'vault') return 'vault';
-    if (!localProv && remote) return 'vault';
+    // VM：Key 来源以 Key 自身标记为准（拉取时写入 origin=vault）。
+    // 旧数据无标记：仅当供应商是中枢拉取的、且中枢清单里确有该 Key 时视为中枢 Key。
+    if (localProv && localProv.origin === 'vault') {
+      const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
+      const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
+      if (remoteKeys.includes(keyLabel)) return 'vault';
+    }
     return 'local';
   }
 

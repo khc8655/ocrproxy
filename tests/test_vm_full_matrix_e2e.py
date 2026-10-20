@@ -193,12 +193,12 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
             )
             check(resp_del.status_code == 200, "删除供应商成功生效（200 OK，无 403 阻断）", f"status={resp_del.status_code}")
 
-            # 读取最新配置，断言 temp_prov 与 temp_model 均被彻底清理，且 tombstones 记录了 temp_prov
+            # 读取最新配置，断言 temp_prov 与 temp_model 均被彻底清理，且不再写 tombstones
             cfg_res = await client.get(f"{base_url}/api/config", headers={"Authorization": f"Bearer {admin_pw}"})
             saved_cfg = cfg_res.json()
             check("temp_prov" not in saved_cfg.get("providers", {}), "供应商已被彻底删除")
             check("temp_model" not in saved_cfg.get("agent_models", {}), "关联模型已级联彻底清除")
-            check("temp_prov" in saved_cfg.get("tombstones", []), "本地删除墓碑 (tombstones) 成功记录已删除供应商")
+            check(not saved_cfg.get("tombstones"), "墓碑机制已废弃：删除即删除，不再记录 tombstones")
 
         # 刷新前端拉取最新配置状态
         await page.click("button[onclick='loadData()']")

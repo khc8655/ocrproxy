@@ -2940,37 +2940,16 @@ function getAllAvailableProviders(){
 
 // Probed Models Selection Modal State & Logic
 
+// 绑定只允许选本地已有的 Key（中枢供应商须先在「供应商」页整体拉取）。
 async function ensureKeysImported(bindings){
-  const toFetch = [];
-  for(const b of bindings){
-    if(b.key === 'public' || b.key === '__public__') continue;
-    const lookupProv = b.provider;
-    const hasLocal = state.config?.providers?.[b.provider]?.keys?.[b.key];
-    if(!hasLocal){
-      toFetch.push({ ...b, fetchProv: lookupProv });
-    }
+  const missing = (bindings || []).filter(b =>
+    b.key !== 'public' && b.key !== '__public__' &&
+    !state.config?.providers?.[b.provider]?.keys?.[b.key]);
+  if (missing.length) {
+    const m = missing[0];
+    toast(\`Key [\${m.provider}:\${m.key}] 不在本地，请先在「供应商」页添加或从中枢拉取该供应商\`, 'err');
+    return false;
   }
-  if(toFetch.length === 0) return true;
-
-  toast(\`正在从中枢拉取 \${toFetch.length} 个密钥凭据...\`, 'ok');
-  for(const item of toFetch){
-    try {
-      const fetchProv = item.fetchProv || item.provider;
-      const res = await fetch('/api/admin/vault/fetch-key', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({ provider: fetchProv, key_label: item.key })
-      });
-      const d = await res.json().catch(() => ({}));
-      if(!res.ok || !d.ok) {
-        throw new Error(d.error || \`HTTP \${res.status}\`);
-      }
-    } catch(e) {
-      toast(\`从凭据中枢拉取密钥 [\${item.provider}:\${item.key}] 失败: \${e.message}\`, 'err');
-      return false;
-    }
-  }
-  await loadData();
   return true;
 }
 
@@ -3370,7 +3349,7 @@ function renderProviders(){
           : \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">\${lockIcon} 中枢统一</span>\`;
       } else {
         vaultBadge = isVaultManaged 
-          ? \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商同步自 EdgeOne 凭据中枢，可在本地随时维护或清理">\${lockIcon} 中枢已同步</span>\`
+          ? \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="从 EdgeOne 凭据中枢拉取：规则随「同步中枢规则」更新；中枢 Key 只读可删，自加 Key 为本地">\${lockIcon} 来自中枢</span>\`
           : \`<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">本地自建</span>\`;
       }
 
@@ -3725,7 +3704,7 @@ async function onProviderPresetChange(){
     nameInput.value = vaultProv.id || realProvId;
     nameInput.disabled = true;
     urlInput.value = vaultProv.base_url || '';
-    urlInput.disabled = false;
+    urlInput.disabled = true; // 以中枢为准，拉取时不使用弹窗里的值
 
     const protos = vaultProv.protocols || ['chat'];
     document.getElementById('p_proto_chat').checked = protos.includes('chat') || protos.includes('openai');
@@ -3750,7 +3729,7 @@ async function onProviderPresetChange(){
     descEl.style.display = 'block';
     descEl.style.background = 'rgba(59,130,246,0.08)';
     descEl.style.color = 'var(--text-primary)';
-    descEl.innerHTML = \`\${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后将按需拉取该供应商配置及名下 <strong>\${keyCount}</strong> 个凭据 Key 到本地。拉取后即为本地资产，可在本地随时维护或清理。\`;
+    descEl.innerHTML = \`\${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后一次性拉取该供应商规则及名下 <strong>\${keyCount}</strong> 个 Key。之后「同步中枢规则」只更新规则不再拉 Key；中枢 Key 只读可删，自己加的 Key 为本地可编辑。需要重新拉取时，先删除该供应商再拉。\`;
     return;
   }
 
@@ -3848,7 +3827,8 @@ function editProvider(name){
   state.currentSelectedPreset = null;
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
-  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  // VM：只有「从中枢拉取」的供应商 (origin=vault) 算中枢来源；本地同名自建不算
+  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local');
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
 
   document.getElementById('providerModalTitle').textContent = isVaultReadOnly
@@ -3892,7 +3872,7 @@ async function saveProvider(){
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const isEdit = document.getElementById('p_name').disabled;
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
-  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local') || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
+  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local'));
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
   const isFromModelModal = (state.providerModalSource === 'agent' || state.providerModalSource === 'candidate');
 
@@ -4591,11 +4571,13 @@ function commitKey(prov, label, val){
     }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
-    const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-    const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-    if (remoteKeys.includes(keyLabel)) return 'vault';
-    if (localProv && localProv.origin === 'vault') return 'vault';
-    if (!localProv && remote) return 'vault';
+    // VM：Key 来源以 Key 自身标记为准（拉取时写入 origin=vault）。
+    // 旧数据无标记：仅当供应商是中枢拉取的、且中枢清单里确有该 Key 时视为中枢 Key。
+    if (localProv && localProv.origin === 'vault') {
+      const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
+      const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
+      if (remoteKeys.includes(keyLabel)) return 'vault';
+    }
     return 'local';
   }
 
