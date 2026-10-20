@@ -178,6 +178,16 @@ async def run_api_scenarios_after_ui(b: Backend, mock_url, c: httpx.AsyncClient,
              and act in ("k2", "up:k2"), f"http={r.status_code} k1={e1} k2={e2} active={act!r}")
     await c.post(mock_url + "/ctl", json={"fail": {}})
 
+    # S7: dashboard summary — VM keeps today's per-request totals, EdgeOne sends none
+    summ = (st.get("agent") or {}).get("summary")
+    if b.kind == "vm":
+        ok7 = (isinstance(summ, dict) and summ.get("window") == "today" and (summ.get("requests") or 0) >= 3
+               and (summ.get("failovers") or 0) >= 1 and (summ.get("tokens_in") or 0) >= 1
+               and (summ.get("ttft_ms_avg") or 0) > 0 and (summ.get("total_ms_avg") or 0) > 0)
+    else:
+        ok7 = not (isinstance(summ, dict) and summ.get("window"))
+    b.record("S7", ok7, f"summary={ {k: (summ or {}).get(k) for k in ('window', 'requests', 'failures', 'failovers', 'tokens_in', 'tokens_out', 'ttft_ms_avg')} }")
+
     t5 = int(time.time() * 1000) - 5
     r = await c.post(b.base + host["api"]["testKey"], headers=A, json=host["body"])
     d = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
@@ -216,6 +226,15 @@ async def run_ui(b: Backend):
                 "(() => { if (typeof renderAgentModels === 'function') renderAgentModels();"
                 " return (document.getElementById('agentModelsBox') || {}).innerHTML.includes('k1'); })()",
                 timeout=10000, polling=300)
+            # the per-key stats arrive in a separate request after config; wait for them too
+            # (without this U1 was flaky on both backends), then assert on the final html below
+            try:
+                await page.wait_for_function(
+                    "(() => { if (typeof renderAgentModels === 'function') renderAgentModels();"
+                    " return (document.getElementById('agentModelsBox') || {}).innerHTML.includes('最近响应耗时'); })()",
+                    timeout=8000, polling=300)
+            except Exception:
+                pass
             html = await page.evaluate("document.getElementById('agentModelsBox').innerHTML")
             # the k1 row: from its key badge to the next row
             i = html.find(">k1<")
@@ -224,6 +243,13 @@ async def run_ui(b: Backend):
             row = row[:nxt] if nxt > 0 else row
             ok = ('最近响应耗时' in html[max(0, i - 4000):i] or '最近响应耗时' in row) and not errors
             b.record("U1", ok, "k1 行无耗时徽章（显示「未调用」）" if not ok else "")
+            # U3: dashboard Agent cards — VM shows today's totals, EdgeOne the snapshot
+            grid = await page.evaluate(
+                "(() => { if (typeof renderDashboard === 'function') renderDashboard();"
+                " const g = document.getElementById('agentStatsGrid'); return g ? g.innerText : ''; })()")
+            want3 = "今日 Token 总量" if b.kind == "vm" else "可用 Key"
+            ok3 = want3 in grid and "NaN" not in grid and "undefined" not in grid
+            b.record("U3", ok3, f"期望含「{want3}」, 实际: {grid[:160]!r}" if not ok3 else "")
             if errors:
                 b.results["U1"] = ("FAIL", "pageerror: " + "; ".join(errors[:2]))
         except Exception as e:

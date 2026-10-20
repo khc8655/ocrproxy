@@ -673,6 +673,91 @@ function manageAllModels() {
   }
 }
 
+function fmtTokens(n){
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtDurationMs(ms){
+  if (ms == null || !isFinite(ms)) return '—';
+  ms = Number(ms);
+  if (ms < 1000) return Math.round(ms) + ' ms';
+  if (ms < 60000) return (ms / 1000).toFixed(2) + ' s';
+  return (ms / 60000).toFixed(1) + ' min';
+}
+
+function renderAgentSummaryCards(s){
+  const tin = s.tokens_in || 0, tout = s.tokens_out || 0;
+  const req = s.requests || 0, fail = s.failures || 0;
+  const okReq = Math.max(0, req - fail);
+  const cover = okReq ? Math.round(((s.usage_requests || 0) / okReq) * 100) : null;
+  const coverTxt = cover == null ? '' : ` · 用量覆盖 <b>${cover}%</b>`;
+  const failColor = fail ? (req && fail / req > 0.05 ? 'var(--error)' : '#f59e0b') : 'var(--text)';
+  return `
+      <div class="stat">
+        <div class="stat-label">今日 Token 总量</div>
+        <div class="stat-value" style="color:var(--primary);">${fmtTokens(tin + tout)}</div>
+        <div class="stat-sub" title="OpenAI 流式请求只有客户端带 stream_options.include_usage 才返回用量，网关不注入">输入 <b>${fmtTokens(tin)}</b> · 输出 <b>${fmtTokens(tout)}</b>${coverTxt}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">平均首字延迟</div>
+        <div class="stat-value">${fmtDurationMs(s.ttft_ms_avg)}</div>
+        <div class="stat-sub">平均总耗时 <b>${fmtDurationMs(s.total_ms_avg)}</b></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">失败请求</div>
+        <div class="stat-value" style="color:${failColor};">${fail}</div>
+        <div class="stat-sub">共 <b>${req}</b> 次 · 切 Key 救回 <b>${s.failovers || 0}</b> 次</div>
+      </div>
+  `;
+}
+
+function renderAgentSnapshotCards(st){
+  const cs = (st && st.candidates_status) || {};
+  const now = Date.now();
+  const seen = new Set();
+  let total = 0, healthy = 0, untested = 0, cooling = 0, failing = 0;
+  const lats = [];
+  const models = (state.config && state.config.agent_models) || {};
+  Object.entries(models).forEach(([mName, m]) => {
+    (m.keys || []).forEach(b => {
+      if (!b || !b.provider || !b.key) return;
+      const id = b.provider + ':' + b.key;
+      const e = cs[`agent:${mName}:${b.provider}:${b.key}`];
+      if (e && e.status === 200 && e.latency_ms > 0) lats.push(e.latency_ms);
+      if (seen.has(id)) return;
+      seen.add(id);
+      total++;
+      if (!e) { untested++; return; }
+      if (e.cooldown_until && e.cooldown_until > now) cooling++;
+      else if (e.status === 200) healthy++;
+      else failing++;
+    });
+  });
+  const avgLat = lats.length ? lats.reduce((a, b) => a + b, 0) / lats.length : null;
+  const bad = cooling + failing;
+  return `
+      <div class="stat">
+        <div class="stat-label">可用 Key</div>
+        <div class="stat-value" style="color:var(--primary);">${healthy + untested}<span class="text-secondary" style="font-size:14px;font-weight:500;"> / ${total}</span></div>
+        <div class="stat-sub">最近正常 <b>${healthy}</b> · 未调用 <b>${untested}</b></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">冷却 / 故障中的 Key</div>
+        <div class="stat-value" style="color:${bad ? '#f59e0b' : 'var(--text)'};">${bad}</div>
+        <div class="stat-sub">冷却中 <b>${cooling}</b> · 最近失败 <b>${failing}</b></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">最近响应耗时（平均）</div>
+        <div class="stat-value">${fmtDurationMs(avgLat)}</div>
+        <div class="stat-sub">按各 Key 最近一次成功调用</div>
+      </div>
+  `;
+}
+
 // Dashboard
 function renderDashboard(){
   renderDashboardGateway();
@@ -680,63 +765,59 @@ function renderDashboard(){
   const ag = st.agent || { count: 0, success: 0, fallback_count: 0, '429': 0, '5xx': 0, '403': 0, '4xx': 0, models: {} };
   const kb = st.kb || { chat: st.chat||{}, embedding: st.embedding||{}, reranker: st.reranker||{}, ocr: st.ocr||{} };
 
-  // 1. Agent Stats Grid (3 Clean Cards)
-  const agRate = ag.count ? ((ag.success / ag.count) * 100).toFixed(1) : '0.0';
-  const agErrors = (ag['429'] || 0) + (ag['5xx'] || 0) + (ag['403'] || 0) + (ag['4xx'] || 0);
-
+  // 1. Agent Stats Grid
+  //  - backend sends stats.agent.summary (VM): today's totals per request
+  //    (tokens, avg first-token latency, failures) — see contract field stats.agent.summary;
+  //  - no summary (EdgeOne keeps no running totals on purpose): a snapshot computed
+  //    here from candidates_status (each key's last call / cooldown). Same UI on both.
+  const summary = (ag && ag.summary && typeof ag.summary === 'object' && ag.summary.window) ? ag.summary : null;
   const agGrid = document.getElementById('agentStatsGrid');
-  if(agGrid) {
-    agGrid.innerHTML = `
-      <div class="stat">
-        <div class="stat-label">Agent 对话总请求</div>
-        <div class="stat-value" style="color:var(--primary);">${ag.count || 0}</div>
-        <div class="stat-sub">成功 <b>${ag.success || 0}</b> · 异常 <b>${agErrors}</b></div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">请求成功率</div>
-        <div class="stat-value" style="color:${Number(agRate) >= 95 ? 'var(--success)' : (Number(agRate) >= 80 ? '#f59e0b' : 'var(--error)')};">${agRate}%</div>
-        <div class="stat-sub">429: <b>${ag['429'] || 0}</b> · 5xx: <b>${ag['5xx'] || 0}</b></div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Key 故障轮换 (Failovers)</div>
-        <div class="stat-value" style="color:${ag.fallback_count ? '#f59e0b' : 'var(--text)'};">${ag.fallback_count || 0}</div>
-        <div class="stat-sub">429 / 5xx 自动避让切换</div>
-      </div>
-    `;
+  const modeBadge = document.getElementById('agentStatsMode');
+  if (agGrid) {
+    agGrid.innerHTML = summary ? renderAgentSummaryCards(summary) : renderAgentSnapshotCards(st);
+  }
+  if (modeBadge) {
+    modeBadge.textContent = summary ? `今日累计 · ${summary.date || ''}` : '当前快照';
+    modeBadge.title = summary
+      ? '按北京时间自然日累计，0 点清零；重启服务不清零'
+      : '按每个 Key 最近一次调用与冷却状态计算，不做累计';
   }
 
-  // 2. Compact Top 3 Models Badge Strip
+  // 2. Compact Top 3 Models Badge Strip (needs per-request totals -> summary mode only)
   const topStrip = document.getElementById('agentTopModelsStrip');
   if(topStrip) {
-    const statModels = ag.models || {};
+    const statModels = (summary && summary.models) || {};
     const modelEntries = Object.keys(statModels).map(name => {
-      const m = statModels[name];
-      const rate = m.count ? ((m.success / m.count) * 100).toFixed(1) : '0.0';
-      return { name, count: m.count || 0, success: m.success || 0, fallback: m.fallback_count || 0, rate };
+      const m = statModels[name] || {};
+      return { name, count: m.requests || 0, tokens: (m.tokens_in || 0) + (m.tokens_out || 0), ttft: m.ttft_ms_avg };
     }).filter(m => m.count > 0);
-
     modelEntries.sort((a, b) => b.count - a.count);
     const top3 = modelEntries.slice(0, 3);
 
-    if(top3.length === 0) {
+    if (!summary) {
+      topStrip.style.display = 'none';
+      topStrip.innerHTML = '';
+    } else if(top3.length === 0) {
+      topStrip.style.display = '';
       topStrip.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
           <span style="font-weight:600;color:var(--text);">热门模型 Top 3：</span>
-          <span>暂无实际调用记录</span>
+          <span>今天暂无调用</span>
         </div>
         <span class="badge badge-neutral">按调用量排行</span>
       `;
     } else {
+      topStrip.style.display = '';
       const chips = top3.map((m, idx) => {
-        const pct = ag.count > 0 ? ((m.count / ag.count) * 100).toFixed(0) : '0';
         const mProtos = getModelProtocols(m.name);
         const pBadges = renderProtocolBadges(mProtos, true);
+        const ttft = (m.ttft != null) ? ` · 首字 ${fmtDurationMs(m.ttft)}` : '';
         return `
           <div class="model-chip" style="display:flex;align-items:center;gap:6px;">
             <span class="rank">#${idx + 1}</span>
             <span class="mono" style="font-weight:700;color:var(--text);">${esc(m.name)}</span>
             <span style="display:inline-flex;gap:4px;">${pBadges}</span>
-            <span class="badge badge-primary">${m.count} 次 (${pct}%)</span>
+            <span class="badge badge-primary">${m.count} 次 · ${fmtTokens(m.tokens)} Token${ttft}</span>
           </div>
         `;
       }).join('');
@@ -748,7 +829,7 @@ function renderDashboard(){
             ${chips}
           </div>
         </div>
-        <span class="text-secondary text-sm">共 ${modelEntries.length} 个活跃模型</span>
+        <span class="text-secondary text-sm">今天共 ${modelEntries.length} 个活跃模型</span>
       `;
     }
   }

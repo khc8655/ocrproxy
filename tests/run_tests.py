@@ -49,7 +49,9 @@ def run_layer_core():
 
     # 2. Python CoW and Token Isolation Tests
     ok2 = run_command([PYTHON_EXE, "tests/test_phase1_security_and_cow.py"], "Python CoW & Fail-Closed Token Isolation")
-    return ok2
+    if not ok2:
+        return False
+    return run_command([PYTHON_EXE, "tests/test_agent_metrics.py"], "VM Agent Dashboard Summary (tokens / TTFT / failures)")
 
 
 def run_layer_api():

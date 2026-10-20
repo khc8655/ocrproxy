@@ -22,7 +22,16 @@
             "is_quota": "bool"
           }
         },
-        "agent.active_keys": "object: agent_model -> key_label of the key that served the last successful call"
+        "agent.active_keys": "object: agent_model -> key_label of the key that served the last successful call",
+        "agent.summary": {
+          "$comment": "Optional. VM only (vm-app/app/agent_metrics.py): today's per-request totals for the dashboard. EdgeOne omits it on purpose and the dashboard falls back to a snapshot computed from candidates_status.",
+          "window": "\"today\"", "date": "YYYY-MM-DD (Asia/Shanghai)", "timezone": "\"Asia/Shanghai\"",
+          "requests": "int, client requests that reached routing", "failures": "int, finally failed for the client (HTTP>=400 or error frame in stream)",
+          "failovers": "int, successful requests that needed a key switch", "tokens_in": "int", "tokens_out": "int",
+          "usage_requests": "int, successful requests whose response carried usage",
+          "ttft_ms_avg": "int or null, avg time to first payload byte (successful requests)", "total_ms_avg": "int or null",
+          "models": "object: agent_model -> {requests, failures, tokens_in, tokens_out, ttft_ms_avg}"
+        }
       }
     },
     "test_key": {
@@ -50,7 +59,9 @@
     {"id": "S3", "title": "真实 messages 调用同样记录", "do": "POST /v1/messages model=claude", "expect": "stats entry agent:claude:up:k1 status=200, time updated"},
     {"id": "S4", "title": "k1 被限流时切到 k2，两行状态各自正确", "do": "upstream returns 429 for k1; POST /v1/chat/completions", "expect": "k1 status=429, k2 status=200, active_keys.claude == k2"},
     {"id": "S5", "title": "手动「测」写回同一条状态", "do": "POST HOST.api.testKey with HOST.buildTestBody for k2", "expect": "response success|ok true; stats entry agent:claude:up:k2 status=200, time>=t_test"},
+    {"id": "S7", "title": "首页 Agent 统计：VM 有今日累计，EdgeOne 不带（前端显示快照）", "do": "after S1, S3, S4 read stats", "expect": "VM: agent.summary.window=today, requests>=3, failovers>=1, tokens_in>=1, ttft_ms_avg>0; EdgeOne: no agent.summary"},
     {"id": "S6", "title": "探测上游模型列表", "do": "POST /api/admin/probe-models provider=up", "expect": "ok true, models contains mock-chat-1"},
-    {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""}
+    {"id": "U1", "title": "浏览器里：真实调用后刷新控制台，k1 行显示耗时徽章而不是「未调用」", "do": "real browser login -> after S1 reload -> read #agentModelsBox", "expect": "row of k1 has title=\"最近响应耗时\""},
+    {"id": "U3", "title": "浏览器里：首页 Agent 卡片 VM 显示今日累计、EdgeOne 显示快照", "do": "real browser: renderDashboard(), read #agentStatsGrid", "expect": "VM contains 今日 Token 总量; EdgeOne contains 可用 Key; no NaN/undefined"}
   ]
 }
