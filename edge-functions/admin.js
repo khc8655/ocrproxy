@@ -1313,6 +1313,13 @@ function pageHtml() {
       <input type="hidden" id="k_provider">
       <input type="hidden" id="k_oldLabel">
       <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      <!-- 从中枢添加 Key：仅「能从中枢拉取」的部署 (HOST.capabilities.vaultClient) 且供应商来自中枢时由 providers.js 显示 -->
+      <div id="k_vault_section" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">从中枢添加</div>
+        <div id="k_vault_list" style="font-size:12px;"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn-primary btn-sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
+        <div class="text-secondary" style="font-size:11px;margin-top:6px;">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
+      </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="k_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
@@ -2940,37 +2947,16 @@ function getAllAvailableProviders(){
 
 // Probed Models Selection Modal State & Logic
 
+// 绑定只允许选本地已有的 Key（中枢供应商须先在「供应商」页整体拉取）。
 async function ensureKeysImported(bindings){
-  const toFetch = [];
-  for(const b of bindings){
-    if(b.key === 'public' || b.key === '__public__') continue;
-    const lookupProv = b.provider;
-    const hasLocal = state.config?.providers?.[b.provider]?.keys?.[b.key];
-    if(!hasLocal){
-      toFetch.push({ ...b, fetchProv: lookupProv });
-    }
+  const missing = (bindings || []).filter(b =>
+    b.key !== 'public' && b.key !== '__public__' &&
+    !state.config?.providers?.[b.provider]?.keys?.[b.key]);
+  if (missing.length) {
+    const m = missing[0];
+    toast(\`Key [\${m.provider}:\${m.key}] 不在本地，请先在「供应商」页添加或从中枢拉取该供应商\`, 'err');
+    return false;
   }
-  if(toFetch.length === 0) return true;
-
-  toast(\`正在从中枢拉取 \${toFetch.length} 个密钥凭据...\`, 'ok');
-  for(const item of toFetch){
-    try {
-      const fetchProv = item.fetchProv || item.provider;
-      const res = await fetch('/api/admin/vault/fetch-key', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({ provider: fetchProv, key_label: item.key })
-      });
-      const d = await res.json().catch(() => ({}));
-      if(!res.ok || !d.ok) {
-        throw new Error(d.error || \`HTTP \${res.status}\`);
-      }
-    } catch(e) {
-      toast(\`从凭据中枢拉取密钥 [\${item.provider}:\${item.key}] 失败: \${e.message}\`, 'err');
-      return false;
-    }
-  }
-  await loadData();
   return true;
 }
 
@@ -3370,7 +3356,7 @@ function renderProviders(){
           : \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="EdgeOne 凭据中枢母本供应商">\${lockIcon} 中枢统一</span>\`;
       } else {
         vaultBadge = isVaultManaged 
-          ? \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="此供应商同步自 EdgeOne 凭据中枢，可在本地随时维护或清理">\${lockIcon} 中枢已同步</span>\`
+          ? \`<span class="badge badge-primary" style="font-size:11px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;" title="从 EdgeOne 凭据中枢拉取：规则随「同步中枢规则」更新；中枢 Key 只读可删，自加 Key 为本地">\${lockIcon} 来自中枢</span>\`
           : \`<span class="badge badge-success" style="font-size:11px;padding:2px 7px;" title="本地手动自建供应商">本地自建</span>\`;
       }
 
@@ -3725,7 +3711,7 @@ async function onProviderPresetChange(){
     nameInput.value = vaultProv.id || realProvId;
     nameInput.disabled = true;
     urlInput.value = vaultProv.base_url || '';
-    urlInput.disabled = false;
+    urlInput.disabled = true; // 以中枢为准，拉取时不使用弹窗里的值
 
     const protos = vaultProv.protocols || ['chat'];
     document.getElementById('p_proto_chat').checked = protos.includes('chat') || protos.includes('openai');
@@ -3750,7 +3736,7 @@ async function onProviderPresetChange(){
     descEl.style.display = 'block';
     descEl.style.background = 'rgba(59,130,246,0.08)';
     descEl.style.color = 'var(--text-primary)';
-    descEl.innerHTML = \`\${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后将按需拉取该供应商配置及名下 <strong>\${keyCount}</strong> 个凭据 Key 到本地。拉取后即为本地资产，可在本地随时维护或清理。\`;
+    descEl.innerHTML = \`\${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后一次性拉取该供应商规则及名下 <strong>\${keyCount}</strong> 个 Key。之后「同步中枢规则」只更新规则不再拉 Key；中枢 Key 只读可删，自己加的 Key 为本地可编辑。需要重新拉取时，先删除该供应商再拉。\`;
     return;
   }
 
@@ -3848,7 +3834,8 @@ function editProvider(name){
   state.currentSelectedPreset = null;
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
-  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local') || !!(typeof findVaultProvider === 'function' && findVaultProvider(name));
+  // VM：只有「从中枢拉取」的供应商 (origin=vault) 算中枢来源；本地同名自建不算
+  const isVaultManaged = (p.origin === 'vault') || (isHostEdgeOne && p.origin !== 'local');
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
 
   document.getElementById('providerModalTitle').textContent = isVaultReadOnly
@@ -3892,7 +3879,7 @@ async function saveProvider(){
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const isEdit = document.getElementById('p_name').disabled;
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
-  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local') || Boolean(typeof findVaultProvider === 'function' && findVaultProvider(name)));
+  const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local'));
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
   const isFromModelModal = (state.providerModalSource === 'agent' || state.providerModalSource === 'candidate');
 
@@ -4141,6 +4128,73 @@ async function applyRuleUpdates(providerIds){
 let _onKeySavedCallback = null;
 let _isLocalKeyMode = false;
 
+// ---- 从中枢添加 Key (VM 等「中枢客户端」部署；EdgeOne 本身是中枢，能力位为 false 不显示) ----
+function canPullKeysFromVault(prov){
+  const caps = (typeof HOST !== 'undefined' && HOST && HOST.capabilities) || {};
+  const p = state.config?.providers?.[prov];
+  return Boolean(caps.vaultClient && p && p.origin === 'vault');
+}
+
+function hideVaultKeyPicker(){
+  const sec = document.getElementById('k_vault_section');
+  if (sec) sec.style.display = 'none';
+}
+
+async function renderVaultKeyPicker(prov){
+  const sec = document.getElementById('k_vault_section');
+  const list = document.getElementById('k_vault_list');
+  const btn = document.getElementById('k_vault_btn');
+  if (!sec || !list) return;
+  if (!canPullKeysFromVault(prov)) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  if (btn) btn.disabled = true;
+  list.innerHTML = '<span class="text-secondary">正在读取中枢清单…</span>';
+  const manifest = (typeof fetchVaultManifest === 'function') ? await fetchVaultManifest(true) : null;
+  if (document.getElementById('k_provider').value !== prov) return; // modal reopened for another provider
+  const remote = manifest && manifest.providers && manifest.providers[prov];
+  if (!remote) {
+    list.innerHTML = \`<span class="text-secondary">\${esc(state.lastVaultError ? ('读取中枢清单失败：' + state.lastVaultError) : '中枢里已没有这个供应商')}</span>\`;
+    return;
+  }
+  const localKeys = (state.config.providers[prov] && state.config.providers[prov].keys) || {};
+  const labels = (remote.keys || []).filter(l => !(l in localKeys));
+  if (!labels.length) {
+    list.innerHTML = '<span class="text-secondary">中枢的 Key 本地都已经有了</span>';
+    return;
+  }
+  list.innerHTML = labels.map(l =>
+    \`<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="k-vault-pick" value="\${esc(l)}"> <span class="mono">\${esc(l)}</span></label>\`
+  ).join('');
+  if (btn) btn.disabled = false;
+}
+
+async function addKeysFromVault(){
+  const prov = document.getElementById('k_provider').value;
+  const picked = Array.from(document.querySelectorAll('#k_vault_list .k-vault-pick:checked')).map(el => el.value);
+  if (!picked.length) { toast('请先勾选要拉取的中枢 Key', 'err'); return; }
+  const btn = document.getElementById('k_vault_btn');
+  if (btn) { btn.disabled = true; btn.textContent = '拉取中…'; }
+  try {
+    const res = await fetch('/api/admin/vault/add-keys', {
+      method: 'POST', headers: headers(), body: JSON.stringify({ provider: prov, keys: picked })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { toast('从中枢添加 Key 失败: ' + (data.error || \`HTTP \${res.status}\`), 'err'); return; }
+    const added = data.added || [];
+    const missing = data.missing || [];
+    let msg = \`已从中枢添加 \${added.length} 个 Key\`;
+    if (missing.length) msg += \`，\${missing.length} 个中枢已不存在\`;
+    toast(msg, added.length ? 'ok' : 'err');
+    await loadData();
+    closeModal('keyModal');
+    if (added.length && typeof _onKeySavedCallback === 'function') { const cb = _onKeySavedCallback; _onKeySavedCallback = null; try { cb(prov, added[0]); } catch (_) {} }
+  } catch (e) {
+    toast('从中枢添加 Key 异常: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '拉取选中 Key'; }
+  }
+}
+
 function isVertexProvider(prov){
   const p = state.config?.providers?.[prov];
   return prov === 'vertex' || p?.preset_id === 'vertex' || (p?.name && p.name.includes('Vertex')) || (p?.base_url && p.base_url.includes('aiplatform.googleapis.com'));
@@ -4166,6 +4220,8 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
     const protos = getProviderProtocols(prov);
     hintEl.innerHTML = \`<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>\${esc(prov)}</b></span><span>需校验协议: \${renderProtocolBadges(protos)}</span></div>\`;
   }
+
+  renderVaultKeyPicker(prov);
 
   const vSec = document.getElementById('k_vertex_section');
   if (isVertexProvider(prov) && vSec) {
@@ -4203,6 +4259,7 @@ function editKey(prov, label){
     keyVal = String(currentKeyObj || '');
   }
 
+  hideVaultKeyPicker();
   _isLocalKeyMode = isLocal;
   document.getElementById('keyModalTitle').textContent = isLocal
     ? \`编辑本地 Key 凭证 - \${prov} (\${label})\`
@@ -4591,11 +4648,13 @@ function commitKey(prov, label, val){
     }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
-    const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-    const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-    if (remoteKeys.includes(keyLabel)) return 'vault';
-    if (localProv && localProv.origin === 'vault') return 'vault';
-    if (!localProv && remote) return 'vault';
+    // VM：Key 来源以 Key 自身标记为准（拉取时写入 origin=vault）。
+    // 旧数据无标记：仅当供应商是中枢拉取的、且中枢清单里确有该 Key 时视为中枢 Key。
+    if (localProv && localProv.origin === 'vault') {
+      const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
+      const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
+      if (remoteKeys.includes(keyLabel)) return 'vault';
+    }
     return 'local';
   }
 

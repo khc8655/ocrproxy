@@ -606,6 +606,13 @@
       <input type="hidden" id="k_provider">
       <input type="hidden" id="k_oldLabel">
       <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      <!-- 从中枢添加 Key：仅「能从中枢拉取」的部署 (HOST.capabilities.vaultClient) 且供应商来自中枢时由 providers.js 显示 -->
+      <div id="k_vault_section" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">从中枢添加</div>
+        <div id="k_vault_list" style="font-size:12px;"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn-primary btn-sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
+        <div class="text-secondary" style="font-size:11px;margin-top:6px;">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
+      </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="k_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">

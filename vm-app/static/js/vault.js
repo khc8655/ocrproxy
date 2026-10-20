@@ -145,37 +145,16 @@ function getAllAvailableProviders(){
 
 // Probed Models Selection Modal State & Logic
 
+// 绑定只允许选本地已有的 Key（中枢供应商须先在「供应商」页整体拉取）。
 async function ensureKeysImported(bindings){
-  const toFetch = [];
-  for(const b of bindings){
-    if(b.key === 'public' || b.key === '__public__') continue;
-    const lookupProv = b.provider;
-    const hasLocal = state.config?.providers?.[b.provider]?.keys?.[b.key];
-    if(!hasLocal){
-      toFetch.push({ ...b, fetchProv: lookupProv });
-    }
+  const missing = (bindings || []).filter(b =>
+    b.key !== 'public' && b.key !== '__public__' &&
+    !state.config?.providers?.[b.provider]?.keys?.[b.key]);
+  if (missing.length) {
+    const m = missing[0];
+    toast(`Key [${m.provider}:${m.key}] 不在本地，请先在「供应商」页添加或从中枢拉取该供应商`, 'err');
+    return false;
   }
-  if(toFetch.length === 0) return true;
-
-  toast(`正在从中枢拉取 ${toFetch.length} 个密钥凭据...`, 'ok');
-  for(const item of toFetch){
-    try {
-      const fetchProv = item.fetchProv || item.provider;
-      const res = await fetch('/api/admin/vault/fetch-key', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({ provider: fetchProv, key_label: item.key })
-      });
-      const d = await res.json().catch(() => ({}));
-      if(!res.ok || !d.ok) {
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-    } catch(e) {
-      toast(`从凭据中枢拉取密钥 [${item.provider}:${item.key}] 失败: ${e.message}`, 'err');
-      return false;
-    }
-  }
-  await loadData();
   return true;
 }
 

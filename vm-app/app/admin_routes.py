@@ -1039,22 +1039,9 @@ async def save_config_endpoint(request: Request):
                             and (c.get("provider"), c.get("key")) not in deleted_keys_set
                         ]
 
-        # 墓碑标记 (Tombstones)：记录用户在本地主动删除的中枢供应商与 Key，杜绝后续同步死灰复燃
-        tombstones = set(current_config.get("tombstones") or [])
-        tombstone_keys = set(current_config.get("tombstone_keys") or [])
-        for dp in deleted_providers:
-            tombstones.add(dp)
-        for p_name, k_lbl in deleted_keys_set:
-            tombstone_keys.add(f"{p_name}:{k_lbl}")
-        if isinstance(incoming_providers, dict):
-            for ap in incoming_providers.keys():
-                tombstones.discard(ap)
-                in_keys = incoming_providers[ap].get("keys") or {}
-                if isinstance(in_keys, dict):
-                    for k_lbl in in_keys.keys():
-                        tombstone_keys.discard(f"{ap}:{k_lbl}")
-        body["tombstones"] = sorted(list(tombstones))
-        body["tombstone_keys"] = sorted(list(tombstone_keys))
+        # 墓碑 (tombstones) 已废弃：同步不再拉取 Key、也不新建供应商，删除即删除，无需防复活。
+        body.pop("tombstones", None)
+        body.pop("tombstone_keys", None)
 
         # 3. Rolling encrypted backups (keep last 20)
         try:
@@ -2049,6 +2036,17 @@ async def vault_manifest_endpoint(request: Request):
 
 @router.post("/vault/fetch-key")
 async def vault_fetch_key_endpoint(request: Request):
+    """One-shot pull of a whole provider (rules + every key) from the EdgeOne vault.
+
+    Rules (VM side):
+      * only allowed when the provider does not exist locally; to pull again the user
+        deletes the provider first, then pulls from 「新增供应商」;
+      * after the pull the provider is a local asset (origin=vault only marks provenance);
+        pulled keys are stored as {"key": ..., "origin": "vault", "is_local": False}
+        (read-only: value cannot be changed, but can be deleted);
+      * keys the user adds later are origin=local and fully editable;
+      * 「同步中枢规则」 later only refreshes rules, never keys.
+    """
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
@@ -2057,22 +2055,16 @@ async def vault_fetch_key_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    provider = body.get("provider")
-    key_label = body.get("key_label")
+    provider = str(body.get("provider") or "").strip()
     if not provider:
         return JSONResponse(status_code=400, content={"error": "Missing provider"})
 
-    # 1. 免密公共凭据兜底：直接本地持久化就绪，免打扰中枢
-    if key_label in ("public", "__public__"):
-        cfg = await get_config()
-        providers = cfg.setdefault("providers", {})
-        local_p = providers.setdefault(provider, {})
-        local_p["name"] = local_p.get("name") or provider
-        local_p["origin"] = "vault"
-        local_keys = local_p.setdefault("keys", {})
-        local_keys[key_label] = "public"
-        await save_config(cfg)
-        return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label, "imported": True})
+    cur_cfg = await get_config()
+    if any(str(k).lower() == provider.lower() for k in (cur_cfg.get("providers") or {}).keys()):
+        return JSONResponse(status_code=409, content={
+            "ok": False,
+            "error": f"本地已存在供应商「{provider}」。如需从中枢重新拉取，请先删除该供应商。"
+        })
 
     edgeone_url, token = await _get_vault_credentials(body)
     if not edgeone_url:
@@ -2084,8 +2076,6 @@ async def vault_fetch_key_endpoint(request: Request):
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             req_payload = {"provider": provider}
-            if key_label and key_label not in ("*", "all"):
-                req_payload["key_label"] = key_label
             res = await client.post(
                 f"{edgeone_url}/api/vault/fetch",
                 headers=headers,
@@ -2105,54 +2095,45 @@ async def vault_fetch_key_endpoint(request: Request):
             if not data.get("ok"):
                 return JSONResponse(status_code=400, content=data)
 
-            # Auto-import into local config_store: Cloud is authoritative and overwrites provider config
             prov_cfg = data.get("provider_config") or {}
             cfg = await get_config()
             providers = cfg.setdefault("providers", {})
-            local_p = providers.setdefault(provider, {})
-            local_p["origin"] = "vault"
+            if any(str(k).lower() == provider.lower() for k in providers.keys()):
+                return JSONResponse(status_code=409, content={
+                    "ok": False, "error": f"本地已存在供应商「{provider}」。如需重新拉取，请先删除该供应商。"})
 
-            # 1. Overwrite identity & protocols strictly from cloud
-            local_p["name"] = prov_cfg.get("name") or provider
             protocol = prov_cfg.get("protocol") or "openai"
-            local_p["protocol"] = protocol
-
             raw_protos = prov_cfg.get("protocols")
             if not raw_protos or not isinstance(raw_protos, list):
                 raw_protos = ["messages"] if protocol == "messages" else ["chat"]
-            local_p["protocols"] = raw_protos
-            local_p["anthropic_messages"] = bool(prov_cfg.get("anthropic_messages") or ("messages" in raw_protos))
-
-            # 2. Overwrite URLs strictly from cloud
-            if prov_cfg.get("base_url"):
-                local_p["base_url"] = prov_cfg["base_url"]
-            if prov_cfg.get("anthropic_base_url"):
+            local_p = {
+                "name": prov_cfg.get("name") or provider,
+                "origin": "vault",
+                "protocol": protocol,
+                "protocols": raw_protos,
+                "anthropic_messages": bool(prov_cfg.get("anthropic_messages") or ("messages" in raw_protos)),
+                "base_url": prov_cfg.get("base_url") or "",
+                "keys": {},
+            }
+            if prov_cfg.get("anthropic_base_url") and local_p["anthropic_messages"]:
                 local_p["anthropic_base_url"] = prov_cfg["anthropic_base_url"]
-            elif "anthropic_base_url" in local_p and not local_p["anthropic_messages"]:
-                del local_p["anthropic_base_url"]
+            for fld in ("adapter_rules", "cached_models", "rpm_per_key",
+                        "preset_id", "preset_version", "preset_updated_at"):
+                if prov_cfg.get(fld) is not None:
+                    local_p[fld] = prov_cfg[fld]
 
-            # 3. Overwrite adapter rules & cached models & rpm limit
-            if prov_cfg.get("adapter_rules") is not None:
-                local_p["adapter_rules"] = prov_cfg["adapter_rules"]
-            if prov_cfg.get("cached_models") is not None:
-                local_p["cached_models"] = prov_cfg["cached_models"]
-            if prov_cfg.get("rpm_per_key") is not None:
-                local_p["rpm_per_key"] = prov_cfg["rpm_per_key"]
+            for k_lbl, k_val in (prov_cfg.get("keys") or {}).items():
+                if not k_lbl or not k_val:
+                    continue
+                k_obj = dict(k_val) if isinstance(k_val, dict) else {"key": str(k_val)}
+                k_obj["origin"] = "vault"
+                k_obj["is_local"] = False
+                local_p["keys"][k_lbl] = k_obj
 
-            # 4. Merge keys: Cloud keys overwrite, local-only keys are preserved
-            local_keys = local_p.setdefault("keys", {})
-            remote_keys = prov_cfg.get("keys") or {}
-            for k_lbl, k_val in remote_keys.items():
-                if k_lbl and k_val:
-                    local_keys[k_lbl] = k_val
-
-            # 5. Clear tombstones for re-added provider
-            tombstones = cfg.get("tombstones") or []
-            if provider in tombstones or any(x.lower() == provider.lower() for x in tombstones):
-                cfg["tombstones"] = [x for x in tombstones if x.lower() != provider.lower()]
-
+            providers[provider] = local_p
             await save_config(cfg)
-            return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label or "*", "imported": True})
+            return JSONResponse(content={"ok": True, "provider": provider,
+                                         "key_count": len(local_p["keys"]), "imported": True})
     except httpx.ConnectError as ce:
         logger.error("Failed to fetch key from EdgeOne Vault: %s", ce)
         return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: 无法连接至 {edgeone_url}"})
@@ -2161,6 +2142,118 @@ async def vault_fetch_key_endpoint(request: Request):
     except Exception as e:
         logger.error("Failed to fetch key from EdgeOne Vault: %s", e)
         return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: {str(e)}"})
+
+
+@router.post("/vault/add-keys")
+async def vault_add_keys_endpoint(request: Request):
+    """Explicitly add selected hub keys to an already-pulled (origin=vault) provider.
+
+    Body: {"provider": str, "keys": [label, ...]}
+
+    Rules (VM side):
+      * only for providers that exist locally with origin=vault (pulled from the hub);
+      * add-only: a label that already exists locally (hub or local key) is skipped,
+        never overwritten;
+      * rules and existing keys are untouched, so KB candidates / Agent bindings survive;
+      * added keys are {"key": ..., "origin": "vault", "is_local": False} (read-only, deletable);
+      * the user picks the labels, so a key the user deleted earlier only comes back when
+        the user picks it again; no tombstones needed.
+    """
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    provider = str(body.get("provider") or "").strip()
+    raw_labels = body.get("keys")
+    if not provider:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "Missing provider"})
+    if not isinstance(raw_labels, list) or not raw_labels:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "请至少选择一个中枢 Key"})
+    labels = []
+    for lbl in raw_labels:
+        lbl = str(lbl or "").strip()
+        if lbl and lbl not in labels:
+            labels.append(lbl)
+
+    cur_cfg = await get_config()
+    local_p = (cur_cfg.get("providers") or {}).get(provider)
+    if not isinstance(local_p, dict):
+        return JSONResponse(status_code=404, content={"ok": False, "error": f"本地不存在供应商「{provider}」，请先在「新增供应商」中从中枢拉取"})
+    if local_p.get("origin") != "vault":
+        return JSONResponse(status_code=400, content={"ok": False, "error": f"供应商「{provider}」是本地自建的，不能从中枢添加 Key"})
+
+    existing = set((local_p.get("keys") or {}).keys())
+    wanted = [l for l in labels if l not in existing]
+    skipped = [l for l in labels if l in existing]
+    if not wanted:
+        return JSONResponse(content={"ok": True, "provider": provider, "added": [], "skipped": skipped, "missing": []})
+
+    edgeone_url, token = await _get_vault_credentials(body)
+    if not edgeone_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "未配置 EdgeOne 凭据中枢地址，请在「系统设置」中配置中枢 URL"})
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.post(
+                f"{edgeone_url}/api/vault/fetch",
+                headers=headers,
+                json={"provider": provider, "keys": wanted, "credentials_only": True},
+            )
+            if res.status_code == 401:
+                return JSONResponse(status_code=401, content={
+                    "ok": False,
+                    "error": "EdgeOne 中枢凭据鉴权失败 (HTTP 401)。请核对中枢访问 Token 是否与 EdgeOne 环境变量 VAULT_ACCESS_TOKEN 完全一致。"
+                })
+            if not res.is_success:
+                return JSONResponse(status_code=res.status_code, content={
+                    "ok": False, "error": f"EdgeOne 中枢返回 HTTP {res.status_code}: {res.text[:150]}"})
+            data = res.json()
+            if not data.get("ok"):
+                return JSONResponse(status_code=400, content=data)
+            remote_keys = data.get("keys")
+            if not isinstance(remote_keys, dict):
+                remote_keys = (data.get("provider_config") or {}).get("keys") or {}
+    except httpx.ConnectError:
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取中枢 Key 失败: 无法连接至 {edgeone_url}"})
+    except httpx.TimeoutException:
+        return JSONResponse(status_code=504, content={"ok": False, "error": f"拉取中枢 Key 超时 (>10s): {edgeone_url}"})
+    except Exception as e:
+        logger.error("Failed to add keys from EdgeOne Vault: %s", e)
+        return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取中枢 Key 失败: {str(e)}"})
+
+    # Re-read config after the network call so concurrent edits are not lost.
+    cfg = await get_config()
+    p = (cfg.get("providers") or {}).get(provider)
+    if not isinstance(p, dict) or p.get("origin") != "vault":
+        return JSONResponse(status_code=409, content={"ok": False, "error": f"供应商「{provider}」已被删除或修改，请刷新后重试"})
+    keys = p.setdefault("keys", {})
+    added, missing = [], []
+    for lbl in wanted:
+        if lbl in keys:
+            skipped.append(lbl)
+            continue
+        val = remote_keys.get(lbl)
+        if not val:
+            missing.append(lbl)
+            continue
+        k_obj = dict(val) if isinstance(val, dict) else {"key": str(val)}
+        if not k_obj.get("key"):
+            missing.append(lbl)
+            continue
+        k_obj["origin"] = "vault"
+        k_obj["is_local"] = False
+        keys[lbl] = k_obj
+        added.append(lbl)
+    if added:
+        await save_config(cfg)
+    return JSONResponse(content={"ok": True, "provider": provider, "added": added,
+                                 "skipped": skipped, "missing": missing})
 
 
 @router.post("/vault/sync")
@@ -2203,34 +2296,21 @@ async def vault_sync_endpoint(request: Request):
             updated = 0
             created = 0
 
-            # 严格精准增量同步：仅同步当前本地已配置的提供商，绝不强塞未配置的中枢提供商
-            # 严格遵守本地删除墓碑 (tombstones)，已被用户删除的提供商与 Key 绝不复活
-            tombstones = set(cfg.get("tombstones") or [])
-            tombstone_keys = set(cfg.get("tombstone_keys") or [])
-            active_pids = set(local_providers.keys())
-
+            # 只刷新「从中枢拉取过」(origin=vault) 且本地仍存在的供应商的规则；
+            # 不新建供应商、不拉取/覆盖任何 Key（Key 只在首次拉取时一次性落地）。
+            remote_by_low = {str(k).lower(): k for k in remote_providers.keys()}
             target_pids = [
-                p_id for p_id in remote_providers.keys()
-                if (p_id in active_pids or p_id.lower() in [x.lower() for x in active_pids])
-                and p_id not in tombstones
-                and p_id.lower() not in [x.lower() for x in tombstones]
+                (local_id, remote_by_low[str(local_id).lower()])
+                for local_id, lp in local_providers.items()
+                if isinstance(lp, dict) and lp.get("origin") == "vault"
+                and str(local_id).lower() in remote_by_low
             ]
 
-            if not target_pids:
-                return JSONResponse(content={
-                    "ok": True,
-                    "updated": 0,
-                    "created": 0,
-                    "message": "当前本地尚未添加任何对应中枢提供商，无需同步。如需使用中枢供应商，请前往「供应商」页面添加。"
-                })
-
-            for p_id in target_pids:
-                r_p = remote_providers[p_id]
+            for p_id, r_id in target_pids:
+                r_p = remote_providers[r_id]
                 if not isinstance(r_p, dict):
                     continue
-                is_new = p_id not in local_providers
-                p_cfg = local_providers.setdefault(p_id, {})
-                p_cfg["origin"] = "vault"
+                p_cfg = local_providers[p_id]
 
                 # 1. 基础元数据落库（云端权威覆盖）
                 p_cfg["name"] = r_p.get("name") or p_id
@@ -2277,50 +2357,22 @@ async def vault_sync_endpoint(request: Request):
                 if preset_updated_at:
                     p_cfg["preset_updated_at"] = preset_updated_at
 
-                # 2. 自动拉取中枢该提供商的密钥（严格保留已有本地自建 Key，且过滤本地删除墓碑）
-                remote_key_labels = r_p.get("keys") or []
-                local_keys = p_cfg.setdefault("keys", {})
-                missing_labels = [
-                    kl for kl in remote_key_labels
-                    if isinstance(kl, str)
-                    and f"{p_id}:{kl}" not in tombstone_keys
-                    and (
-                        kl not in local_keys or
-                        not local_keys[kl] or
-                        (isinstance(local_keys[kl], dict) and not local_keys[kl].get("is_local"))
-                    )
-                ]
+                # 旧数据迁移：早期拉取的 Key 是裸字符串、没有来源标记；中枢清单里有的同名 Key 补上
+                # origin=vault（只补标记，不改值，也不新增 Key）。
+                remote_labels = {kl for kl in (r_p.get("keys") or []) if isinstance(kl, str)}
+                for kl, kv in list((p_cfg.get("keys") or {}).items()):
+                    if kl in remote_labels and not (isinstance(kv, dict) and kv.get("origin")):
+                        k_obj = dict(kv) if isinstance(kv, dict) else {"key": str(kv)}
+                        k_obj["origin"] = "vault"
+                        k_obj["is_local"] = False
+                        p_cfg["keys"][kl] = k_obj
 
-                for kl in missing_labels:
-                    # 如果本地同名 Key 已经被标记为本地自建 (is_local=True)，绝对不被中枢覆盖
-                    existing_key_obj = local_keys.get(kl)
-                    if isinstance(existing_key_obj, dict) and existing_key_obj.get("is_local"):
-                        continue
-
-                    try:
-                        fk_res = await client.post(
-                            f"{edgeone_url}/api/vault/fetch",
-                            headers=headers,
-                            json={"provider": p_id, "key_label": kl}
-                        )
-                        if fk_res.is_success:
-                            fk_data = fk_res.json()
-                            if fk_data.get("ok"):
-                                r_keys = (fk_data.get("provider_config") or {}).get("keys") or {}
-                                if kl in r_keys and r_keys[kl]:
-                                    local_keys[kl] = r_keys[kl]
-                    except Exception as fe:
-                        logger.warning(f"Failed to fetch key {kl} for provider {p_id} during sync: {fe}")
-
-                if is_new:
-                    created += 1
-                else:
-                    updated += 1
+                updated += 1
 
             if updated > 0 or created > 0:
                 await save_config(cfg)
 
-            msg = f"中枢同步完成：已精准增量更新 {updated} 个已配置供应商的最新中枢端点与密钥"
+            msg = f"中枢同步完成：已更新 {updated} 个中枢来源供应商的规则（Key 不变）"
             return JSONResponse(content={
                 "ok": True,
                 "message": msg,
