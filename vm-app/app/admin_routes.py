@@ -2139,17 +2139,28 @@ async def vault_fetch_key_endpoint(request: Request):
             if prov_cfg.get("rpm_per_key") is not None:
                 local_p["rpm_per_key"] = prov_cfg["rpm_per_key"]
 
-            # 4. Merge keys: Cloud keys overwrite, local-only keys are preserved
+            # 4. Merge keys: cloud keys overwrite cloud copies; a same-name key the user created
+            #    locally (is_local / origin=local) is never overwritten (same rule as vault_sync).
             local_keys = local_p.setdefault("keys", {})
             remote_keys = prov_cfg.get("keys") or {}
+            imported_labels = []
             for k_lbl, k_val in remote_keys.items():
-                if k_lbl and k_val:
-                    local_keys[k_lbl] = k_val
+                if not k_lbl or not k_val:
+                    continue
+                existing = local_keys.get(k_lbl)
+                if isinstance(existing, dict) and (existing.get("is_local") or existing.get("origin") == "local"):
+                    continue
+                local_keys[k_lbl] = k_val
+                imported_labels.append(k_lbl)
 
-            # 5. Clear tombstones for re-added provider
-            tombstones = cfg.get("tombstones") or []
-            if provider in tombstones or any(x.lower() == provider.lower() for x in tombstones):
-                cfg["tombstones"] = [x for x in tombstones if x.lower() != provider.lower()]
+            # 5. Explicit re-import = user wants it back: clear the provider tombstone and the
+            #    key tombstones of what was just imported, so the next sync does not fight it.
+            p_low = provider.lower()
+            tombstones = [x for x in (cfg.get("tombstones") or []) if isinstance(x, str)]
+            cfg["tombstones"] = [x for x in tombstones if x.lower() != p_low]
+            if imported_labels:
+                drop = {f"{provider}:{k}" for k in imported_labels}
+                cfg["tombstone_keys"] = [x for x in (cfg.get("tombstone_keys") or []) if x not in drop]
 
             await save_config(cfg)
             return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label or "*", "imported": True})

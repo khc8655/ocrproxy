@@ -3650,7 +3650,7 @@ function populateCatalogSelect(select) {
           const protos = rp.protocols || ['chat'];
           const protoStr = (typeof formatProtocolsDisplay === 'function') ? formatProtocolsDisplay(protos) : protos.join('+');
           const cleanName = (typeof cleanProviderLabel === 'function') ? cleanProviderLabel(rp.name || rp.id) : (rp.name || rp.id);
-          return \`<option value="vault:\${rp.id}">\${cleanName} (\${protoStr})</option>\`;
+          return \`<option value="vault:\${esc(rp.id)}">\${esc(cleanName)} (\${esc(protoStr)})</option>\`;
         }).join('') +
         '</optgroup>';
     }

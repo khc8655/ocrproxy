@@ -154,6 +154,59 @@ async def test_readding_provider_clears_tombstone():
         assert "prov_a" not in res2.json().get("tombstones", []), "Re-added provider must be cleared from tombstones"
 
 
+async def test_vault_provider_import_keeps_local_keys():
+    """Layer 2: whole-provider import from the EdgeOne vault (fetch-key without key_label)
+    pulls all cloud keys, never overwrites a same-name key the user created locally,
+    and clears the provider/key tombstones of what it imported."""
+    import types
+    from app.main import app
+    import app.admin_routes as ar
+
+    seen = {}
+    def handler(req):
+        import json as _j
+        seen["body"] = _j.loads(req.content or b"{}")
+        return httpx.Response(200, json={"ok": True, "provider": "prov_v", "provider_config": {
+            "name": "V", "protocol": "openai", "base_url": "https://v.example.com/v1",
+            "keys": {"shared": "sk-cloud-shared", "cloud_only": "sk-cloud-only"}}})
+    real_client = httpx.AsyncClient
+    shim = types.SimpleNamespace(**{k: getattr(httpx, k) for k in dir(httpx) if not k.startswith("__")})
+    shim.AsyncClient = lambda *a, **kw: real_client(transport=httpx.MockTransport(handler), **{k: v for k, v in kw.items() if k != "transport"})
+    orig = ar.httpx
+    ar.httpx = shim
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test_admin_pass_123"}
+    try:
+        async with real_client(transport=transport, base_url="http://testserver") as client:
+            r = await client.post("/api/admin/config", headers=headers, json={
+                "edgeone_vault": {"edgeone_url": "https://hub.example.com", "token": "t"},
+                "providers": {"prov_v": {"name": "V", "base_url": "https://v.example.com/v1",
+                                         "keys": {"shared": {"key": "sk-my-local", "is_local": True}}}},
+            })
+            assert r.status_code == 200, r.text
+            cur = (await client.get("/api/config", headers=headers)).json()
+            cur = cur.get("config", cur)
+            cur["tombstones"] = ["prov_v"]
+            cur["tombstone_keys"] = ["prov_v:cloud_only"]
+            from app.config_store import save_config
+            await save_config(cur)
+
+            r = await client.post("/api/admin/vault/fetch-key", headers=headers, json={"provider": "prov_v"})
+            assert r.status_code == 200 and r.json().get("ok"), r.text
+            assert "key_label" not in seen["body"], f"whole-provider import must not send key_label: {seen['body']}"
+
+            from app.config_store import get_config
+            cfg = await get_config()
+            keys = cfg["providers"]["prov_v"]["keys"]
+            shared = keys["shared"]
+            assert isinstance(shared, dict) and shared.get("key") == "sk-my-local", f"local key overwritten: {shared}"
+            assert keys.get("cloud_only") == "sk-cloud-only", keys
+            assert "prov_v" not in (cfg.get("tombstones") or []), cfg.get("tombstones")
+            assert "prov_v:cloud_only" not in (cfg.get("tombstone_keys") or []), cfg.get("tombstone_keys")
+    finally:
+        ar.httpx = orig
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -182,6 +235,10 @@ async def _run_all_tests():
         print("  -> test_readding_provider_clears_tombstone...")
         await test_readding_provider_clears_tombstone()
         print("     PASS: test_readding_provider_clears_tombstone")
+
+        print("  -> test_vault_provider_import_keeps_local_keys...")
+        await test_vault_provider_import_keeps_local_keys()
+        print("     PASS: test_vault_provider_import_keeps_local_keys")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:
