@@ -369,6 +369,7 @@ def get_active_cooldowns() -> Dict[str, dict]:
             model = rest.partition(":")[2]
             res[cand_id] = {
                 "cooling": True,
+                "expires_at": expiry,
                 "is_quota": cand_id in _quota_exhausted_cands,
                 "is_gone": _is_model_gone(prov, model),
             }

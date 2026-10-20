@@ -62,6 +62,28 @@ def main():
         t = am.AgentRequestTracker(); t.note_schedule("claude")
         t.finish(False)
 
+        # 5b. normal content that merely mentions "event: error" must NOT count as a failure
+        t = am.AgentRequestTracker(); t.note_schedule("gpt")
+        t.on_chunk(b'data: {"choices":[{"delta":{"content":"the token event: error is documented"}}]}\n\ndata: [DONE]\n\n')
+        t.finish(True)
+
+        # 5c. Anthropic error event (event: error + JSON type=error) -> failure
+        t = am.AgentRequestTracker(); t.note_schedule("claude")
+        t.on_chunk(b'event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"busy"}}\n\n')
+        t.finish(True)
+
+        # 5d. OpenAI-style error frame with irregular spacing / type=error -> failure
+        t = am.AgentRequestTracker(); t.note_schedule("gpt")
+        t.on_chunk(b'data:  {"type":"error","message":"boom"}\n\ndata: [DONE]\n\n')
+        t.finish(True)
+
+        # 5e. keep-alive comment and the first real event in the same chunk -> that is the TTFT
+        t = am.AgentRequestTracker(); t.note_schedule("claude")
+        time.sleep(0.01)
+        t.on_chunk(b': keep-alive\n\ndata: {"choices":[{"delta":{"content":"hi"}}]}\n\n')
+        assert t.ttft_ms is not None and t.ttft_ms >= 10, f"comment+data chunk must start the TTFT clock: {t.ttft_ms}"
+        t.finish(True)
+
         # 6. never reached routing (auth / validation / KB) -> not recorded
         t = am.AgentRequestTracker()
         t.on_body(b'{"usage":{"prompt_tokens":999}}')
@@ -69,20 +91,20 @@ def main():
 
         s = am.snapshot()
         assert s["window"] == "today" and s["timezone"] == "Asia/Shanghai", s
-        assert s["requests"] == 6, s
-        assert s["failures"] == 2, s
+        assert s["requests"] == 10, s
+        assert s["failures"] == 4, s
         assert s["failovers"] == 1, s
         assert s["tokens_in"] == 120 + 105 + 7, s
         assert s["tokens_out"] == 30 + 42 + 3, s
         assert s["usage_requests"] == 3, s
         assert s["ttft_ms_avg"] is not None and s["total_ms_avg"] is not None
-        assert s["models"]["claude"]["requests"] == 4 and s["models"]["gpt"]["failures"] == 1, s["models"]
+        assert s["models"]["claude"]["requests"] == 6 and s["models"]["gpt"]["failures"] == 2, s["models"]
 
         # 7. persistence: flush, drop memory, reload from disk
         am.flush()
         assert os.path.exists(os.path.join(tmp, "agent_summary.json"))
         am.reset()
-        assert am.snapshot()["requests"] == 6, "today's summary must survive a restart"
+        assert am.snapshot()["requests"] == 10, "today's summary must survive a restart"
 
         # 8. a file from another day is ignored; rollover resets
         with open(os.path.join(tmp, "agent_summary.json"), "w", encoding="utf-8") as f:

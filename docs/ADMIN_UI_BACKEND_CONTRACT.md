@@ -82,6 +82,7 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 
 ### 5. 首页 Agent 统计契约 (`stats.agent.summary`)
 - **字段**：`GET /api/admin/stats` 响应中的可选字段 `agent.summary`（含 `window`/`date`/`timezone`/`requests`/`failures`/`failovers`/`tokens_in`/`tokens_out`/`usage_requests`/`ttft_ms_avg`/`total_ms_avg`/`models`），完整定义见 [`shared/contracts/admin-ui-backend.json`](../shared/contracts/admin-ui-backend.json) 的 `endpoints.stats.response.agent.summary`。
+- **冷却字段**：`candidates_status.*.cooldown_until`（epoch ms，可选）为契约字段，双端在 Key 处于冷却窗口内时下发，供首页「当前快照」计算「冷却 / 故障中的 Key」。
 - **双端口径**：VM（`vm-app/app/agent_metrics.py`）返回按北京时间自然日累计的今日统计；EdgeOne **刻意不返回**该字段，前端 `core.js` 自动降级为基于 `candidates_status` 的「当前快照」三卡。前端仅凭 `summary.window` 是否存在切换两种渲染。
 - **核验场景**：API 层 `S7`（VM 有 `agent.summary`、EdgeOne 无）与真实浏览器 `U3`（VM 显示「今日 Token 总量」、EdgeOne 显示「可用 Key」，无 `NaN`/`undefined`）；「+ Key → 从中枢添加」能力位由 `U2` 覆盖。
 

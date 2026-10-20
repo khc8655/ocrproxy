@@ -4,6 +4,31 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-03] - 2026-10-20
+
+### 独立评审修复：中枢写入版本锁、旧中枢 Key 只读与首页快照口径矫正
+- **中枢写入统一版本锁与滚动备份（P0 修复）**：
+  - `/vault/fetch-key`、`/vault/add-keys`、`/vault/sync`、`/vault/config` 改为统一 `_save_vault_config_change()` 持久化，与手动保存一致地自增 `_version` 并生成滚动加密备份；
+  - 修复「在拉取/同步之前打开的旧标签页再次保存会静默删除刚拉取的供应商与 Key」的数据丢失竞态：旧标签页现在收到 409 版本冲突（本地自建 Key 无法从中枢恢复，必须拦截）。
+- **旧数据中枢 Key 只读保护（P1 修复）**：
+  - 后端：`origin=vault` 供应商下升级前遗留的未标记裸字符串 Key 同样只读（保存时还原原值、可删除）；
+  - 前端：供应商 `origin=vault` 时，未标记 Key 回退判定为 `[中枢]`，中枢离线/未配置时不再误显示为可编辑的本地 Key（避免保存后被写成 `origin=local`）；VM 端「供应商」页中枢 Key 不再渲染「编辑」入口（EdgeOne 作为中枢母本不受影响）。
+- **首页 Agent 快照按 Key 聚合（P1 修复）**：
+  - 同一 Key 绑定多个模型时，EdgeOne 快照先按 `provider:key` 聚合再统计，修正「可用 Key / 冷却故障 / 最近平均耗时」重复计数及「有成功记录却显示未调用/最近失败」的问题；
+  - 契约 U3 增加唯一 Key 数量与数值断言，夹具覆盖多模型绑定同一 Key 的去重口径。
+- **冷却字段契约化（P1 修复）**：`candidates_status.*.cooldown_until` 正式写入后端契约，VM stats 从调度器冷却窗口补齐该字段，双端快照口径一致。
+- **统计边界与重置修复**：
+  - SSE 错误帧改为按事件与 JSON 解析：正文内容包含 `event: error` 不再误判为失败，`data:  {"error"`（多余空格）与 `{"type":"error"}` 不再漏判；
+  - keep-alive 注释与首个 data 事件同处一个 chunk 时正确计入首字延迟（TTFT）；
+  - 「重置统计」接口返回最新 stats 载荷，前端不再把 `{status}` 当作 stats 而回退到空快照；流式统计包装显式关闭上游迭代器，及时释放连接与 Key 租约。
+- **安全收口**：`/probe-models` 从中枢取出的明文 Key 只允许发往中枢声明的 `base_url`，不再跟随调用方临时传入地址，杜绝「管理员口令 + 自定义 base_url」的明文 Key 外送通道。
+- **回归测试**：
+  - 新增 Layer 2 `test_vault_write_version_and_legacy_key_guard`（版本自增、旧标签页 409、旧字符串 Key 不可改写、重置统计返回 stats）；
+  - `test_agent_metrics` 补充错误帧误判、同块 keep-alive、Anthropic `event: error` 等边界；契约 U2/U3 在无 Playwright 环境正确 SKIP；
+  - 四层全量测试 100% 通过，发版门禁 G1~G5 全绿。
+
+---
+
 ## [v20261020-02] - 2026-10-20
 
 ### Agent 首页今日统计与中枢供应商拉取/同步规约收敛

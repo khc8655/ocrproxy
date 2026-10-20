@@ -31,6 +31,45 @@ def _check_auth(request: Request) -> bool:
     return verify_admin_auth(request)
 
 
+def _rolling_config_backup() -> None:
+    """Copy proxy_config.enc to a timestamped rolling backup (keep the last 20)."""
+    try:
+        config_dir = _get_config_dir()
+        current_enc_file = os.path.join(config_dir, "proxy_config.enc")
+        if not os.path.exists(current_enc_file):
+            return
+        # millisecond suffix: vault writes can follow a manual save within the same second
+        timestamp_str = time.strftime("%Y%m%d%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+        bak_file = os.path.join(config_dir, f"proxy_config.enc.bak-{timestamp_str}")
+        shutil.copy2(current_enc_file, bak_file)
+        bak_files = sorted(glob.glob(os.path.join(config_dir, "proxy_config.enc.bak-*")))
+        if len(bak_files) > 20:
+            for old_bak in bak_files[:-20]:
+                try:
+                    os.remove(old_bak)
+                except Exception:
+                    pass
+    except Exception as bak_err:
+        logger.warning("Failed to create pre-save rolling backup: %s", bak_err)
+
+
+async def _save_vault_config_change(cfg: dict) -> int:
+    """Persist config mutated by the /vault/* endpoints (pull / add-keys / sync / vault settings).
+
+    These endpoints do a read-modify-write on the whole config, so they must bump the
+    persisted `_version` exactly like POST /api/admin/config does: otherwise a console tab
+    that loaded the config before the pull still holds the same `_version`, its next save
+    passes the optimistic-lock check and silently deletes the freshly pulled provider
+    (including local keys that cannot be re-pulled from the hub). Same rolling encrypted
+    backup as manual saves.
+    """
+    _rolling_config_backup()
+    next_ver = int(cfg.get("_version", 1) or 1) + 1
+    cfg["_version"] = next_ver
+    await save_config(cfg)
+    return next_ver
+
+
 _METADATA_HOSTS = {"169.254.169.254", "metadata.google.internal", "metadata", "100.100.100.200", "fd00:ec2::254"}
 
 
@@ -985,8 +1024,17 @@ async def save_config_endpoint(request: Request):
                     curr_keys = curr_providers.get(p_name, {}).get("keys", {}) if isinstance(curr_providers.get(p_name), dict) else {}
                     for k_lbl, k_val in list(in_keys.items()):
                         orig_secret = curr_keys.get(k_lbl)
-                        is_vault_key = isinstance(orig_secret, dict) and (
-                            orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
+                        _curr_p = curr_providers.get(p_name)
+                        _curr_origin = _curr_p.get("origin") if isinstance(_curr_p, dict) else None
+                        is_vault_key = (
+                            isinstance(orig_secret, dict) and (
+                                orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
+                            )
+                        ) or (
+                            # 旧数据：中枢拉取的供应商下未标记的裸字符串 Key 同样是中枢资产（只读可删）。
+                            # 否则升级后/中枢离线时这些 Key 会被当成自建 Key 覆盖掉，且同步迁移要等下次联网。
+                            isinstance(orig_secret, str) and _curr_origin == "vault"
+                            and orig_secret not in ("public", "__public__") and bool(orig_secret)
                         )
                         if is_vault_key:
                             # 保持中枢 Key 不可篡改明文，强制恢复中枢母本
@@ -1044,22 +1092,7 @@ async def save_config_endpoint(request: Request):
         body.pop("tombstone_keys", None)
 
         # 3. Rolling encrypted backups (keep last 20)
-        try:
-            config_dir = _get_config_dir()
-            current_enc_file = os.path.join(config_dir, "proxy_config.enc")
-            if os.path.exists(current_enc_file):
-                timestamp_str = time.strftime("%Y%m%d%H%M%S")
-                bak_file = os.path.join(config_dir, f"proxy_config.enc.bak-{timestamp_str}")
-                shutil.copy2(current_enc_file, bak_file)
-                bak_files = sorted(glob.glob(os.path.join(config_dir, "proxy_config.enc.bak-*")))
-                if len(bak_files) > 20:
-                    for old_bak in bak_files[:-20]:
-                        try:
-                            os.remove(old_bak)
-                        except Exception:
-                            pass
-        except Exception as bak_err:
-            logger.warning("Failed to create pre-save rolling backup: %s", bak_err)
+        _rolling_config_backup()
 
         # 4. Bump version monotonically
         next_ver = curr_ver + 1
@@ -1089,34 +1122,52 @@ async def save_config_endpoint(request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to save configuration"})
 
 
-@router.get("/stats")
-async def get_stats_endpoint(request: Request):
-    if not _check_auth(request):
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+def _stats_payload_with_cooldowns() -> dict:
+    """stats.get_stats() plus live cooldown metadata from the scheduler.
 
+    Contract field `candidates_status.*.cooldown_until` (epoch ms) is written by both
+    backends: EdgeOne already sets it, VM annotates it here so the shared dashboard
+    snapshot ("冷却 / 故障中的 Key") works identically after e.g. a stats reset.
+    """
     data = stats.get_stats()
     try:
         from .scheduler import get_active_cooldowns
         active_cds = get_active_cooldowns()
-        if active_cds and "candidates_status" in data:
-            c_status = data["candidates_status"]
+        c_status = data.get("candidates_status")
+        if active_cds and isinstance(c_status, dict):
+            now_ms = int(time.time() * 1000)
             for cid, info in active_cds.items():
                 parts = cid.split(":")
-                if len(parts) >= 2:
-                    prov, key = parts[0], parts[1]
-                    model = parts[2] if len(parts) > 2 else ""
-                    for k, entry in c_status.items():
-                        if prov in k and key in k and (not model or model in k):
-                            if info.get("is_quota"):
-                                entry["is_quota"] = True
-                            # Agent mode keys should not be marked as 'cooling' unless strictly quota-exhausted
-                            is_agent_entry = (entry.get("category") == "agent" or k.startswith("agent:"))
-                            if info.get("cooling") and not is_agent_entry:
-                                entry["cooling"] = True
+                if info.get("is_key_level") and len(parts) >= 3:
+                    parts = parts[1:]  # "key:<provider>:<key_label>"
+                if len(parts) < 2:
+                    continue
+                prov, key = parts[0], parts[1]
+                model = parts[2] if len(parts) > 2 else ""
+                exp = info.get("expires_at")
+                exp_ms = int(float(exp) * 1000) if exp else 0
+                for k, entry in c_status.items():
+                    if prov not in k or key not in k or (model and model not in k):
+                        continue
+                    if info.get("is_quota"):
+                        entry["is_quota"] = True
+                    is_agent_entry = (entry.get("category") == "agent" or k.startswith("agent:"))
+                    # Agent 的历史状态保持原样（dashboard 用 cooldown_until 判断冷却）；
+                    # 只有确在冷却窗口内才补契约字段，避免把已过期的冷却继续显示出来。
+                    if exp_ms > now_ms:
+                        entry["cooldown_until"] = max(int(entry.get("cooldown_until") or 0), exp_ms)
+                    if info.get("cooling") and not is_agent_entry:
+                        entry["cooling"] = True
     except Exception:
         pass
+    return data
 
-    return JSONResponse(content=data)
+
+@router.get("/stats")
+async def get_stats_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    return JSONResponse(content=_stats_payload_with_cooldowns())
 
 
 @router.post("/stats")
@@ -1131,7 +1182,13 @@ async def post_stats_endpoint(request: Request):
 
     if body.get("action") in ("reset", "clear_stats"):
         stats.reset()
-        return JSONResponse(content={"status": "success", "message": "All statistics and error logs have been reset."})
+        # Return the fresh stats as well: the console assigns this payload to state.stats,
+        # and a bare {status} made the dashboard fall back to an empty "当前快照".
+        return JSONResponse(content={
+            "status": "success",
+            "message": "All statistics and error logs have been reset.",
+            "stats": _stats_payload_with_cooldowns(),
+        })
 
     return JSONResponse(status_code=400, content={"error": "Invalid stats action"})
 
@@ -1802,6 +1859,11 @@ async def probe_models_endpoint(request: Request):
                 candidate_keys.append((kl, ksec))
 
     # 2. 若本地无 key 或无 base_url，尝试从中枢 EdgeOne 获取
+    #    从中枢取出的明文 Key 只允许发往中枢自己声明的 base_url（下面 vault_base_url），
+    #    绝不发往调用方临时传入的地址：否则管理员口令 + 自定义 base_url 就能把中枢
+    #    明文 Key 外送到任意公网主机（本端点是按需拉取中枢凭据的唯一残留路径）。
+    vault_key_labels = set()
+    vault_base_url = ""
     edgeone_url, token = await _get_vault_credentials()
     headers_vault = {"Accept": "application/json"}
     if token:
@@ -1826,8 +1888,9 @@ async def probe_models_endpoint(request: Request):
                                 break
                     v_p = v_p or {}
 
+                    vault_base_url = (v_p.get("base_url") or "").strip()
                     if not base_url:
-                        base_url = v_p.get("base_url") or ""
+                        base_url = vault_base_url
                     if not target_vault_keys:
                         raw_vk = v_p.get("keys") or []
                         for k in raw_vk:
@@ -1853,6 +1916,7 @@ async def probe_models_endpoint(request: Request):
                                 ksec = r_keys.get(kl) or (next(iter(r_keys.values())) if r_keys else "")
                                 if ksec:
                                     candidate_keys.append((kl, ksec))
+                                    vault_key_labels.add(kl)
                     except Exception as fe:
                         logger.warning("Vault fetch key %s for %s failed: %s", kl, provider, fe)
         except Exception as e:
@@ -1871,6 +1935,9 @@ async def probe_models_endpoint(request: Request):
         if isinstance(sec_key, dict):
             cand_api_key = str(sec_key.get("key", ""))
             cand_base_url = sec_key.get("base_url") or base_url
+        if label in vault_key_labels and vault_base_url:
+            # 中枢 Key 只发往中枢声明的端点，忽略调用方传入的 base_url
+            cand_base_url = vault_base_url
 
         probe_targets = []
         if is_google:
@@ -2131,9 +2198,10 @@ async def vault_fetch_key_endpoint(request: Request):
                 local_p["keys"][k_lbl] = k_obj
 
             providers[provider] = local_p
-            await save_config(cfg)
+            new_ver = await _save_vault_config_change(cfg)
             return JSONResponse(content={"ok": True, "provider": provider,
-                                         "key_count": len(local_p["keys"]), "imported": True})
+                                         "key_count": len(local_p["keys"]), "imported": True,
+                                         "_version": new_ver})
     except httpx.ConnectError as ce:
         logger.error("Failed to fetch key from EdgeOne Vault: %s", ce)
         return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: 无法连接至 {edgeone_url}"})
@@ -2251,9 +2319,11 @@ async def vault_add_keys_endpoint(request: Request):
         keys[lbl] = k_obj
         added.append(lbl)
     if added:
-        await save_config(cfg)
+        new_ver = await _save_vault_config_change(cfg)
+    else:
+        new_ver = int(cfg.get("_version", 1) or 1)
     return JSONResponse(content={"ok": True, "provider": provider, "added": added,
-                                 "skipped": skipped, "missing": missing})
+                                 "skipped": skipped, "missing": missing, "_version": new_ver})
 
 
 @router.post("/vault/sync")
@@ -2294,7 +2364,6 @@ async def vault_sync_endpoint(request: Request):
             cfg = await get_config()
             local_providers = cfg.setdefault("providers", {})
             updated = 0
-            created = 0
 
             # 只刷新「从中枢拉取过」(origin=vault) 且本地仍存在的供应商的规则；
             # 不新建供应商、不拉取/覆盖任何 Key（Key 只在首次拉取时一次性落地）。
@@ -2369,14 +2438,17 @@ async def vault_sync_endpoint(request: Request):
 
                 updated += 1
 
-            if updated > 0 or created > 0:
-                await save_config(cfg)
+            if updated > 0:
+                new_ver = await _save_vault_config_change(cfg)
+            else:
+                new_ver = int(cfg.get("_version", 1) or 1)
 
             msg = f"中枢同步完成：已更新 {updated} 个中枢来源供应商的规则（Key 不变）"
             return JSONResponse(content={
                 "ok": True,
                 "message": msg,
-                "created_count": created,
+                # Kept for console compatibility: rules-only sync never creates providers.
+                "created_count": 0,
                 "updated_count": updated
             })
     except httpx.ConnectError as ce:
@@ -2481,7 +2553,7 @@ async def vault_config_endpoint(request: Request):
         v_cfg["edgeone_url"] = edgeone_url
     if token and not is_masked_secret(token):
         v_cfg["token"] = token
-    await save_config(cfg)
+    new_ver = await _save_vault_config_change(cfg)
 
     saved_token = v_cfg.get("token", "")
     masked = (saved_token[:4] + "****" + saved_token[-4:]) if len(saved_token) > 8 else "***"

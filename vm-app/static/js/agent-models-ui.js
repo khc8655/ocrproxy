@@ -138,9 +138,9 @@
    *  - A key explicitly flagged { is_local: true } or { origin: 'local' } is always local,
    *    and { is_local: false } / { origin: 'vault' } is always a hub key.
    *  - On EdgeOne the console *is* the hub, so unflagged keys are hub keys.
-   *  - On VM the key's own mark wins; for legacy data without a mark, a key is a hub
-   *    key only when its provider is hub-managed (origin === 'vault') AND the hub
-   *    manifest lists that key. Everything else is local, so a local provider that
+   *  - On VM the key's own mark wins; for legacy data without a mark, a key under a
+   *    hub-pulled provider (origin === 'vault') is still a hub key (read-only), even
+   *    when the hub is offline. Everything else is local, so a local provider that
    *    happens to share a name with a hub provider is never misread as hub-owned.
    * Used by the providers list, the agent-model modal and the binding rows so the
    * three places can never disagree again.
@@ -156,13 +156,10 @@
     }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
-    // VM：Key 来源以 Key 自身标记为准（拉取时写入 origin=vault）。
-    // 旧数据无标记：仅当供应商是中枢拉取的、且中枢清单里确有该 Key 时视为中枢 Key。
-    if (localProv && localProv.origin === 'vault') {
-      const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-      const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-      if (remoteKeys.includes(keyLabel)) return 'vault';
-    }
+    // VM：Key 自身标记优先（旧数据没有标记）。只要供应商本身是从中枢拉取的
+    // (origin=vault)，其未标记的 Key 也一律按中枢 Key 处理：中枢离线或未配置时
+    // 不能把这些旧 Key 误显示成可编辑的本地 Key（否则保存后会写成 origin=local）。
+    if (localProv && localProv.origin === 'vault') return 'vault';
     return 'local';
   }
 

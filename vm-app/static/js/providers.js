@@ -137,10 +137,11 @@ function renderProviders(){
           ? `<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})">GCP: ${esc(val.project_id || '—')} (${esc(val.location || 'global')})</span>`
           : '';
         const sourceBadge = keySourceBadge(keySrc, 10);
-        const actions = `
-          <button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>
-          <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>
-        `;
+        // VM 端中枢 Key 只读可删：编辑入口不渲染（点击也只会报错）；
+        // EdgeOne 本身就是中枢母本，Key 仍可自由编辑。
+        const editBtn = (keySrc === 'vault' && !isHostEdgeOne) ? '' : `<button class="btn-ghost" style="padding:0 2px" onclick="editKey('${esc(name)}','${esc(k)}')">编辑</button>`;
+        const deleteBtn = `<button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('${esc(name)}','${esc(k)}')">×</button>`;
+        const actions = editBtn + deleteBtn;
         return `
           <span class="key-chip">
             <b>${esc(k)}</b>

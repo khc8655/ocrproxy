@@ -181,8 +181,12 @@ async def run_api_scenarios_after_ui(b: Backend, mock_url, c: httpx.AsyncClient,
     # S7: dashboard summary — VM keeps today's per-request totals, EdgeOne sends none
     summ = (st.get("agent") or {}).get("summary")
     if b.kind == "vm":
-        ok7 = (isinstance(summ, dict) and summ.get("window") == "today" and (summ.get("requests") or 0) >= 3
+        ok7 = (isinstance(summ, dict) and summ.get("window") == "today"
+               and bool(summ.get("date")) and summ.get("timezone") == "Asia/Shanghai"
+               and (summ.get("requests") or 0) >= 3
+               and isinstance(summ.get("failures"), int) and isinstance(summ.get("usage_requests"), int)
                and (summ.get("failovers") or 0) >= 1 and (summ.get("tokens_in") or 0) >= 1
+               and isinstance(summ.get("models"), dict) and bool(summ["models"].get("claude"))
                and (summ.get("ttft_ms_avg") or 0) > 0 and (summ.get("total_ms_avg") or 0) > 0)
     else:
         ok7 = not (isinstance(summ, dict) and summ.get("window"))
@@ -207,7 +211,9 @@ async def run_ui(b: Backend):
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        b.results["U1"] = ("SKIP", "playwright 未安装"); return
+        for sid in ("U1", "U2", "U3"):
+            b.results[sid] = ("SKIP", "playwright 未安装")
+        return
     exe = os.environ.get("CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
     async with async_playwright() as p:
         browser = await (p.chromium.launch(executable_path=exe, args=["--no-sandbox"]) if exe else p.chromium.launch())
@@ -250,17 +256,39 @@ async def run_ui(b: Backend):
                 " closeModal('keyModal'); return d; })()")
             want = "block" if b.kind == "vm" else "none"
             b.record("U2", disp == want, f"#k_vault_section display={disp}, 期望 {want}" if disp != want else "")
-            # U3: dashboard Agent cards — VM shows today's totals, EdgeOne the snapshot
-            grid = await page.evaluate(
+            # U3: dashboard Agent cards — VM shows today's totals, EdgeOne the snapshot.
+            #     The snapshot numbers are asserted too: a key bound to several agent models
+            #     must be counted once, so "可用 Key x / y" requires y == unique provider:key.
+            info3 = await page.evaluate(
                 "(() => { if (typeof renderDashboard === 'function') renderDashboard();"
-                " const g = document.getElementById('agentStatsGrid'); return g ? g.innerText : ''; })()")
-            want3 = "今日 Token 总量" if b.kind == "vm" else "可用 Key"
-            ok3 = want3 in grid and "NaN" not in grid and "undefined" not in grid
-            b.record("U3", ok3, f"期望含「{want3}」, 实际: {grid[:160]!r}" if not ok3 else "")
+                " const g = document.getElementById('agentStatsGrid');"
+                " const models = (state.config && state.config.agent_models) || {};"
+                " const ids = new Set();"
+                " Object.entries(models).forEach(([m, cfg]) => (cfg.keys || []).forEach(b => {"
+                "   if (b && b.provider && b.key) ids.add(b.provider + ':' + b.key); }));"
+                " const text = g ? g.innerText : '';"
+                " const mt = text.match(/\\/\\s*(\\d+)/);"
+                " const summ = state.stats && state.stats.agent && state.stats.agent.summary;"
+                " return { text, unique: ids.size, shownTotal: mt ? Number(mt[1]) : null,"
+                "          summaryRequests: summ ? (summ.requests || 0) : null };"
+                "})()")
+            clean3 = "NaN" not in info3["text"] and "undefined" not in info3["text"]
+            if b.kind == "vm":
+                ok3 = ("今日 Token 总量" in info3["text"] and "失败请求" in info3["text"]
+                       and info3["summaryRequests"] is not None and info3["summaryRequests"] >= 2 and clean3)
+            else:
+                ok3 = ("可用 Key" in info3["text"] and "冷却中" in info3["text"]
+                       and info3["unique"] > 0 and info3["shownTotal"] == info3["unique"] and clean3)
+            b.record("U3", ok3,
+                     f"kind={b.kind} unique={info3['unique']} shownTotal={info3['shownTotal']} "
+                     f"summaryRequests={info3['summaryRequests']} text={info3['text'][:160]!r}")
             if errors:
                 b.results["U1"] = ("FAIL", "pageerror: " + "; ".join(errors[:2]))
         except Exception as e:
             b.record("U1", False, f"{type(e).__name__}: {str(e)[:160]}")
+            for sid in ("U2", "U3"):
+                if sid not in b.results:
+                    b.results[sid] = ("SKIP", f"浏览器流程中断: {type(e).__name__}")
         finally:
             await browser.close()
 

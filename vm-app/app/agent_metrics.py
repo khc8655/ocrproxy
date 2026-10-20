@@ -297,8 +297,14 @@ class AgentRequestTracker:
     def on_chunk(self, chunk: bytes):
         if not chunk:
             return
-        if self.ttft_ms is None and not chunk.lstrip().startswith(b":"):
-            self.ttft_ms = (time.monotonic() - self.t0) * 1000.0
+        if self.ttft_ms is None:
+            # SSE keep-alive comments and blank separator lines are not payload; a chunk may
+            # start with a comment and still contain the first real event after it.
+            for line in chunk.split(b"\n"):
+                line = line.strip()
+                if line and not line.startswith(b":"):
+                    self.ttft_ms = (time.monotonic() - self.t0) * 1000.0
+                    break
         buf = self._tail + chunk
         cut = buf.rfind(b"\n")
         if cut < 0:
@@ -307,20 +313,35 @@ class AgentRequestTracker:
         complete, self._tail = buf[:cut], buf[cut + 1:]
         if len(self._tail) > _MAX_LINE_BUF:
             self._tail = b""
-        # cheap pre-checks: only split/parse when something interesting is there
-        has_usage = b'"usage"' in complete
-        has_err = b"event: error" in complete or b'data: {"error"' in complete
-        if not (has_usage or has_err):
+        # Only parse when something interesting is there (usage or an error event).
+        if b'"usage"' not in complete and b"error" not in complete:
             return
-        if has_err:
-            self.stream_error = True
-        if has_usage:
-            for line in complete.split(b"\n"):
-                if line.startswith(b"data:") and b'"usage"' in line:
-                    try:
-                        self._take_usage(json.loads(line[5:].strip()))
-                    except Exception:
-                        pass
+        for line in complete.split(b"\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(b"event:"):
+                if line[6:].strip() == b"error":
+                    self.stream_error = True
+                continue
+            if not line.startswith(b"data:"):
+                continue
+            payload = line[5:].strip()
+            if not payload or payload == b"[DONE]":
+                continue
+            if b'"usage"' not in payload and b"error" not in payload:
+                continue
+            try:
+                obj = json.loads(payload)
+            except Exception:
+                continue
+            if isinstance(obj, dict):
+                if isinstance(obj.get("error"), (dict, str)) and obj.get("error"):
+                    self.stream_error = True
+                elif obj.get("type") == "error":
+                    self.stream_error = True
+                if b'"usage"' in payload:
+                    self._take_usage(obj)
 
     def finish(self, ok: bool):
         if self._done or not self.scheduled:

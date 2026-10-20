@@ -740,7 +740,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-02</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-03</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -2520,24 +2520,34 @@ function renderAgentSummaryCards(s){
 function renderAgentSnapshotCards(st){
   const cs = (st && st.candidates_status) || {};
   const now = Date.now();
-  const seen = new Set();
-  let total = 0, healthy = 0, untested = 0, cooling = 0, failing = 0;
-  const lats = [];
+  // One entry per provider:key (a key may be bound to several agent models, and each
+  // model has its own candidates_status row). Aggregate first, then count: otherwise a
+  // key is double counted / mis-typed depending on which model row happens to exist.
+  const byKey = new Map();  // provider:key -> [entry|null, ...]
   const models = (state.config && state.config.agent_models) || {};
   Object.entries(models).forEach(([mName, m]) => {
     (m.keys || []).forEach(b => {
       if (!b || !b.provider || !b.key) return;
       const id = b.provider + ':' + b.key;
-      const e = cs[\`agent:\${mName}:\${b.provider}:\${b.key}\`];
-      if (e && e.status === 200 && e.latency_ms > 0) lats.push(e.latency_ms);
-      if (seen.has(id)) return;
-      seen.add(id);
-      total++;
-      if (!e) { untested++; return; }
-      if (e.cooldown_until && e.cooldown_until > now) cooling++;
-      else if (e.status === 200) healthy++;
-      else failing++;
+      if (!byKey.has(id)) byKey.set(id, []);
+      byKey.get(id).push(cs[\`agent:\${mName}:\${b.provider}:\${b.key}\`] || null);
     });
+  });
+  let total = 0, healthy = 0, untested = 0, cooling = 0, failing = 0;
+  const lats = [];
+  byKey.forEach(entries => {
+    total++;
+    if (entries.some(e => e && e.cooldown_until && e.cooldown_until > now)) { cooling++; return; }
+    const okEntries = entries.filter(e => e && e.status === 200);
+    if (okEntries.length) {
+      // "最近一次成功调用" for this key = latest successful row across its model bindings.
+      const latest = okEntries.reduce((a, b) => ((b.time || 0) >= (a.time || 0) ? b : a));
+      if (latest.latency_ms > 0) lats.push(latest.latency_ms);
+      healthy++;
+      return;
+    }
+    if (entries.some(e => e)) failing++;
+    else untested++;
   });
   const avgLat = lats.length ? lats.reduce((a, b) => a + b, 0) / lats.length : null;
   const bad = cooling + failing;
@@ -2658,7 +2668,9 @@ function renderDashboard(){
 async function resetStats(){
   if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
-  state.stats=await r.json(); toast('统计与日志已清空','ok'); renderDashboard();
+  const resetData=await r.json().catch(()=>({}));
+  state.stats=(resetData && resetData.stats) || resetData || {};
+  toast('统计与日志已清空','ok'); renderDashboard();
 }
 
 function handlePrimaryModelAction(){
@@ -3388,10 +3400,11 @@ function renderProviders(){
           ? \`<span class="badge badge-purple" style="font-size:10px;padding:1px 5px;" title="GCP: \${esc(val.project_id || '—')} (\${esc(val.location || 'global')})">GCP: \${esc(val.project_id || '—')} (\${esc(val.location || 'global')})</span>\`
           : '';
         const sourceBadge = keySourceBadge(keySrc, 10);
-        const actions = \`
-          <button class="btn-ghost" style="padding:0 2px" onclick="editKey('\${esc(name)}','\${esc(k)}')">编辑</button>
-          <button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('\${esc(name)}','\${esc(k)}')">×</button>
-        \`;
+        // VM 端中枢 Key 只读可删：编辑入口不渲染（点击也只会报错）；
+        // EdgeOne 本身就是中枢母本，Key 仍可自由编辑。
+        const editBtn = (keySrc === 'vault' && !isHostEdgeOne) ? '' : \`<button class="btn-ghost" style="padding:0 2px" onclick="editKey('\${esc(name)}','\${esc(k)}')">编辑</button>\`;
+        const deleteBtn = \`<button class="btn-ghost" style="padding:0 2px;color:var(--error)" onclick="deleteKey('\${esc(name)}','\${esc(k)}')">×</button>\`;
+        const actions = editBtn + deleteBtn;
         return \`
           <span class="key-chip">
             <b>\${esc(k)}</b>
@@ -4713,9 +4726,9 @@ function commitKey(prov, label, val){
    *  - A key explicitly flagged { is_local: true } or { origin: 'local' } is always local,
    *    and { is_local: false } / { origin: 'vault' } is always a hub key.
    *  - On EdgeOne the console *is* the hub, so unflagged keys are hub keys.
-   *  - On VM the key's own mark wins; for legacy data without a mark, a key is a hub
-   *    key only when its provider is hub-managed (origin === 'vault') AND the hub
-   *    manifest lists that key. Everything else is local, so a local provider that
+   *  - On VM the key's own mark wins; for legacy data without a mark, a key under a
+   *    hub-pulled provider (origin === 'vault') is still a hub key (read-only), even
+   *    when the hub is offline. Everything else is local, so a local provider that
    *    happens to share a name with a hub provider is never misread as hub-owned.
    * Used by the providers list, the agent-model modal and the binding rows so the
    * three places can never disagree again.
@@ -4731,13 +4744,10 @@ function commitKey(prov, label, val){
     }
     const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
     if (isEdgeOne) return 'vault';
-    // VM：Key 来源以 Key 自身标记为准（拉取时写入 origin=vault）。
-    // 旧数据无标记：仅当供应商是中枢拉取的、且中枢清单里确有该 Key 时视为中枢 Key。
-    if (localProv && localProv.origin === 'vault') {
-      const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-      const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-      if (remoteKeys.includes(keyLabel)) return 'vault';
-    }
+    // VM：Key 自身标记优先（旧数据没有标记）。只要供应商本身是从中枢拉取的
+    // (origin=vault)，其未标记的 Key 也一律按中枢 Key 处理：中枢离线或未配置时
+    // 不能把这些旧 Key 误显示成可编辑的本地 Key（否则保存后会写成 origin=local）。
+    if (localProv && localProv.origin === 'vault') return 'vault';
     return 'local';
   }
 

@@ -1070,6 +1070,12 @@ async def _with_agent_metrics(request: Request, impl):
                 raise
             finally:
                 tr.finish(status_ok and not failed)
+                aclose = getattr(inner, "aclose", None)
+                if aclose is not None:
+                    try:
+                        await aclose()
+                    except Exception:
+                        pass
         resp.body_iterator = _measured()
     else:
         tr.on_body(getattr(resp, "body", b"") or b"")

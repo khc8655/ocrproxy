@@ -19,7 +19,8 @@
             "status": "int (HTTP status of the last attempt; 200 = ok)",
             "latency_ms": "int >= 0 or null",
             "time": "int, epoch ms of the last attempt",
-            "is_quota": "bool"
+            "is_quota": "bool",
+            "cooldown_until": "int, epoch ms until which the key/candidate is cooling down (optional; set by both backends while cooling; the dashboard snapshot uses it)"
           }
         },
         "agent.active_keys": "object: agent_model -> key_label of the key that served the last successful call",

@@ -201,7 +201,8 @@ function resolveKeySource(provId, keyLabel) {
   if (isEdgeOne) return 'vault';
 
   // 3. VM 端：Key 来源以 Key 自身 origin 标记为准（拉取时写入 origin=vault）；
-  //    旧数据无标记时唯一回退：供应商 origin=vault 且中枢清单里确有该 Key 才视为中枢 Key。
+  //    旧数据（升级前）没有标记：只要供应商 origin=vault，其 Key 仍按中枢 Key 处理，
+  //    中枢离线/未配置时也不显示成可编辑的本地 Key（保存后会被写成 origin=local）。
   if (localProv && localProv.origin === 'vault') {
     const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
     const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
@@ -213,6 +214,8 @@ function resolveKeySource(provId, keyLabel) {
 
 > [!IMPORTANT]
 > VM 端中枢来源**只认 `origin: vault`**：本地同名自建的供应商与 Key 即使在中枢清单里同名，也一律判定为 `[本地]`，不会被误标为中枢资产。判定结果三处共用，不允许各自实现。
+>
+> 升级兼容：`origin=vault` 供应商下升级前遗留的**未标记裸字符串 Key** 同样按中枢 Key 处理（只读可删、保存时后端还原原值），保证中枢离线时也不会被误认为本地 Key 而改写。
 
 ### 3.3 凭据同步与拉取协议契约
 
@@ -239,6 +242,9 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | `POST /api/admin/vault/add-keys` | 「+ Key → 从中枢添加」**按需补拉**指定 Key | Body `{provider, keys:[label...]}`；仅对本地 `origin=vault` 供应商开放；**只新增不覆盖**（已存在标签一律跳过）、不改规则、保留既有模型绑定；前端由 `HOST.capabilities.vaultClient` 控制显示 |
 | `POST /api/admin/vault/sync` | 「同步中枢规则」**只更新规则** | 仅遍历本地 `origin=vault` 的供应商；刷新 `name`/`protocol`/`protocols`/`anthropic_messages`/`base_url`/`anthropic_base_url`/`adapter_rules`/`cached_models`/`rpm_per_key` 与预设版本元数据；**不拉取、不恢复、不新增任何 Key**，不新建供应商；旧数据中无标记的中枢 Key 仅补 `origin=vault` 标记、不改值 |
 | `POST /api/admin/vault/test` | 中枢连通性诊断（manifest 探测 + 延迟 + 供应商计数） | 401 / 502 / 504 全链路透明报错 |
+
+> [!IMPORTANT]
+> `/vault/fetch-key`、`/vault/add-keys`、`/vault/sync`、`/vault/config` 与手动保存共用同一套持久化纪律：写入前生成滚动加密备份，写入时自增 `_version`。因此在这几个操作之前打开的旧控制台标签页，下一次保存会收到 **409 版本冲突**而不是静默覆盖刚拉取的供应商与 Key（其中本地自建 Key 无法从中枢恢复）。
 
 > [!NOTE]
 > 已彻底废弃墓碑机制（`tombstones` / `tombstone_keys`）与调度器请求路径上的中枢懒拉取：本地删掉即删掉，中枢不会在请求时偷偷复活 Key；需要找回某个 Key 时，由用户在「+ Key → 从中枢添加」中显式勾选。

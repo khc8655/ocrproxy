@@ -718,24 +718,34 @@ function renderAgentSummaryCards(s){
 function renderAgentSnapshotCards(st){
   const cs = (st && st.candidates_status) || {};
   const now = Date.now();
-  const seen = new Set();
-  let total = 0, healthy = 0, untested = 0, cooling = 0, failing = 0;
-  const lats = [];
+  // One entry per provider:key (a key may be bound to several agent models, and each
+  // model has its own candidates_status row). Aggregate first, then count: otherwise a
+  // key is double counted / mis-typed depending on which model row happens to exist.
+  const byKey = new Map();  // provider:key -> [entry|null, ...]
   const models = (state.config && state.config.agent_models) || {};
   Object.entries(models).forEach(([mName, m]) => {
     (m.keys || []).forEach(b => {
       if (!b || !b.provider || !b.key) return;
       const id = b.provider + ':' + b.key;
-      const e = cs[`agent:${mName}:${b.provider}:${b.key}`];
-      if (e && e.status === 200 && e.latency_ms > 0) lats.push(e.latency_ms);
-      if (seen.has(id)) return;
-      seen.add(id);
-      total++;
-      if (!e) { untested++; return; }
-      if (e.cooldown_until && e.cooldown_until > now) cooling++;
-      else if (e.status === 200) healthy++;
-      else failing++;
+      if (!byKey.has(id)) byKey.set(id, []);
+      byKey.get(id).push(cs[`agent:${mName}:${b.provider}:${b.key}`] || null);
     });
+  });
+  let total = 0, healthy = 0, untested = 0, cooling = 0, failing = 0;
+  const lats = [];
+  byKey.forEach(entries => {
+    total++;
+    if (entries.some(e => e && e.cooldown_until && e.cooldown_until > now)) { cooling++; return; }
+    const okEntries = entries.filter(e => e && e.status === 200);
+    if (okEntries.length) {
+      // "最近一次成功调用" for this key = latest successful row across its model bindings.
+      const latest = okEntries.reduce((a, b) => ((b.time || 0) >= (a.time || 0) ? b : a));
+      if (latest.latency_ms > 0) lats.push(latest.latency_ms);
+      healthy++;
+      return;
+    }
+    if (entries.some(e => e)) failing++;
+    else untested++;
   });
   const avgLat = lats.length ? lats.reduce((a, b) => a + b, 0) / lats.length : null;
   const bad = cooling + failing;
@@ -856,7 +866,9 @@ function renderDashboard(){
 async function resetStats(){
   if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
-  state.stats=await r.json(); toast('统计与日志已清空','ok'); renderDashboard();
+  const resetData=await r.json().catch(()=>({}));
+  state.stats=(resetData && resetData.stats) || resetData || {};
+  toast('统计与日志已清空','ok'); renderDashboard();
 }
 
 function handlePrimaryModelAction(){

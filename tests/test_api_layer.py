@@ -309,6 +309,68 @@ async def test_vault_add_keys_explicit():
         restore()
 
 
+async def test_vault_write_version_and_legacy_key_guard():
+    """Layer 2: vault writes bump `_version` (a stale tab gets 409 instead of silently
+    deleting what was just pulled) and legacy bare-string hub keys stay read-only.
+    Also checks that POST /stats reset returns the fresh stats payload."""
+    import json as _j
+    from app.main import app
+    from app.config_store import get_config
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+
+    def handler(req):
+        if req.url.path.endswith("/api/vault/fetch"):
+            body = _j.loads(req.content or b"{}")
+            return httpx.Response(200, json={"ok": True, "provider": body["provider"], "provider_config": {
+                "name": "Legacy P", "protocol": "openai", "base_url": "https://legacy.example.com/v1",
+                "keys": {"h1": "sk-hub-h1"}}})
+        return httpx.Response(404)
+
+    restore = _mock_vault(handler)
+    transport = httpx.ASGITransport(app=app)
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+            def body_of(res):
+                d = res.json()
+                return d.get("config", d)
+
+            # --- legacy data: hub-pulled provider whose keys are still unmarked bare strings
+            cur = body_of(await c.get("/api/config", headers=H))
+            cur["providers"] = {"legacy_p": {"name": "Legacy P", "origin": "vault",
+                                             "base_url": "https://legacy.example.com/v1",
+                                             "keys": {"old": "sk-legacy-old"}}}
+            assert (await c.post("/api/admin/config", headers=H, json=cur)).status_code == 200
+
+            # 1) backend keeps the legacy hub key read-only (value restored), and it is masked on GET
+            shown = body_of(await c.get("/api/config", headers=H))
+            assert shown["providers"]["legacy_p"]["keys"]["old"] == "●●●●●●●●", shown["providers"]["legacy_p"]["keys"]
+            cur = body_of(await c.get("/api/config", headers=H))
+            cur["providers"]["legacy_p"]["keys"]["old"] = "sk-tampered"
+            assert (await c.post("/api/admin/config", headers=H, json=cur)).status_code == 200
+            assert (await get_config())["providers"]["legacy_p"]["keys"]["old"] == "sk-legacy-old", \
+                "legacy hub key under origin=vault provider must not be overwritable"
+
+            # 2) a vault pull bumps _version; a tab loaded before the pull must get 409,
+            #    and the freshly pulled provider must survive
+            stale = body_of(await c.get("/api/config", headers=H))
+            v_before = stale["_version"]
+            r = await c.post("/api/admin/vault/fetch-key", headers=H, json={"provider": "new_p"})
+            assert r.status_code == 200, r.text
+            assert r.json().get("_version") == v_before + 1, r.text
+            assert (await get_config())["_version"] == v_before + 1
+            r = await c.post("/api/admin/config", headers=H, json=stale)
+            assert r.status_code == 409, f"stale save must 409 after a vault pull: {r.status_code} {r.text}"
+            assert "new_p" in (await get_config())["providers"], "stale save must not delete the freshly pulled provider"
+
+            # 3) reset stats returns the fresh payload (dashboard re-renders zeros, no snapshot fallback)
+            r = await c.post("/api/admin/stats", headers=H, json={"action": "reset"})
+            body = r.json()
+            assert body.get("status") == "success" and isinstance(body.get("stats"), dict), body
+            assert (body["stats"].get("agent") or {}).get("summary", {}).get("requests") == 0, body["stats"].get("agent")
+    finally:
+        restore()
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -341,6 +403,10 @@ async def _run_all_tests():
         print("  -> test_vault_add_keys_explicit...")
         await test_vault_add_keys_explicit()
         print("     PASS: test_vault_add_keys_explicit")
+
+        print("  -> test_vault_write_version_and_legacy_key_guard...")
+        await test_vault_write_version_and_legacy_key_guard()
+        print("     PASS: test_vault_write_version_and_legacy_key_guard")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:
