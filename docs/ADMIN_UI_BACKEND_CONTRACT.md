@@ -80,6 +80,13 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 
 ---
 
+### 5. 首页 Agent 统计契约 (`stats.agent.summary`)
+- **字段**：`GET /api/admin/stats` 响应中的可选字段 `agent.summary`（含 `window`/`date`/`timezone`/`requests`/`failures`/`failovers`/`tokens_in`/`tokens_out`/`usage_requests`/`ttft_ms_avg`/`total_ms_avg`/`models`），完整定义见 [`shared/contracts/admin-ui-backend.json`](../shared/contracts/admin-ui-backend.json) 的 `endpoints.stats.response.agent.summary`。
+- **双端口径**：VM（`vm-app/app/agent_metrics.py`）返回按北京时间自然日累计的今日统计；EdgeOne **刻意不返回**该字段，前端 `core.js` 自动降级为基于 `candidates_status` 的「当前快照」三卡。前端仅凭 `summary.window` 是否存在切换两种渲染。
+- **核验场景**：API 层 `S7`（VM 有 `agent.summary`、EdgeOne 无）与真实浏览器 `U3`（VM 显示「今日 Token 总量」、EdgeOne 显示「可用 Key」，无 `NaN`/`undefined`）；「+ Key → 从中枢添加」能力位由 `U2` 覆盖。
+
+---
+
 ## 三、 自动化契约测试矩阵 (The Same Scenarios)
 
 测试脚本 [`tests/test_backend_contract.py`](../tests/test_backend_contract.py) 在本地真实拉起：
@@ -97,7 +104,10 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 | **S4** | 429 故障转移双 Key 状态独立 | 上游对 k1 返回 429，触发切到 k2 | k1 显示 `status=429`，k2 显示 `status=200`，`active_keys == "k2"` |
 | **S5** | 手动「测」写回同一状态条目 | 模拟点击「测」调用 `testKey` | 探活成功，且 `candidates_status` 对应节点状态即时更新 |
 | **S6** | 探测上游模型列表接口 | `POST /api/admin/probe-models` | 成功探测并返回包含 `mock-chat-1` 的模型列表 |
+| **S7** | 首页 Agent 统计双端口径 | 读完 S1/S3/S4 状态后读 `stats` | VM：`agent.summary.window=today`，`requests>=3`、`failovers>=1`、`tokens_in>=1`、`ttft_ms_avg>0`；EdgeOne：无 `agent.summary` |
 | **U1** | 真实浏览器渲染核验 | 真实 Chromium 打开控制台 | 对应 Key 行显示「最近响应耗时」徽章，无报错无白屏 |
+| **U2** | 「从中枢添加」能力位 | 真实浏览器：将 `up` 标记 `origin=vault` 后 `openKeyModal('up')`，读取 `#k_vault_section` 显隐 | VM：显示；EdgeOne：不显示（由 `HOST.capabilities.vaultClient` 控制） |
+| **U3** | 首页 Agent 卡片双端呈现 | 真实浏览器：`renderDashboard()` 后读取 `#agentStatsGrid` | VM 含「今日 Token 总量」；EdgeOne 含「可用 Key」；均无 `NaN`/`undefined` |
 
 ---
 

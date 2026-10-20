@@ -149,73 +149,99 @@ classDiagram
     class ProviderKey {
         +string key "API 密钥明文"
         +int rpm "可选单 Key RPM 限流"
-        +bool is_local "是否为本地专属"
+        +string origin "vault | local，来源标记"
         +string created_at "创建时间"
     }
     class VaultKey {
-        +bool is_local = false
+        +string origin = "vault"
         +string scope = "Global Provider Pool"
         +badge = "[中枢]"
-        +can_delete_in_model = false
+        +bool editable = false
+        +bool deletable = true
     }
     class LocalKey {
-        +bool is_local = true
-        +string scope = "Dedicated Model Sandbox"
+        +string origin = "local"
+        +string scope = "Provider Pool (自行添加)"
         +badge = "[本地]"
-        +can_delete_in_model = true
+        +bool editable = true
+        +bool deletable = true
     }
     ProviderKey <|-- VaultKey
     ProviderKey <|-- LocalKey
 ```
 
-| 维度 | 中枢凭据 (Vault Key) | 本地专属凭据 (Local Key) |
+| 维度 | 中枢凭据 (Vault Key) | 本地凭据 (Local Key) |
 | :--- | :--- | :--- |
-| **创建与录入源头** | 统一在管理后台**【模型提供商 (Providers)】**页面添加 | 在**【模型列表 ➔ 添加/编辑模型】**弹窗中点击「+ 添加本地 Key」临时录入 |
-| **数据归属** | 归属于 Provider 顶级凭据池 (`providers[name].keys`) | 仅挂载于特定模型实例 (`is_local: true`) |
-| **UI 视觉徽章** | 灰色沉稳徽章：**`[中枢]`** | 绿色醒目徽章：**`[本地]`** |
-| **删除操作权限** | **严禁在模型弹窗中删除**（`deleteBtn = ''`，不可被单删） | **允许在模型弹窗中点击 `×` 删除**（仅影响当前模型） |
-| **跨端同步传播** | 允许通过 `/api/vault/manifest` 与 `/api/vault/fetch` 下发至各 Worker 节点 | **严格沙箱隔离，API 接口强行过滤，绝不下发/不回传云端** |
-| **本地覆写保护** | 随中枢同步自动更新（权威覆盖） | **最高优先级保护**，同步中枢时即使同名也绝不覆盖本地 Key |
+| **创建与录入源头** | EdgeOne 中枢母本在**【供应商 (Providers)】**页添加；VM 端仅通过「+ 新增供应商」一次性整体拉取落地 | 统一在**【供应商 (Providers)】**页该供应商卡片的「+ Key」中手动添加（模型弹窗已无任何录入入口） |
+| **数据归属** | 均归属于 Provider 顶级凭据池 (`providers[name].keys`)，以 Key 自身 `origin: vault` 标记来源 | 同上池内，以 `origin: local` 标记，不再挂载于特定模型实例 |
+| **UI 视觉徽章** | 蓝紫色徽章：**`[中枢]`**（VM 供应商卡片徽章文案为「来自中枢」） | 绿色徽章：**`[本地]`** |
+| **增删改权限** | **只读可删**：VM 端密钥值与规则只读不可改，但允许整条删除（删除即删除，需重拉则先删后拉） | **完全自治**：自由编辑密钥值、自由删除 |
+| **模型弹窗中的权限** | ❌ **禁止新增 / 禁止删除**（模型弹窗仅显示 Key 胶囊供勾选绑定） | ❌ **禁止新增 / 禁止删除**（同上，Key 增删改查唯一入口＝「供应商」页） |
+| **跨端同步传播** | 通过 `/api/vault/manifest`（仅标签）与 `/api/vault/fetch` 下发；`/api/admin/vault/sync` 只更新规则、不传输 Key | **严格沙箱隔离，API 接口强行过滤，绝不下发/不回传云端** |
+| **本地覆写保护** | 「同步中枢规则」以中枢规则覆盖 `origin: vault` 供应商的规则，但**绝不增删或覆盖任何 Key** | 同步完全不触碰本地自建 Key 与本地同名自建供应商 |
 
 ### 3.2 凭据归属判定算法与真理源契约 (`resolveKeySource`)
 
-为杜绝「供应商列表」、「新增模型弹窗」以及「模型 Key 列表行」三处对凭据类型的判定出现分歧与飘移，前端统一通过 `resolveKeySource(provId, keyLabel)` 导出唯一真理源：
+为杜绝「供应商列表」、「模型弹窗」以及「模型 Key 列表行」三处对凭据类型的判定出现分歧与飘移，前端统一通过 `shared/admin/js/agent-models-ui.js` 导出的 `resolveKeySource(provId, keyLabel)` 建立唯一真理源：
 ```javascript
 function resolveKeySource(provId, keyLabel) {
   if (keyLabel === 'public' || keyLabel === '__public__') return 'public';
   const provs = (getCtx().cfg || {}).providers || {};
   const localProv = provs[provId] || Object.entries(provs).find(([k]) => k.toLowerCase() === String(provId || '').toLowerCase())?.[1];
   const raw = localProv && localProv.keys ? localProv.keys[keyLabel] : undefined;
-  
-  // 1. 显式标记 is_local: true 恒定为本地凭据
-  if (raw && typeof raw === 'object' && raw.is_local === true) return 'local';
-  
-  // 2. EdgeOne 控制台自身即为金库中枢 (Hub)，未标记 is_local 的全量为中枢资产
+
+  // 1. Key 自身的显式标记最高优先（is_local / origin 任一即可判定）
+  if (raw && typeof raw === 'object') {
+    if (raw.is_local === true || raw.origin === 'local') return 'local';
+    if (raw.is_local === false || raw.origin === 'vault') return 'vault';
+  }
+
+  // 2. EdgeOne 控制台自身即为金库中枢 (Hub)，未标记的全量为中枢资产
   const isEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   if (isEdgeOne) return 'vault';
-  
-  // 3. VM 端：仅当中枢清单包含该 Key 或 Provider 标记为中枢同步时为 vault，其余自建一律为 local
-  const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
-  const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
-  if (remoteKeys.includes(keyLabel)) return 'vault';
-  if (localProv && localProv.origin === 'vault') return 'vault';
-  if (!localProv && remote) return 'vault';
+
+  // 3. VM 端：Key 来源以 Key 自身 origin 标记为准（拉取时写入 origin=vault）；
+  //    旧数据无标记时唯一回退：供应商 origin=vault 且中枢清单里确有该 Key 才视为中枢 Key。
+  if (localProv && localProv.origin === 'vault') {
+    const remote = (typeof findVaultProvider === 'function') ? findVaultProvider(provId) : null;
+    const remoteKeys = remote ? (remote.keys || []).map(k => typeof k === 'string' ? k : (k && (k.label || k.id)) || '').filter(Boolean) : [];
+    if (remoteKeys.includes(keyLabel)) return 'vault';
+  }
   return 'local';
 }
 ```
 
+> [!IMPORTANT]
+> VM 端中枢来源**只认 `origin: vault`**：本地同名自建的供应商与 Key 即使在中枢清单里同名，也一律判定为 `[本地]`，不会被误标为中枢资产。判定结果三处共用，不允许各自实现。
+
 ### 3.3 凭据同步与拉取协议契约
 
-EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产接口：
+EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产接口；VM 端则暴露 4 个管理接口。两端职责严格切分：**拉取＝一次性整体，同步＝只更新规则**。
+
+#### 1. 中枢侧（EdgeOne，`agent-edgeone/edge-functions/api/vault/`）
+
 1. `GET /api/vault/manifest`：
    - 鉴权头：`Authorization: Bearer <VAULT_ACCESS_TOKEN>`；
-   - 响应内容：仅返回已配置供应商元数据列表（`name`、`protocol`、`base_url`、`has_keys`、`rpm_per_key`），**绝不包含任何明文 Key**，且自动剔除带有 `is_local: true` 的本地私有配置。
+   - 响应内容：仅返回已配置供应商元数据列表（`name`、`protocol`、`protocols`、`base_url`、`anthropic_base_url`、`adapter_rules`、`cached_models`/`models`、`rpm_per_key`、`preset_id`/`preset_version`/`preset_updated_at`、`keys: [label...]` 仅标签、`has_keys`），**绝不包含任何明文 Key**，且自动剔除带有 `is_local: true` / `origin: 'local'` 的本地私有配置。
 2. `POST /api/vault/fetch`：
-   - 请求体：`{"provider": "stepfun", "key_label": "生产主号"}`；
+   - 请求体：`{"provider": "stepfun"}` —— **默认整体拉取**（规则 + 该供应商全部 Key），无按需懒加载语义；
+   - 精简取 Key 场景（供「从中枢添加」按需补拉）：`{"provider": "stepfun", "keys": ["k1","k2"], "credentials_only": true}`，仅返回所选 Key 的凭据与 Base URL，剥离 `adapter_rules`；
    - 鉴权头：`Authorization: Bearer <VAULT_ACCESS_TOKEN>`；
-   - 响应内容：返回该 Provider 的精准鉴权配置与明文 Key，供 VM 节点按需懒加载；拦截所有 `is_local: true` 请求（返回 404）。
+   - 响应内容：`provider_config`（`name`、`protocol`、`protocols`、`anthropic_messages`、`base_url`、`anthropic_base_url`、`adapter_rules`、`cached_models`、`rpm_per_key`、`keys`）；中枢未托管该供应商返回 404；`is_local: true` / `origin: 'local'` 的 Key 一律跳过不下发。
 3. `POST /api/vault/credentials`：
    - 专用无规则扁平凭据端点，严格剥离 `adapter_rules`，仅传输纯净 Base URL 与密钥。
+
+#### 2. VM 侧（`vm-app/app/admin_routes.py`）
+
+| 接口 | 语义 | 关键约束 |
+| :--- | :--- | :--- |
+| `POST /api/admin/vault/fetch-key` | 「新增供应商」一次性**整体拉取**（规则 + 全部 Key） | Body `{provider}`；本地已存在同名供应商直接返回 **409**（需先删除再拉）；落地的 Key 写 `origin=vault` + `is_local=false`，只读可删 |
+| `POST /api/admin/vault/add-keys` | 「+ Key → 从中枢添加」**按需补拉**指定 Key | Body `{provider, keys:[label...]}`；仅对本地 `origin=vault` 供应商开放；**只新增不覆盖**（已存在标签一律跳过）、不改规则、保留既有模型绑定；前端由 `HOST.capabilities.vaultClient` 控制显示 |
+| `POST /api/admin/vault/sync` | 「同步中枢规则」**只更新规则** | 仅遍历本地 `origin=vault` 的供应商；刷新 `name`/`protocol`/`protocols`/`anthropic_messages`/`base_url`/`anthropic_base_url`/`adapter_rules`/`cached_models`/`rpm_per_key` 与预设版本元数据；**不拉取、不恢复、不新增任何 Key**，不新建供应商；旧数据中无标记的中枢 Key 仅补 `origin=vault` 标记、不改值 |
+| `POST /api/admin/vault/test` | 中枢连通性诊断（manifest 探测 + 延迟 + 供应商计数） | 401 / 502 / 504 全链路透明报错 |
+
+> [!NOTE]
+> 已彻底废弃墓碑机制（`tombstones` / `tombstone_keys`）与调度器请求路径上的中枢懒拉取：本地删掉即删掉，中枢不会在请求时偷偷复活 Key；需要找回某个 Key 时，由用户在「+ Key → 从中枢添加」中显式勾选。
 
 ### 3.4 供应商与 Key 管理全版本统一规约与权限矩阵 (Vault vs Local Matrix SSOT)
 
@@ -528,8 +554,7 @@ vm-app/static/        agent-edgeone/
 | **客户端密钥输入框 (`#set_proxy_api_key`)** | **Disabled 置灰只读**<br>(`env.PROXY_API_KEY 只读`) | **可编辑输入**<br>(支持手动输入与随机生成) | EdgeOne 严格遵循 Serverless 规范由环境变量注入，保存时保护不覆写；VM 支持自建实例修改。 |
 | **设置页「复制 Key」按钮** | **彻底移除** | **彻底移除** | 首页概览顶层卡片已有醒目的一键复制按钮，设置区保持纯粹配置属性。 |
 | **分流策略下拉项 (`#set_routing_strategy`)** | **严格 2 项**：<br>`sticky_failover`<br>`manual` | **严格 2 项**：<br>`sticky_failover`<br>`manual` | **双端完全对齐，彻底清除过往遗留的轮询、优先级等废弃选项**。 |
-| **供应商自带 Key 胶囊** | 徽章：**`[中枢]`**<br>删除叉：**无** | 徽章：**`[中枢]`**<br>删除叉：**无** | 供应商录入的凭据属于中枢资产，在模型弹窗中绝对禁止单删。 |
-| **模型新增本地 Key 胶囊** | 徽章：**`[本地]`**<br>删除叉：**有 (`×`)** | 徽章：**`[本地]`**<br>删除叉：**有 (`×`)** | 仅模型弹窗点击「+ 添加本地 Key」存入的凭据标记为本地，允许删除。 |
+| **模型弹窗 Key 胶囊** | 徽章按 `resolveKeySource` 判定：**`[中枢]`** / **`[本地]`**<br>删除叉：**无** | 徽章按 `resolveKeySource` 判定：**`[中枢]`** / **`[本地]`**<br>删除叉：**无** | 模型弹窗仅做勾选绑定：**不新增、不删除、不改值**，Key 增删改查唯一入口＝「供应商」页。 |
 | **置灰优先原则** | 遵循 | 遵循 | 未启用或只读项以中性灰色 Disabled 呈现，**严禁粗暴 `display: none` 导致功能失踪**。 |
 
 ### 6.2.1 首页「Agent 对话总览」统计口径

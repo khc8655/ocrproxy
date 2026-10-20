@@ -135,11 +135,13 @@
   /**
    * Single source of truth for "where does this key come from".
    * Returns 'public' | 'vault' | 'local'.
-   *  - A key explicitly flagged { is_local: true } is always local.
+   *  - A key explicitly flagged { is_local: true } or { origin: 'local' } is always local,
+   *    and { is_local: false } / { origin: 'vault' } is always a hub key.
    *  - On EdgeOne the console *is* the hub, so unflagged keys are hub keys.
-   *  - On VM a key is a hub key only when its provider is hub-managed
-   *    (origin === 'vault' or listed in the hub manifest) AND the hub lists that
-   *    key (or the provider came from the hub wholesale). Everything else is local.
+   *  - On VM the key's own mark wins; for legacy data without a mark, a key is a hub
+   *    key only when its provider is hub-managed (origin === 'vault') AND the hub
+   *    manifest lists that key. Everything else is local, so a local provider that
+   *    happens to share a name with a hub provider is never misread as hub-owned.
    * Used by the providers list, the agent-model modal and the binding rows so the
    * three places can never disagree again.
    */

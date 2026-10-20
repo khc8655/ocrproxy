@@ -4,6 +4,42 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-02] - 2026-10-20
+
+### Agent 首页今日统计与中枢供应商拉取/同步规约收敛
+- **Agent 首页「今日累计」统计（VM 端）**：
+  - 新增 `vm-app/app/agent_metrics.py`，以北京时间自然日累计今日 Token 总量（输入 / 输出 / 用量覆盖率）、平均首字延迟（TTFT，跳过 SSE keep-alive 注释）、失败请求（含 200 流内 error 帧，客户端主动断开不计失败）与切 Key 救回次数；
+  - 仅统计进入调度的 Agent 请求（鉴权 / 参数错误与 KB 流量不计）；Token 取自响应 usage（Anthropic 输入含 cache read / creation），网关不注入 `stream_options.include_usage`，卡片显示「用量覆盖率」；
+  - 每 30s 节流原子写入 `CONFIG_DIR/agent_summary.json`，服务关停时 flush，重启不清零；「重置统计」同步清零内存与磁盘；
+  - Agent 首页 Top 3 改为今日按调用量排序，每项附 Token 与首字延迟。
+- **EdgeOne 首页「当前快照」降级呈现（后端零改动）**：
+  - EdgeOne 不做累计、不新增 KV 写入；前端以 `candidates_status` 计算「可用 Key / 冷却或故障中的 Key / 最近平均响应耗时」三卡，同一份 `core.js` 渲染；
+  - 角标标注「当前快照」，Top 3 在快照模式下隐藏，双端界面保持一致。
+- **VM 中枢供应商拉取与同步规约收敛（PR #18）**：
+  - 拉取收敛为「新增供应商」一次性整体拉取（规则 + 全部 Key），本地已存在同名供应商返回 409（先删除再拉）；拉下的 Key 标记 `origin=vault`，只读可删；
+  - 「同步中枢规则」只更新 `origin=vault` 供应商的规则（协议 / URL / 适配规则 / 模型列表 / RPM），不拉取、不恢复、不新增任何 Key，不新建供应商，也不再误把本地同名自建供应商改写为中枢来源；
+  - 新增「+ Key → 从中枢添加」（`POST /api/admin/vault/add-keys`，`HOST.capabilities.vaultClient` 控制显示），只新增不覆盖、不改规则、保留既有模型绑定；
+  - 彻底移除墓碑 `tombstones` / `tombstone_keys` 与调度器请求路径上的中枢懒拉取；旧数据中无标记的中枢 Key 在同步时补 `origin=vault`（只补标记、不改值）；
+  - 前端 VM 侧中枢来源只认 `origin=vault`，徽章改为「来自中枢」；拉取弹窗中枢供应商 URL 置为只读。
+- **契约与测试**：
+  - `shared/contracts/admin-ui-backend.json` 新增 `stats.agent.summary` 字段与 S7（API）/ U3（真实浏览器）双端场景，另增 U2（「从中枢添加」能力位）场景；
+  - 新增 `tests/test_agent_metrics.py`（Layer 1）与 `test_vault_pull_once_rules_only_sync`（Layer 2，MockTransport 模拟中枢）；移除墓碑 / 懒拉取相关的过时断言；
+  - 四层全量测试通过：Layer 1 199 项 ESM 单元 + Python 安全/统计测试，Layer 2 双端后端契约 S1~S7 / U1~U3，Layer 3 架构与窄屏安全审计，Layer 4 全矩阵 Playwright E2E 76 项断言；发版门禁 G1~G5 全绿。
+
+---
+
+## [v20261020-01] - 2026-10-20
+
+### 模型提供商、Key 管理与模型规则全版本统一规约
+- **供应商管理唯一入口收敛**：全版本（EdgeOne 与 VM）添加供应商唯一入口严格收敛至「供应商」标签页，模型管理弹窗彻底移除中枢未拉取选项；
+- **VM 资产自治与自由删除**：从中枢拉取至 VM 的供应商与 Key 变成本地托管资产，VM 端完全允许自由删除；中枢 Key 在本地保持只读保护；
+- **供应商按需拉取交互统一**：VM 端在「新增供应商」弹窗内通过预设下拉框选择中枢未导入项，保存即可按需拉取供应商与其全部 Key；
+- **Key 增删改查唯一入口**：所有版本对 Key 的增删改查仅限在「供应商」菜单操作，模型管理弹窗彻底移除 Key 删除叉与临时 Key 逻辑，纯粹仅做勾选绑定；
+- **中枢与本地徽章强化**：醒目区分蓝紫色 `[中枢]` 与绿色 `[本地]` 凭证徽章；极简同步策略（删除重拉无冲突）；
+- **全套自动化测试通过**：Layer 1 (199/199)、Layer 2 S1~S6/U1 契约、Layer 3 架构审计、Layer 4 全矩阵 Playwright E2E 76 项断言全部通过。
+
+---
+
 ## [v2026.10.19-10] - 2026-10-19
 
 ### 预设下拉协议规范化、列表版本徽章真理源回显与中枢资产本地持久化

@@ -67,7 +67,7 @@ npm run build:admin
 
 ### Step 3: 全层级测试验证并提交推送
 ```bash
-# 运行四层全量测试（Layer 1~4，199 单元测试 + S1~S6 契约 + 76 项 E2E 浏览器渲染）
+# 运行四层全量测试（Layer 1~4，199 单元测试 + S1~S7 契约 + 76 项 E2E 浏览器渲染）
 python3 tests/run_tests.py --layer=all
 
 # 校验通过后提交并推送至 GitHub，自动触发 EdgeOne 边缘部署
