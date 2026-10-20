@@ -96,6 +96,11 @@ CHECKS = {
         "desc": "Backend contract incl. browser U1~U3 (VM vs EdgeOne)",
         "cmd": [PYTHON_EXE, "tests/test_backend_contract.py"],
     },
+    "vault_ui": {
+        "tier": "T2",
+        "desc": "Vault on-demand provider pull via real provider modal (KB + Agent)",
+        "cmd": [PYTHON_EXE, "tests/test_vm_vault_provider_ui.py"],
+    },
     "overflow": {
         "tier": "T3",
         "desc": "Narrow Viewport No Horizontal Overflow (VM vs EdgeOne)",
@@ -115,12 +120,12 @@ LAYERS = {
     "logic": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
-    "contract": ["contract_ui", "key_capsules"],
+    "contract": ["contract_ui", "key_capsules", "vault_ui"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
     "all": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static",
-            "key_capsules", "contract_ui", "overflow", "e2e"],
+            "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 
 TIER_TITLES = {
@@ -272,8 +277,8 @@ _UI_JS_TIERS = {
     "shared/admin/js/host.js": [CONTRACT_UI],
     "shared/admin/js/app.js": [CONTRACT_UI, E2E],
     "shared/admin/js/core.js": [CONTRACT_UI],
-    "shared/admin/js/providers.js": [CONTRACT_UI, "key_capsules"],
-    "shared/admin/js/vault.js": [CONTRACT_UI, "key_capsules"],
+    "shared/admin/js/providers.js": [CONTRACT_UI, "key_capsules", "vault_ui"],
+    "shared/admin/js/vault.js": [CONTRACT_UI, "key_capsules", "vault_ui"],
     "shared/admin/js/agent-models-ui.js": [CONTRACT_UI, "key_capsules"],
     "shared/admin/js/settings.js": [E2E],
     "shared/admin/js/settings-form.js": [E2E],

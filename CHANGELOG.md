@@ -4,6 +4,16 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-04] - 2026-10-20
+
+### 修复「从中枢按需拉取供应商」被误判为编辑而失效
+- **严重缺陷**：`saveProvider()` 过去用 `#p_name.disabled` 推断「新增 / 编辑」，而中枢预设为了让名称只读也会 `disable` 名称框，导致保存时进入「编辑已有供应商」分支，`POST /api/admin/vault/fetch-key` 根本不会被调用——选中「EdgeOne 凭据中枢托管（按需拉取）」的供应商保存后，本地只会得到一个 `origin=local`、**0 个 Key** 的空壳供应商，中枢规则与 Key 都没有落地；KB 模式因此无法把中枢供应商挂载为候选节点，与 Agent 侧的本地资产表现不一致。
+- **修复**：改为显式编辑态标记（`openProviderModal` 置 create、`editProvider` 置 edit），彻底移除对 DOM `disabled` 状态的推断；同时在打开/编辑弹窗时清理残留的 `currentSelectedVaultProvider`，避免上一次选择污染本次保存。
+- **回归测试**：新增 `tests/test_vm_vault_provider_ui.py`（T2 浏览器层，KB + Agent 双模式）：拉起真实 HTTP 中枢与 VM 服务，用真实 Chromium 点击「新增供应商 → 选择中枢项 → 保存并生效」，断言 `origin=vault`、中枢 Key 全部拉取且掩码只读、KB「挂载候选节点」弹窗立即可选该供应商；已接入分层测试 T2 契约层与发版全套。
+- **影响面**：仅 VM 端供应商管理 UI；EdgeOne 中枢母本与后端 `/vault/fetch-key` 逻辑不变。
+
+---
+
 ## [v20261020-03] - 2026-10-20
 
 ### 独立评审修复：中枢写入版本锁、旧中枢 Key 只读与首页快照口径矫正

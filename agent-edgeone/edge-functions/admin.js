@@ -740,7 +740,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-03</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-04</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -3903,6 +3903,8 @@ async function onProviderPresetChange(){
 function openProviderModal(sourceModal){
   state.providerModalSource = sourceModal || null;
   state.currentSelectedPreset = null;
+  state.providerEditName = null;          // create mode (vault presets disable p_name but are NOT edit)
+  state.currentSelectedVaultProvider = null;
   document.getElementById('providerModalTitle').textContent = '新增供应商';
   document.getElementById('p_preset_wrap').style.display = 'block';
   document.getElementById('p_preset').value = '';
@@ -3926,6 +3928,8 @@ function openProviderModal(sourceModal){
 
 function editProvider(name){
   state.currentSelectedPreset = null;
+  state.providerEditName = name;          // edit mode
+  state.currentSelectedVaultProvider = null;
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const p = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : {}) || {};
   // VM：只有「从中枢拉取」的供应商 (origin=vault) 算中枢来源；本地同名自建不算
@@ -3971,7 +3975,10 @@ async function saveProvider(){
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
 
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
-  const isEdit = document.getElementById('p_name').disabled;
+  // Never infer create/edit from \`p_name.disabled\`: the vault-preset branch disables the
+  // name field too (it is read-only there), and doing so made "从中枢按需拉取" fall into the
+  // edit branch, creating an empty local provider instead of calling /vault/fetch-key.
+  const isEdit = Boolean(state.providerEditName);
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
   const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local'));
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;

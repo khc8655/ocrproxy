@@ -1,13 +1,12 @@
 {
-  "version": "v20261020-03",
+  "version": "v20261020-04",
   "release_date": "2026-10-20",
   "commit": "HEAD",
-  "title": "独立评审修复：中枢写入版本锁、旧中枢 Key 只读与首页快照口径矫正 (v20261020-03)",
+  "title": "修复中枢按需拉取供应商被误判为编辑而失效 (v20261020-04)",
   "changelog": [
-    "中枢写入统一版本锁与滚动备份：/vault/fetch-key、/vault/add-keys、/vault/sync、/vault/config 与手动保存一致地自增 _version 并生成滚动加密备份；修复旧标签页保存静默删除刚拉取供应商与 Key 的数据丢失竞态（现返回 409）；",
-    "旧数据中枢 Key 只读保护：origin=vault 供应商下升级前未标记的裸字符串 Key 同样只读可删，前端在其供应商来自中枢时回退判定为 [中枢]，中枢离线时不再误显示为可编辑本地 Key；供应商页中枢 Key 不再渲染编辑入口；",
-    "首页 Agent 快照按 provider:key 聚合：修正同一 Key 绑定多个模型时的可用/冷却/平均耗时重复计数与误判；candidates_status.cooldown_until 写入契约并由 VM 从调度器冷却窗口补齐，双端一致；",
-    "统计边界与重置修复：SSE 错误帧按事件/JSON 解析（正文含 event: error 不误判、多余空格与 type=error 不漏判），keep-alive 与首事件同块正确计入 TTFT；重置统计返回最新 stats 载荷，流式包装显式关闭上游流；",
-    "安全收口与回归测试：/probe-models 中枢明文 Key 仅发往中枢声明 base_url；新增 test_vault_write_version_and_legacy_key_guard，补充错误帧/同块 keep-alive/Anthropic error 边界与 U2/U3 数值断言；四层全量测试与 G1~G5 门禁全绿。"
+    "根因：saveProvider() 以 #p_name.disabled 判断「新增/编辑」，而中枢预设分支为只读也会 disable 名称框，导致保存时误判为「编辑已有供应商」；/api/admin/vault/fetch-key 从未被调用，中枢供应商被落成 origin=local 且 0 Key 的空壳，UI 的「从中枢按需拉取」完全失效（API 直连测试无法发现，仅真实点击暴露）；",
+    "修复：改为显式编辑态标记（openProviderModal 置 create、editProvider 置 edit），彻底移除对 DOM disabled 的推断；同时清理切换弹窗时残留的 currentSelectedVaultProvider，避免跨弹窗污染；",
+    "回归：新增 tests/test_vm_vault_provider_ui.py（T2 浏览器层，KB + Agent 双模式）：真实 HTTP 中枢 + 真实 Chromium 点击「新增供应商 → 选择中枢项 → 保存并生效」，断言 origin=vault、中枢 Key 全部拉取且掩码只读、KB 候选节点可立即选择该供应商；接入分层测试 T2 契约层与发版全套；",
+    "影响面：VM 端供应商管理 UI；EdgeOne 母本不受影响，后端 /vault/fetch-key 逻辑不变。"
   ]
 }
