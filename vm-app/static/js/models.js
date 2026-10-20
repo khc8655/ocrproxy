@@ -118,15 +118,10 @@ function selectCandidateType(type){
 function populateCandidateProviderSelect(selectedId){
   const sel = document.getElementById('c_providerSelect');
   const optLocal = document.getElementById('c_optgroup_local');
-  const optVault = document.getElementById('c_optgroup_vault');
   if(!sel) return;
-
-  const hasVault = !!(state.config?.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url));
-  if (optVault) optVault.style.display = hasVault ? '' : 'none';
 
   const providers = getAllAvailableProviders();
   const configuredList = providers.filter(p => p.isConfigured !== false);
-  const unconfiguredVaultList = providers.filter(p => !p.isConfigured && p.isVault);
 
   if (optLocal) {
     if (configuredList.length > 0) {
@@ -137,27 +132,22 @@ function populateCandidateProviderSelect(selectedId){
         return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
       }).join('');
     } else {
-      optLocal.innerHTML = '<option value="" disabled>-- 暂无已配置供应商 (可从下方选用或点击新增) --</option>';
+      optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
     }
-  }
-  if (optVault) {
-    if (!hasVault || unconfiguredVaultList.length === 0) {
-      optVault.style.display = 'none';
-      optVault.innerHTML = '';
-    } else {
-      optVault.style.display = '';
-      optVault.innerHTML = unconfiguredVaultList.map(p => {
-        const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-          ? _formatProviderOptionLabel(p) + ' (中枢按需拉取)'
-          : `${p.label} (${p.protoStr || 'openai'}) (中枢按需拉取)`;
-        return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
-      }).join('');
-    }
+  } else {
+    sel.innerHTML = configuredList.length
+      ? configuredList.map(p => {
+          const optLabel = (typeof _formatProviderOptionLabel === 'function') 
+            ? _formatProviderOptionLabel(p) 
+            : `${p.label} (${p.protoStr || 'openai'})`;
+          return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
+        }).join('')
+      : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
   }
 
-  const curId = (selectedId && providers.some(p => p.id === selectedId)) 
+  const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
     ? selectedId 
-    : (providers[0] ? providers[0].id : '');
+    : (configuredList[0] ? configuredList[0].id : '');
   
   sel.value = curId;
   onCandidateProviderSelectChange(curId);
@@ -266,17 +256,12 @@ function renderCandidateKeyChecks(){
         ? keySourceBadge(src, 10)
         : (isVault 
           ? `<span class="badge badge-primary" style="font-size:10px;padding:0 6px;">${icon('cloud', 11)} 中枢</span>`
-          : `<span class="badge badge-primary" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`);
-
-      const deleteBtn = isLocal
-        ? `<button type="button" class="btn-ghost" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key" onclick="removeLocalKeyFromModal('${esc(prov)}', '${esc(k)}', event)">×</button>`
-        : '';
+          : `<span class="badge badge-success" style="font-size:10px;padding:0 6px;">${icon('check', 11)} 本地</span>`);
 
       return `<div class="key-capsule ${isChecked ? 'checked' : ''}" onclick="toggleCandidateKeyCapsule(this)">
         <input type="checkbox" value="${esc(k)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
         <span style="font-weight:600;">${esc(k)}</span>
         ${tag}
-        ${deleteBtn}
       </div>`;
     }).join('');
   }

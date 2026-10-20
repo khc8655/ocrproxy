@@ -76,7 +76,7 @@ function renderProviders(){
   const railInner = document.getElementById('alphaRailInner');
   if (!box) return;
   box.innerHTML = '';
-  const p = state.config.providers || {};
+  const p = (state && state.config && state.config.providers) ? state.config.providers : (window.cfg?.providers || {});
   const names = Object.keys(p).sort((a,b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
   if (!names.length){
@@ -450,13 +450,36 @@ function populateCatalogSelect(select) {
         anthropic_base_url: FALLBACK_PRESETS[k].anthropic_base_url
       }));
 
+  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
+  let vaultGroupHtml = '';
+  if (!isHostEdgeOne && typeof getVaultProviderList === 'function') {
+    const localProviders = state.config?.providers || {};
+    const localKeys = Object.keys(localProviders).map(k => k.toLowerCase());
+    const remoteList = getVaultProviderList();
+    const unconfigured = remoteList.filter(rp => {
+      const pId = (rp.id || '').toLowerCase();
+      return pId && !localKeys.includes(pId);
+    });
+    if (unconfigured.length > 0) {
+      vaultGroupHtml = '<optgroup label="EdgeOne 凭据中枢托管 (按需拉取)">' +
+        unconfigured.map(rp => {
+          const protos = rp.protocols || ['chat'];
+          const protoStr = (typeof formatProtocolsDisplay === 'function') ? formatProtocolsDisplay(protos) : protos.join('+');
+          const cleanName = (typeof cleanProviderLabel === 'function') ? cleanProviderLabel(rp.name || rp.id) : (rp.name || rp.id);
+          return `<option value="vault:${rp.id}">${cleanName} (${protoStr})</option>`;
+        }).join('') +
+        '</optgroup>';
+    }
+  }
+
   select.innerHTML = '<option value="">-- 自定义供应商 (手动填写) --</option>' +
     '<optgroup label="官方预设供应商">' +
     catalog.map(p => {
       const protoLabel = getPresetProtocolLabel(p);
       return `<option value="${p.id}">${p.name} (${protoLabel})</option>`;
     }).join('') +
-    '</optgroup>';
+    '</optgroup>' +
+    vaultGroupHtml;
   if (cur !== undefined && cur !== null) select.value = cur;
 }
 
@@ -489,6 +512,7 @@ async function onProviderPresetChange(){
 
   if(!presetId){
     state.currentSelectedPreset = null;
+    state.currentSelectedVaultProvider = null;
     nameInput.value = '';
     urlInput.value = '';
     nameInput.disabled = false;
@@ -502,6 +526,52 @@ async function onProviderPresetChange(){
     document.getElementById('p_anthropic_url').value = '';
     return;
   }
+
+  // Handle EdgeOne Vault Hub On-Demand Import
+  if(presetId.startsWith('vault:')){
+    const realProvId = presetId.substring(6);
+    const vaultProv = (typeof findVaultProvider === 'function') ? findVaultProvider(realProvId) : null;
+    if(!vaultProv){
+      toast(`未能获取中枢供应商「${realProvId}」信息`, 'err');
+      return;
+    }
+    state.currentSelectedPreset = null;
+    state.currentSelectedVaultProvider = vaultProv;
+
+    nameInput.value = vaultProv.id || realProvId;
+    nameInput.disabled = true;
+    urlInput.value = vaultProv.base_url || '';
+    urlInput.disabled = false;
+
+    const protos = vaultProv.protocols || ['chat'];
+    document.getElementById('p_proto_chat').checked = protos.includes('chat') || protos.includes('openai');
+    document.getElementById('p_proto_messages').checked = protos.includes('messages') || protos.includes('anthropic');
+    document.getElementById('p_proto_responses').checked = protos.includes('responses');
+
+    if(vaultProv.anthropic_base_url){
+      document.getElementById('p_custom_url_toggle').checked = true;
+      document.getElementById('p_custom_url_section').style.display = 'block';
+      document.getElementById('p_anthropic_url').value = vaultProv.anthropic_base_url;
+    } else {
+      document.getElementById('p_custom_url_toggle').checked = false;
+      document.getElementById('p_custom_url_section').style.display = 'none';
+      document.getElementById('p_anthropic_url').value = '';
+    }
+
+    const rpmInput = document.getElementById('p_rpm');
+    const provRpm = vaultProv.rpm_per_key || vaultProv.rpm;
+    if(rpmInput) rpmInput.value = provRpm ? String(provRpm) : '';
+
+    const keyCount = Array.isArray(vaultProv.keys) ? vaultProv.keys.length : (vaultProv.keys ? Object.keys(vaultProv.keys).length : 0);
+    descEl.style.display = 'block';
+    descEl.style.background = 'rgba(59,130,246,0.08)';
+    descEl.style.color = 'var(--text-primary)';
+    descEl.innerHTML = `${icon('cloud')} <strong>EdgeOne 凭据中枢托管供应商</strong>：点击【保存并生效】后将按需拉取该供应商配置及名下 <strong>${keyCount}</strong> 个凭据 Key 到本地。拉取后即为本地资产，可在本地随时维护或清理。`;
+    return;
+  }
+
+  state.currentSelectedVaultProvider = null;
+  nameInput.disabled = false;
 
   // Fetch preset detail (Prioritize local cache & built-in presets)
   let preset = state.cachedPresets[presetId] || FALLBACK_PRESETS[presetId];
@@ -630,7 +700,7 @@ function editProvider(name){
   openModal('providerModal');
 }
 
-function saveProvider(){
+async function saveProvider(){
   const name = document.getElementById('p_name').value.trim();
   const url = document.getElementById('p_url').value.trim();
   if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
@@ -661,6 +731,33 @@ function saveProvider(){
 
   if(!isEdit && state.config.providers && state.config.providers[name]){ toast('供应商已存在', 'err'); return; }
   if(!state.config.providers) state.config.providers = {};
+
+  const presetVal = document.getElementById('p_preset')?.value || '';
+  const isVaultImport = Boolean(!isHostEdgeOne && !isEdit && (state.currentSelectedVaultProvider || presetVal.startsWith('vault:')));
+
+  if (isVaultImport) {
+    closeModal('providerModal');
+    toast(`正在从 EdgeOne 凭据中枢按需拉取供应商「${name}」...`, 'info');
+    try {
+      const res = await fetch('/api/admin/vault/fetch-key', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ provider: name })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d && d.ok) {
+        toast(`已成功从凭据中枢拉取供应商「${name}」及其密钥到本地！`, 'ok');
+        await loadData();
+        renderProviders();
+        renderModels();
+        return;
+      }
+      toast(`从中枢拉取失败: ${d?.error || '网络异常'}`, 'err');
+    } catch(e) {
+      toast(`从中枢拉取异常: ${e.message}`, 'err');
+    }
+    return;
+  }
 
   if(isEdit) {
     if (!state.config.providers[name]) {
@@ -955,12 +1052,6 @@ function editKey(prov, label){
 }
 
 async function deleteKey(prov,label){ 
-  const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
-  const keySrc = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, label) : 'local';
-  if (!isHostEdgeOne && keySrc === 'vault') {
-    toast('中枢统一凭据不可在本地删除，请在 EdgeOne 中枢控制台进行维护', 'err');
-    return;
-  }
   if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
     delete state.config.providers[prov].keys[label]; 
@@ -1155,27 +1246,5 @@ function commitKey(prov, label, val){
     _onKeySavedCallback = null;
     cb(prov, label);
   }
-}
-
-function openKeyModalFromAgentModal(){
-  const prov = document.getElementById('a_provider')?.value;
-  if (!prov) {
-    toast('请先在上方选择一个有效提供商', 'err');
-    return;
-  }
-  openKeyModal(prov, () => {
-    renderAgentKeyChecks();
-  }, true);
-}
-
-function openKeyModalFromCandidateModal(){
-  const prov = document.getElementById('c_provider')?.value;
-  if (!prov) {
-    toast('请先在上方选择一个有效提供商', 'err');
-    return;
-  }
-  openKeyModal(prov, () => {
-    renderCandidateKeyChecks();
-  }, true);
 }
 

@@ -65,8 +65,10 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
     if (typeof cfg !== 'undefined') {
       Object.assign(cfg, mockCfg);
     }
+    if (typeof state !== 'undefined' && state) {
+      state.config = mockCfg;
+    }
     window.cfg = mockCfg;
-    window.state = { config: mockCfg, stats: { candidates_status: {} } };
     renderProviders();
     renderAgentModels();
   });
@@ -107,52 +109,31 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
         throw new Error(`供应商自带 Key [${item.label}] 必须标记为 [中枢]，实际为 [${item.badge}]！`);
       }
       if (item.hasDel) {
-        throw new Error(`中枢 Key [${item.label}] 绝不能带有删除按钮！`);
+        throw new Error(`模型弹窗中 Key [${item.label}] 绝不能带有删除按钮！`);
       }
     }
     if (item.label === '临时调试') {
       if (item.badge !== '本地') {
         throw new Error(`本地专属 Key [${item.label}] 必须标记为 [本地]，实际为 [${item.badge}]！`);
       }
-      if (!item.hasDel) {
-        throw new Error(`本地专属 Key [${item.label}] 必须带有删除按钮！`);
+      if (item.hasDel) {
+        throw new Error(`模型弹窗中所有 Key 纯粹只做点选勾选，绝不允许带有删除按钮！`);
       }
     }
   }
 
-  console.log('\n2. 走查在模型弹窗中删除 Key 的防绕行门禁...');
+  console.log('\n2. 走查在模型弹窗中删除 Key 的防绕行门禁 (彻底移除模型内删 Key 入口)...');
   const modalDeleteRes = await page.evaluate(async () => {
-    let lastToast = null;
-    window._toast = (msg, type) => { lastToast = { msg, type }; };
-    window.toast = (msg, type) => { lastToast = { msg, type }; };
-    window.confirm = () => true;
-
-    // 尝试在模型弹窗中删除中枢 Key
-    await removeLocalKeyFromModal('stepfun', '小号');
-    const stepfunStillHasXiaohao = Boolean(window.cfg.providers.stepfun.keys['小号']);
-    const toastForXiaohao = lastToast;
-
-    // 尝试在模型弹窗中删除本地 Key
-    lastToast = null;
-    await removeLocalKeyFromModal('stepfun', '临时调试');
-    const stepfunHasLinshi = Boolean(window.cfg.providers.stepfun.keys['临时调试']);
-
-    return { stepfunStillHasXiaohao, toastForXiaohao, stepfunHasLinshi };
+    const fnExists = typeof window.removeLocalKeyFromModal === 'function';
+    return { fnExists };
   });
 
-  if (!modalDeleteRes.stepfunStillHasXiaohao) {
-    throw new Error('中枢 Key「小号」在模型弹窗中被误删！防绕行门禁失效！');
+  if (modalDeleteRes.fnExists) {
+    throw new Error('removeLocalKeyFromModal 违规暴露！模型弹窗严禁任何删除 Key 入口！');
   }
-  if (!modalDeleteRes.toastForXiaohao?.msg?.includes('中枢统一凭据不可在模型弹窗中删除')) {
-    throw new Error('删除中枢 Key 时未弹出正确的提示消息！实际为: ' + JSON.stringify(modalDeleteRes.toastForXiaohao));
-  }
-  if (modalDeleteRes.stepfunHasLinshi) {
-    throw new Error('本地 Key「临时调试」未能成功在模型弹窗中删除！');
-  }
-  console.log('  ✓ 模型弹窗拦截中枢 Key 删除成功 (已阻断并给出友好提示)');
-  console.log('  ✓ 模型弹窗允许本地 Key 删除成功');
+  console.log('  ✓ 模型弹窗 Key CRUD 彻底剥离，纯粹仅保留勾选绑定');
 
-  console.log('\n3. 走查 EdgeOne vs VM 供应商菜单操作权限差异...');
+  console.log('\n3. 走查 EdgeOne vs VM 供应商菜单操作权限 (拉到本地即本地资产，完全允许删除)...');
   const edgeonePermRes = await page.evaluate(async () => {
     // 恢复测试数据并设置为 EdgeOne 环境
     window.HOST = { isEdgeOne: true, isVm: false };
@@ -186,7 +167,7 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
   }
   console.log('  ✓ EdgeOne 端允许正常维护和管理中枢提供商');
 
-  // 读取并注入 VM 端专属的 providers.js 模块，测试 VM 宿主环境下的只读门禁
+  // 读取并注入 VM 端专属的 providers.js 模块，测试 VM 宿主环境下的自治与删除权限
   const vmProvidersJs = fs.readFileSync(path.resolve(__dirname, '../shared/admin/js/providers.js'), 'utf8');
   await page.evaluate((scriptCode) => {
     // 注入 VM 模块代码覆盖全局函数
@@ -205,10 +186,10 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
       }
     };
     if (typeof state !== 'undefined' && state && state.config && state.config.providers) {
-      state.config.providers.stepfun = testProv;
+      state.config.providers.stepfun = JSON.parse(JSON.stringify(testProv));
     }
     if (typeof cfg !== 'undefined' && cfg && cfg.providers) {
-      cfg.providers.stepfun = testProv;
+      cfg.providers.stepfun = JSON.parse(JSON.stringify(testProv));
     }
     renderProviders();
 
@@ -216,43 +197,40 @@ const htmlPath = path.resolve(__dirname, '../agent-edgeone/admin.bundled.html');
     window.toast = (msg, type) => { toastMsg = msg; };
     window.confirm = () => true;
 
-    // 在 VM 端尝试删除中枢提供商
-    deleteProvider('stepfun');
-    const provBlocked = toastMsg.includes('中枢托管供应商不可在本地删除');
-    const debugProvToast = toastMsg;
-
-    // 在 VM 端尝试删除中枢 Key
+    // 在 VM 端尝试删除中枢 Key (新规约：变成本地后允许删除)
     toastMsg = '';
     deleteKey('stepfun', '小号');
-    const keyBlocked = toastMsg.includes('中枢统一凭据不可在本地删除');
+    const centralKeyDeleted = !state.config.providers.stepfun?.keys?.['小号'];
 
-    // 在 VM 端尝试删除本地 Key
+    // 在 VM 端尝试删除本地 Key (完全支持)
     toastMsg = '';
     deleteKey('stepfun', '本地Key');
     const localKeyDeleted = !state.config.providers.stepfun?.keys?.['本地Key'];
 
+    // 在 VM 端尝试删除中枢提供商 (新规约：拉下来就属于本地，允许随时删除)
+    toastMsg = '';
+    deleteProvider('stepfun');
+    const provDeleted = !state.config.providers.stepfun;
+
     return {
-      provBlocked,
-      keyBlocked,
+      centralKeyDeleted,
       localKeyDeleted,
-      debugProvToast,
-      provObj: state.config.providers.stepfun,
-      host: window.HOST
+      provDeleted
     };
   });
 
-  if (!vmPermRes.provBlocked) {
-    console.error('DEBUG vmPermRes:', vmPermRes);
-    throw new Error('VM 端未拦截删除中枢提供商！');
-  }
-  if (!vmPermRes.keyBlocked) {
-    throw new Error('VM 端未拦截删除中枢 Key！');
+  if (!vmPermRes.centralKeyDeleted) {
+    throw new Error('VM 端未允许删除中枢 Key！拉取到本地后应允许删除！');
   }
   if (!vmPermRes.localKeyDeleted) {
     throw new Error('VM 端未允许删除本地 Key！');
   }
-  console.log('  ✓ VM 端成功硬拦截中枢提供商与中枢 Key 的删除/修改');
-  console.log('  ✓ VM 端成功允许本地 Key 的修改与删除');
+  if (!vmPermRes.provDeleted) {
+    throw new Error('VM 端未允许删除供应商！拉取到本地后应允许随时删除！');
+  }
+  console.log('  ✓ VM 端成功允许删除中枢 Key（变成本地后可删）');
+  console.log('  ✓ VM 端成功允许删除本地 Key');
+  console.log('  ✓ VM 端成功允许删除已同步的中枢供应商');
 
   console.log('\n🎉 [中枢] vs [本地] 胶囊徽章、操作权限矩阵与防绕行门禁 100% 验证通过！');
   await browser.close();

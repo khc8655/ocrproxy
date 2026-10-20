@@ -63,12 +63,6 @@
     if (keyList && !keyList._hasDelegated) {
       keyList._hasDelegated = true;
       keyList.addEventListener('click', (e) => {
-        const delBtn = e.target.closest('[data-action="remove-local-key"]');
-        if (delBtn) {
-          e.stopPropagation();
-          removeLocalKeyFromModal(delBtn.dataset.prov, delBtn.dataset.key, e);
-          return;
-        }
         const cap = e.target.closest('.key-capsule');
         if (cap) {
           toggleKeyCapsule(cap);
@@ -172,7 +166,7 @@
     const fs = size || 10;
     if (src === 'public') return `<span class="badge badge-warning" style="font-size:${fs}px;padding:0 6px;">免Key兜底</span>`;
     if (src === 'vault') return `<span class="badge badge-primary" style="font-size:${fs}px;padding:1px 6px;font-weight:600;" title="来自 EdgeOne 凭据中枢">中枢</span>`;
-    return `<span class="badge badge-primary" style="font-size:${fs}px;padding:1px 6px;font-weight:600;" title="本地加密存储">本地</span>`;
+    return `<span class="badge badge-success" style="font-size:${fs}px;padding:1px 6px;font-weight:600;" title="本地加密存储">本地</span>`;
   }
 
 
@@ -487,15 +481,10 @@
   function populateAgentProviderSelect(selectedId) {
     const sel = document.getElementById('a_providerSelect');
     const optLocal = document.getElementById('a_optgroup_local');
-    const optVault = document.getElementById('a_optgroup_vault');
     if (!sel) return;
-
-    const { cfg } = getCtx();
-    if (optVault) optVault.style.display = (cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url)) ? '' : 'none';
 
     const providers = _getAllProvidersList();
     const configuredList = providers.filter(p => p.isConfigured !== false);
-    const unconfiguredVaultList = providers.filter(p => !p.isConfigured && p.isVault);
 
     if (optLocal) {
       if (configuredList.length > 0) {
@@ -504,7 +493,7 @@
           return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
         }).join('');
       } else {
-        optLocal.innerHTML = '<option value="" disabled>-- 暂无已配置供应商 (可从下方选用或点击右上角新增) --</option>';
+        optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
       }
     } else {
       sel.innerHTML = configuredList.length
@@ -512,26 +501,12 @@
             const optLabel = _formatProviderOptionLabel(p);
             return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
           }).join('')
-        : '<option value="" disabled selected>-- 当前暂无可用供应商 (请在供应商Tab中配置) --</option>';
+        : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
     }
 
-    if (optVault) {
-      const hasVault = Boolean(cfg && cfg.edgeone_vault && (cfg.edgeone_vault.edgeone_url || cfg.edgeone_vault.url));
-      if (!hasVault || unconfiguredVaultList.length === 0) {
-        optVault.style.display = 'none';
-        optVault.innerHTML = '';
-      } else {
-        optVault.style.display = '';
-        optVault.innerHTML = unconfiguredVaultList.map(p => {
-          const optLabel = _formatProviderOptionLabel(p) + ' (中枢按需拉取)';
-          return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
-        }).join('');
-      }
-    }
-
-    const curId = (selectedId && providers.some(p => p.id === selectedId)) 
+    const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
       ? selectedId 
-      : (providers[0] ? providers[0].id : '');
+      : (configuredList[0] ? configuredList[0].id : '');
     
     sel.value = curId;
     onAgentProviderSelectChange(curId);
@@ -630,17 +605,12 @@
         const isChecked = modalBindings.some(b => b.provider === prov && b.key === k);
         const tag = (typeof keySourceBadge === 'function') ? keySourceBadge(src, 10) : '';
 
-        const deleteBtn = isLocal
-          ? `<button type="button" class="btn-ghost" data-action="remove-local-key" data-prov="${_esc(prov)}" data-key="${_esc(k)}" style="padding:0 4px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;" title="从本地存储中彻底删除此 Key">×</button>`
-          : '';
-
         const displayLabel = isPublic ? '公共匿名凭据 (免Key兜底)' : k;
 
         return `<div class="key-capsule ${isChecked ? 'checked' : ''}" data-action="toggle-key-capsule">
           <input type="checkbox" value="${_esc(k)}" data-provider="${_esc(prov)}" data-is-local="${isLocal}" ${isChecked ? 'checked' : ''} style="display:none;">
           <span style="font-weight:600;">${_esc(displayLabel)}</span>
           ${tag}
-          ${deleteBtn}
         </div>`;
       }).join('');
     }
@@ -1146,50 +1116,9 @@
     initAgentModelsDelegation();
   }
 
-  async function removeLocalKeyFromModal(prov, label, event) {
-    if (event) event.stopPropagation();
-    if (typeof resolveKeySource === 'function' && resolveKeySource(prov, label) === 'vault') {
-      if (typeof _toast === 'function') {
-        _toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
-      } else if (typeof toast === 'function') {
-        toast('中枢统一凭据不可在模型弹窗中删除，如需维护请前往「供应商」页面', 'err');
-      }
-      return;
-    }
-    if (!confirm(`确定要从本地存储中彻底删除 Key「${label}」吗？`)) return;
-    const { cfg } = getCtx();
-    if (cfg && cfg.providers && cfg.providers[prov] && cfg.providers[prov].keys) {
-      delete cfg.providers[prov].keys[label];
-    }
-    if (cfg && cfg.agent_models) {
-      Object.values(cfg.agent_models).forEach(m => {
-        m.keys = (m.keys || []).filter(x => !(x.provider === prov && x.key === label));
-      });
-    }
-    if (cfg && cfg.candidates) {
-      Object.values(cfg.candidates).forEach(list => {
-        if (Array.isArray(list)) {
-          const idxs = [];
-          list.forEach((c, idx) => {
-            if (c.provider === prov && c.key === label) idxs.push(idx);
-          });
-          for (let i = idxs.length - 1; i >= 0; i--) {
-            list.splice(idxs[i], 1);
-          }
-        }
-      });
-    }
-    await _persist(`本地 Key「${label}」已彻底删除并立即生效`);
-    _toast(`已删除本地 Key: ${label}`, 'ok');
-    renderAgentKeyChecks();
-    if (typeof renderCandidateKeyChecks === 'function') renderCandidateKeyChecks();
-    if (typeof renderProviders === 'function') renderProviders();
-  }
-
   // 10. Exports to Window Scope
   global.resolveKeySource = resolveKeySource;
   global.keySourceBadge = keySourceBadge;
-  global.removeLocalKeyFromModal = removeLocalKeyFromModal;
   global.renderAgentModels = renderAgentModels;
   global.renderAgentBindingRow = renderAgentBindingRow;
   global.openAgentModal = openAgentModal;

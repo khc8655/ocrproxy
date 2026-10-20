@@ -2059,8 +2059,8 @@ async def vault_fetch_key_endpoint(request: Request):
 
     provider = body.get("provider")
     key_label = body.get("key_label")
-    if not provider or not key_label:
-        return JSONResponse(status_code=400, content={"error": "Missing provider or key_label"})
+    if not provider:
+        return JSONResponse(status_code=400, content={"error": "Missing provider"})
 
     # 1. 免密公共凭据兜底：直接本地持久化就绪，免打扰中枢
     if key_label in ("public", "__public__"):
@@ -2083,10 +2083,13 @@ async def vault_fetch_key_endpoint(request: Request):
 
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            req_payload = {"provider": provider}
+            if key_label and key_label not in ("*", "all"):
+                req_payload["key_label"] = key_label
             res = await client.post(
                 f"{edgeone_url}/api/vault/fetch",
                 headers=headers,
-                json={"provider": provider, "key_label": key_label}
+                json=req_payload
             )
             if res.status_code == 401:
                 return JSONResponse(status_code=401, content={
@@ -2143,8 +2146,13 @@ async def vault_fetch_key_endpoint(request: Request):
                 if k_lbl and k_val:
                     local_keys[k_lbl] = k_val
 
+            # 5. Clear tombstones for re-added provider
+            tombstones = cfg.get("tombstones") or []
+            if provider in tombstones or any(x.lower() == provider.lower() for x in tombstones):
+                cfg["tombstones"] = [x for x in tombstones if x.lower() != provider.lower()]
+
             await save_config(cfg)
-            return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label, "imported": True})
+            return JSONResponse(content={"ok": True, "provider": provider, "key_label": key_label or "*", "imported": True})
     except httpx.ConnectError as ce:
         logger.error("Failed to fetch key from EdgeOne Vault: %s", ce)
         return JSONResponse(status_code=502, content={"ok": False, "error": f"拉取密钥失败: 无法连接至 {edgeone_url}"})
