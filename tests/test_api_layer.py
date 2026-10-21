@@ -409,6 +409,67 @@ async def test_legacy_unmarked_provider_keys_stay_local():
         assert (await get_config())["providers"]["old_local"]["keys"]["s"]["key"] == "sk-new"
 
 
+async def test_security_hardening_export_and_vault_token():
+    """Security: a stolen admin session must not be able to dump secrets or the vault Token.
+
+      * /api/admin/config/export never contains plaintext provider keys or the vault token;
+      * /api/admin/vault/config never returns the token (not even a prefix), and changing
+        the vault URL requires re-entering the token;
+      * vault URLs are validated (scheme + cloud-metadata targets).
+    """
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    save_to_disk({
+        "providers": {
+            "local_p": {"name": "Local", "origin": "local", "base_url": "https://local.example.com/v1",
+                        "keys": {"mine": {"key": "sk-local-plain-1", "origin": "local", "is_local": True}}},
+            "hub_p": {"name": "Hub", "origin": "vault", "base_url": "https://hub.example.com/v1",
+                      "keys": {"hub": {"key": "sk-hub-plain-1", "origin": "vault", "is_local": False}}},
+        },
+        "edgeone_vault": {"edgeone_url": "https://hub.example.com", "url": "https://hub.example.com",
+                          "token": "vault-super-secret-token"},
+        "agent_models": {},
+        "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []},
+    })
+    clear_cache()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+        # 1) console GET: local key visible, hub key masked, token write-only
+        body = (await c.get("/api/admin/config", headers=H)).json()
+        body = body.get("config", body)
+        assert body["providers"]["local_p"]["keys"]["mine"]["key"] == "sk-local-plain-1"
+        assert body["providers"]["hub_p"]["keys"]["hub"]["key"] == "●●●●●●●●"
+        assert body["edgeone_vault"]["token"] == ""
+        assert body["edgeone_vault"]["has_token"] is True
+
+        # 2) export must not leak any plaintext key/token
+        r = await c.get("/api/admin/config/export", headers=H)
+        assert r.status_code == 200, r.text
+        exported = r.text
+        for secret in ("sk-local-plain-1", "sk-hub-plain-1", "vault-super-secret-token"):
+            assert secret not in exported, f"export leaked {secret}"
+        assert "●●●●●●●●" in exported
+
+        # 3) changing vault URL without re-entering the token is refused
+        r = await c.post("/api/admin/vault/config", headers=H, json={"edgeone_url": "https://evil.example.com"})
+        assert r.status_code == 400, r.text
+
+        # 4) non-http/metadata targets are refused
+        for bad in ("ftp://evil.example.com", "http://169.254.169.254/latest/meta-data"):
+            r = await c.post("/api/admin/vault/config", headers=H, json={"edgeone_url": bad, "token": "x"})
+            assert r.status_code == 400, (bad, r.text)
+
+        # 5) same URL + new token works, and the response never echoes the token
+        r = await c.post("/api/admin/vault/config", headers=H, json={
+            "edgeone_url": "https://hub.example.com", "token": "vault-rotated-token"})
+        assert r.status_code == 200, r.text
+        assert "vault-rotated-token" not in r.text
+        payload = r.json()["edgeone_vault"]
+        assert "token" not in payload and payload["has_token"] is True, payload
+        assert (await get_config())["edgeone_vault"]["token"] == "vault-rotated-token"
+    print("     PASS: export/token hardening")
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -448,6 +509,8 @@ async def _run_all_tests():
         print("  -> test_legacy_unmarked_provider_keys_stay_local...")
         await test_legacy_unmarked_provider_keys_stay_local()
         print("     PASS: test_legacy_unmarked_provider_keys_stay_local")
+        print("  -> test_security_hardening_export_and_vault_token...")
+        await test_security_hardening_export_and_vault_token()
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:

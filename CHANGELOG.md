@@ -4,6 +4,19 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261021-03] - 2026-10-21
+
+### Security（安全热修复，优先发布）
+- **导出全掩码**：`GET /api/admin/config/export` 对所有 provider Key 掩码、`edgeone_vault.token` 置空。此前导出是 `copy.deepcopy(config)` 明文全量（含 Token），管理员会话被窃取即可一键拿走全部密钥；现在导出不再含任何明文，导入仍按"掩码保持原值"恢复。
+- **中枢 Token 只写不读**：`POST /api/admin/vault/config` 响应只返回 `has_token`，不再返回 Token 明文/前后缀；`/api/admin/config` 继续只给 `has_token`。
+- **改中枢地址必须重输 Token**：地址变更且未提供新 Token 直接 400，防止攻击者把中枢指向自己的服务器，借下一次 manifest/fetch 骗取 Bearer Token。
+- **中枢地址校验**：仅 http/https、禁止 URL 内嵌账号密码、禁止云厂商元数据/链路本地地址（`/vault/config`、`/vault/test`、`/api/admin/config` 保存均生效）。
+- **登录限流抗伪造**：`X-Forwarded-For` / `X-Real-IP` 仅在请求来自回环（同机反代）或显式 `TRUST_PROXY_HEADERS=1` 时可信，避免轮换伪造 IP 绕过 5 次/10 分钟锁定。
+- **回归测试**：导出不含明文、Token 不回显、改地址缺 Token 被拒、非法/元数据地址被拒、同地址轮换 Token 成功。
+- **范围**：仅收敛管理面攻击面，不改 `/v1` 转发链路，性能与离线可用性零影响；OS/root 被攻破后内存与可解密配置仍可读，属明确接受的残余风险（免费 Key 按轮换处理）。
+
+---
+
 ## [v20261021-02] - 2026-10-21
 
 ### 管理后台

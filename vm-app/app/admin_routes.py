@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
+from typing import Optional
 
 from . import settings_schema
 from .config_store import (get_config, save_config, _get_config_dir, is_masked_secret,
@@ -117,6 +118,61 @@ def _is_link_local_or_metadata(host: str) -> bool:
         return addr.is_link_local
     except ValueError:
         return False
+
+
+def _mask_config_secrets(config: dict, *, mask_local_keys: bool) -> dict:
+    """Deep-copy config and mask upstream secrets before delivering it to a client."""
+    masked = copy.deepcopy(dict(config))
+    providers = masked.get("providers", {})
+    if isinstance(providers, dict):
+        for p_data in providers.values():
+            if not isinstance(p_data, dict) or not isinstance(p_data.get("keys"), dict):
+                continue
+            prov_origin = "vault" if p_data.get("origin") == "vault" else "local"
+            masked_keys = {}
+            for k_lbl, k_val in p_data["keys"].items():
+                if k_lbl in ("public", "__public__") or k_val == "public":
+                    masked_keys[k_lbl] = "public"
+                    continue
+                key_origin = secret_origin(k_val) if isinstance(k_val, dict) else None
+                is_local = (key_origin or ("local" if prov_origin == "local" else "vault")) == "local"
+                if is_local and not mask_local_keys:
+                    masked_keys[k_lbl] = k_val
+                    continue
+                if isinstance(k_val, dict):
+                    if k_val.get("type") == "service_account" or "private_key" in k_val:
+                        masked_keys[k_lbl] = {"type": "service_account",
+                                              "project_id": k_val.get("project_id", "masked"),
+                                              "private_key": "●●●●●●●●"}
+                    else:
+                        m_dict = dict(k_val)
+                        m_dict["key"] = "●●●●●●●●" if k_val.get("key") else ""
+                        masked_keys[k_lbl] = m_dict
+                else:
+                    masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
+            p_data["keys"] = masked_keys
+    if isinstance(masked.get("edgeone_vault"), dict):
+        v_tok = masked["edgeone_vault"].get("token")
+        masked["edgeone_vault"]["has_token"] = bool(v_tok and not is_masked_secret(v_tok))
+        masked["edgeone_vault"]["token"] = ""
+    return masked
+
+
+def _validate_vault_url(url: str) -> Optional[str]:
+    raw = (url or "").strip()
+    if not raw:
+        return "中枢地址不能为空"
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return "中枢地址格式无效"
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return "中枢地址仅支持 http/https"
+    if parsed.username or parsed.password:
+        return "中枢地址不允许包含账号密码"
+    if _is_link_local_or_metadata((parsed.hostname or "").lower()):
+        return "禁止将中枢指向云厂商元数据 / 链路本地地址"
+    return None
 
 
 async def _admin_upstream_block_reason(url: str, config: dict = None):
@@ -384,43 +440,7 @@ async def get_config_endpoint(request: Request):
 
     try:
         config = await get_config()
-        resp_data = copy.deepcopy(dict(config))
-        # 零明文脱敏：对下发给浏览器的所有 Provider keys 实施脱敏掩码，确保绝不泄露上游密钥密文
-        providers = resp_data.get("providers", {})
-        if isinstance(providers, dict):
-            for p_name, p_data in providers.items():
-                if isinstance(p_data, dict) and "keys" in p_data and isinstance(p_data["keys"], dict):
-                    masked_keys = {}
-                    # 与保存守卫 / 前端 resolveKeySource() 同一判定：仅 origin=vault 供应商下的未标记 Key 算中枢 Key
-                    prov_origin = "vault" if p_data.get("origin") == "vault" else "local"
-                    for k_lbl, k_val in p_data["keys"].items():
-                        if k_lbl in ("public", "__public__") or k_val == "public":
-                            masked_keys[k_lbl] = "public"
-                            continue
-                        # 本地 Key 与管理端保持一致：管理员可查看/编辑（EdgeOne 同款行为）；
-                        # 仅中枢（origin=vault）Key 继续掩码下发，保持只读。
-                        key_origin = secret_origin(k_val) if isinstance(k_val, dict) else None
-                        if (key_origin or ("local" if prov_origin == "local" else "vault")) == "local":
-                            masked_keys[k_lbl] = k_val
-                            continue
-                        if isinstance(k_val, dict):
-                            if k_val.get("type") == "service_account" or "private_key" in k_val:
-                                masked_keys[k_lbl] = {"type": "service_account", "project_id": k_val.get("project_id", "masked"), "private_key": "●●●●●●●●"}
-                            else:
-                                m_dict = dict(k_val)
-                                m_dict["key"] = "●●●●●●●●" if k_val.get("key") else ""
-                                masked_keys[k_lbl] = m_dict
-                        else:
-                            masked_keys[k_lbl] = "●●●●●●●●" if k_val else ""
-                    p_data["keys"] = masked_keys
-
-        # 脱敏 EdgeOne 金库专钥 (edgeone_vault.token)：
-        # 遵循标准留空保持模式，绝不回传黑圆点字符（规避 ASCII Header 编码错误及二次覆盖冲毁），
-        # 仅下发 has_token 状态标记供前端呈现已配置占位符
-        if isinstance(resp_data.get("edgeone_vault"), dict):
-            v_tok = resp_data["edgeone_vault"].get("token")
-            resp_data["edgeone_vault"]["has_token"] = bool(v_tok and not is_masked_secret(v_tok))
-            resp_data["edgeone_vault"]["token"] = ""
+        resp_data = _mask_config_secrets(config, mask_local_keys=False)
 
         run_mode = config.get("run_mode") or os.environ.get("RUN_MODE") or "agent"
         run_mode = run_mode.lower().strip()
@@ -759,7 +779,8 @@ async def export_config_endpoint(request: Request):
 
     try:
         config = await get_config()
-        export_data = copy.deepcopy(config)
+        # 导出永不含明文：所有 Key 掩码、中枢 Token 置空（导入时走掩码保持原值）。
+        export_data = _mask_config_secrets(config, mask_local_keys=True)
         now_str = time.strftime("%Y%m%d_%H%M%S")
         export_data["_exported_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         export_data["_version"] = "3.3"
@@ -951,6 +972,12 @@ async def save_config_endpoint(request: Request):
             body["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
         if "agent_models" not in body or not isinstance(body["agent_models"], dict):
             body["agent_models"] = current_config.get("agent_models") or {}
+        if isinstance(body.get("edgeone_vault"), dict):
+            _vu = (body["edgeone_vault"].get("edgeone_url") or body["edgeone_vault"].get("url") or "").strip()
+            if _vu:
+                _verr = _validate_vault_url(_vu)
+                if _verr:
+                    return JSONResponse(status_code=400, content={"error": _verr})
         if "edgeone_vault" not in body or not isinstance(body["edgeone_vault"], dict):
             if "edgeone_vault" in current_config:
                 body["edgeone_vault"] = current_config["edgeone_vault"]
@@ -2429,6 +2456,9 @@ async def vault_test_endpoint(request: Request):
     edgeone_url, token = await _get_vault_credentials(body)
     if not edgeone_url:
         return JSONResponse(status_code=400, content={"ok": False, "error": "请先在上方输入 EdgeOne 凭据中枢服务地址"})
+    _v_err = _validate_vault_url(edgeone_url)
+    if _v_err:
+        return JSONResponse(status_code=400, content={"ok": False, "error": _v_err})
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -2486,7 +2516,14 @@ async def vault_test_endpoint(request: Request):
 
 @router.post("/vault/config")
 async def vault_config_endpoint(request: Request):
-    """Persist EdgeOne Vault connection settings directly into proxy_config.enc without touching .env."""
+    """Persist EdgeOne Vault connection settings into proxy_config.enc.
+
+    Security rules:
+      * the token is write-only: it is never returned (not even a prefix);
+      * changing the vault URL requires re-entering the token, otherwise a stolen admin
+        session could point the hub at an attacker server and harvest the Bearer token;
+      * URL is validated (http/https, no credentials, no cloud-metadata targets).
+    """
     if not _check_auth(request):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
@@ -2498,24 +2535,36 @@ async def vault_config_endpoint(request: Request):
 
     edgeone_url = (body.get("edgeone_url") or body.get("url") or "").strip().rstrip("/")
     token = (body.get("token") or "").strip()
+    if token and is_masked_secret(token):
+        token = ""
+
+    if edgeone_url:
+        err = _validate_vault_url(edgeone_url)
+        if err:
+            return JSONResponse(status_code=400, content={"ok": False, "error": err})
 
     cfg = await get_config()
     v_cfg = cfg.setdefault("edgeone_vault", {})
+    old_url = (v_cfg.get("edgeone_url") or v_cfg.get("url") or "").strip().rstrip("/")
+    if bool(edgeone_url) and edgeone_url != old_url and not token:
+        return JSONResponse(status_code=400, content={
+            "ok": False,
+            "error": "修改中枢地址必须重新输入中枢 Token（防止地址被篡改后泄露 Token）"
+        })
+
     if edgeone_url:
         v_cfg["url"] = edgeone_url
         v_cfg["edgeone_url"] = edgeone_url
-    if token and not is_masked_secret(token):
+    if token:
         v_cfg["token"] = token
-    new_ver = await _save_vault_config_change(cfg)
+    await _save_vault_config_change(cfg)
 
-    saved_token = v_cfg.get("token", "")
-    masked = (saved_token[:4] + "****" + saved_token[-4:]) if len(saved_token) > 8 else "***"
     return JSONResponse(content={
         "ok": True,
         "edgeone_vault": {
             "url": v_cfg.get("url") or "",
             "edgeone_url": v_cfg.get("edgeone_url") or "",
-            "token_masked": masked
+            "has_token": bool(v_cfg.get("token")),
         },
         "message": "EdgeOne 凭据中枢配置已成功持久化保存至本地加密文件"
     })

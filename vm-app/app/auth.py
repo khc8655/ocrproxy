@@ -20,15 +20,25 @@ _BLOCK_SECONDS = 600  # 10 minutes block
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP considering reverse proxies (X-Forwarded-For / X-Real-IP)."""
-    xff = request.headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip()
-    x_real_ip = request.headers.get("X-Real-IP")
-    if x_real_ip:
-        return x_real_ip.strip()
-    if request.client and request.client.host:
-        return request.client.host
+    """Extract the client IP for anti-bruteforce accounting.
+
+    X-Forwarded-For / X-Real-IP are client-controlled headers: trusting them
+    unconditionally lets an attacker rotate the "IP" on every attempt and bypass the
+    failed-login lockout. They are honoured only when the request comes from loopback
+    (a reverse proxy on the same host) or when TRUST_PROXY_HEADERS=1 is explicitly set
+    for a trusted external proxy.
+    """
+    client_host = request.client.host if request.client and request.client.host else None
+    trust_headers = os.environ.get("TRUST_PROXY_HEADERS", "").strip().lower() in ("1", "true", "yes", "on")
+    if trust_headers or client_host in ("127.0.0.1", "::1"):
+        xff = request.headers.get("X-Forwarded-For")
+        if xff:
+            return xff.split(",")[0].strip()
+        x_real_ip = request.headers.get("X-Real-IP")
+        if x_real_ip:
+            return x_real_ip.strip()
+    if client_host:
+        return client_host
     return "127.0.0.1"
 
 

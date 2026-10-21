@@ -1,13 +1,15 @@
 {
-  "version": "v20261021-02",
+  "version": "v20261021-03",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "批次发布：协议端点两行式、本地 Key 可见可编辑、历史供应商 Key 来源判定修复 (v20261021-02)",
+  "title": "安全热修复：中枢 Token 只写不读、导出全掩码、中枢地址变更需重输 Token (v20261021-03)",
   "changelog": [
-    "管理后台：供应商弹窗协议与端点改为两行式（第一行协议开关、第二行整宽地址），解决 OpenAI/Messages 地址输入框过短；只读供应商全部控件与保存按钮禁用；",
-    "本地 Key 与 EdgeOne 对齐：/api/admin/config 仅对显式 origin=vault 的中枢 Key 掩码，本地 Key 原值下发（管理员登录态），编辑弹窗可查看并修改；中枢 Key 保持掩码只读；",
-    "合并 PR #21：修复 4fbc327/a4ac0d7 把「无 origin 的历史供应商」误判为中枢供应商的问题——VM 上这类供应商是用户本机录入的本地供应商，其字符串 Key 迁移、GET 掩码、保存守卫与前端 resolveKeySource() 统一按本地处理；仅显式 origin=vault 才按中枢只读；EdgeOne 保持默认 vault（其本身即中枢）；",
-    "新增回归：本地 Key 可见/中枢 Key 仍掩码；无 origin 老供应商的 Key 迁移后保持 local 且可改；",
-    "验证：四层全量测试（E2E 76 项、契约 S1~S7/U1~U4、vault_ui、overflow、runtime_profiles/settings_resolution）全绿；T0 G1~G6 全绿；按批次节奏一次发布。"
+    "安全（高优先）：/api/admin/config/export 改为全掩码导出（所有 provider Key 掩码、edgeone_vault.token 置空），即使管理员会话被窃取也无法一键导出全部 Key 或中枢 Token；导入仍按掩码保持原值恢复；",
+    "/api/admin/vault/config 改为 Token 只写不读：响应仅返回 has_token，不再返回任何前后缀；修改中枢地址必须重新输入 Token（否则 400），防止把中枢指向攻击者服务器后骗取 Bearer Token；",
+    "中枢地址校验：仅 http/https、禁止内嵌账号密码、禁止云厂商元数据/链路本地地址（/vault/config、/vault/test、/api/admin/config 保存均生效）；",
+    "登录限流抗伪造：X-Forwarded-For / X-Real-IP 仅在回环（同机反代）或 TRUST_PROXY_HEADERS=1 时可信，避免伪造 IP 绕过 5 次/10 分钟锁定；",
+    "测试：新增 security hardening 回归（导出不含明文、Token 不回显、改地址缺 Token 拒绝、非法/元数据地址拒绝、同地址轮换 Token 成功）；",
+    "范围说明：本次仅收敛管理面攻击面，不改变 /v1 转发链路，性能与离线可用性零影响；OS 被攻破后内存/可解密配置仍可读属于明确接受的残余风险；",
+    "验证：四层全量测试 18.3s 全绿，T0 G1~G6 全绿。"
   ]
 }

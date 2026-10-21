@@ -360,6 +360,19 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 - **旧字符串 Key 加载归一化**：VM `config_store._migrate_string_secrets()` 与 EdgeOne `normalizeProviderKeys()` 把 `"KeyA": "sk-xxx"` 一次性转成 `{key, origin, is_local}`（本地供应商→local，中枢供应商→vault），两端投影/编辑逻辑不再需要字符串特例。
 - **请求级超时键改名**：内部键 `upstream_timeout` → `request_timeout_sec`（从不持久化），与保存的 `upstream_timeout_sec` 彻底区分，避免再次出现"全局值覆盖 OCR 60s"的混淆。
 
+### 3.5.y 管理面安全基线（v20261021-03）
+
+> 目标：即使管理员 Web 会话被窃取，也**不能导出中枢 Token，也不能一键打包全部 Key**。不改变数据面转发路径，性能零影响。
+
+- **中枢 Token 只写不读**：`/api/admin/config`、`/api/admin/config/export`、`/api/admin/vault/config` 一律只返回 `has_token`，永不返回 Token 明文或前后缀。
+- **导出全掩码**：`/api/admin/config/export` 对所有 provider Key 掩码、Token 置空；导入仍按"掩码保持原值"恢复。导出不再能作为"密钥备份"。
+- **改中枢地址必须重输 Token**：地址变更且未提供新 Token 直接 400，防止把中枢指向攻击者服务器后骗走 Bearer Token。
+- **中枢地址校验**：仅 http/https、禁止 URL 内嵌账号密码、禁止云厂商元数据/链路本地地址。
+- **登录限流抗伪造**：`X-Forwarded-For` / `X-Real-IP` 仅在请求来自本机回环（同机反代）或显式 `TRUST_PROXY_HEADERS=1` 时可信，避免攻击者轮换伪造 IP 绕过 5 次/10 分钟锁定。
+- **接受的残余风险（明确不做）**：OS/root 被攻破时，内存与可解密配置中的 Key 仍可被读取；不采用"中枢 Key 不落盘"或"hub 注入代转发"方案（会牺牲性能/离线可用性）。密钥价值以免费额度为主，泄露按轮换处理。
+
+**部署提示**：若管理面在可信外部反向代理之后，设置 `TRUST_PROXY_HEADERS=1` 以恢复按真实客户端 IP 限流；否则保持默认，限流按直连 IP 计算。
+
 ### 3.5.x 管理后台一致性补充（v20261021-01）
 
 - **供应商卡片徽章**：只显示 `规则 v{version}`，不再展示同步/更新日期（该日期无运维意义）。
