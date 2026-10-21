@@ -380,8 +380,21 @@ async function persistConfig(msg='配置已保存并立即生效'){
     });
     if (!r.ok) {
       if (r.status === 409) {
-        alert('配置保存冲突拦截！\n\n检测到后端配置已被其他窗口或进程更新。为防止覆盖他人最新提交的内容，本次保存已安全拦截。\n\n系统将自动为您重新拉取最新线上配置。');
+        // 说明：409 只拦截"这一次"保存，之前已成功的保存不受影响。若本次改的是中枢
+        // Token，把刚输入的值暂存后重新回填，用户点一下即可再次保存（Token 不回显、不能丢）。
+        const tokenEl = document.getElementById('cfg_vault_token');
+        const pendingToken = (tokenEl?.value || '').trim();
+        alert('本次保存未写入（配置已被其他窗口或进程更新）\n\n' +
+              '为防止覆盖对方的改动，系统拦截了这次的整包保存；你之前已保存过的修改不受影响。\n\n' +
+              (pendingToken ? '你刚输入的 Token 没有丢，页面刷新后会回填，请点击「保存中枢配置」再存一次。\n\n' : '') +
+              '提示：修改中枢地址/Token 请用「保存中枢配置」按钮，它单独保存、不参与整包版本锁，基本不会再冲突。\n\n' +
+              '页面将自动重新拉取最新配置。');
         await loadData();
+        if (pendingToken) {
+          const again = document.getElementById('cfg_vault_token');
+          if (again) again.value = pendingToken;
+          toast('已恢复你刚才输入的 Token，请点「保存中枢配置」再保存一次', 'info');
+        }
         return;
       }
       const err = await r.json().catch(() => ({}));

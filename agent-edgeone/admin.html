@@ -453,10 +453,11 @@
             <div class="settings-row settings-row-full">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
-                <span class="settings-row-hint" title="测试中枢网络连接，或一键增量同步已配置的提供商端点与规则">测试中枢网络连接，或一键增量同步已配置的提供商端点与规则</span>
+                <span class="settings-row-hint" title="修改中枢地址/Token 后请点「保存中枢配置」（单独保存，不与其它设置共用版本锁）；可测试连接或增量同步规则">修改地址/Token 后点「保存中枢配置」；可测试连接或增量同步规则</span>
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>

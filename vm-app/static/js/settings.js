@@ -83,7 +83,12 @@ function initSettingsKeyListeners(){
       saveSettings();
     } else if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
       e.preventDefault();
-      saveSettings();
+      // 中枢 URL/Token 走独立保存接口，避免把 Token 混进整包保存触发版本冲突
+      if (e.target.id === 'cfg_vault_url' || e.target.id === 'cfg_vault_token') {
+        saveVaultConfig();
+      } else {
+        saveSettings();
+      }
     }
   });
 }

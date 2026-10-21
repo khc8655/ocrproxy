@@ -255,13 +255,19 @@ async function testVaultConnection(){
 }
 
 async function saveVaultConfig(silent = false){
-  const url = (document.getElementById('cfg_vault_url')?.value || '').trim();
-  const token = (document.getElementById('cfg_vault_token')?.value || '').trim();
+  const urlEl = document.getElementById('cfg_vault_url');
+  const tokenEl = document.getElementById('cfg_vault_token');
+  const btn = document.getElementById('btnSaveVaultConfig');
+  const url = (urlEl?.value || '').trim();
+  const token = (tokenEl?.value || '').trim();
+  if(!url){
+    toast('请先填写 EdgeOne 中枢服务地址', 'err');
+    return;
+  }
+  const payload = { edgeone_url: url, url: url };
+  if (token && !isMaskedSecret(token)) payload.token = token;
+  if (btn) { btn.disabled = true; btn.dataset.busy = '1'; }
   try {
-    const payload = { edgeone_url: url, url: url };
-    if (token && !isMaskedSecret(token)) {
-      payload.token = token;
-    }
     const res = await fetch('/api/admin/vault/config', {
       method: 'POST',
       headers: headers(),
@@ -277,16 +283,21 @@ async function saveVaultConfig(silent = false){
     state.config.edgeone_vault.edgeone_url = url;
     if (payload.token) {
       state.config.edgeone_vault.has_token = true;
+      // Token 只写不读：保存成功后清空输入框，避免驻留明文
+      if (tokenEl) tokenEl.value = '';
     }
     const badge = document.getElementById('vaultTokenStatusBadge');
     if (badge && (payload.token || state.config.edgeone_vault.has_token)) {
       badge.style.display = 'inline-block';
     }
-    if (!silent) toast('EdgeOne 凭据中枢配置已成功保存到本地加密配置 (proxy_config.enc)', 'ok');
+    if (!silent) toast('中枢配置已单独保存（不影响其它设置）', 'ok');
+    // 独立保存会更新后端版本号，重新拉取以同步 _version 与状态
     await loadData();
     await fetchVaultManifest(false);
   } catch(e) {
     if (!silent) toast('保存中枢配置失败: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; delete btn.dataset.busy; }
   }
 }
 

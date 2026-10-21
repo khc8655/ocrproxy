@@ -1168,10 +1168,11 @@ function pageHtml() {
             <div class="settings-row settings-row-full">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
-                <span class="settings-row-hint" title="测试中枢网络连接，或一键增量同步已配置的提供商端点与规则">测试中枢网络连接，或一键增量同步已配置的提供商端点与规则</span>
+                <span class="settings-row-hint" title="修改中枢地址/Token 后请点「保存中枢配置」（单独保存，不与其它设置共用版本锁）；可测试连接或增量同步规则">修改地址/Token 后点「保存中枢配置」；可测试连接或增量同步规则</span>
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
@@ -2177,8 +2178,21 @@ async function persistConfig(msg='配置已保存并立即生效'){
     });
     if (!r.ok) {
       if (r.status === 409) {
-        alert('配置保存冲突拦截！\\n\\n检测到后端配置已被其他窗口或进程更新。为防止覆盖他人最新提交的内容，本次保存已安全拦截。\\n\\n系统将自动为您重新拉取最新线上配置。');
+        // 说明：409 只拦截"这一次"保存，之前已成功的保存不受影响。若本次改的是中枢
+        // Token，把刚输入的值暂存后重新回填，用户点一下即可再次保存（Token 不回显、不能丢）。
+        const tokenEl = document.getElementById('cfg_vault_token');
+        const pendingToken = (tokenEl?.value || '').trim();
+        alert('本次保存未写入（配置已被其他窗口或进程更新）\\n\\n' +
+              '为防止覆盖对方的改动，系统拦截了这次的整包保存；你之前已保存过的修改不受影响。\\n\\n' +
+              (pendingToken ? '你刚输入的 Token 没有丢，页面刷新后会回填，请点击「保存中枢配置」再存一次。\\n\\n' : '') +
+              '提示：修改中枢地址/Token 请用「保存中枢配置」按钮，它单独保存、不参与整包版本锁，基本不会再冲突。\\n\\n' +
+              '页面将自动重新拉取最新配置。');
         await loadData();
+        if (pendingToken) {
+          const again = document.getElementById('cfg_vault_token');
+          if (again) again.value = pendingToken;
+          toast('已恢复你刚才输入的 Token，请点「保存中枢配置」再保存一次', 'info');
+        }
         return;
       }
       const err = await r.json().catch(() => ({}));
@@ -3157,13 +3171,19 @@ async function testVaultConnection(){
 }
 
 async function saveVaultConfig(silent = false){
-  const url = (document.getElementById('cfg_vault_url')?.value || '').trim();
-  const token = (document.getElementById('cfg_vault_token')?.value || '').trim();
+  const urlEl = document.getElementById('cfg_vault_url');
+  const tokenEl = document.getElementById('cfg_vault_token');
+  const btn = document.getElementById('btnSaveVaultConfig');
+  const url = (urlEl?.value || '').trim();
+  const token = (tokenEl?.value || '').trim();
+  if(!url){
+    toast('请先填写 EdgeOne 中枢服务地址', 'err');
+    return;
+  }
+  const payload = { edgeone_url: url, url: url };
+  if (token && !isMaskedSecret(token)) payload.token = token;
+  if (btn) { btn.disabled = true; btn.dataset.busy = '1'; }
   try {
-    const payload = { edgeone_url: url, url: url };
-    if (token && !isMaskedSecret(token)) {
-      payload.token = token;
-    }
     const res = await fetch('/api/admin/vault/config', {
       method: 'POST',
       headers: headers(),
@@ -3179,16 +3199,21 @@ async function saveVaultConfig(silent = false){
     state.config.edgeone_vault.edgeone_url = url;
     if (payload.token) {
       state.config.edgeone_vault.has_token = true;
+      // Token 只写不读：保存成功后清空输入框，避免驻留明文
+      if (tokenEl) tokenEl.value = '';
     }
     const badge = document.getElementById('vaultTokenStatusBadge');
     if (badge && (payload.token || state.config.edgeone_vault.has_token)) {
       badge.style.display = 'inline-block';
     }
-    if (!silent) toast('EdgeOne 凭据中枢配置已成功保存到本地加密配置 (proxy_config.enc)', 'ok');
+    if (!silent) toast('中枢配置已单独保存（不影响其它设置）', 'ok');
+    // 独立保存会更新后端版本号，重新拉取以同步 _version 与状态
     await loadData();
     await fetchVaultManifest(false);
   } catch(e) {
     if (!silent) toast('保存中枢配置失败: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; delete btn.dataset.busy; }
   }
 }
 
@@ -6174,7 +6199,12 @@ function initSettingsKeyListeners(){
       saveSettings();
     } else if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
       e.preventDefault();
-      saveSettings();
+      // 中枢 URL/Token 走独立保存接口，避免把 Token 混进整包保存触发版本冲突
+      if (e.target.id === 'cfg_vault_url' || e.target.id === 'cfg_vault_token') {
+        saveVaultConfig();
+      } else {
+        saveSettings();
+      }
     }
   });
 }

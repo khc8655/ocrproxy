@@ -372,6 +372,9 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 - **登录限流抗伪造**：`X-Forwarded-For` / `X-Real-IP` 仅在请求来自本机回环（同机反代）或显式 `TRUST_PROXY_HEADERS=1` 时可信，避免攻击者轮换伪造 IP 绕过 5 次/10 分钟锁定。
 - **接受的残余风险（明确不做）**：OS/root 被攻破时，内存与可解密配置中的 Key 仍可被读取；不采用"中枢 Key 不落盘"或"hub 注入代转发"方案（会牺牲性能/离线可用性）。密钥价值以免费额度为主，泄露按轮换处理。
 
+- **中枢配置独立保存**：系统设置里「保存中枢配置」按钮走 `/api/admin/vault/config` 单独提交 URL/Token，不参与整包配置的乐观锁；`cfg_vault_url` / `cfg_vault_token` 输入框回车也走该独立保存，避免只改 Token 时被整包 409 连累。
+- **冲突提示可行动**：整包保存遇到 409 时，提示明确「本次保存未写入、之前的保存不受影响」，并把刚输入的 Token 回填到输入框（Token 仍不回显），用户点一次「保存中枢配置」即可重试；不再让用户误以为 Token 保存失败。
+
 **部署提示**：若管理面在可信外部反向代理之后，设置 `TRUST_PROXY_HEADERS=1` 以恢复按真实客户端 IP 限流；否则保持默认，限流按直连 IP 计算。
 
 **中枢 Token 与地址绑定**：已保存的 Token 只会发往已保存的中枢地址；任何 vault 接口或配置保存指定了另一个地址时，必须同时带上新 Token（`config_store.vault_url_and_token()` 统一判定）。中枢供应商（origin=vault）的连接字段（origin/base_url/anthropic_base_url/adapter_rules/协议字段/preset_id）后端只读，只能经 /vault/sync 更新。

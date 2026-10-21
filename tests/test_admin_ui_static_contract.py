@@ -60,7 +60,7 @@ REQUIRED_IDS = [
     # models / candidates
     "agentModelsBox", "candidateModal", "agentModal",
     # settings
-    "cfg_vault_url", "cfg_vault_token", "btnTestVault", "btnSyncVaultFromSettings", "p_proto_hint",
+    "cfg_vault_url", "cfg_vault_token", "btnSaveVaultConfig", "btnTestVault", "btnSyncVaultFromSettings", "p_proto_hint",
 ]
 
 KNOWN_ARCH = {"vm", "edgeone"}
