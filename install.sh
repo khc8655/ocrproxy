@@ -31,7 +31,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # 基础全局定义
-SCRIPT_VERSION="v20261021-04"
+SCRIPT_VERSION="v20261021-05"
 INSTALL_DIR="/opt/ocrproxy"
 SERVICE_NAME="ocrproxy"
 GITHUB_REPO="khc8655/ocrproxy"
@@ -496,6 +496,15 @@ if [[ "$CLI_ACTION" == "upgrade" ]] || is_installed; then
     if [[ -d "${INSTALL_DIR}/config" ]]; then
         run_sudo cp -r "${INSTALL_DIR}/config" "${BACKUP_DIR}/" 2>/dev/null || true
     fi
+    # 备份只保留最近 1 份：备份内含 .env 与 config（可解密历史 Key），
+    # 长期累积会让"已删除的 Key"一直可恢复。
+    run_sudo chmod 700 "${INSTALL_DIR}/backup" "${BACKUP_DIR}" 2>/dev/null || true
+    mapfile -t _ocrproxy_bks < <(ls -1d "${INSTALL_DIR}"/backup/backup_* 2>/dev/null | sort)
+    if [[ ${#_ocrproxy_bks[@]} -gt 1 ]]; then
+        for _old_bk in "${_ocrproxy_bks[@]:0:${#_ocrproxy_bks[@]}-1}"; do
+            run_sudo rm -rf "$_old_bk"
+        done
+    fi
     ok "历史配置已完成安全备份"
 
     # 准备新源码
@@ -773,6 +782,7 @@ mkdir -p "${INSTALL_DIR}/config"
 mkdir -p "${INSTALL_DIR}/static"
 mkdir -p "${INSTALL_DIR}/scripts"
 mkdir -p "${INSTALL_DIR}/backup"
+chmod 700 "${INSTALL_DIR}/backup" 2>/dev/null || true
 
 TMP_DIR=$(mktemp -d /tmp/ocrproxy_install_XXXXXX)
 trap 'rm -rf "$TMP_DIR"' EXIT

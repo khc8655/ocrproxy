@@ -568,6 +568,48 @@ async def test_vault_env_token_not_sent_to_changed_url():
     print("     PASS: env vault token does not follow a URL change")
 
 
+async def test_backup_retention_and_deletion_purge():
+    """Backups must not accumulate, and deleting a key/provider must purge local history.
+
+    * only one rolling backup is kept (previous version);
+    * deleting a provider purges all rolling backups, so the deleted secret cannot be
+      recovered from a pre-delete snapshot (ENCRYPT_KEY lives on the same host).
+    """
+    import glob
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    cfg_dir = os.environ["CONFIG_DIR"]
+    save_to_disk({
+        "providers": {"p1": {"name": "P", "origin": "local", "base_url": "https://p.example.com/v1",
+                             "keys": {"k1": {"key": "sk-delete-me", "origin": "local", "is_local": True}}}},
+        "agent_models": {},
+        "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []},
+    })
+    clear_cache()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+        def body_of(res):
+            d = res.json()
+            return d.get("config", d)
+
+        # two saves -> exactly one rolling backup (retention = 1)
+        for _ in range(2):
+            body = body_of(await c.get("/api/admin/config", headers=H))
+            r = await c.post("/api/admin/config", headers=H, json=body)
+            assert r.status_code == 200, r.text
+        baks = glob.glob(os.path.join(cfg_dir, "proxy_config.enc.bak-*"))
+        assert len(baks) == 1, f"rolling backups must be capped at 1, got {baks}"
+
+        # delete the provider -> backups purged, secret gone from current + history
+        body = body_of(await c.get("/api/admin/config", headers=H))
+        body["providers"].pop("p1")
+        r = await c.post("/api/admin/config", headers=H, json=body)
+        assert r.status_code == 200, r.text
+        assert glob.glob(os.path.join(cfg_dir, "proxy_config.enc.bak-*")) == [], "delete must purge local backups"
+        assert "p1" not in (await get_config()).get("providers", {})
+    print("     PASS: backup retention + deletion purge")
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -617,6 +659,8 @@ async def _run_all_tests():
         print("     PASS: test_vault_provider_connection_fields_locked")
         print("  -> test_vault_env_token_not_sent_to_changed_url...")
         await test_vault_env_token_not_sent_to_changed_url()
+        print("  -> test_backup_retention_and_deletion_purge...")
+        await test_backup_retention_and_deletion_purge()
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:

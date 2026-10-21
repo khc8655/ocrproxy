@@ -1,14 +1,14 @@
 {
-  "version": "v20261021-04",
+  "version": "v20261021-05",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "安全热修复（续）：Token 与中枢地址绑定、中枢供应商连接字段后端只读 (v20261021-04)",
+  "title": "批次发布：中枢配置独立保存、409 可行动提示、备份仅保留 1 份且删除即清理 (v20261021-05)",
   "changelog": [
-    "合并 PR #22（保留两项零操作成本的修复，撤回了会改变登录限流行为的 CDN/XFF 改动）：",
-    "Token 与地址绑定：vault 接口（test/manifest/fetch-key/add-keys/sync）此前「请求体 URL 优先、Token 回退已保存值」，仅凭管理密码就能把真 Token 发往任意地址；现在已保存 Token 只发往已保存地址，换地址必须带新 Token；/api/admin/config 保存同样拦截（这是 v20261021-03 只堵 /vault/config 的旁路）；",
-    "中枢供应商连接字段后端只读：origin=vault 供应商的 origin/base_url/anthropic_base_url/adapter_rules/protocols/protocol/anthropic_messages/preset_id 保存时强制还原、合并导入时跳过，防止改 base_url 后把中枢 Key 明文外发；前端本来就禁用这些输入，操作无变化；规则更新仍走 /vault/sync；",
-    "补强：环境变量 Token（VAULT_ACCESS_TOKEN / EDGEONE_VAULT_TOKEN）同样受地址绑定约束——配置里没有 Token、仅靠 env Token 的部署，换中枢地址同样必须重输 Token（新增回归测试）；",
-    "明确不采用：撤回 PR 中的 CLIENT_IP_HEADER / XFF 最右项改动（会改变挂 CDN 时的限流行为），登录限流保持 v20261021-03 语义；导出全掩码、Token 只写不读、地址校验维持不变；",
-    "验证：四层全量测试全绿（含 4 个新增安全回归），T0 G1~G6 全绿。"
+    "系统设置新增「保存中枢配置」按钮：中枢 URL/Token 走 /api/admin/vault/config 单独保存，不参与整包配置版本锁；URL/Token 输入框回车也走独立保存，修改 Token 不再被其它设置保存的 409 连累；",
+    "整包保存 409 冲突提示改为可行动文案：明确本次未写入、之前的保存不受影响，并回填刚输入的 Token（仍不回显），点「保存中枢配置」即可重试；",
+    "备份策略收紧：滚动配置备份由 20 份改为只保留 1 份；删除 Key/供应商保存成功后自动清理全部滚动备份，避免 pre-delete 快照长期保留已删除密钥；install.sh 安装备份仅保留最近 1 份并设 700；",
+    "删除确认提示补充：本地删除不会移除中枢中的 Key，彻底删除需在中枢操作；本地历史备份会一并清理；",
+    "新增回归：备份只保留 1 份、删除供应商后本地备份清空；",
+    "验证：四层全量测试全绿，T0 G1~G6 全绿。"
   ]
 }

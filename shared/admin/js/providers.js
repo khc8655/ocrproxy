@@ -870,7 +870,7 @@ async function saveProvider(){
 }
 
 async function deleteProvider(name){ 
-  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？本地规则与配置将一并清理。')) return; 
+  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？\n\n本地规则、配置与历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢里的 Key；如需彻底删除，请在中枢操作。')) return; 
   delete state.config.providers[name]; 
   if(state.ruleUpdatesMap && state.ruleUpdatesMap[name]) delete state.ruleUpdatesMap[name];
   KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
@@ -1178,7 +1178,7 @@ function editKey(prov, label){
 }
 
 async function deleteKey(prov,label){ 
-  if(!confirm('确定要删除 Key "'+label+'" 吗？')) return; 
+  if(!confirm('确定要删除 Key "'+label+'" 吗？\n\n本地历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢中的 Key；如需彻底删除，请在中枢操作。')) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
     delete state.config.providers[prov].keys[label]; 
   }

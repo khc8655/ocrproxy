@@ -36,8 +36,15 @@ def _check_auth(request: Request) -> bool:
     return verify_admin_auth(request)
 
 
-def _rolling_config_backup() -> None:
-    """Copy proxy_config.enc to a timestamped rolling backup (keep the last 20)."""
+_ROLLING_BACKUP_KEEP = 1
+
+
+def _rolling_config_backup(keep: int = _ROLLING_BACKUP_KEEP) -> None:
+    """Copy proxy_config.enc to a single rolling backup (previous version only).
+
+    只保留 1 份上一版本备份：备份是加密的，但 ENCRYPT_KEY 同机存放，历史备份越多，
+    已删除 Key 的可恢复窗口越长。删除 Key/供应商时还会调用 _purge_rolling_backups()。
+    """
     try:
         config_dir = _get_config_dir()
         current_enc_file = os.path.join(config_dir, "proxy_config.enc")
@@ -48,14 +55,34 @@ def _rolling_config_backup() -> None:
         bak_file = os.path.join(config_dir, f"proxy_config.enc.bak-{timestamp_str}")
         shutil.copy2(current_enc_file, bak_file)
         bak_files = sorted(glob.glob(os.path.join(config_dir, "proxy_config.enc.bak-*")))
-        if len(bak_files) > 20:
-            for old_bak in bak_files[:-20]:
+        if len(bak_files) > keep:
+            for old_bak in bak_files[:len(bak_files) - keep]:
                 try:
                     os.remove(old_bak)
                 except Exception:
                     pass
     except Exception as bak_err:
         logger.warning("Failed to create pre-save rolling backup: %s", bak_err)
+
+
+def _purge_rolling_backups() -> int:
+    """Remove every rolling backup (used after a key/provider deletion).
+
+    删除 Key 后，pre-delete 备份里仍有旧 Key；不清掉就等于"删了还能恢复"。
+    返回清理的文件数。
+    """
+    removed = 0
+    try:
+        config_dir = _get_config_dir()
+        for bak in glob.glob(os.path.join(config_dir, "proxy_config.enc.bak-*")):
+            try:
+                os.remove(bak)
+                removed += 1
+            except Exception:
+                pass
+    except Exception as err:
+        logger.warning("Failed to purge rolling backups: %s", err)
+    return removed
 
 
 async def _save_vault_config_change(cfg: dict) -> int:
@@ -1158,6 +1185,17 @@ async def save_config_endpoint(request: Request):
 
         await save_config(body)
         vm_logger.info("ConfigAudit", "Configuration saved to disk successfully", version=next_ver, run_mode=new_run_mode or "unchanged")
+
+        # 删除 Key/供应商后清理滚动备份：pre-delete 备份里仍有旧密钥，不能留。
+        if deleted_providers or deleted_keys_set:
+            _purged = _purge_rolling_backups()
+            vm_logger.info(
+                "ConfigAudit",
+                "Deleted secrets purged from local rolling backups",
+                purged_files=_purged,
+                deleted_providers=sorted(deleted_providers),
+                deleted_keys=sorted(f"{p}:{k}" for p, k in deleted_keys_set),
+            )
 
         for m_name, m_cfg in (body.get("agent_models") or {}).items():
             if isinstance(m_cfg, dict) and m_cfg.get("active_key"):
