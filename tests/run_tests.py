@@ -65,6 +65,11 @@ CHECKS = {
         "desc": "VM Agent Dashboard Summary (tokens / TTFT / failures)",
         "cmd": [PYTHON_EXE, "tests/test_agent_metrics.py"],
     },
+    "settings_resolution": {
+        "tier": "T1",
+        "desc": "Runtime settings resolution (first-byte/OCR timeout, 403 cooldown, hub string keys)",
+        "cmd": [PYTHON_EXE, "tests/test_settings_resolution.py"],
+    },
     "api_layer": {
         "tier": "T1",
         "desc": "FastAPI API Auth, Cascade Deletion & Vault Pull Rules",
@@ -117,7 +122,7 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static"],
+    "logic": ["units", "security", "agent_metrics", "settings_resolution", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
     "contract": ["contract_ui", "key_capsules", "vault_ui"],
