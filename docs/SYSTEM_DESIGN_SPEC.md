@@ -331,11 +331,35 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | EdgeOne 根镜像（`edge-functions/`） | `build-admin.mjs: syncTree()`（带删除同步）；唯一的构建管线 `npm run build:assets` → `build:admin`；agent-edgeone 脚本委托根目录 | 用 `cp -R` 追加式复制、另写第二套构建步骤、手写 `agent-edgeone/admin.js` |
 | 生成物门禁 | T0 `G6`：根镜像逐字节等于 `agent-edgeone/edge-functions/`，`lib/presets/*.json` 与 `agent-edgeone/admin.js` 禁止复活 | 把生成物当源码手改 |
 
+#### 三运行时差异矩阵（EdgeOne / VM-Agent / VM-KB）
+
+> 判定准则：**只有"流程相同、只是数值/默认值不同"的差异才允许用默认参数表达；凡是能力有无、控制流、数据形状不同的，必须有代码分支或能力位。** 同一个词在不同模式里含义不同（例如"403 冷却"与"欠费冷却"）不属于默认参数差异，属于不同策略。
+
+| 差异项 | EdgeOne | VM-Agent | VM-KB | 归类 |
+| :--- | :--- | :--- | :--- | :--- |
+| 运行模式存在性 | 仅 agent（无 KB 候选/挂载） | agent | kb | **代码/能力位**（`HOST.runModes`、`vaultClient`、`systemUpdate`） |
+| 中枢角色 | 中枢服务端（manifest/fetch） | 客户端（拉取/同步） | 客户端 | **代码**（同一份 UI 由能力位裁剪） |
+| 路由策略默认 | sticky_failover | sticky_failover | round_robin | **默认参数**（按 mode 取值） |
+| 单次请求超时 | 以 agent 首包为准 | 首包 120 s | 快速 15 s / OCR 60 s | **默认参数 + 请求级覆盖**：分类默认值属参数；路由按 category 覆盖属代码 |
+| 并发控制 | 无 KB 全局闸门 | 每 Key 0（不限） | 每 Key 16 + 全局闸门 | **默认参数**（限额）+ **代码分支**（KB 全局闸门是否存在） |
+| 冷却时长 | 429 60 s / 5xx 30 s | 429 依 Retry-After（无人工冻结） | 429 60 s / 5xx 30 s / 403 600 s / 欠费 1800 s | **默认参数**（时长） |
+| 冷却/熔断触发条件 | 无 KB 熔断语义 | 瞬时 5xx/超时**不冻结**、自由换 Key | 连续失败熔断（3 次→1800 s）、严格失败保护 | **代码分支**（控制流不同，不能只改数值） |
+| 重试/总预算 | 单请求预算 | 3 次 / 300 s | 由分类推导的预算上限 | **默认参数**（次数/预算）+ 代码选择 category 预算 |
+| 流式首包保障 | peek 窗口（20 s） | stream precommit grace（45 s） | 同 VM | **默认参数**（窗口大小）+ 实现差异（edge peek vs precommit） |
+| 统计口径 | 当前快照（KV 聚合） | 今日累计（本地落盘） | 今日累计 | **代码分支**（持久化介质/语义不同） |
+| 配置存储/鉴权 | KV + 环境变量 | 加密文件 + `_version` 锁 | 同 VM | **代码**（存储适配层，不做参数化） |
+| 配置 GET 掩码 | 原样返回 | 掩码返回 + PUT 还原 | 同 VM | **代码 + 契约**（待写入 `shared/contracts`） |
+| 旧数据兼容 | 字符串 Key、`_run_mode`、`url/edgeone_url` | 同左 | 同左 | **代码迁移**（加载时归一化，不参与运行时策略） |
+
+**教训（v20261020-07 → PR #20）**：`settings.schema.json` 的 `aliases` 原本服务于"旧配置迁移/设置表单显示"，被直接接入运行时 `get_setting()` 后，把 KB 超时误当成 Agent 首包超时、把欠费冷却误当成 403 冷却。今后 schema 需区分 `aliases`（展示/迁移）与运行时解析；跨模式差异应落到**显式 profile**，而不是复用另一个策略的别名。
+
 **已知未收敛项（需单独评审后实施，不阻塞当前版本）**：
-1. EdgeOne `lib/config.js` 的 `DEFAULT_SETTINGS`、超时/冷却常量仍为硬编码，尚未由 settings.schema 生成；
-2. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
-3. EdgeOne ↔ VM 的失败/冷却策略（429/5xx/40x、熔断）语义仍有漂移，需共享策略表后再统一；
-4. `/api/config` GET/PUT 的掩码与资产保留语义未写入 `shared/contracts/admin-ui-backend.json`，双端行为差异尚未契约化。
+1. 引入 `shared/config/runtime-profiles.json`（edgeone / vm-agent / vm-kb 三套默认值），VM 侧以 profile 解析默认值，EdgeOne 侧构建期生成 `lib/generated/runtime-profile.js`，删除 `lib/config.js` 的 `DEFAULT_SETTINGS` 与 `cooldowns.js` 常量副本；
+2. `cooldown_quota_sec` / `cooldown_404_sec` / `cooldown_410_sec` 作为独立 schema 字段（hosts: vm）而非别名，`scheduler` 统一经 schema 读取；
+3. 把每请求内部键 `upstream_timeout` 重命名为 `request_timeout_sec`（避免与持久化的 `upstream_timeout_sec` 混淆），`schedule()` 也可改为显式参数；
+4. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
+5. 旧字符串 Key 在加载时统一归一化为 `{key, origin}`（两端各一次迁移），投影谓词即可去掉字符串特例；
+6. `/api/config` GET/PUT 的掩码与资产保留语义写入 `shared/contracts/admin-ui-backend.json` 并纳入契约场景。
 
 ### 3.5 供应商预设规范、下拉格式与列表版本徽章真理源
 

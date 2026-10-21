@@ -129,7 +129,7 @@ LAYERS = {
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "api_layer", "static_sync", "admin_static",
+    "all": ["units", "security", "agent_metrics", "settings_resolution", "api_layer", "static_sync", "admin_static",
             "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 

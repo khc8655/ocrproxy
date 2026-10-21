@@ -1,18 +1,17 @@
 {
-  "version": "v20261020-07",
+  "version": "v20261020-08",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "全仓去重与单一实现收敛：协议/供应商/凭据/配置知识归一，构建管线与生成物门禁 (v20261020-07)",
+  "title": "合并 PR #20 修复去重引入的运行时回归，并固化三运行时差异判定准则 (v20261020-08)",
   "changelog": [
-    "前端协议词汇归一：新增 core.js normalizeProtocolList()/formatProtocolLabel() 唯一实现，providers/vault/agent-models-ui/models 的协议标签、徽章、预选与 provider option 全部委托；删除 agent-models-ui 内重复的 _getModelProtocols/_renderProtocolBadges/_getAllProvidersList/_formatProviderOptionLabel 逻辑；",
-    "供应商下拉唯一渲染：vault.js populateLocalProviderSelect() 同时服务 Agent 模型弹窗与 KB 候选弹窗，删除 models.js/agent-models-ui.js 两份重复的 option/占位/默认选中逻辑；",
-    "凭据来源统一：后端 config_store.secret_origin()/stamp_secret_origin() 与前端 vault.js stampSecretOrigin() 统一 origin 与旧字段 is_local 的读写，杜绝两套判定漂移；",
-    "配置知识归一：新增 vm-app/app/presets.py 唯一适配规则加载器（目录解析/文件名归一化/缓存/失效），admin_routes 与 proxy_routes 删除各自实现；新增 get_run_mode()/vault_url_and_token()，删除 admin/proxy 重复的 run_mode 归一与中枢 URL/token 解析；",
-    "参数读取归一：proxy_routes/scheduler 的 upstream_timeout/agent_first_byte_timeout/cooldown_429|5xx|403/circuit_*/max_retries 等长 fallback 链全部改走 settings.schema.json + settings_schema.get_setting()，config merge 的键清单由 schema all_setting_keys() 生成，schema 别名顺序与 circuit_cooldown_sec 默认值同步纠正（60→300 与运行时一致）；",
-    "EdgeOne 中枢投影唯一化：lib/config.js 新增 toVaultProviderView()/isVaultExportableKey()，manifest 与 fetch 共用同一投影；修复 manifest 只过滤 is_local 而 fetch 还过滤 origin=local 导致「清单可拉、拉取 404」的漂移，manifest 现在同样不下发 origin=local 供应商与本地 Key；",
-    "构建管线与生成物收敛：根 build:admin 拆为 build:assets（符号→预设→admin 构建→DOM 冒烟）+ T0 门禁，agent-edgeone 脚本全部委托根目录；build-presets 改为确定性输出（版本/日期取自 version.json，单写一次后镜像）并自动清理旧的手工 per-provider JSON 副本（19 个）；edge-functions 根镜像改为带删除的 syncTree；删除历史手写重复 bundle agent-edgeone/admin.js（78KB）；",
-    "门禁增强：新增 T0 G6——根 edge-functions 镜像必须与 agent-edgeone/edge-functions 逐字节一致，lib/presets/*.json 与 agent-edgeone/admin.js 禁止复活；发版门禁由 5 项升为 6 项，文档/测试同步；",
-    "遗留未收敛项（已写入设计文档 §3.4.x，需单独评审）：EdgeOne DEFAULT_SETTINGS 由 schema 生成、v1 chat/messages relay 骨架抽取、Edge↔VM 冷却策略统一、/api/config 语义契约化；",
-    "验证：四层全量测试 17.6s 全绿（S1~S7/U1~U4 + vault_ui 双模式 + E2E），T0 G1~G6 全绿；纯去重/一致性整理，未改变对外 API 与持久化配置格式（唯一可见行为修正：中枢 manifest 不再展示 origin=local 的供应商/本地 Key，与 fetch 的既有拒绝语义一致）。"
+    "合并 PR #20（fix/dedupe-regressions）：修复 v20261020-07 把 settings.schema.json 的「展示/迁移别名」直接接入运行时 get_setting() 造成的 3 类回归；",
+    "R1 Agent 首包超时：agent_first_byte_timeout_sec 不再从 KB 的 upstream_timeout_chat / upstream_timeout_sec 别名兜底（新装模板会写 upstream_timeout_chat=45，KB 保存会写 15，曾把 Agent 首包从 120s 降到 45s/15s 并误判超时切 Key）；",
+    "R2 403 冷却：cooldown_403_sec 不再复用 cooldown_quota_sec 别名（只配欠费 1800s 时曾让 403 也冷却 1800s）；",
+    "R3 请求级超时优先：scheduler 先读本次请求设置的 upstream_timeout（OCR 60s），再回退 schema（避免全局 upstream_timeout_sec=15 覆盖 OCR 60s）；",
+    "R4 中枢字符串 Key：EdgeOne isVaultExportableKey() 对非空字符串 Key 放行（配置文档写法 \"KeyA\": \"sk-xxx\"），manifest 与 fetch 恢复一致导出，仍隐藏 is_local/origin=local；",
+    "设置页：Agent 模式超时输入框不再把 KB 的 upstream_timeout_sec 当作默认显示值；",
+    "测试：新增 tests/test_settings_resolution.py（T1，覆盖 R1~R4，R3 真实慢上游跑 schedule()，R4 真实跑 EdgeOne 函数）；PR 只把它加入 logic 层，本次补入发版全套 all 层，确保 test:full/发版必跑；",
+    "文档：SYSTEM_DESIGN_SPEC §3.4.x 新增「三运行时差异矩阵（EdgeOne / VM-Agent / VM-KB）」与判定准则——流程相同仅数值不同→默认参数/profile；能力有无、控制流、数据形状不同→代码分支/能力位；并更新遗留项（runtime-profiles、quota/404/410 独立 schema 字段、request_timeout_sec 重命名、字符串 Key 归一化、relay 骨架抽取、/api/config 契约化）；",
+    "验证：四层全量测试全绿（含新增 settings_resolution），T0 G1~G6 全绿。"
   ]
 }

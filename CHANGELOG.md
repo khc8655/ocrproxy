@@ -4,6 +4,22 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-08] - 2026-10-21
+
+### 合并 PR #20：修复去重引入的运行时回归（超时 / 冷却 / 中枢字符串 Key）
+v20261020-07 把 `settings.schema.json` 中原本只用于「旧配置迁移 / 设置表单显示」的 `aliases` 直接接入了运行时 `get_setting()`，把不同策略的参数混为一谈。已按 PR #20 逐项修复并补回归：
+
+- **R1 Agent 首包超时**：`agent_first_byte_timeout_sec` 不再从 KB 的 `upstream_timeout_chat` / `upstream_timeout_sec` 别名兜底。新装模板写 `upstream_timeout_chat=45`、KB 模式保存设置写 `15`，此前会把 Agent 首包从 120s 降为 45s/15s，长思考请求被误判超时并切 Key。
+- **R2 403 冷却**：`cooldown_403_sec` 不再复用 `cooldown_quota_sec`（欠费/额度冷却）别名；只配欠费 1800s 时，403 不再被冷却 1800s。
+- **R3 请求级超时优先**：`scheduler` 先读取本次请求设置的 `upstream_timeout`（如 OCR 60s），再回退到 schema 的全局 `upstream_timeout_sec`（15s），恢复"分类超时优先于全局默认"的既有语义。
+- **R4 中枢字符串 Key**：EdgeOne `isVaultExportableKey()` 对**非空字符串** Key 放行（配置文档中的 `"KeyA": "sk-xxx"` 写法），manifest 与 fetch 恢复一致导出；`is_local`/`origin=local` 仍严格隐藏。
+- **设置页显示**：Agent 模式的超时输入框不再把 KB 的 `upstream_timeout_sec` 当作默认显示值。
+- **测试**：新增 `tests/test_settings_resolution.py`（T1，R1~R4；R3 对真实慢上游跑 `schedule()`，R4 直接跑 EdgeOne 函数）；PR 只将其加入 `logic` 层，本版补入发版全套 `all` 层，确保 `test:full` / 发版必跑。
+- **文档**：`SYSTEM_DESIGN_SPEC` §3.4.x 新增「三运行时差异矩阵（EdgeOne / VM-Agent / VM-KB）」与判定准则，并更新遗留项（runtime-profiles、quota/404/410 独立字段、`request_timeout_sec` 重命名、字符串 Key 归一化、relay 骨架抽取、`/api/config` 契约化）。
+- **验证**：四层全量测试全绿（含新增 `settings_resolution`），T0 G1~G6 全绿。
+
+---
+
 ## [v20261020-07] - 2026-10-21
 
 ### 全仓去重与单一实现收敛（行为等价，除一处与既有语义对齐的修正）
