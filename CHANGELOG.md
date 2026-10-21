@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [Unreleased]
+
+### 工程流程
+- 发版节奏改为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；P0 线上故障才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
+
+---
+
 ## [v20261020-09] - 2026-10-21
 
 ### 三运行时默认值单一真理源 + 独立冷却策略字段
