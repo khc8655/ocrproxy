@@ -371,9 +371,9 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 - **登录限流抗伪造**：`X-Forwarded-For` / `X-Real-IP` 仅在请求来自本机回环（同机反代）或显式 `TRUST_PROXY_HEADERS=1` 时可信，避免攻击者轮换伪造 IP 绕过 5 次/10 分钟锁定。
 - **接受的残余风险（明确不做）**：OS/root 被攻破时，内存与可解密配置中的 Key 仍可被读取；不采用"中枢 Key 不落盘"或"hub 注入代转发"方案（会牺牲性能/离线可用性）。密钥价值以免费额度为主，泄露按轮换处理。
 
-**部署提示**：可信代理链下取 `X-Forwarded-For` **最右**一项（最近一跳代理追加的地址；最左项客户端可伪造）。挂 CDN 时设置 `CLIENT_IP_HEADER` 为 CDN 覆盖写入的真实客户端头（Azure Front Door `X-Azure-ClientIP`、Cloudflare `CF-Connecting-IP`、EdgeOne `EO-Client-IP`），否则所有登录共享 CDN 边缘 IP，他人的失败尝试会把管理员锁在外面。代理不在本机时另设 `TRUST_PROXY_HEADERS=1`。
+**部署提示**：若管理面在可信外部反向代理之后，设置 `TRUST_PROXY_HEADERS=1` 以恢复按真实客户端 IP 限流；否则保持默认，限流按直连 IP 计算。
 
-**中枢 Token 与地址绑定**：已保存的 Token 只会发往已保存的中枢地址；任何 vault 接口或配置保存指定了另一个地址时，必须同时带上新 Token（`config_store.vault_url_and_token()` 统一判定）。
+**中枢 Token 与地址绑定**：已保存的 Token 只会发往已保存的中枢地址；任何 vault 接口或配置保存指定了另一个地址时，必须同时带上新 Token（`config_store.vault_url_and_token()` 统一判定）。中枢供应商（origin=vault）的连接字段（origin/base_url/anthropic_base_url/adapter_rules/协议字段/preset_id）后端只读，只能经 /vault/sync 更新。
 
 ### 3.5.x 管理后台一致性补充（v20261021-01）
 

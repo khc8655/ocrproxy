@@ -510,29 +510,6 @@ async def test_vault_token_never_follows_another_url():
         srv.shutdown()
 
 
-def test_client_ip_behind_cdn():
-    """Lockout IP: rightmost XFF behind a loopback proxy (leftmost is client-spoofable);
-    CLIENT_IP_HEADER wins when set (CDN real-client header); untrusted peers ignore headers."""
-    from types import SimpleNamespace
-    from app.auth import _get_client_ip
-
-    def req(peer, headers):
-        return SimpleNamespace(client=SimpleNamespace(host=peer), headers=headers)
-
-    old = {k: os.environ.pop(k, None) for k in ("CLIENT_IP_HEADER", "TRUST_PROXY_HEADERS")}
-    try:
-        assert _get_client_ip(req("127.0.0.1", {"X-Forwarded-For": "6.6.6.6, 203.0.113.9"})) == "203.0.113.9"
-        assert _get_client_ip(req("198.51.100.1", {"X-Forwarded-For": "6.6.6.6"})) == "198.51.100.1"
-        os.environ["CLIENT_IP_HEADER"] = "X-Azure-ClientIP"
-        assert _get_client_ip(req("127.0.0.1", {"X-Forwarded-For": "6.6.6.6, 147.243.0.1",
-                                                 "X-Azure-ClientIP": "203.0.113.9"})) == "203.0.113.9"
-    finally:
-        for k, v in old.items():
-            os.environ.pop(k, None)
-            if v is not None:
-                os.environ[k] = v
-
-
 async def test_vault_provider_connection_fields_locked():
     """With only the admin password, an attacker must not be able to repoint a hub
     provider (base_url / origin) and make the VM send hub keys to their server."""
@@ -603,9 +580,6 @@ async def _run_all_tests():
         print("  -> test_vault_token_never_follows_another_url...")
         await test_vault_token_never_follows_another_url()
         print("     PASS: test_vault_token_never_follows_another_url")
-        print("  -> test_client_ip_behind_cdn...")
-        test_client_ip_behind_cdn()
-        print("     PASS: test_client_ip_behind_cdn")
         print("  -> test_vault_provider_connection_fields_locked...")
         await test_vault_provider_connection_fields_locked()
         print("     PASS: test_vault_provider_connection_fields_locked")
