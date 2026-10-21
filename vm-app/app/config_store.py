@@ -190,8 +190,8 @@ def _migrate_string_secrets(config: dict) -> bool:
     Historically a provider could store `"KeyA": "sk-xxx"`. That string carries no
     provenance, so every consumer had to special-case it (and Edge's vault export had
     to guess). Normalize once at load into {key, origin, is_local}:
-      * providers with origin == 'local'  -> local key (editable)
-      * everything else (hub parent)      -> vault key (read-only, deletable)
+      * providers with origin == 'vault'  -> vault key (read-only, deletable)
+      * everything else (incl. legacy providers without origin) -> local key (editable)
     """
     changed = False
     providers = config.get("providers")
@@ -203,10 +203,12 @@ def _migrate_string_secrets(config: dict) -> bool:
         keys = prov.get("keys")
         if not isinstance(keys, dict):
             continue
-        prov_origin = prov.get("origin") if prov.get("origin") in ("local", "vault") else "vault"
+        # VM 判定与前端 resolveKeySource()、保存守卫一致：只有供应商明确 origin=vault
+        # 时，未标记的旧 Key 才算中枢资产；没有 origin 的老供应商是用户在本机录入的。
+        prov_origin = "vault" if prov.get("origin") == "vault" else "local"
         for label, val in list(keys.items()):
             if isinstance(val, str) and val.strip():
-                origin = "local" if prov_origin == "local" else "vault"
+                origin = prov_origin
                 keys[label] = {"key": val, "origin": origin, "is_local": origin == "local"}
                 changed = True
     return changed
