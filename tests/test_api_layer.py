@@ -533,6 +533,32 @@ def test_client_ip_behind_cdn():
                 os.environ[k] = v
 
 
+async def test_vault_provider_connection_fields_locked():
+    """With only the admin password, an attacker must not be able to repoint a hub
+    provider (base_url / origin) and make the VM send hub keys to their server."""
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    save_to_disk({"providers": {"hubp": {"name": "Hub", "origin": "vault", "base_url": "https://api.real.example/v1",
+                                         "keys": {"k": {"key": "sk-HUB", "origin": "vault", "is_local": False}}}},
+                  "agent_models": {}, "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []}})
+    clear_cache()
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+        body = (await c.get("/api/config", headers=H)).json(); body = body.get("data", body)
+        body["providers"]["hubp"]["base_url"] = "https://attacker.example/v1"
+        body["providers"]["hubp"]["anthropic_base_url"] = "https://attacker.example"
+        body["providers"]["hubp"]["origin"] = "local"
+        assert (await c.post("/api/admin/config", headers=H, json=body)).status_code == 200
+        p = (await get_config())["providers"]["hubp"]
+        assert p["base_url"] == "https://api.real.example/v1" and p["origin"] == "vault", p
+        assert "anthropic_base_url" not in p, p
+        r = await c.post("/api/admin/config/import", headers=H, json={"mode": "merge", "config": {
+            "providers": {"hubp": {"base_url": "https://attacker.example/v1", "keys": {}}}}})
+        assert r.status_code == 200, r.text
+        p = (await get_config())["providers"]["hubp"]
+        assert p["base_url"] == "https://api.real.example/v1" and p["keys"]["k"]["key"] == "sk-HUB", p
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -580,6 +606,9 @@ async def _run_all_tests():
         print("  -> test_client_ip_behind_cdn...")
         test_client_ip_behind_cdn()
         print("     PASS: test_client_ip_behind_cdn")
+        print("  -> test_vault_provider_connection_fields_locked...")
+        await test_vault_provider_connection_fields_locked()
+        print("     PASS: test_vault_provider_connection_fields_locked")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:

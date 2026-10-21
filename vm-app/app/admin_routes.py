@@ -120,6 +120,12 @@ def _is_link_local_or_metadata(host: str) -> bool:
         return False
 
 
+# Fields of an origin=vault provider that decide where its hub keys are sent / how the
+# request is built. Only the vault pull/sync path may change them.
+_VAULT_LOCKED_PROVIDER_FIELDS = ("origin", "base_url", "anthropic_base_url", "adapter_rules",
+                                 "protocols", "protocol", "anthropic_messages", "preset_id")
+
+
 def _mask_config_secrets(config: dict, *, mask_local_keys: bool) -> dict:
     """Deep-copy config and mask upstream secrets before delivering it to a client."""
     masked = copy.deepcopy(dict(config))
@@ -294,6 +300,9 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
                     for k_name, k_secret in list(p_keys.items()):
                         if is_masked_secret(k_secret):
                             p_keys.pop(k_name, None)
+            elif merged_providers[p_name].get("origin") == "vault":
+                # 中枢供应商：导入不得改写连接字段（同 _VAULT_LOCKED_PROVIDER_FIELDS），也不往里加 Key。
+                continue
             else:
                 if p_val.get("base_url"):
                     merged_providers[p_name]["base_url"] = p_val["base_url"]
@@ -1035,6 +1044,16 @@ async def save_config_endpoint(request: Request):
             for p_name, p_data in incoming_providers.items():
                 if not isinstance(p_data, dict):
                     continue
+                _curr_prov = curr_providers.get(p_name)
+                if isinstance(_curr_prov, dict) and _curr_prov.get("origin") == "vault":
+                    # 中枢供应商的连接字段只读（UI 已禁用，这里在后端强制）：否则仅凭管理密码就能把
+                    # base_url 改到攻击者服务器，之后每次转发/探活都会把中枢 Key 明文发过去；
+                    # 也不允许把 origin 改成 local 来绕过。规则更新只走 /vault/sync。
+                    for _f in _VAULT_LOCKED_PROVIDER_FIELDS:
+                        if _f in _curr_prov:
+                            p_data[_f] = copy.deepcopy(_curr_prov[_f])
+                        else:
+                            p_data.pop(_f, None)
                 in_keys = p_data.get("keys")
                 if isinstance(in_keys, dict):
                     curr_keys = curr_providers.get(p_name, {}).get("keys", {}) if isinstance(curr_providers.get(p_name), dict) else {}
