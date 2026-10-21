@@ -18,6 +18,10 @@ if not os.path.exists(_FIXTURE) and not os.path.exists("scratch/merged_edgeone_c
     print("SKIP: 缺少 scratch/merged_edgeone_config.json 夹具 (git-ignored，需本地导出 EdgeOne 配置)")
     sys.exit(0)
 _CHROMIUM = os.environ.get("CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
+if not os.path.exists("agent-edgeone/admin.js"):
+    print("SKIP: agent-edgeone/admin.js 是已删除的历史手写副本；EdgeOne 实际页面由生成的 edge-functions/admin.js 提供（覆盖见 tests/test_backend_contract.py U1~U4）")
+    sys.exit(0)
+
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):

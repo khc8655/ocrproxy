@@ -27,6 +27,7 @@ import {
   checkVaultAuth,
 } from '../../lib/config.js';
 import { getPreset } from '../../lib/presets/index.js';
+import { toVaultProviderView } from '../../lib/config.js';
 
 function checkAuth(request, env) {
   return checkVaultAuth(request, env);
@@ -59,49 +60,9 @@ export async function onRequestGet(context) {
 
   for (const [pId, pCfg] of Object.entries(providers)) {
     if (!pCfg || typeof pCfg !== 'object') continue;
-    const preset = getPreset(pId);
-    const isSpecialized = Boolean(preset && (preset.adapter_rules || preset.features?.native_thinking));
-
-    // Extract key labels (never expose secrets in manifest, filter out local temporary keys)
-    const keyLabels = Object.entries(pCfg.keys || {})
-      .filter(([_, val]) => !(typeof val === 'object' && val !== null && val.is_local === true))
-      .map(([k]) => k);
-
-    // Models: from preset, or probe_models cache, or recommended_models
-    let models = [];
-    if (Array.isArray(pCfg.cached_models) && pCfg.cached_models.length > 0) {
-      models = pCfg.cached_models;
-    } else if (preset && Array.isArray(preset.recommended_models)) {
-      models = preset.recommended_models.map(m => m.name || m.upstream_model).filter(Boolean);
-    }
-
-    const protoStr = pCfg.protocol || preset?.protocol || 'openai';
-    const rawProtos = (Array.isArray(pCfg.protocols) && pCfg.protocols.length > 0)
-      ? pCfg.protocols
-      : (protoStr === 'messages' ? ['messages'] : (pCfg.anthropic_messages ? ['chat', 'messages'] : ['chat']));
-    const isAnthropic = Boolean(pCfg.anthropic_messages || rawProtos.includes('messages') || protoStr === 'messages');
-
-    manifestProviders[pId] = {
-      id: pId,
-      name: pCfg.name || preset?.name || pId,
-      preset_id: pCfg.preset_id || preset?.id || null,
-      preset_version: pCfg.preset_version || preset?.version || null,
-      preset_updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
-      version: pCfg.preset_version || preset?.version || null,
-      updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
-      type: isSpecialized ? 'specialized' : 'standard',
-      protocol: protoStr,
-      protocols: rawProtos,
-      anthropic_messages: isAnthropic,
-      base_url: pCfg.base_url || preset?.base_url || '',
-      anthropic_base_url: pCfg.anthropic_base_url || preset?.anthropic_base_url || '',
-      doc_url: pCfg.doc_url || preset?.doc_url || '',
-      description: pCfg.description || preset?.description || '',
-      keys: keyLabels,
-      models: models,
-      adapter_rules: pCfg.adapter_rules || preset?.adapter_rules || {},
-      ...(pCfg.rpm_per_key ? { rpm_per_key: pCfg.rpm_per_key } : (preset?.rpm_per_key ? { rpm_per_key: preset.rpm_per_key } : {})),
-    };
+    // Local/private providers are never advertised by the hub (fetch refuses them too).
+    if (pCfg.origin === 'local') continue;
+    manifestProviders[pId] = toVaultProviderView(pId, pCfg, getPreset(pId), { includeSecrets: false });
   }
 
   return new Response(

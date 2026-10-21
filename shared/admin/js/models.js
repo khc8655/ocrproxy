@@ -116,40 +116,7 @@ function selectCandidateType(type){
 }
 
 function populateCandidateProviderSelect(selectedId){
-  const sel = document.getElementById('c_providerSelect');
-  const optLocal = document.getElementById('c_optgroup_local');
-  if(!sel) return;
-
-  const providers = getAllAvailableProviders();
-  const configuredList = providers.filter(p => p.isConfigured !== false);
-
-  if (optLocal) {
-    if (configuredList.length > 0) {
-      optLocal.innerHTML = configuredList.map(p => {
-        const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-          ? _formatProviderOptionLabel(p) 
-          : `${p.label} (${p.protoStr || 'openai'})`;
-        return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
-      }).join('');
-    } else {
-      optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-    }
-  } else {
-    sel.innerHTML = configuredList.length
-      ? configuredList.map(p => {
-          const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-            ? _formatProviderOptionLabel(p) 
-            : `${p.label} (${p.protoStr || 'openai'})`;
-          return `<option value="${esc(p.id)}">${esc(optLabel)}</option>`;
-        }).join('')
-      : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-  }
-
-  const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
-    ? selectedId 
-    : (configuredList[0] ? configuredList[0].id : '');
-  
-  sel.value = curId;
+  const curId = populateLocalProviderSelect('c_providerSelect', 'c_optgroup_local', selectedId);
   onCandidateProviderSelectChange(curId);
 }
 

@@ -54,20 +54,7 @@ function getProviderPresetMeta(provName, provObj) {
 
 function getPresetProtocolLabel(p) {
   if (!p) return 'openai';
-  const rawProtos = p.protocols || (Array.isArray(p.protocols) ? p.protocols : null);
-  const isAnthropic = Boolean(
-    p.anthropic_base_url ||
-    p.anthropic_messages ||
-    (p.features && p.features.anthropic_messages) ||
-    (rawProtos && (rawProtos.includes('messages') || rawProtos.includes('anthropic')))
-  );
-  const isResponses = Boolean(
-    p.protocol === 'responses' ||
-    (rawProtos && rawProtos.includes('responses'))
-  );
-  if (isResponses) return 'openai+responses';
-  if (isAnthropic) return 'openai+message';
-  return 'openai';
+  return formatProtocolLabel(getPresetProtocols(p) || ['chat']);
 }
 
 function renderProviders(){
@@ -470,15 +457,9 @@ function populateCatalogSelect(select) {
   if (cur !== undefined && cur !== null) select.value = cur;
 }
 
+// Thin adapter over the canonical normalizer (kept as Set for legacy call sites).
 function normalizePresetProtocols(raw){
-  const norm = new Set();
-  (Array.isArray(raw) ? raw : []).forEach(x => {
-    const v = String(x).toLowerCase();
-    if (v.includes('openai') || v === 'chat') norm.add('chat');
-    if (v.includes('message') || v.includes('anthropic')) norm.add('messages');
-    if (v.includes('response')) norm.add('responses');
-  });
-  return norm;
+  return new Set(normalizeProtocolList(raw));
 }
 
 // 适配脚本（本地预设文件）支持哪些协议：chat 恒有；Messages 由 features.anthropic_messages /
@@ -486,7 +467,6 @@ function normalizePresetProtocols(raw){
 function getPresetProtocols(preset){
   if (!preset) return null;
   const norm = normalizePresetProtocols(preset.protocols);
-  if (norm.size === 0) norm.add('chat');
   const proto = String(preset.protocol || '').toLowerCase();
   const feat = preset.features || {};
   if (feat.anthropic_messages || preset.anthropic_base_url || proto.includes('messages')) norm.add('messages');
@@ -1234,13 +1214,11 @@ async function saveKey(){
   const pObj = (state.config.providers && state.config.providers[prov]) || {};
 
   if (_isLocalKeyMode) {
-    finalKeyVal.is_local = true;
-    finalKeyVal.origin = 'local';
+    stampSecretOrigin(finalKeyVal, 'local');
     _isLocalKeyMode = false;
   } else {
     const keyOrigin = (pObj.origin === 'local' || !isHostEdgeOne) ? 'local' : 'vault';
-    finalKeyVal.is_local = (keyOrigin === 'local');
-    finalKeyVal.origin = keyOrigin;
+    stampSecretOrigin(finalKeyVal, keyOrigin);
   }
 
   if(skip){ commitKey(prov, label, finalKeyVal); return; }

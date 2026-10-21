@@ -112,10 +112,10 @@ def test_edgeone_and_vm_ui_timeout_parity():
     # 1. EdgeOne dedicated sources: agent-edgeone/admin.{html,css,js}
     eo_html_path = os.path.join(root_dir, "agent-edgeone", "admin.html")
     eo_css_path = os.path.join(root_dir, "agent-edgeone", "admin.css")
-    eo_js_path = os.path.join(root_dir, "agent-edgeone", "admin.js")
+    eo_js_path = os.path.join(root_dir, "edge-functions", "admin.js")  # generated EdgeOne bundle (single source)
     assert os.path.exists(eo_html_path), "agent-edgeone/admin.html must exist"
     assert os.path.exists(eo_css_path), "agent-edgeone/admin.css must exist"
-    assert os.path.exists(eo_js_path), "agent-edgeone/admin.js must exist"
+    assert os.path.exists(eo_js_path), "edge-functions/admin.js (generated bundle) must exist"
 
     eo_html = open(eo_html_path, "r", encoding="utf-8").read()
     assert "OCRProxy EdgeOne 控制台" in eo_html, "agent-edgeone/admin.html must have EdgeOne console title"
@@ -134,10 +134,10 @@ def test_edgeone_and_vm_ui_timeout_parity():
     if os.path.exists(eo_js_path):
         eo_js = open(eo_js_path, "r", encoding="utf-8").read()
         assert "Math.min(30, upTimeout)" not in eo_js, (
-            "Red Line Violated: Obsolete Math.min(30, upTimeout) truncation found in agent-edgeone/admin.js"
+            "Red Line Violated: Obsolete Math.min(30, upTimeout) truncation found in edge-functions/admin.js"
         )
         assert "xsk/ocrprox" not in eo_js, (
-            "Red Line Violated: 404 mirror xsk/ocrprox found in agent-edgeone/admin.js"
+            "Red Line Violated: 404 mirror xsk/ocrprox found in edge-functions/admin.js"
         )
 
     # 2. EdgeOne compiled bundle: edge-functions/admin.js (index.js only redirects / -> /admin)

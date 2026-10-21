@@ -21,7 +21,9 @@ const sharedJsDir = join(root, '..', 'shared', 'admin', 'js');
 console.log('🔍 [Gate 1/2] 正在执行前端代码静态语法与符号完整性检查...');
 
 // 0. 架构规范门禁：确保 EdgeOne 专属控制台骨架完好存在且为 Vault Hub 专属控制台
-const requiredEdgeOneFiles = ['admin.html', 'admin.css', 'admin.js'];
+const requiredEdgeOneFiles = ['admin.html', 'admin.css'];
+// 注意：EdgeOne 实际服务的前端 bundle 是生成产物 edge-functions/admin.js，由 build-admin.mjs 生成；
+// agent-edgeone/admin.js 是历史遗留手写副本，已删除，禁止复活。
 for (const f of requiredEdgeOneFiles) {
   const p = join(root, f);
   if (!existsSync(p)) {

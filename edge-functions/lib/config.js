@@ -568,6 +568,55 @@ export function resolveBinding(config, binding) {
  * Note: most providers use the same /v1/chat/completions path; if a
  * new provider needs a different path, branch on provider name here.
  */
+/**
+ * Vault export guard: a key is exportable only when it is NOT a local/private credential.
+ * Both `/api/vault/manifest` and `/api/vault/fetch` MUST use this predicate, otherwise the
+ * manifest can advertise labels that fetch refuses (historical drift).
+ */
+export function isVaultExportableKey(keyObj) {
+  if (!keyObj || typeof keyObj !== 'object') return false;
+  return !(keyObj.is_local === true || keyObj.origin === 'local');
+}
+
+/**
+ * Single provider projection for the Vault Hub (manifest = labels, fetch = secrets + rules).
+ * Replaces the two copy-pasted projection blocks in api/vault/{manifest,fetch}.js.
+ */
+export function toVaultProviderView(pId, pCfg, preset, { includeSecrets = false } = {}) {
+  const protoStr = pCfg.protocol || preset?.protocol || 'openai';
+  const rawProtos = (Array.isArray(pCfg.protocols) && pCfg.protocols.length > 0)
+    ? pCfg.protocols
+    : (protoStr === 'messages' ? ['messages'] : (pCfg.anthropic_messages ? ['chat', 'messages'] : ['chat']));
+  const isAnthropic = Boolean(pCfg.anthropic_messages || rawProtos.includes('messages') || protoStr === 'messages');
+  const exportableKeys = Object.fromEntries(
+    Object.entries(pCfg.keys || {}).filter(([, v]) => isVaultExportableKey(v))
+  );
+  const models = (Array.isArray(pCfg.cached_models) && pCfg.cached_models.length > 0)
+    ? pCfg.cached_models
+    : ((preset?.recommended_models || []).map(m => m.name || m.upstream_model).filter(Boolean));
+  return {
+    id: pId,
+    name: pCfg.name || preset?.name || pId,
+    preset_id: pCfg.preset_id || preset?.id || null,
+    preset_version: pCfg.preset_version || preset?.version || null,
+    preset_updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
+    version: pCfg.preset_version || preset?.version || null,
+    updated_at: pCfg.preset_updated_at || preset?.updated_at || null,
+    type: (preset && (preset.adapter_rules || preset.features?.native_thinking)) ? 'specialized' : 'standard',
+    protocol: protoStr,
+    protocols: rawProtos,
+    anthropic_messages: isAnthropic,
+    base_url: pCfg.base_url || preset?.base_url || '',
+    anthropic_base_url: pCfg.anthropic_base_url || preset?.anthropic_base_url || '',
+    doc_url: pCfg.doc_url || preset?.doc_url || '',
+    description: pCfg.description || preset?.description || '',
+    models,
+    adapter_rules: pCfg.adapter_rules || preset?.adapter_rules || {},
+    ...(pCfg.rpm_per_key ? { rpm_per_key: pCfg.rpm_per_key } : (preset?.rpm_per_key ? { rpm_per_key: preset.rpm_per_key } : {})),
+    keys: includeSecrets ? exportableKeys : Object.keys(exportableKeys),
+  };
+}
+
 export function buildChatUrl(baseUrl) {
   const cleaned = String(baseUrl || '').replace(/\/+$/, '');
   if (cleaned.endsWith('/chat/completions')) {

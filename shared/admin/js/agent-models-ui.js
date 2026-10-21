@@ -259,54 +259,18 @@
     _toast('已更新配置（未检测到持久化回调）', 'info');
   }
 
-  // 2. Protocols and Provider Discovery
+  // 2. Protocols and Provider Discovery — identical logic lives in core.js/vault.js,
+  //    these are thin adapters so the agent modal and KB modal can never drift apart.
   function _getModelProtocols(modelName) {
-    const { cfg } = getCtx();
-    const m = cfg && cfg.agent_models ? cfg.agent_models[modelName] : null;
-    if (!m || !m.keys || !m.keys.length) return ['chat'];
-    const set = new Set();
-    for (const b of m.keys) {
-      const provProtos = (typeof getProviderProtocols === 'function') 
-        ? getProviderProtocols(b.provider) 
-        : ['chat'];
-      provProtos.forEach(pr => set.add(pr));
-    }
-    return set.size ? Array.from(set) : ['chat'];
+    return getModelProtocols(modelName);
   }
 
   function _renderProtocolBadges(protoList, isShort = true) {
-    if (typeof renderProtocolBadges === 'function') {
-      return renderProtocolBadges(protoList, isShort);
-    }
-    return (protoList || ['chat']).map(pr => {
-      const p = String(pr).toLowerCase();
-      let cls = 'badge-neutral', label = p;
-      if (p.includes('chat') || p === 'openai') { cls = 'badge-success'; label = 'chat'; }
-      else if (p.includes('message') || p === 'anthropic') { cls = 'badge-warn'; label = 'messages'; }
-      else if (p.includes('response')) { cls = 'badge-primary'; label = 'responses'; }
-      return `<span class="badge ${cls}" style="font-weight:600;font-size:11px;padding:2px 7px;">${_esc(label)}</span>`;
-    }).join(' ');
+    return renderProtocolBadges(protoList, isShort);
   }
 
   function _getAllProvidersList() {
-    let list = [];
-    if (typeof getAllAvailableProviders === 'function') {
-      list = getAllAvailableProviders();
-    } else {
-      const { cfg } = getCtx();
-      const provs = cfg.providers || {};
-      list = Object.keys(provs).sort().map(id => {
-        const p = provs[id];
-        const protoList = (typeof getProviderProtocols === 'function') ? getProviderProtocols(id) : ['chat'];
-        return {
-          id,
-          label: p.label || id,
-          isVault: false,
-          protoStr: protoList.join(', ')
-        };
-      });
-    }
-    return list;
+    return getAllAvailableProviders();
   }
 
   // 3. Probed Upstream Models State
@@ -467,49 +431,13 @@
   }
 
   function _formatProviderOptionLabel(p) {
-    const rawProtos = p.protoStr || (Array.isArray(p.protocols) ? p.protocols.join(', ') : '');
-    const parts = (rawProtos || 'chat').split(/[,+\s/]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-    const normalized = [];
-    if (parts.some(x => x.includes('openai') || x.includes('chat'))) normalized.push('openai');
-    if (parts.some(x => x.includes('anthropic') || x.includes('message'))) normalized.push('message');
-    if (parts.some(x => x.includes('response'))) normalized.push('responses');
-    const protoStr = (normalized.length ? normalized.join('+') : 'openai');
     const name = p.label || p.name || p.id;
-    return `${name} (${protoStr})`;
+    return `${name} (${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})`;
   }
 
   // 4. Populate and Handle Provider Selection in Agent Modal
   function populateAgentProviderSelect(selectedId) {
-    const sel = document.getElementById('a_providerSelect');
-    const optLocal = document.getElementById('a_optgroup_local');
-    if (!sel) return;
-
-    const providers = _getAllProvidersList();
-    const configuredList = providers.filter(p => p.isConfigured !== false);
-
-    if (optLocal) {
-      if (configuredList.length > 0) {
-        optLocal.innerHTML = configuredList.map(p => {
-          const optLabel = _formatProviderOptionLabel(p);
-          return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
-        }).join('');
-      } else {
-        optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-      }
-    } else {
-      sel.innerHTML = configuredList.length
-        ? configuredList.map(p => {
-            const optLabel = _formatProviderOptionLabel(p);
-            return `<option value="${_esc(p.id)}">${_esc(optLabel)}</option>`;
-          }).join('')
-        : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-    }
-
-    const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
-      ? selectedId 
-      : (configuredList[0] ? configuredList[0].id : '');
-    
-    sel.value = curId;
+    const curId = populateLocalProviderSelect('a_providerSelect', 'a_optgroup_local', selectedId);
     onAgentProviderSelectChange(curId);
   }
 

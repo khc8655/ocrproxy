@@ -2,7 +2,7 @@
 """tests/verify_release_gate.py — 极简发版质量硬门禁 (Lean Release Gatekeeper)
 
 遵循奥卡姆剃刀原则：0 外部依赖，<0.3 秒完成。
-严格校验发版 5 大黄金法则（G1~G5），任何一处不满足立即报错并退出。
+严格校验发版 6 大黄金法则（G1~G6），任何一处不满足立即报错并退出。
 """
 
 import sys
@@ -196,6 +196,53 @@ def check_g5_zero_secret_leak():
     pass_gate("G5", "Zero plaintext secret leakage verified across core files")
 
 
+def _dir_files(base):
+    """Relative path -> bytes for every file under base (sorted for stable walks)."""
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames.sort()
+        for name in sorted(filenames):
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, base).replace(os.sep, "/")
+            with open(full, "rb") as f:
+                out[rel] = f.read()
+    return out
+
+
+def check_g6_generated_mirrors():
+    """G6: 生成镜像必须与权威源逐字节一致，且不得复活历史重复制品。
+
+    - edge-functions/ 是 agent-edgeone/edge-functions/ 的生成镜像（single authority）；
+    - lib/presets/ 只允许 index.js / hub.js（旧的手工 per-provider JSON 副本已废弃）；
+    - agent-edgeone/admin.js（历史手写 bundle）不得复活。
+    """
+    src = os.path.join(REPO_ROOT, "agent-edgeone", "edge-functions")
+    dst = os.path.join(REPO_ROOT, "edge-functions")
+    src_files = _dir_files(src)
+    dst_files = _dir_files(dst)
+    if set(src_files) != set(dst_files):
+        missing = sorted(set(src_files) - set(dst_files))
+        extra = sorted(set(dst_files) - set(src_files))
+        fail("G6", f"edge-functions mirror file list drift. missing={missing[:5]} extra={extra[:5]}. Run 'npm run build:admin'!")
+    for rel, content in src_files.items():
+        if dst_files[rel] != content:
+            fail("G6", f"edge-functions mirror drift at {rel}. Run 'npm run build:admin'!")
+
+    for base in (src, dst):
+        presets_dir = os.path.join(base, "lib", "presets")
+        if not os.path.isdir(presets_dir):
+            continue
+        for name in os.listdir(presets_dir):
+            if name.endswith(".json"):
+                fail("G6", f"Stale hand-written preset copy resurrected: {os.path.join(presets_dir, name)}")
+
+    dead_admin = os.path.join(REPO_ROOT, "agent-edgeone", "admin.js")
+    if os.path.exists(dead_admin):
+        fail("G6", "agent-edgeone/admin.js is a dead hand-written bundle; generated bundle lives in edge-functions/admin.js")
+
+    pass_gate("G6", "Generated edge-functions mirror byte-identical; no orphan preset/dead-bundle duplicates")
+
+
 def main():
     print(f"\n{COLOR_BOLD}=== OCRProxy 极简发版质量硬门禁 (Lean Release Gatekeeper) ==={COLOR_RESET}")
     check_g1_version_sync()
@@ -203,7 +250,8 @@ def main():
     check_g3_install_scripts_zero_drift()
     check_g4_ssot_sync()
     check_g5_zero_secret_leak()
-    print(f"\n{COLOR_BOLD}{COLOR_GREEN}🎉 ALL 5 RELEASE GATES PASSED! Ready for deployment.{COLOR_RESET}\n")
+    check_g6_generated_mirrors()
+    print(f"\n{COLOR_BOLD}{COLOR_GREEN}🎉 ALL 6 RELEASE GATES PASSED! Ready for deployment.{COLOR_RESET}\n")
 
 
 if __name__ == "__main__":

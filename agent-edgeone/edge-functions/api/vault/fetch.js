@@ -23,6 +23,7 @@ import {
   checkVaultAuth,
 } from '../../lib/config.js';
 import { getPreset } from '../../lib/presets/index.js';
+import { isVaultExportableKey, toVaultProviderView } from '../../lib/config.js';
 
 function checkAuth(request, env) {
   return checkVaultAuth(request, env);
@@ -89,10 +90,8 @@ export async function handleVaultFetch(context, options = {}) {
   for (const label of requestedLabels) {
     if (pCfg.keys && pCfg.keys[label]) {
       const keyObj = pCfg.keys[label];
-      // 严格安全隔离：绝不对外分发或泄露标记为本地临时凭据 (is_local: true 或 origin: 'local') 的 Key
-      if (typeof keyObj === 'object' && keyObj !== null && (keyObj.is_local === true || keyObj.origin === 'local')) {
-        continue;
-      }
+      // 严格安全隔离：本地凭据绝不对外分发（统一走 isVaultExportableKey 判定）
+      if (!isVaultExportableKey(keyObj)) continue;
       targetKeys[label] = keyObj;
     }
   }
@@ -127,23 +126,18 @@ export async function handleVaultFetch(context, options = {}) {
     });
   }
 
-  const protoStr = pCfg.protocol || preset?.protocol || 'openai';
-  const rawProtos = (Array.isArray(pCfg.protocols) && pCfg.protocols.length > 0)
-    ? pCfg.protocols
-    : (protoStr === 'messages' ? ['messages'] : (pCfg.anthropic_messages ? ['chat', 'messages'] : ['chat']));
-  const isAnthropic = Boolean(pCfg.anthropic_messages || rawProtos.includes('messages') || protoStr === 'messages');
-
+  const view = toVaultProviderView(provider, pCfg, preset, { includeSecrets: true });
   const responseConfig = {
-    name: pCfg.name || preset?.name || provider,
-    protocol: protoStr,
-    protocols: rawProtos,
-    anthropic_messages: isAnthropic,
-    base_url: pCfg.base_url || preset?.base_url || '',
-    anthropic_base_url: pCfg.anthropic_base_url || preset?.anthropic_base_url || '',
-    adapter_rules: pCfg.adapter_rules || preset?.adapter_rules || {},
-    cached_models: pCfg.cached_models || preset?.recommended_models?.map(m => m.name || m.upstream_model) || [],
+    name: view.name,
+    protocol: view.protocol,
+    protocols: view.protocols,
+    anthropic_messages: view.anthropic_messages,
+    base_url: view.base_url,
+    anthropic_base_url: view.anthropic_base_url,
+    adapter_rules: view.adapter_rules,
+    cached_models: view.models,
     keys: targetKeys,
-    ...(pCfg.rpm_per_key ? { rpm_per_key: pCfg.rpm_per_key } : (preset?.rpm_per_key ? { rpm_per_key: preset.rpm_per_key } : {})),
+    ...(view.rpm_per_key ? { rpm_per_key: view.rpm_per_key } : {}),
   };
 
   return new Response(

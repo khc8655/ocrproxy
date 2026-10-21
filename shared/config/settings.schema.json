@@ -1,11 +1,26 @@
 {
   "version": 1,
   "groups": [
-    { "id": "auth", "title": "客户端鉴权与运行模式" },
-    { "id": "routing", "title": "路由与负载均衡策略" },
-    { "id": "timeout", "title": "超时与预算控制" },
-    { "id": "fault", "title": "容错、熔断与冷却" },
-    { "id": "concurrency", "title": "并发与队列控制" }
+    {
+      "id": "auth",
+      "title": "客户端鉴权与运行模式"
+    },
+    {
+      "id": "routing",
+      "title": "路由与负载均衡策略"
+    },
+    {
+      "id": "timeout",
+      "title": "超时与预算控制"
+    },
+    {
+      "id": "fault",
+      "title": "容错、熔断与冷却"
+    },
+    {
+      "id": "concurrency",
+      "title": "并发与队列控制"
+    }
   ],
   "fields": [
     {
@@ -15,8 +30,14 @@
       "hint": "外部应用访问 /v1/chat/completions 或 /v1/embeddings 等生产路由时所带的 Bearer Token",
       "type": "string",
       "placeholder": "留空则使用管理员密码作为客户端 Key",
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "agent_routing_strategy",
@@ -26,11 +47,22 @@
       "type": "select",
       "default": "sticky_failover",
       "options": [
-        { "value": "sticky_failover", "label": "粘性会话与智能故障转移 (推荐)" },
-        { "value": "manual", "label": "手动严格直通 (不重试)" }
+        {
+          "value": "sticky_failover",
+          "label": "粘性会话与智能故障转移 (推荐)"
+        },
+        {
+          "value": "manual",
+          "label": "手动严格直通 (不重试)"
+        }
       ],
-      "modes": ["agent"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "kb_routing_strategy",
@@ -40,12 +72,25 @@
       "type": "select",
       "default": "round_robin",
       "options": [
-        { "value": "round_robin", "label": "标准轮询 (Round Robin)" },
-        { "value": "weighted", "label": "性能与配额加权轮询" },
-        { "value": "latency_first", "label": "最低延迟优先" }
+        {
+          "value": "round_robin",
+          "label": "标准轮询 (Round Robin)"
+        },
+        {
+          "value": "weighted",
+          "label": "性能与配额加权轮询"
+        },
+        {
+          "value": "latency_first",
+          "label": "最低延迟优先"
+        }
       ],
-      "modes": ["kb"],
-      "hosts": ["vm"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
     },
     {
       "key": "agent_first_byte_timeout_sec",
@@ -57,9 +102,17 @@
       "default": 120,
       "min": 5,
       "max": 600,
-      "modes": ["agent"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["upstream_timeout_sec", "upstream_timeout_chat"]
+      "modes": [
+        "agent"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "upstream_timeout_chat",
+        "upstream_timeout_sec"
+      ]
     },
     {
       "key": "stream_precommit_grace_sec",
@@ -71,8 +124,12 @@
       "default": 45,
       "min": 1,
       "max": 120,
-      "modes": ["agent"],
-      "hosts": ["vm"]
+      "modes": [
+        "agent"
+      ],
+      "hosts": [
+        "vm"
+      ]
     },
     {
       "key": "edge_peek_window_sec",
@@ -84,8 +141,12 @@
       "default": 20,
       "min": 3,
       "max": 24,
-      "modes": ["agent"],
-      "hosts": ["edgeone"]
+      "modes": [
+        "agent"
+      ],
+      "hosts": [
+        "edgeone"
+      ]
     },
     {
       "key": "upstream_timeout_sec",
@@ -97,9 +158,18 @@
       "default": 15,
       "min": 5,
       "max": 300,
-      "modes": ["kb"],
-      "hosts": ["vm"],
-      "aliases": ["chat_fast_timeout", "upstream_timeout_chat", "upstream_timeout_embedding", "upstream_timeout_rerank"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ],
+      "aliases": [
+        "upstream_timeout",
+        "chat_fast_timeout",
+        "upstream_timeout_embedding",
+        "upstream_timeout_rerank"
+      ]
     },
     {
       "key": "upstream_timeout_kb",
@@ -111,9 +181,15 @@
       "default": 60,
       "min": 10,
       "max": 300,
-      "modes": ["kb"],
-      "hosts": ["vm"],
-      "aliases": ["upstream_timeout_ocr"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ],
+      "aliases": [
+        "upstream_timeout_ocr"
+      ]
     },
     {
       "key": "request_total_budget_sec",
@@ -126,9 +202,17 @@
       "min": 10,
       "max": 900,
       "optional": true,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["schedule_total_budget"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "schedule_total_budget"
+      ]
     },
     {
       "key": "max_retries",
@@ -139,9 +223,17 @@
       "default": 3,
       "min": 1,
       "max": 10,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["schedule_total_budget_count"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "schedule_total_budget_count"
+      ]
     },
     {
       "key": "max_attempts_per_provider",
@@ -152,8 +244,14 @@
       "default": 3,
       "min": 1,
       "max": 10,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "fast_failover_provider_down",
@@ -162,8 +260,14 @@
       "hint": "当同一供应商名下有 Key 遭遇 502/504 或连接超时时，若配置了其他可用厂商，立即跳往下一厂商而不是重试本厂商其他 Key",
       "type": "boolean",
       "default": true,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "cooldown_429_sec",
@@ -175,9 +279,17 @@
       "default": 60,
       "min": 5,
       "max": 600,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["cooldown_tpm_sec"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "cooldown_tpm_sec"
+      ]
     },
     {
       "key": "cooldown_5xx_sec",
@@ -189,9 +301,17 @@
       "default": 30,
       "min": 5,
       "max": 300,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["cooldown_duration"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "cooldown_duration"
+      ]
     },
     {
       "key": "cooldown_403_sec",
@@ -203,9 +323,17 @@
       "default": 600,
       "min": 10,
       "max": 3600,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"],
-      "aliases": ["cooldown_quota_sec"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ],
+      "aliases": [
+        "cooldown_quota_sec"
+      ]
     },
     {
       "key": "circuit_break_threshold",
@@ -216,8 +344,14 @@
       "default": 3,
       "min": 1,
       "max": 10,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "circuit_cooldown_sec",
@@ -226,11 +360,17 @@
       "hint": "Key 触发熔断后保持隔离的秒数，过期后自动进入半开状态试探",
       "type": "int",
       "unit": "s",
-      "default": 60,
+      "default": 300,
       "min": 5,
       "max": 600,
-      "modes": ["agent", "kb"],
-      "hosts": ["vm", "edgeone"]
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm",
+        "edgeone"
+      ]
     },
     {
       "key": "kb_max_concurrency_per_key",
@@ -241,8 +381,12 @@
       "default": 16,
       "min": 1,
       "max": 100,
-      "modes": ["kb"],
-      "hosts": ["vm"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
     },
     {
       "key": "agent_max_concurrency_per_key",
@@ -253,8 +397,12 @@
       "default": 0,
       "min": 0,
       "max": 1000,
-      "modes": ["agent"],
-      "hosts": ["vm"]
+      "modes": [
+        "agent"
+      ],
+      "hosts": [
+        "vm"
+      ]
     },
     {
       "key": "ocr_max_inflight",
@@ -265,8 +413,12 @@
       "default": 12,
       "min": 1,
       "max": 30,
-      "modes": ["kb"],
-      "hosts": ["vm"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
     },
     {
       "key": "ocr_queue_timeout_sec",
@@ -278,8 +430,12 @@
       "default": 30,
       "min": 0,
       "max": 300,
-      "modes": ["kb"],
-      "hosts": ["vm"]
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
     }
   ]
 }

@@ -45,7 +45,9 @@ from fastapi.responses import StreamingResponse, JSONResponse, Response
 from . import gemini_compat
 from . import agent_metrics
 
-from .config_store import get_config, clear_cache
+from .config_store import get_config, clear_cache, get_run_mode
+from .settings_schema import get_setting
+from .presets import load_preset as _get_preset
 from .scheduler import (
     schedule,
     AllCandidatesFailedError,
@@ -222,44 +224,6 @@ VIRTUAL_ALIASES = {"chat", "embedding", "reranker", "ocr"}
 #    - Default "general" returns reasoning in a `reasoning` field
 #    - "deepseek-style" returns reasoning in `reasoning_content` (DeepSeek-compatible)
 #    - Age# ── Declarative Provider Rule Engine ────────────────────────────────
-_PRESET_CACHE: dict = {}
-
-
-def _get_presets_dir() -> Path:
-    """Resolve shared/presets directory in both prod (/opt/ocrproxy) and dev repo environments."""
-    p = Path(__file__).resolve().parent.parent / "shared" / "presets"
-    if p.exists():
-        return p
-    return Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
-
-
-def _get_preset(provider_id: str) -> dict:
-    """Load provider preset definition from shared/presets/ directory."""
-    pid = str(provider_id or "").lower().strip()
-    if not pid:
-        return {}
-    if pid in _PRESET_CACHE:
-        return _PRESET_CACHE[pid]
-    try:
-        presets_dir = _get_presets_dir()
-        preset_file = presets_dir / f"{pid}.json"
-        if preset_file.exists():
-            data = json.loads(preset_file.read_text(encoding="utf-8"))
-            _PRESET_CACHE[pid] = data
-            return data
-        # Fallback: try stripping dots, hyphens, and underscores (e.g. "b.ai" -> "bai")
-        pid_clean = re.sub(r"[.\-_]", "", pid)
-        if pid_clean and pid_clean != pid:
-            clean_file = presets_dir / f"{pid_clean}.json"
-            if clean_file.exists():
-                data = json.loads(clean_file.read_text(encoding="utf-8"))
-                _PRESET_CACHE[pid] = data
-                return data
-    except Exception as e:
-        logger.warning("Failed to load preset %s: %s", pid, e)
-    return {}
-
-
 def _get_preset_rules(provider_id: str) -> dict:
     """Return adapter_rules dictionary for a given provider or preset ID."""
     return _get_preset(provider_id).get("adapter_rules", {})
@@ -1030,12 +994,6 @@ async def _parse_json_body(request: Request, max_bytes: int = _MAX_JSON_BODY_BYT
         return (None, None, err) if return_raw_bytes else (None, err)
 
 
-def _get_active_run_mode(config: dict) -> str:
-    """Return the active run mode: 'agent' or 'kb'."""
-    mode = (config.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower().strip()
-    return mode if mode in ("agent", "kb") else "agent"
-
-
 async def _with_agent_metrics(request: Request, impl):
     """Feed the per-request Agent dashboard summary (agent_metrics) around a route.
 
@@ -1090,7 +1048,7 @@ async def list_models(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
     data = []
 
     # 1. Include real Agent models if in agent mode
@@ -1174,7 +1132,7 @@ async def _chat_completions_impl(request: Request):
             }
         )
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
 
     if run_mode == "agent":
         if model_name in VIRTUAL_ALIASES:
@@ -1210,7 +1168,7 @@ async def _chat_completions_impl(request: Request):
         if not candidates_list:
             return _model_not_found_response(model_name)
         try:
-            chat_timeout = max(1.0, float(config.get("agent_first_byte_timeout_sec") or config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 120.0))
+            chat_timeout = max(1.0, float(get_setting(config, "agent_first_byte_timeout_sec", 120.0) or 120.0))
         except (ValueError, TypeError):
             chat_timeout = 120.0
     else:
@@ -1227,7 +1185,7 @@ async def _chat_completions_impl(request: Request):
             body["stream"] = False
             is_stream = False
         try:
-            chat_timeout = max(1.0, float(config.get("upstream_timeout_sec") or config.get("chat_fast_timeout") or 15.0))
+            chat_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
         except (ValueError, TypeError):
             chat_timeout = 15.0
         candidates_list = config.get("candidates", {}).get("chat", [])
@@ -1449,7 +1407,7 @@ async def _anthropic_messages_impl(request: Request):
     if not model_name or not isinstance(model_name, str):
         return _anthropic_error(400, "invalid_request_error", "Field 'model' is required.")
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
     if run_mode == "kb":
         return _anthropic_error(
             404, "not_found_error",
@@ -1513,7 +1471,7 @@ async def _anthropic_messages_impl(request: Request):
         )
 
     try:
-        chat_timeout = max(1.0, float(config.get("agent_first_byte_timeout_sec") or config.get("upstream_timeout_chat") or config.get("upstream_timeout_sec") or 120.0))
+        chat_timeout = max(1.0, float(get_setting(config, "agent_first_byte_timeout_sec", 120.0) or 120.0))
     except (ValueError, TypeError):
         chat_timeout = 120.0
 
@@ -1626,7 +1584,7 @@ async def embeddings(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
     if run_mode == "agent":
         return JSONResponse(
             status_code=404,
@@ -1661,7 +1619,7 @@ async def embeddings(request: Request):
     # global default (12s) — one timeout would burn the whole failover
     # budget and the remaining keys would never be tried.
     try:
-        emb_timeout = max(1.0, float(config.get("upstream_timeout_sec") or config.get("upstream_timeout_embedding") or config.get("upstream_timeout_kb") or 15.0))
+        emb_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
     except (ValueError, TypeError):
         emb_timeout = 15.0
 
@@ -1718,7 +1676,7 @@ async def rerank(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
     if run_mode == "agent":
         return JSONResponse(
             status_code=404,
@@ -1752,7 +1710,7 @@ async def rerank(request: Request):
     # Rerank requests can also be slow on long candidate lists — same
     # per-type timeout + budget treatment as embeddings.
     try:
-        rerank_timeout = max(1.0, float(config.get("upstream_timeout_sec") or config.get("upstream_timeout_rerank") or config.get("upstream_timeout_kb") or 15.0))
+        rerank_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
     except (ValueError, TypeError):
         rerank_timeout = 15.0
 
@@ -1908,7 +1866,7 @@ async def ocr(request: Request):
     if not verify_proxy_auth(request, config):
         return JSONResponse(status_code=401, content={"error": "Invalid or missing proxy API key"})
 
-    run_mode = _get_active_run_mode(config)
+    run_mode = get_run_mode(config)
     if run_mode == "agent":
         return JSONResponse(
             status_code=404,
@@ -2012,7 +1970,7 @@ async def _ocr_handle(request: Request, config: dict):
 
     # OCR / vision models need a longer timeout than chat
     try:
-        ocr_timeout = max(1.0, float(config.get("upstream_timeout_kb", config.get("upstream_timeout_ocr", 60))))
+        ocr_timeout = max(1.0, float(get_setting(config, "upstream_timeout_kb", 60.0)))
     except (ValueError, TypeError):
         ocr_timeout = 60.0
 

@@ -112,6 +112,34 @@ function fmtTime(ms) {
 }
 
 // Protocol and Model Helpers (Globally available to prevent script-ordering race conditions)
+// ── Canonical protocol normalization (single source of truth) ──────────────
+// Accepts arrays or strings in any legacy spelling ('chat', 'openai', 'openai+message',
+// 'anthropic', 'OpenAI / Message', 'responses', ...) and returns canonical tokens:
+// 'chat' | 'messages' | 'responses'. Every protocol label/badge/preselection in the
+// admin UI goes through these two helpers so the vocabulary can never drift again.
+function normalizeProtocolList(raw){
+  const out = new Set();
+  const parts = Array.isArray(raw) ? raw : String(raw || '').split(/[,+\s/|]+/);
+  parts.forEach(item => {
+    const v = String(item || '').toLowerCase().trim();
+    if (!v) return;
+    if (v.includes('anthropic') || v.includes('message')) out.add('messages');
+    else if (v.includes('response')) out.add('responses');
+    else out.add('chat');
+  });
+  if (!out.size) out.add('chat');
+  return Array.from(out);
+}
+
+function formatProtocolLabel(raw){
+  const list = normalizeProtocolList(raw);
+  const parts = [];
+  if (list.includes('chat')) parts.push('openai');
+  if (list.includes('messages')) parts.push('message');
+  if (list.includes('responses')) parts.push('responses');
+  return parts.length ? parts.join('+') : 'openai';
+}
+
 function getProtocolBadge(proto){
   const p = String(proto || '').toLowerCase();
   if (p.includes('anthropic') || p.includes('messages')) {
@@ -140,7 +168,7 @@ function getProviderProtocols(name, provObj){
     if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
       protos.push('messages');
     }
-    return protos;
+    return normalizeProtocolList(protos);
   } catch (_) {
     return ['chat'];
   }

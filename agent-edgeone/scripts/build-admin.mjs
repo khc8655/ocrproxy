@@ -9,9 +9,37 @@
  * Adheres strictly to Architecture Rule: Single Source of Truth (Plan A).
  * No divergent hand-written admin.html / admin.js.
  */
-import { readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, cpSync, readdirSync, rmSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+// Mirror generator: copy every source file AND delete files that no longer exist in
+// the source, so a removed/renamed edge module can never linger in the root mirror.
+function listFiles(dir, rel = '') {
+  const out = [];
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const nextRel = rel ? join(rel, ent.name) : ent.name;
+    if (ent.isDirectory()) out.push(...listFiles(join(dir, ent.name), nextRel));
+    else if (ent.isFile()) out.push(nextRel);
+  }
+  return out;
+}
+
+function syncTree(src, dest) {
+  if (!existsSync(dest)) { cpSync(src, dest, { recursive: true }); return; }
+  const srcFiles = new Set(listFiles(src));
+  for (const rel of listFiles(dest)) {
+    if (!srcFiles.has(rel)) {
+      rmSync(join(dest, rel));
+      console.log(`[Mirror] pruned stale file: ${join(dest, rel)}`);
+    }
+  }
+  for (const rel of srcFiles) {
+    const target = join(dest, rel);
+    mkdirSync(dirname(target), { recursive: true });
+    cpSync(join(src, rel), target);
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -255,7 +283,7 @@ const rootEdgeFuncDir = join(projectRoot, 'edge-functions');
 if (existsSync(rootEdgeFuncDir)) {
   writeFileSync(join(rootEdgeFuncDir, 'index.js'), indexCode, 'utf8');
   writeFileSync(join(rootEdgeFuncDir, 'admin.js'), functionCode, 'utf8');
-  cpSync(edgeFuncDir, rootEdgeFuncDir, { recursive: true });
+  syncTree(edgeFuncDir, rootEdgeFuncDir);
   console.log(`[Sync] Synced all edge-functions to root: ${rootEdgeFuncDir}`);
 }
 

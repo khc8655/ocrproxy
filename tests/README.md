@@ -12,7 +12,7 @@
 
 | 层级 | 命令 | 说明 | 耗时 | 浏览器 |
 | :--- | :--- | :--- | :---: | :---: |
-| T0 | `npm run check:release` | 静态发版门禁 G1~G5 | ~0.2s | 否 |
+| T0 | `npm run check:release` | 静态发版门禁 G1~G6 | ~0.2s | 否 |
 | T1 | `npm run test:fast` | 单元/安全/API/统计 + **静态 UI 契约**（id、内联 handler、host 标记、SSOT、bundle、CSS 不变式） | ~0.5s | 否 |
 | T2a | `npm run test:contract:api` | 后端契约 S1~S7（无浏览器） | ~6.7s | 否 |
 | T2b | `npm run test:contract` | 契约 S1~S7 + U1~U3 + Key 权限矩阵 | ~16s | 是 |

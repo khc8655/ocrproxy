@@ -1,25 +1,38 @@
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+#!/usr/bin/env node
+/**
+ * build-presets.mjs — shared/presets/*.json → JS registry (single generator).
+ *
+ * Determinism: catalog version/updated_at come from root version.json (release
+ * date) instead of `new Date()`, so re-running the build produces a byte-identical
+ * artifact and never dirties the tree on its own.
+ *
+ * Single write path: the exact same content is written to the authoritative
+ * agent-edgeone/edge-functions/lib/presets/index.js and then copied to the root
+ * mirror; stale per-provider JSON copies are pruned (they were never imported —
+ * PRESETS registry already embeds every provider).
+ */
+import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync, copyFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const sharedPresetsDir = join(__dirname, '../../shared/presets');
+const projectRoot = join(__dirname, '../..');
 
-// Dynamically discover all json files except catalog.json
+const versionJson = JSON.parse(readFileSync(join(projectRoot, 'version.json'), 'utf8'));
+const releaseDate = String(versionJson.release_date || '2026-10-18'); // YYYY-MM-DD
+const catalogVersion = releaseDate.replace(/-/g, '.');
+
 const presetFiles = readdirSync(sharedPresetsDir)
   .filter((f) => f.endsWith('.json') && f !== 'catalog.json')
   .sort();
 
-const presets = presetFiles.map((file) => {
-  const fullPath = join(sharedPresetsDir, file);
-  return JSON.parse(readFileSync(fullPath, 'utf8'));
-});
+const presets = presetFiles.map((file) => JSON.parse(readFileSync(join(sharedPresetsDir, file), 'utf8')));
 
-// Build catalog
 const catalog = {
-  version: '2026.10.18',
-  updated_at: new Date().toISOString(),
+  version: catalogVersion,
+  updated_at: `${releaseDate}T00:00:00.000Z`,
   providers: presets.map((p) => {
     const rulesStr = JSON.stringify(p.adapter_rules || {});
     const ruleHash = createHash('sha256').update(rulesStr).digest('hex').slice(0, 12);
@@ -27,7 +40,7 @@ const catalog = {
       id: p.id,
       name: p.name,
       version: p.version || '1.0.0',
-      updated_at: p.updated_at || '2026-10-18',
+      updated_at: p.updated_at || releaseDate,
       update_notes: p.update_notes || p.description || '',
       rule_hash: ruleHash,
       protocol: p.protocol || 'openai',
@@ -41,10 +54,9 @@ const catalog = {
   }),
 };
 
-// Write catalog.json to shared/presets/
 const catalogPath = join(sharedPresetsDir, 'catalog.json');
 writeFileSync(catalogPath, JSON.stringify(catalog, null, 2), 'utf8');
-console.log(`Generated catalog at: ${catalogPath}`);
+console.log(`Generated catalog at: ${catalogPath} (version ${catalogVersion})`);
 
 const content = `/**
  * presets/index.js — Pure JS Registry of Provider Presets (zero JSON import attribute dependency).
@@ -65,7 +77,18 @@ export function getPreset(id) {
 
 const dest1 = join(__dirname, '../edge-functions/lib/presets/index.js');
 const dest2 = join(__dirname, '../../edge-functions/lib/presets/index.js');
-
 writeFileSync(dest1, content, 'utf8');
-writeFileSync(dest2, content, 'utf8');
-console.log(`Generated pure JS presets at: ${dest1} and ${dest2}`);
+mkdirSync(dirname(dest2), { recursive: true });
+copyFileSync(dest1, dest2);
+console.log(`Generated pure JS presets at: ${dest1} (mirrored to ${dest2})`);
+
+// Prune stale per-provider JSON copies (single source = index.js registry).
+for (const dir of [dirname(dest1), dirname(dest2)]) {
+  if (!existsSync(dir)) continue;
+  for (const f of readdirSync(dir)) {
+    if (f.endsWith('.json')) {
+      unlinkSync(join(dir, f));
+      console.log(`[Prune] removed stale preset copy: ${join(dir, f)}`);
+    }
+  }
+}

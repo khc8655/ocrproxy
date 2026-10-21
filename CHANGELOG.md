@@ -4,6 +4,22 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-07] - 2026-10-21
+
+### 全仓去重与单一实现收敛（行为等价，除一处与既有语义对齐的修正）
+- **前端协议词汇唯一化**：`core.js` 新增 `normalizeProtocolList()` / `formatProtocolLabel()`；`providers`/`vault`/`agent-models-ui`/`models` 的协议标签、徽章、预选、provider option 全部委托，删掉 agent-models-ui 内重复的 4 个协议/供应商辅助函数。
+- **供应商下拉唯一渲染**：`vault.js` 新增 `populateLocalProviderSelect()`，Agent 模型弹窗与 KB 候选弹窗共用；删除两份重复的 option/占位/默认选中逻辑。
+- **凭据来源统一**：后端 `config_store.secret_origin()` / `stamp_secret_origin()`、前端 `vault.js stampSecretOrigin()` 统一 `origin` 与旧字段 `is_local` 的读写，杜绝两套判定漂移。
+- **适配规则加载唯一化**：新增 `vm-app/app/presets.py`（目录解析/文件名归一化/缓存/失效），`admin_routes` 与 `proxy_routes` 删除各自副本；新增 `get_run_mode()` / `vault_url_and_token()`，删除重复的 run_mode 归一与中枢 URL/token 解析。
+- **参数读取唯一化**：`proxy_routes` / `scheduler` 的 upstream/agent 超时、cooldown_429/5xx/403、circuit_*、max_retries 等长 `or` fallback 链全部改走 `settings.schema.json` + `settings_schema.get_setting()`；config merge 键清单由 schema `all_setting_keys()` 生成；schema 别名顺序、`circuit_cooldown_sec` 默认值（60→300）与运行时对齐。
+- **EdgeOne 中枢投影唯一化**：`lib/config.js` 新增 `toVaultProviderView()` / `isVaultExportableKey()`，manifest 与 fetch 共用；修正「manifest 只过滤 is_local、fetch 还过滤 origin=local」造成的清单/拉取不一致（**唯一可见行为修正**：中枢清单不再列出 `origin=local` 的供应商与本地 Key，与 fetch 既有拒绝语义一致）。
+- **构建与生成物收敛**：根 `build:admin` 拆为 `build:assets` + T0 门禁，`agent-edgeone` 脚本全部委托根目录；`build-presets` 改为确定性输出（版本/日期取自 `version.json`）单写一次后镜像，并清理 19 个旧手工 per-provider JSON 副本；`edge-functions/` 根镜像改为带删除的 `syncTree()`；删除历史手写重复 bundle `agent-edgeone/admin.js`（78KB）。
+- **门禁增强**：新增 T0 **G6**——根 `edge-functions/` 与 `agent-edgeone/edge-functions/` 逐字节一致，`lib/presets/*.json` 与 `agent-edgeone/admin.js` 禁止复活；发版门禁 G1~G5 → **G1~G6**。
+- **遗留未收敛项**（已写入 `docs/SYSTEM_DESIGN_SPEC.md` §3.4.x，需单独评审）：EdgeOne `DEFAULT_SETTINGS` 由 schema 生成、`v1/chat` 与 `v1/messages` relay 骨架抽取、Edge↔VM 冷却策略统一、`/api/config` 语义契约化。
+- **验证**：四层全量测试 17.6s 全绿（S1~S7 / U1~U4 + vault_ui 双模式 + E2E 76 项），T0 G1~G6 全绿；除上述 manifest 过滤修正外不改变对外 API 与持久化配置格式。
+
+---
+
 ## [v20261020-06] - 2026-10-21
 
 ### 新增供应商信息区精简、协议按适配脚本预选、移除多余的中枢同步按钮

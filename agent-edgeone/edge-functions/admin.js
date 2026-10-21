@@ -740,7 +740,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-06</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-07</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -1914,6 +1914,34 @@ function fmtTime(ms) {
 }
 
 // Protocol and Model Helpers (Globally available to prevent script-ordering race conditions)
+// ── Canonical protocol normalization (single source of truth) ──────────────
+// Accepts arrays or strings in any legacy spelling ('chat', 'openai', 'openai+message',
+// 'anthropic', 'OpenAI / Message', 'responses', ...) and returns canonical tokens:
+// 'chat' | 'messages' | 'responses'. Every protocol label/badge/preselection in the
+// admin UI goes through these two helpers so the vocabulary can never drift again.
+function normalizeProtocolList(raw){
+  const out = new Set();
+  const parts = Array.isArray(raw) ? raw : String(raw || '').split(/[,+\\s/|]+/);
+  parts.forEach(item => {
+    const v = String(item || '').toLowerCase().trim();
+    if (!v) return;
+    if (v.includes('anthropic') || v.includes('message')) out.add('messages');
+    else if (v.includes('response')) out.add('responses');
+    else out.add('chat');
+  });
+  if (!out.size) out.add('chat');
+  return Array.from(out);
+}
+
+function formatProtocolLabel(raw){
+  const list = normalizeProtocolList(raw);
+  const parts = [];
+  if (list.includes('chat')) parts.push('openai');
+  if (list.includes('messages')) parts.push('message');
+  if (list.includes('responses')) parts.push('responses');
+  return parts.length ? parts.join('+') : 'openai';
+}
+
 function getProtocolBadge(proto){
   const p = String(proto || '').toLowerCase();
   if (p.includes('anthropic') || p.includes('messages')) {
@@ -1942,7 +1970,7 @@ function getProviderProtocols(name, provObj){
     if (p.anthropic_messages || clean === 'minimax' || clean === 'bai' || lower === 'b.ai' || p.anthropic_base_url || (preset && preset.anthropic_base_url)) {
       protos.push('messages');
     }
-    return protos;
+    return normalizeProtocolList(protos);
   } catch (_) {
     return ['chat'];
   }
@@ -2942,6 +2970,15 @@ function findVaultProvider(provId){
   return list.find(p => p.id === provId || (p.id && p.id.toLowerCase() === low)) || null;
 }
 
+// 凭据来源只有两种：vault（中枢）与 local（本地）。origin 与旧字段 is_local 必须
+// 同步写入，否则旧控制台 / 后端 secret_origin() 会读出不同结论。
+function stampSecretOrigin(secret, origin){
+  if (!secret) return secret;
+  secret.origin = (origin === 'local') ? 'local' : 'vault';
+  secret.is_local = (secret.origin === 'local');
+  return secret;
+}
+
 function cleanProviderLabel(label) {
   if (!label) return '';
   return String(label)
@@ -2949,13 +2986,9 @@ function cleanProviderLabel(label) {
     .trim();
 }
 
+// Kept as a named alias for the dropdown labels: delegates to the canonical formatter.
 function formatProtocolsDisplay(protos) {
-  if (!Array.isArray(protos) || protos.length === 0) return 'OpenAI';
-  const hasOpenAI = protos.some(pr => pr === 'chat' || pr === 'openai' || pr === 'responses' || pr === 'google_openai');
-  const hasMessage = protos.some(pr => pr === 'messages' || pr === 'anthropic');
-  if (hasOpenAI && hasMessage) return 'OpenAI / Message';
-  if (hasMessage) return 'Message';
-  return 'OpenAI';
+  return formatProtocolLabel(protos);
 }
 
 function getAllAvailableProviders(){
@@ -3013,6 +3046,30 @@ function getAllAvailableProviders(){
   return list;
 }
 
+// Shared 「本地已配置供应商」下拉渲染：Agent 模型弹窗与 KB 候选节点弹窗共用，
+// 避免两处各写一套 option/label/占位/默认选中逻辑而漂移。
+function populateLocalProviderSelect(selectId, optgroupId, selectedId){
+  const sel = document.getElementById(selectId);
+  const optLocal = document.getElementById(optgroupId);
+  if (!sel) return '';
+  const configuredList = (typeof getAllAvailableProviders === 'function' ? getAllAvailableProviders() : [])
+    .filter(p => p.isConfigured !== false);
+  const emptyHtml = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
+  const html = configuredList.length
+    ? configuredList.map(p => {
+        const label = \`\${p.label || p.name || p.id} (\${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})\`;
+        return \`<option value="\${esc(p.id)}">\${esc(label)}</option>\`;
+      }).join('')
+    : emptyHtml;
+  if (optLocal) optLocal.innerHTML = html;
+  else sel.innerHTML = html;
+  const curId = (selectedId && configuredList.some(p => p.id === selectedId))
+    ? selectedId
+    : (configuredList[0] ? configuredList[0].id : '');
+  sel.value = curId;
+  return curId;
+}
+
 // Probed Models Selection Modal State & Logic
 
 // 绑定只允许选本地已有的 Key（中枢供应商须先在「供应商」页整体拉取）。
@@ -3026,26 +3083,6 @@ async function ensureKeysImported(bindings){
     return false;
   }
   return true;
-}
-
-async function refreshVaultManifestInModal() {
-  const vaultUrl = (state.config && state.config.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url)) || '';
-  if (!vaultUrl) {
-    toast('当前未配置 EdgeOne 凭据中枢。如需使用中枢功能，请前往「系统设置」填写中枢地址；或直接点击左侧「+ 新建供应商」在本地直接配置。', 'warn');
-    return;
-  }
-  toast('正在从 EdgeOne 中枢拉取最新供应商清单...', 'info');
-  const d = await fetchVaultManifest(false);
-  if (d) {
-    const count = d.count || Object.keys(d.providers || {}).length || 0;
-    const curA = document.getElementById('a_providerSelect')?.value;
-    const curC = document.getElementById('c_providerSelect')?.value;
-    populateAgentProviderSelect(curA);
-    populateCandidateProviderSelect(curC);
-    toast(\`已成功同步 EdgeOne 中枢配置清单 (共 \${count} 个供应商)\`, 'ok');
-  } else {
-    toast(\`同步中枢清单失败: \${state.lastVaultError || '鉴权失败或网络不可达'}\`, 'err');
-  }
 }
 
 function toggleVaultTokenVisibility(){
@@ -3292,20 +3329,7 @@ function getProviderPresetMeta(provName, provObj) {
 
 function getPresetProtocolLabel(p) {
   if (!p) return 'openai';
-  const rawProtos = p.protocols || (Array.isArray(p.protocols) ? p.protocols : null);
-  const isAnthropic = Boolean(
-    p.anthropic_base_url ||
-    p.anthropic_messages ||
-    (p.features && p.features.anthropic_messages) ||
-    (rawProtos && (rawProtos.includes('messages') || rawProtos.includes('anthropic')))
-  );
-  const isResponses = Boolean(
-    p.protocol === 'responses' ||
-    (rawProtos && rawProtos.includes('responses'))
-  );
-  if (isResponses) return 'openai+responses';
-  if (isAnthropic) return 'openai+message';
-  return 'openai';
+  return formatProtocolLabel(getPresetProtocols(p) || ['chat']);
 }
 
 function renderProviders(){
@@ -3708,15 +3732,9 @@ function populateCatalogSelect(select) {
   if (cur !== undefined && cur !== null) select.value = cur;
 }
 
+// Thin adapter over the canonical normalizer (kept as Set for legacy call sites).
 function normalizePresetProtocols(raw){
-  const norm = new Set();
-  (Array.isArray(raw) ? raw : []).forEach(x => {
-    const v = String(x).toLowerCase();
-    if (v.includes('openai') || v === 'chat') norm.add('chat');
-    if (v.includes('message') || v.includes('anthropic')) norm.add('messages');
-    if (v.includes('response')) norm.add('responses');
-  });
-  return norm;
+  return new Set(normalizeProtocolList(raw));
 }
 
 // 适配脚本（本地预设文件）支持哪些协议：chat 恒有；Messages 由 features.anthropic_messages /
@@ -3724,7 +3742,6 @@ function normalizePresetProtocols(raw){
 function getPresetProtocols(preset){
   if (!preset) return null;
   const norm = normalizePresetProtocols(preset.protocols);
-  if (norm.size === 0) norm.add('chat');
   const proto = String(preset.protocol || '').toLowerCase();
   const feat = preset.features || {};
   if (feat.anthropic_messages || preset.anthropic_base_url || proto.includes('messages')) norm.add('messages');
@@ -4472,13 +4489,11 @@ async function saveKey(){
   const pObj = (state.config.providers && state.config.providers[prov]) || {};
 
   if (_isLocalKeyMode) {
-    finalKeyVal.is_local = true;
-    finalKeyVal.origin = 'local';
+    stampSecretOrigin(finalKeyVal, 'local');
     _isLocalKeyMode = false;
   } else {
     const keyOrigin = (pObj.origin === 'local' || !isHostEdgeOne) ? 'local' : 'vault';
-    finalKeyVal.is_local = (keyOrigin === 'local');
-    finalKeyVal.origin = keyOrigin;
+    stampSecretOrigin(finalKeyVal, keyOrigin);
   }
 
   if(skip){ commitKey(prov, label, finalKeyVal); return; }
@@ -4873,54 +4888,18 @@ function commitKey(prov, label, val){
     _toast('已更新配置（未检测到持久化回调）', 'info');
   }
 
-  // 2. Protocols and Provider Discovery
+  // 2. Protocols and Provider Discovery — identical logic lives in core.js/vault.js,
+  //    these are thin adapters so the agent modal and KB modal can never drift apart.
   function _getModelProtocols(modelName) {
-    const { cfg } = getCtx();
-    const m = cfg && cfg.agent_models ? cfg.agent_models[modelName] : null;
-    if (!m || !m.keys || !m.keys.length) return ['chat'];
-    const set = new Set();
-    for (const b of m.keys) {
-      const provProtos = (typeof getProviderProtocols === 'function') 
-        ? getProviderProtocols(b.provider) 
-        : ['chat'];
-      provProtos.forEach(pr => set.add(pr));
-    }
-    return set.size ? Array.from(set) : ['chat'];
+    return getModelProtocols(modelName);
   }
 
   function _renderProtocolBadges(protoList, isShort = true) {
-    if (typeof renderProtocolBadges === 'function') {
-      return renderProtocolBadges(protoList, isShort);
-    }
-    return (protoList || ['chat']).map(pr => {
-      const p = String(pr).toLowerCase();
-      let cls = 'badge-neutral', label = p;
-      if (p.includes('chat') || p === 'openai') { cls = 'badge-success'; label = 'chat'; }
-      else if (p.includes('message') || p === 'anthropic') { cls = 'badge-warn'; label = 'messages'; }
-      else if (p.includes('response')) { cls = 'badge-primary'; label = 'responses'; }
-      return \`<span class="badge \${cls}" style="font-weight:600;font-size:11px;padding:2px 7px;">\${_esc(label)}</span>\`;
-    }).join(' ');
+    return renderProtocolBadges(protoList, isShort);
   }
 
   function _getAllProvidersList() {
-    let list = [];
-    if (typeof getAllAvailableProviders === 'function') {
-      list = getAllAvailableProviders();
-    } else {
-      const { cfg } = getCtx();
-      const provs = cfg.providers || {};
-      list = Object.keys(provs).sort().map(id => {
-        const p = provs[id];
-        const protoList = (typeof getProviderProtocols === 'function') ? getProviderProtocols(id) : ['chat'];
-        return {
-          id,
-          label: p.label || id,
-          isVault: false,
-          protoStr: protoList.join(', ')
-        };
-      });
-    }
-    return list;
+    return getAllAvailableProviders();
   }
 
   // 3. Probed Upstream Models State
@@ -5081,49 +5060,13 @@ function commitKey(prov, label, val){
   }
 
   function _formatProviderOptionLabel(p) {
-    const rawProtos = p.protoStr || (Array.isArray(p.protocols) ? p.protocols.join(', ') : '');
-    const parts = (rawProtos || 'chat').split(/[,+\\s/]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-    const normalized = [];
-    if (parts.some(x => x.includes('openai') || x.includes('chat'))) normalized.push('openai');
-    if (parts.some(x => x.includes('anthropic') || x.includes('message'))) normalized.push('message');
-    if (parts.some(x => x.includes('response'))) normalized.push('responses');
-    const protoStr = (normalized.length ? normalized.join('+') : 'openai');
     const name = p.label || p.name || p.id;
-    return \`\${name} (\${protoStr})\`;
+    return \`\${name} (\${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})\`;
   }
 
   // 4. Populate and Handle Provider Selection in Agent Modal
   function populateAgentProviderSelect(selectedId) {
-    const sel = document.getElementById('a_providerSelect');
-    const optLocal = document.getElementById('a_optgroup_local');
-    if (!sel) return;
-
-    const providers = _getAllProvidersList();
-    const configuredList = providers.filter(p => p.isConfigured !== false);
-
-    if (optLocal) {
-      if (configuredList.length > 0) {
-        optLocal.innerHTML = configuredList.map(p => {
-          const optLabel = _formatProviderOptionLabel(p);
-          return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
-        }).join('');
-      } else {
-        optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-      }
-    } else {
-      sel.innerHTML = configuredList.length
-        ? configuredList.map(p => {
-            const optLabel = _formatProviderOptionLabel(p);
-            return \`<option value="\${_esc(p.id)}">\${_esc(optLabel)}</option>\`;
-          }).join('')
-        : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-    }
-
-    const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
-      ? selectedId 
-      : (configuredList[0] ? configuredList[0].id : '');
-    
-    sel.value = curId;
+    const curId = populateLocalProviderSelect('a_providerSelect', 'a_optgroup_local', selectedId);
     onAgentProviderSelectChange(curId);
   }
 
@@ -5894,40 +5837,7 @@ function selectCandidateType(type){
 }
 
 function populateCandidateProviderSelect(selectedId){
-  const sel = document.getElementById('c_providerSelect');
-  const optLocal = document.getElementById('c_optgroup_local');
-  if(!sel) return;
-
-  const providers = getAllAvailableProviders();
-  const configuredList = providers.filter(p => p.isConfigured !== false);
-
-  if (optLocal) {
-    if (configuredList.length > 0) {
-      optLocal.innerHTML = configuredList.map(p => {
-        const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-          ? _formatProviderOptionLabel(p) 
-          : \`\${p.label} (\${p.protoStr || 'openai'})\`;
-        return \`<option value="\${esc(p.id)}">\${esc(optLabel)}</option>\`;
-      }).join('');
-    } else {
-      optLocal.innerHTML = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-    }
-  } else {
-    sel.innerHTML = configuredList.length
-      ? configuredList.map(p => {
-          const optLabel = (typeof _formatProviderOptionLabel === 'function') 
-            ? _formatProviderOptionLabel(p) 
-            : \`\${p.label} (\${p.protoStr || 'openai'})\`;
-          return \`<option value="\${esc(p.id)}">\${esc(optLabel)}</option>\`;
-        }).join('')
-      : '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
-  }
-
-  const curId = (selectedId && configuredList.some(p => p.id === selectedId)) 
-    ? selectedId 
-    : (configuredList[0] ? configuredList[0].id : '');
-  
-  sel.value = curId;
+  const curId = populateLocalProviderSelect('c_providerSelect', 'c_optgroup_local', selectedId);
   onCandidateProviderSelectChange(curId);
 }
 

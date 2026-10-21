@@ -57,7 +57,7 @@
 
 | 层级 | 内容 | 命令 | 耗时 | 浏览器 |
 | :--- | :--- | :--- | :---: | :---: |
-| **T0 静态门禁** | G1~G5：版本 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT / 零明文密钥 | `npm run check:release` | ~0.2s | 否 |
+| **T0 静态门禁** | G1~G6：版本 7 处一致 / EdgeOne 身份 / install.sh 零漂移 / SSOT / 零明文密钥 / 生成镜像与重复制品 | `npm run check:release` | ~0.2s | 否 |
 | **T1 逻辑层** | 199 ESM 单元、CoW 安全、Agent 统计、API/Vault 规约、SSOT 镜像、**静态 UI 契约** | `npm run test:fast` | ~0.5s | 否 |
 | **T2a API 契约** | 真服务 + Mock 上游，S1~S7（U1~U4 SKIP） | `npm run test:contract:api` | ~6.7s | 否 |
 | **T2b UI 契约** | S1~S7 + U1~U4（真 Chromium：登录、能力位、首页卡片）+ Key 权限矩阵 | `npm run test:contract` | ~16s | 是 |
@@ -102,7 +102,7 @@
 ```bash
 npm run build:admin
 ```
-构建脚本会自动同步 `shared/admin/` → `vm-app/static/`、注入版本号、编译 EdgeOne bundle，并**自动触发 T0 G1~G5**，失败立即 `exit(1)`。
+构建脚本会自动同步 `shared/admin/` → `vm-app/static/`、注入版本号、编译 EdgeOne bundle，并**自动触发 T0 G1~G6**，失败立即 `exit(1)`。构建只有一条管线：`npm run build:assets`（符号校验 → 预设生成 → admin 构建 → DOM 冒烟）→ `build:admin` 追加 T0 门禁；`agent-edgeone/package.json` 的脚本全部委托根目录，禁止再维护第二套步骤。
 
 ### Step 3: 按改动分层验证并提交推送（0.6~20s）
 ```bash

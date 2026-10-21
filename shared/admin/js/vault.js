@@ -47,6 +47,15 @@ function findVaultProvider(provId){
   return list.find(p => p.id === provId || (p.id && p.id.toLowerCase() === low)) || null;
 }
 
+// 凭据来源只有两种：vault（中枢）与 local（本地）。origin 与旧字段 is_local 必须
+// 同步写入，否则旧控制台 / 后端 secret_origin() 会读出不同结论。
+function stampSecretOrigin(secret, origin){
+  if (!secret) return secret;
+  secret.origin = (origin === 'local') ? 'local' : 'vault';
+  secret.is_local = (secret.origin === 'local');
+  return secret;
+}
+
 function cleanProviderLabel(label) {
   if (!label) return '';
   return String(label)
@@ -54,13 +63,9 @@ function cleanProviderLabel(label) {
     .trim();
 }
 
+// Kept as a named alias for the dropdown labels: delegates to the canonical formatter.
 function formatProtocolsDisplay(protos) {
-  if (!Array.isArray(protos) || protos.length === 0) return 'OpenAI';
-  const hasOpenAI = protos.some(pr => pr === 'chat' || pr === 'openai' || pr === 'responses' || pr === 'google_openai');
-  const hasMessage = protos.some(pr => pr === 'messages' || pr === 'anthropic');
-  if (hasOpenAI && hasMessage) return 'OpenAI / Message';
-  if (hasMessage) return 'Message';
-  return 'OpenAI';
+  return formatProtocolLabel(protos);
 }
 
 function getAllAvailableProviders(){
@@ -118,6 +123,30 @@ function getAllAvailableProviders(){
   return list;
 }
 
+// Shared 「本地已配置供应商」下拉渲染：Agent 模型弹窗与 KB 候选节点弹窗共用，
+// 避免两处各写一套 option/label/占位/默认选中逻辑而漂移。
+function populateLocalProviderSelect(selectId, optgroupId, selectedId){
+  const sel = document.getElementById(selectId);
+  const optLocal = document.getElementById(optgroupId);
+  if (!sel) return '';
+  const configuredList = (typeof getAllAvailableProviders === 'function' ? getAllAvailableProviders() : [])
+    .filter(p => p.isConfigured !== false);
+  const emptyHtml = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
+  const html = configuredList.length
+    ? configuredList.map(p => {
+        const label = `${p.label || p.name || p.id} (${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})`;
+        return `<option value="${esc(p.id)}">${esc(label)}</option>`;
+      }).join('')
+    : emptyHtml;
+  if (optLocal) optLocal.innerHTML = html;
+  else sel.innerHTML = html;
+  const curId = (selectedId && configuredList.some(p => p.id === selectedId))
+    ? selectedId
+    : (configuredList[0] ? configuredList[0].id : '');
+  sel.value = curId;
+  return curId;
+}
+
 // Probed Models Selection Modal State & Logic
 
 // 绑定只允许选本地已有的 Key（中枢供应商须先在「供应商」页整体拉取）。
@@ -131,26 +160,6 @@ async function ensureKeysImported(bindings){
     return false;
   }
   return true;
-}
-
-async function refreshVaultManifestInModal() {
-  const vaultUrl = (state.config && state.config.edgeone_vault && (state.config.edgeone_vault.edgeone_url || state.config.edgeone_vault.url)) || '';
-  if (!vaultUrl) {
-    toast('当前未配置 EdgeOne 凭据中枢。如需使用中枢功能，请前往「系统设置」填写中枢地址；或直接点击左侧「+ 新建供应商」在本地直接配置。', 'warn');
-    return;
-  }
-  toast('正在从 EdgeOne 中枢拉取最新供应商清单...', 'info');
-  const d = await fetchVaultManifest(false);
-  if (d) {
-    const count = d.count || Object.keys(d.providers || {}).length || 0;
-    const curA = document.getElementById('a_providerSelect')?.value;
-    const curC = document.getElementById('c_providerSelect')?.value;
-    populateAgentProviderSelect(curA);
-    populateCandidateProviderSelect(curC);
-    toast(`已成功同步 EdgeOne 中枢配置清单 (共 ${count} 个供应商)`, 'ok');
-  } else {
-    toast(`同步中枢清单失败: ${state.lastVaultError || '鉴权失败或网络不可达'}`, 'err');
-  }
 }
 
 function toggleVaultTokenVisibility(){

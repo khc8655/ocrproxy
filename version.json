@@ -1,13 +1,18 @@
 {
-  "version": "v20261020-06",
+  "version": "v20261020-07",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "新增供应商信息区精简与协议按适配脚本预选，移除多余的中枢同步按钮 (v20261020-06)",
+  "title": "全仓去重与单一实现收敛：协议/供应商/凭据/配置知识归一，构建管线与生成物门禁 (v20261020-07)",
   "changelog": [
-    "新增供应商信息区精简：中枢托管来源只展示两条判断——「中枢 N 个 Key」与「适配脚本 v{version} · {updated_at}」（无适配脚本时明确显示「无适配脚本」）；原长段落收敛到 Tooltip，避免啰嗦；",
-    "协议默认值改为按本地适配脚本预选：选中中枢供应商或输入命中的供应商标识时，自动勾选该适配脚本支持的协议（OpenAI Chat / Anthropic Messages / OpenAI Responses），并在协议区提示「已按适配脚本预选…（可手动调整）」；无适配脚本时回退中枢 manifest 的 protocols；",
-    "移除「供应商」页语义不清的「从凭据中枢同步」按钮：Key 无法通过它同步、规则又与本地适配脚本重复；规则升级统一走供应商卡片「升级至 vX」，系统设置「增量同步中枢规则」与 /api/admin/vault/sync 作为 API/兜底入口保留；",
-    "确认既有过滤行为：已从中枢拉取过的供应商不会再次出现在「新增供应商 → 中枢按需拉取」列表（按 id 大小写不敏感过滤），避免重复拉取；",
-    "测试与文档：vault UI 回归新增「信息区仅两条判断 + 协议按适配脚本预选 + 无预设回退」断言；behavioral 用例改为断言同步按钮不存在；SYSTEM_DESIGN_SPEC §3.4/§3.5.1、README 同步；四层全量测试与门禁 G1~G5 全绿。"
+    "前端协议词汇归一：新增 core.js normalizeProtocolList()/formatProtocolLabel() 唯一实现，providers/vault/agent-models-ui/models 的协议标签、徽章、预选与 provider option 全部委托；删除 agent-models-ui 内重复的 _getModelProtocols/_renderProtocolBadges/_getAllProvidersList/_formatProviderOptionLabel 逻辑；",
+    "供应商下拉唯一渲染：vault.js populateLocalProviderSelect() 同时服务 Agent 模型弹窗与 KB 候选弹窗，删除 models.js/agent-models-ui.js 两份重复的 option/占位/默认选中逻辑；",
+    "凭据来源统一：后端 config_store.secret_origin()/stamp_secret_origin() 与前端 vault.js stampSecretOrigin() 统一 origin 与旧字段 is_local 的读写，杜绝两套判定漂移；",
+    "配置知识归一：新增 vm-app/app/presets.py 唯一适配规则加载器（目录解析/文件名归一化/缓存/失效），admin_routes 与 proxy_routes 删除各自实现；新增 get_run_mode()/vault_url_and_token()，删除 admin/proxy 重复的 run_mode 归一与中枢 URL/token 解析；",
+    "参数读取归一：proxy_routes/scheduler 的 upstream_timeout/agent_first_byte_timeout/cooldown_429|5xx|403/circuit_*/max_retries 等长 fallback 链全部改走 settings.schema.json + settings_schema.get_setting()，config merge 的键清单由 schema all_setting_keys() 生成，schema 别名顺序与 circuit_cooldown_sec 默认值同步纠正（60→300 与运行时一致）；",
+    "EdgeOne 中枢投影唯一化：lib/config.js 新增 toVaultProviderView()/isVaultExportableKey()，manifest 与 fetch 共用同一投影；修复 manifest 只过滤 is_local 而 fetch 还过滤 origin=local 导致「清单可拉、拉取 404」的漂移，manifest 现在同样不下发 origin=local 供应商与本地 Key；",
+    "构建管线与生成物收敛：根 build:admin 拆为 build:assets（符号→预设→admin 构建→DOM 冒烟）+ T0 门禁，agent-edgeone 脚本全部委托根目录；build-presets 改为确定性输出（版本/日期取自 version.json，单写一次后镜像）并自动清理旧的手工 per-provider JSON 副本（19 个）；edge-functions 根镜像改为带删除的 syncTree；删除历史手写重复 bundle agent-edgeone/admin.js（78KB）；",
+    "门禁增强：新增 T0 G6——根 edge-functions 镜像必须与 agent-edgeone/edge-functions 逐字节一致，lib/presets/*.json 与 agent-edgeone/admin.js 禁止复活；发版门禁由 5 项升为 6 项，文档/测试同步；",
+    "遗留未收敛项（已写入设计文档 §3.4.x，需单独评审）：EdgeOne DEFAULT_SETTINGS 由 schema 生成、v1 chat/messages relay 骨架抽取、Edge↔VM 冷却策略统一、/api/config 语义契约化；",
+    "验证：四层全量测试 17.6s 全绿（S1~S7/U1~U4 + vault_ui 双模式 + E2E），T0 G1~G6 全绿；纯去重/一致性整理，未改变对外 API 与持久化配置格式（唯一可见行为修正：中枢 manifest 不再展示 origin=local 的供应商/本地 Key，与 fetch 的既有拒绝语义一致）。"
   ]
 }

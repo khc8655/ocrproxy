@@ -43,6 +43,21 @@ def get_field_def(key: str) -> Optional[Dict[str, Any]]:
     return _FIELDS_BY_KEY.get(key)
 
 
+def all_setting_keys() -> list[str]:
+    """All canonical keys + legacy aliases declared by the schema (single source).
+
+    Used by the config merge so a new schema field/alias cannot be forgotten in a
+    hand-maintained merge list.
+    """
+    _load_schema()
+    keys: list[str] = []
+    for fld in _SCHEMA_DATA.get("fields", []):
+        for k in [fld.get("key")] + list(fld.get("aliases") or []):
+            if k and k not in keys:
+                keys.append(k)
+    return keys
+
+
 def get_setting(config: Dict[str, Any], key: str, default_override: Any = None) -> Any:
     """Retrieve setting value by key with schema-driven alias migration, defaults, and bounds clamping."""
     fld = get_field_def(key)

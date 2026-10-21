@@ -15,7 +15,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from urllib.parse import urlparse
 
-from .config_store import get_config, save_config, _get_config_dir, is_masked_secret
+from . import settings_schema
+from .config_store import (get_config, save_config, _get_config_dir, is_masked_secret,
+                            get_run_mode, vault_url_and_token, secret_origin, stamp_secret_origin)
+from .presets import (get_presets_dir as _get_presets_dir, load_catalog as _load_local_catalog,
+                      load_preset as _load_local_preset, clear_cache as _clear_presets_cache)
 from .upstream import join_upstream, build_messages_upstream
 from . import stats
 from .auth import verify_admin_auth
@@ -293,20 +297,16 @@ def _merge_configs(base: dict, incoming: dict, local_run_mode: str = "agent") ->
                     merged_agent_models[m_name]["upstream_model"] = m_val["upstream_model"]
 
     # 4. Update top-level setting parameters if present in incoming (EXCLUDING run_mode)
-    setting_keys = [
-        "proxy_api_key", "proxy_keys",
-        "agent_routing_strategy", "kb_routing_strategy",
-        "request_total_budget_sec", "max_retries", "upstream_timeout_sec", "agent_first_byte_timeout_sec", "max_attempts_per_provider",
-        "fast_failover_provider_down",
-        "upstream_timeout", "upstream_timeout_chat", "upstream_timeout_embedding",
-        "upstream_timeout_rerank", "upstream_timeout_ocr", "chat_fast_timeout",
-        "max_concurrency_per_key", "kb_max_concurrency_per_key", "agent_max_concurrency_per_key",
-        "cooldown_tpm_sec", "cooldown_quota_sec", "cooldown_5xx_sec",
-        "cooldown_429_sec", "cooldown_403_sec", "cooldown_duration",
-        "circuit_break_threshold", "circuit_cooldown_sec", "latency_based_routing",
-        "kb_global_max_concurrency", "stream_idle_timeout_sec", "cooldown_404_sec", "cooldown_410_sec",
-        "ocr_max_inflight", "ocr_queue_timeout_sec"
-    ]
+    # Canonical keys + legacy aliases come from settings.schema.json (single source);
+    # only keys that the schema deliberately does not own are appended here.
+    setting_keys = list(dict.fromkeys(
+        settings_schema.all_setting_keys() + [
+            "proxy_keys",
+            "max_concurrency_per_key", "kb_global_max_concurrency",
+            "latency_based_routing", "stream_idle_timeout_sec",
+            "cooldown_404_sec", "cooldown_410_sec",
+        ]
+    ))
     for sk in setting_keys:
         if sk in incoming:
             merged[sk] = incoming[sk]
@@ -459,39 +459,14 @@ async def _fetch_remote_json(urls: list, timeout: float = 2.5):
     return None
 
 
-def _get_presets_dir() -> Path:
-    """Resolve shared/presets directory in both prod (/opt/ocrproxy) and dev repo environments."""
-    p = Path(__file__).resolve().parent.parent / "shared" / "presets"
-    if p.exists():
-        return p
-    return Path(__file__).resolve().parent.parent.parent / "shared" / "presets"
-
-
 def _get_local_catalog() -> dict:
-    """Fallback: read shared/presets/catalog.json locally."""
-    catalog_file = _get_presets_dir() / "catalog.json"
-    if catalog_file.exists():
-        try:
-            return json.loads(catalog_file.read_text(encoding="utf-8"))
-        except Exception as e:
-            logger.warning("Failed to read local catalog.json: %s", e)
-    return {"version": "1.1.0", "providers": []}
+    """Fallback: read shared/presets/catalog.json locally (see presets.load_catalog)."""
+    return _load_local_catalog()
 
 
 def _get_local_preset(preset_id: str):
-    """Fallback: read shared/presets/{preset_id}.json locally."""
-    pdir = _get_presets_dir()
-    preset_file = pdir / f"{preset_id}.json"
-    if not preset_file.exists():
-        pid_clean = re.sub(r"[.\-_]", "", preset_id.lower())
-        if pid_clean:
-            preset_file = pdir / f"{pid_clean}.json"
-    if preset_file.exists():
-        try:
-            return json.loads(preset_file.read_text(encoding="utf-8"))
-        except Exception as e:
-            logger.warning("Failed to read local preset %s.json: %s", preset_id, e)
-    return None
+    """Fallback: read shared/presets/{preset_id}.json locally (see presets.load_preset)."""
+    return _load_local_preset(preset_id) or None
 
 
 @router.get("/presets/catalog")
@@ -719,8 +694,7 @@ async def update_preset_rules_endpoint(request: Request):
     if updated:
         await save_config(curr_cfg)
         try:
-            from .proxy_routes import _PRESET_CACHE
-            _PRESET_CACHE.clear()
+            _clear_presets_cache()
         except Exception:
             pass
 
@@ -842,9 +816,7 @@ async def import_config_endpoint(request: Request):
 
     try:
         current_config = await get_config()
-        local_run_mode = (current_config.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower().strip()
-        if local_run_mode not in ("agent", "kb"):
-            local_run_mode = "agent"
+        local_run_mode = get_run_mode(current_config)
 
         try:
             config_dir = _get_config_dir()
@@ -1028,7 +1000,7 @@ async def save_config_endpoint(request: Request):
                         _curr_origin = _curr_p.get("origin") if isinstance(_curr_p, dict) else None
                         is_vault_key = (
                             isinstance(orig_secret, dict) and (
-                                orig_secret.get("origin") == "vault" or orig_secret.get("is_local") is False
+                                secret_origin(orig_secret) == "vault"
                             )
                         ) or (
                             # 旧数据：中枢拉取的供应商下未标记的裸字符串 Key 同样是中枢资产（只读可删）。
@@ -2028,34 +2000,9 @@ async def probe_models_endpoint(request: Request):
 
 
 async def _get_vault_credentials(body: dict = None) -> tuple[str, str]:
-    body = body or {}
+    """Resolve vault URL/token via the shared config_store helper (one spelling)."""
     cfg = await get_config()
-    v_cfg = cfg.get("edgeone_vault") or {}
-
-    edgeone_url = (
-        body.get("edgeone_url")
-        or body.get("url")
-        or v_cfg.get("edgeone_url")
-        or v_cfg.get("url")
-        or os.environ.get("EDGEONE_VAULT_URL")
-        or ""
-    ).strip().rstrip("/")
-
-    in_tok = (body.get("token") or "").strip()
-    if is_masked_secret(in_tok):
-        in_tok = ""
-
-    token = (
-        in_tok
-        or v_cfg.get("token")
-        or os.environ.get("EDGEONE_VAULT_TOKEN")
-        or os.environ.get("VAULT_ACCESS_TOKEN")
-        or ""
-    ).strip()
-    if is_masked_secret(token):
-        token = ""
-
-    return edgeone_url, token
+    return vault_url_and_token(cfg, body or {})
 
 
 @router.post("/vault/manifest")
@@ -2193,8 +2140,7 @@ async def vault_fetch_key_endpoint(request: Request):
                 if not k_lbl or not k_val:
                     continue
                 k_obj = dict(k_val) if isinstance(k_val, dict) else {"key": str(k_val)}
-                k_obj["origin"] = "vault"
-                k_obj["is_local"] = False
+                stamp_secret_origin(k_obj, "vault")
                 local_p["keys"][k_lbl] = k_obj
 
             providers[provider] = local_p
@@ -2314,8 +2260,7 @@ async def vault_add_keys_endpoint(request: Request):
         if not k_obj.get("key"):
             missing.append(lbl)
             continue
-        k_obj["origin"] = "vault"
-        k_obj["is_local"] = False
+        stamp_secret_origin(k_obj, "vault")
         keys[lbl] = k_obj
         added.append(lbl)
     if added:
@@ -2432,8 +2377,7 @@ async def vault_sync_endpoint(request: Request):
                 for kl, kv in list((p_cfg.get("keys") or {}).items()):
                     if kl in remote_labels and not (isinstance(kv, dict) and kv.get("origin")):
                         k_obj = dict(kv) if isinstance(kv, dict) else {"key": str(kv)}
-                        k_obj["origin"] = "vault"
-                        k_obj["is_local"] = False
+                        stamp_secret_origin(k_obj, "vault")
                         p_cfg["keys"][kl] = k_obj
 
                 updated += 1

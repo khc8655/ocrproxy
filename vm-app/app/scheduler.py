@@ -22,6 +22,7 @@ from .config_store import get_config_version
 from .logger_utils import clean_upstream_error_text
 
 logger = logging.getLogger("scheduler")
+from .settings_schema import get_setting
 
 # ── Global concurrency limiter ───────────────────────────────────────
 # Caps the total number of in-flight upstream requests across ALL keys and
@@ -507,12 +508,13 @@ def evaluate_candidate_failure(
     from KB mode (strict batch protection, circuit breakers, rate limit cool down).
     """
     is_agent = (category == "agent")
+    # Quota/arrears is a distinct policy (not the 403 alias), so it stays explicit.
     cooldown_quota_sec = config_params.get("cooldown_quota_sec", 1800.0)
-    cooldown_tpm_sec = config_params.get("cooldown_tpm_sec", 15.0)
-    cooldown_403_sec = config_params.get("cooldown_403_sec", 600.0)
-    cooldown_5xx_sec = config_params.get("cooldown_5xx_sec", 30.0)
-    circuit_threshold = config_params.get("circuit_break_threshold", 3)
-    circuit_cooldown_sec = config_params.get("circuit_cooldown_sec", 300.0)
+    cooldown_tpm_sec = get_setting(config_params, "cooldown_429_sec", 15.0)
+    cooldown_403_sec = get_setting(config_params, "cooldown_403_sec", 600.0)
+    cooldown_5xx_sec = get_setting(config_params, "cooldown_5xx_sec", 30.0)
+    circuit_threshold = get_setting(config_params, "circuit_break_threshold", 3)
+    circuit_cooldown_sec = get_setting(config_params, "circuit_cooldown_sec", 300.0)
 
     # 1. Hard Quota / Arrears: applies to both KB and Agent (account has no money/credits)
     if is_quota:
@@ -1337,18 +1339,18 @@ async def schedule(
         # embedding, rerank, agent chat) takes precedence over the global
         # `upstream_timeout_sec`.  The previous order let the global default
         # (30 s) silently override e.g. the 60 s OCR timeout.
-        upstream_timeout_sec = max(1.0, float(config.get("upstream_timeout", config.get("upstream_timeout_sec", 15))))
+        upstream_timeout_sec = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0)))
     except (ValueError, TypeError):
         upstream_timeout_sec = 15.0
 
     try:
-        agent_first_byte_timeout_sec = max(1.0, float(config.get("agent_first_byte_timeout_sec", 120.0)))
+        agent_first_byte_timeout_sec = max(1.0, float(get_setting(config, "agent_first_byte_timeout_sec", 120.0)))
     except (ValueError, TypeError):
         agent_first_byte_timeout_sec = 120.0
 
     # Max candidate retries per request
     try:
-        max_retries = max(1, int(config.get("max_retries", 3)))
+        max_retries = max(1, int(get_setting(config, "max_retries", 3)))
     except (ValueError, TypeError):
         max_retries = 3
 
@@ -1359,11 +1361,11 @@ async def schedule(
 
     # Max attempts per individual provider
     try:
-        max_attempts_per_provider = max(1, int(config.get("max_attempts_per_provider", 3)))
+        max_attempts_per_provider = max(1, int(get_setting(config, "max_attempts_per_provider", 3)))
     except (ValueError, TypeError):
         max_attempts_per_provider = 3
 
-    fast_failover_provider_down = bool(config.get("fast_failover_provider_down", True))
+    fast_failover_provider_down = bool(get_setting(config, "fast_failover_provider_down", True))
     provider_attempts: Dict[str, int] = {}
     down_providers: Set[str] = set()
 
@@ -1379,13 +1381,13 @@ async def schedule(
     # KB: high default so ~10 parallel KB calls on one key are not serialised.
     if category == "agent":
         try:
-            _agent_cap = int(config.get("agent_max_concurrency_per_key", 0) or 0)
+            _agent_cap = int(get_setting(config, "agent_max_concurrency_per_key", 0) or 0)
         except (ValueError, TypeError):
             _agent_cap = 0
         concurrency_limit = _agent_cap if _agent_cap > 0 else _UNLIMITED_KEY_CONCURRENCY
     else:
         try:
-            concurrency_limit = max(1, int(config.get("kb_max_concurrency_per_key", _KB_DEFAULT_KEY_CONCURRENCY)))
+            concurrency_limit = max(1, int(get_setting(config, "kb_max_concurrency_per_key", _KB_DEFAULT_KEY_CONCURRENCY)))
         except (ValueError, TypeError):
             concurrency_limit = _KB_DEFAULT_KEY_CONCURRENCY
 
@@ -1416,7 +1418,7 @@ async def schedule(
 
     # 429 TPM Rate Limit Cooldown (default 60s)
     try:
-        cooldown_tpm_sec = max(1.0, float(config.get("cooldown_429_sec", config.get("cooldown_tpm_sec", 60))))
+        cooldown_tpm_sec = max(1.0, float(get_setting(config, "cooldown_429_sec", 60.0)))
     except (ValueError, TypeError):
         cooldown_tpm_sec = 60.0
 
@@ -1428,13 +1430,13 @@ async def schedule(
 
     # 403 Auth Failure Cooldown (default 600s)
     try:
-        cooldown_403_sec = max(1.0, float(config.get("cooldown_403_sec", 600)))
+        cooldown_403_sec = max(1.0, float(get_setting(config, "cooldown_403_sec", 600.0)))
     except (ValueError, TypeError):
         cooldown_403_sec = 600.0
 
     # 5xx Server Error Cooldown (default 30s)
     try:
-        cooldown_5xx_sec = max(1.0, float(config.get("cooldown_5xx_sec", config.get("cooldown_duration", 30))))
+        cooldown_5xx_sec = max(1.0, float(get_setting(config, "cooldown_5xx_sec", 30.0)))
     except (ValueError, TypeError):
         cooldown_5xx_sec = 30.0
 
@@ -1442,12 +1444,12 @@ async def schedule(
 
     # Circuit breaker threshold (only for genuine 5xx server failures / crash)
     try:
-        circuit_break_threshold = max(1, int(config.get("circuit_break_threshold", 3)))
+        circuit_break_threshold = max(1, int(get_setting(config, "circuit_break_threshold", 3)))
     except (ValueError, TypeError):
         circuit_break_threshold = 3
 
     try:
-        circuit_cooldown = max(1.0, float(config.get("circuit_cooldown_sec", 300)))
+        circuit_cooldown = max(1.0, float(get_setting(config, "circuit_cooldown_sec", 300.0)))
     except (ValueError, TypeError):
         circuit_cooldown = 300.0
 

@@ -8,10 +8,10 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:presets": "node scripts/build-presets.mjs",
-    "check:symbols": "node scripts/verify-frontend-symbols.mjs",
-    "test:ui": "node scripts/test-ui-smoke.mjs",
-    "build:admin": "node scripts/verify-frontend-symbols.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs",
+    "build:presets": "npm --prefix .. run build:presets",
+    "check:symbols": "npm --prefix .. run check:symbols",
+    "test:ui": "npm --prefix .. run test:ui",
+    "build:admin": "npm --prefix .. run build:assets",
     "dev": "npm run build:admin && edgeone makers dev",
     "deploy": "npm run build:admin && edgeone makers deploy",
     "deploy:preview": "npm run build:admin && edgeone makers deploy -e preview",

@@ -177,7 +177,14 @@ def test_vault_vs_local_data_and_permission_isolation():
         fetch_code = f.read()
 
     assert "origin === 'local'" in fetch_code, "api/vault/fetch.js must block providers with origin === 'local'"
-    assert "keyObj.origin === 'local'" in fetch_code, "api/vault/fetch.js must filter origin === 'local' keys"
+    assert "isVaultExportableKey(keyObj)" in fetch_code, "api/vault/fetch.js must filter local keys via the shared isVaultExportableKey predicate"
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    config_lib = open(os.path.join(repo_root, "edge-functions", "lib", "config.js"), encoding="utf-8").read()
+    assert "keyObj.is_local === true || keyObj.origin === 'local'" in config_lib, (
+        "lib/config.js isVaultExportableKey must treat is_local === true AND origin === 'local' as non-exportable")
+    manifest_code = open(os.path.join(repo_root, "edge-functions", "api", "vault", "manifest.js"), encoding="utf-8").read()
+    assert "toVaultProviderView" in manifest_code and "pCfg.origin === 'local'" in manifest_code, (
+        "api/vault/manifest.js must use the shared projection and never advertise local-origin providers")
     print("  PASS: api/vault/fetch.js strictly excludes local providers and keys (physical sandbox isolation)")
 
     # 2. Verify shared/admin/js/providers.js local deletion sovereignty

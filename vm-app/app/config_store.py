@@ -53,6 +53,71 @@ def _bump_version_if_changed(config: dict):
         logger.info("Configuration content changed (version %d).", _config_version)
 
 
+def get_run_mode(config: Optional[dict] = None) -> str:
+    """Active run mode ('agent' | 'kb'), normalised in one place.
+
+    Previously admin_routes and proxy_routes each re-implemented this
+    "run_mode -> env RUN_MODE -> agent" fallback chain.
+    """
+    cfg = config if isinstance(config, dict) else (_config or {})
+    mode = (cfg.get("run_mode") or os.environ.get("RUN_MODE") or "agent").lower().strip()
+    return mode if mode in ("agent", "kb") else "agent"
+
+
+def vault_url_and_token(config: Optional[dict], body: Optional[dict] = None) -> tuple[str, str]:
+    """Resolve EdgeOne vault URL/token from request body, config and env (single place).
+
+    Accepts both legacy/config spellings (`url` / `edgeone_url`); masked tokens are
+    treated as absent so a read-back masked value can never be persisted as a secret.
+    """
+    body = body or {}
+    v_cfg = (config or {}).get("edgeone_vault") or {}
+    url = (
+        body.get("edgeone_url")
+        or body.get("url")
+        or v_cfg.get("edgeone_url")
+        or v_cfg.get("url")
+        or os.environ.get("EDGEONE_VAULT_URL")
+        or ""
+    ).strip().rstrip("/")
+    token = (
+        (body.get("token") or "").strip()
+        or v_cfg.get("token")
+        or os.environ.get("EDGEONE_VAULT_TOKEN")
+        or os.environ.get("VAULT_ACCESS_TOKEN")
+        or ""
+    ).strip()
+    if is_masked_secret(token):
+        token = ""
+    return url, token
+
+
+def secret_origin(secret) -> Optional[str]:
+    """Normalised credential provenance: 'vault' | 'local' | None.
+
+    `origin` and the legacy boolean `is_local` described the same fact; read through
+    this helper so the two spellings can never disagree. Writers should use
+    `stamp_secret_origin` (keeps both fields in sync for older consoles).
+    """
+    if not isinstance(secret, dict):
+        return None
+    origin = secret.get("origin")
+    if origin in ("vault", "local"):
+        return origin
+    if secret.get("is_local") is True:
+        return "local"
+    if secret.get("is_local") is False:
+        return "vault"
+    return None
+
+
+def stamp_secret_origin(secret: dict, origin: str) -> dict:
+    """Write provenance atomically to both `origin` and legacy `is_local`."""
+    secret["origin"] = "local" if origin == "local" else "vault"
+    secret["is_local"] = (secret["origin"] == "local")
+    return secret
+
+
 def is_masked_secret(val) -> bool:
     """Check if a secret value is a masked placeholder (e.g. ●●●●●●●● or ********)."""
     if val is None:

@@ -312,6 +312,31 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | **Key 凭证** | **本地自建** | **VM: 供应商页** | **✅ 允许** | **✅ 允许** | 带有绿色「本地」徽章，显示「编辑」与「×」删除按钮 | 本地最高自治权，自由增删改查 |
 | **Key 凭证** | **任意归属** | **双端: 模型管理弹窗** | ❌ **禁止** | ❌ **禁止** | 仅显示 Key 胶囊供打勾绑定，**彻底移除红色「×」单删按钮** | 模型弹窗纯粹只做路由绑定，绝不触碰凭据库 |
 
+
+### 3.4.x 工程一致性与单一实现规约 (Single-Source / DRY)
+
+> 同一种状态、同一个标识、同一份配置知识，只允许存在**一个权威实现**；其它位置必须委托或由门禁生成，禁止复制后各自演化。
+
+| 领域 | 唯一权威实现 | 禁止事项 |
+| :--- | :--- | :--- |
+| 协议词汇（chat/messages/responses） | 前端 `core.js: normalizeProtocolList() / formatProtocolLabel()`；所有下拉标签、徽章、预选、provider option 全部委托 | 在 providers/vault/agent-models-ui 里另写一套协议判定 |
+| 「本地已配置供应商」下拉 | `vault.js: populateLocalProviderSelect()`（Agent 模型弹窗与 KB 候选弹窗共用） | 两个弹窗各写一套 option/占位/默认选中逻辑 |
+| 凭据来源（vault/local） | 后端 `config_store.secret_origin() / stamp_secret_origin()`；前端 `vault.js: stampSecretOrigin()`（origin 与旧字段 is_local 同步写） | 只改 `origin` 或只改 `is_local`；各处手写判定 |
+| 运行模式（agent/kb） | `config_store.get_run_mode()` | admin/proxy 各自重复 run_mode→env→agent 归一化 |
+| 中枢凭据解析（url/edgeone_url、token 掩码） | `config_store.vault_url_and_token()` | 各 endpoint 重复读 `edgeone_vault.url/edgeone_url` 与掩码判断 |
+| 适配规则（presets）加载 | `vm-app/app/presets.py: get_presets_dir() / load_preset() / load_catalog() / clear_cache()` | admin_routes 与 proxy_routes 各写目录解析、文件名归一化与缓存 |
+| 参数默认值 / 别名 / 边界 | `shared/config/settings.schema.json` + `settings_schema.get_setting()`；config merge 的键清单由 `all_setting_keys()` 生成 | 代码里手写 `config.get(canonical) or config.get(alias) or default` 长链；手维护 merge 键名单 |
+| EdgeOne 中枢投影（manifest/fetch） | `lib/config.js: toVaultProviderView() / isVaultExportableKey()`（manifest=fetch 的同一投影，local 供应商与 local Key 统一过滤） | manifest 与 fetch 各写一份 provider 投影、过滤条件不一致 |
+| 预设注册表（shared/presets → JS） | `agent-edgeone/scripts/build-presets.mjs`（确定性输出：版本/日期取自 version.json，单写一次后镜像） | 手工 per-provider JSON 副本；用 `new Date()` 让每次构建产生脏 diff |
+| EdgeOne 根镜像（`edge-functions/`） | `build-admin.mjs: syncTree()`（带删除同步）；唯一的构建管线 `npm run build:assets` → `build:admin`；agent-edgeone 脚本委托根目录 | 用 `cp -R` 追加式复制、另写第二套构建步骤、手写 `agent-edgeone/admin.js` |
+| 生成物门禁 | T0 `G6`：根镜像逐字节等于 `agent-edgeone/edge-functions/`，`lib/presets/*.json` 与 `agent-edgeone/admin.js` 禁止复活 | 把生成物当源码手改 |
+
+**已知未收敛项（需单独评审后实施，不阻塞当前版本）**：
+1. EdgeOne `lib/config.js` 的 `DEFAULT_SETTINGS`、超时/冷却常量仍为硬编码，尚未由 settings.schema 生成；
+2. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
+3. EdgeOne ↔ VM 的失败/冷却策略（429/5xx/40x、熔断）语义仍有漂移，需共享策略表后再统一；
+4. `/api/config` GET/PUT 的掩码与资产保留语义未写入 `shared/contracts/admin-ui-backend.json`，双端行为差异尚未契约化。
+
 ### 3.5 供应商预设规范、下拉格式与列表版本徽章真理源
 
 #### 1. 新增供应商来源与下拉规范 (`#p_preset`)
