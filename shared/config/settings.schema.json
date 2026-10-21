@@ -108,10 +108,6 @@
       "hosts": [
         "vm",
         "edgeone"
-      ],
-      "aliases": [
-        "upstream_timeout_chat",
-        "upstream_timeout_sec"
       ]
     },
     {
@@ -330,9 +326,6 @@
       "hosts": [
         "vm",
         "edgeone"
-      ],
-      "aliases": [
-        "cooldown_quota_sec"
       ]
     },
     {

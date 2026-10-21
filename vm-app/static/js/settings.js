@@ -122,7 +122,7 @@ function onRunModeChange(){
     if (isKb) {
       inputChatTimeout.value = state.config.upstream_timeout_sec ?? state.config.upstream_timeout_chat ?? 15;
     } else {
-      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? state.config.upstream_timeout_sec ?? 120;
+      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? 120;  // KB timeouts are not a fallback: runtime uses 120 s
     }
   }
   updateRoutingSettingsState();

@@ -574,6 +574,9 @@ export function resolveBinding(config, binding) {
  * manifest can advertise labels that fetch refuses (historical drift).
  */
 export function isVaultExportableKey(keyObj) {
+  // Plain string keys ("KeyA": "sk-xxx", the documented config format above) carry
+  // no provenance and have always been exported; only an explicit local flag hides a key.
+  if (typeof keyObj === 'string') return keyObj.trim() !== '';
   if (!keyObj || typeof keyObj !== 'object') return false;
   return !(keyObj.is_local === true || keyObj.origin === 'local');
 }
