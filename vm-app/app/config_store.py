@@ -72,16 +72,24 @@ def vault_url_and_token(config: Optional[dict], body: Optional[dict] = None) -> 
     """
     body = body or {}
     v_cfg = (config or {}).get("edgeone_vault") or {}
-    url = (
-        body.get("edgeone_url")
-        or body.get("url")
-        or v_cfg.get("edgeone_url")
+    saved_url = (
+        v_cfg.get("edgeone_url")
         or v_cfg.get("url")
         or os.environ.get("EDGEONE_VAULT_URL")
         or ""
     ).strip().rstrip("/")
+    body_url = (body.get("edgeone_url") or body.get("url") or "").strip().rstrip("/")
+    url = body_url or saved_url
+    body_token = (body.get("token") or "").strip()
+    if is_masked_secret(body_token):
+        body_token = ""
+    if body_url and body_url != saved_url:
+        # The saved token is bound to the saved hub URL. A request that names another
+        # URL must bring its own token; otherwise a stolen admin session could aim any
+        # vault endpoint at an attacker server and harvest the Bearer token.
+        return url, body_token
     token = (
-        (body.get("token") or "").strip()
+        body_token
         or v_cfg.get("token")
         or os.environ.get("EDGEONE_VAULT_TOKEN")
         or os.environ.get("VAULT_ACCESS_TOKEN")

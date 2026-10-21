@@ -22,18 +22,30 @@ _BLOCK_SECONDS = 600  # 10 minutes block
 def _get_client_ip(request: Request) -> str:
     """Extract the client IP for anti-bruteforce accounting.
 
-    X-Forwarded-For / X-Real-IP are client-controlled headers: trusting them
-    unconditionally lets an attacker rotate the "IP" on every attempt and bypass the
-    failed-login lockout. They are honoured only when the request comes from loopback
-    (a reverse proxy on the same host) or when TRUST_PROXY_HEADERS=1 is explicitly set
-    for a trusted external proxy.
+    Forwarding headers are client-controlled, so they are read only when the TCP peer is
+    a trusted proxy (loopback reverse proxy, or TRUST_PROXY_HEADERS=1):
+
+      * CLIENT_IP_HEADER (e.g. X-Azure-ClientIP, CF-Connecting-IP, EO-Client-IP) names the
+        single-value header a CDN overwrites with the real client IP. Behind a CDN this is
+        the only reliable source: without it every login shares the CDN edge IPs and
+        failed attempts by anyone lock the admin out of that edge.
+      * Otherwise the RIGHTMOST X-Forwarded-For entry is used: it is the address the
+        nearest proxy appended itself. The leftmost entry is whatever the client sent,
+        so trusting it would let an attacker rotate IPs and bypass the lockout.
     """
     client_host = request.client.host if request.client and request.client.host else None
     trust_headers = os.environ.get("TRUST_PROXY_HEADERS", "").strip().lower() in ("1", "true", "yes", "on")
     if trust_headers or client_host in ("127.0.0.1", "::1"):
+        cdn_header = os.environ.get("CLIENT_IP_HEADER", "").strip()
+        if cdn_header:
+            val = (request.headers.get(cdn_header) or "").split(",")[0].strip()
+            if val:
+                return val
         xff = request.headers.get("X-Forwarded-For")
         if xff:
-            return xff.split(",")[0].strip()
+            parts = [p.strip() for p in xff.split(",") if p.strip()]
+            if parts:
+                return parts[-1]
         x_real_ip = request.headers.get("X-Real-IP")
         if x_real_ip:
             return x_real_ip.strip()

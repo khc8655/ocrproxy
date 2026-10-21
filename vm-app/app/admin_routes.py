@@ -988,6 +988,14 @@ async def save_config_endpoint(request: Request):
                 body["edgeone_vault"]["edgeone_url"] = v_u
             in_v_tok = (body["edgeone_vault"].get("token") or "").strip()
             curr_v_tok = (current_config.get("edgeone_vault") or {}).get("token")
+            _curr_vu = ((current_config.get("edgeone_vault") or {}).get("edgeone_url")
+                        or (current_config.get("edgeone_vault") or {}).get("url") or "").strip().rstrip("/")
+            _new_vu = (v_u or "").strip().rstrip("/")
+            if (_new_vu and _curr_vu and _new_vu != _curr_vu and curr_v_tok
+                    and (not in_v_tok or is_masked_secret(in_v_tok))):
+                # Same rule as /vault/config: the saved token never follows a URL change.
+                return JSONResponse(status_code=400, content={
+                    "error": "修改中枢地址必须重新输入中枢 Token（防止地址被篡改后泄露 Token）"})
             if not in_v_tok or is_masked_secret(in_v_tok):
                 if curr_v_tok and not is_masked_secret(curr_v_tok):
                     body["edgeone_vault"]["token"] = curr_v_tok

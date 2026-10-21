@@ -470,6 +470,69 @@ async def test_security_hardening_export_and_vault_token():
     print("     PASS: export/token hardening")
 
 
+async def test_vault_token_never_follows_another_url():
+    """The saved hub token is bound to the saved hub URL: no vault endpoint and no config
+    save may send it to a different URL (stolen admin session -> attacker server)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    got = []
+
+    class _H(BaseHTTPRequestHandler):
+        def _h(self):
+            got.append(self.headers.get("Authorization"))
+            self.send_response(200); self.send_header("content-type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"ok":true,"providers":[]}')
+        do_GET = do_POST = _h
+        def log_message(self, *a): pass
+
+    srv = HTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    evil = f"http://127.0.0.1:{srv.server_address[1]}"
+    save_to_disk({"providers": {}, "agent_models": {}, "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []},
+                  "edgeone_vault": {"url": "https://hub.example.com", "edgeone_url": "https://hub.example.com",
+                                    "token": "REAL-VAULT-TOKEN"}})
+    clear_cache()
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+            for ep in ("/api/admin/vault/test", "/api/admin/vault/manifest"):
+                await c.post(ep, headers=H, json={"url": evil})
+            body = (await c.get("/api/config", headers=H)).json(); body = body.get("data", body)
+            body["edgeone_vault"] = {"url": evil, "edgeone_url": evil, "token": ""}
+            r = await c.post("/api/admin/config", headers=H, json=body)
+            assert r.status_code == 400, f"URL change without token must be rejected on config save: {r.status_code}"
+            assert (await get_config())["edgeone_vault"]["token"] == "REAL-VAULT-TOKEN"
+            assert (await get_config())["edgeone_vault"]["url"] == "https://hub.example.com"
+        assert "Bearer REAL-VAULT-TOKEN" not in got, f"saved vault token leaked to another URL: {got}"
+    finally:
+        srv.shutdown()
+
+
+def test_client_ip_behind_cdn():
+    """Lockout IP: rightmost XFF behind a loopback proxy (leftmost is client-spoofable);
+    CLIENT_IP_HEADER wins when set (CDN real-client header); untrusted peers ignore headers."""
+    from types import SimpleNamespace
+    from app.auth import _get_client_ip
+
+    def req(peer, headers):
+        return SimpleNamespace(client=SimpleNamespace(host=peer), headers=headers)
+
+    old = {k: os.environ.pop(k, None) for k in ("CLIENT_IP_HEADER", "TRUST_PROXY_HEADERS")}
+    try:
+        assert _get_client_ip(req("127.0.0.1", {"X-Forwarded-For": "6.6.6.6, 203.0.113.9"})) == "203.0.113.9"
+        assert _get_client_ip(req("198.51.100.1", {"X-Forwarded-For": "6.6.6.6"})) == "198.51.100.1"
+        os.environ["CLIENT_IP_HEADER"] = "X-Azure-ClientIP"
+        assert _get_client_ip(req("127.0.0.1", {"X-Forwarded-For": "6.6.6.6, 147.243.0.1",
+                                                 "X-Azure-ClientIP": "203.0.113.9"})) == "203.0.113.9"
+    finally:
+        for k, v in old.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -511,6 +574,12 @@ async def _run_all_tests():
         print("     PASS: test_legacy_unmarked_provider_keys_stay_local")
         print("  -> test_security_hardening_export_and_vault_token...")
         await test_security_hardening_export_and_vault_token()
+        print("  -> test_vault_token_never_follows_another_url...")
+        await test_vault_token_never_follows_another_url()
+        print("     PASS: test_vault_token_never_follows_another_url")
+        print("  -> test_client_ip_behind_cdn...")
+        test_client_ip_behind_cdn()
+        print("     PASS: test_client_ip_behind_cdn")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:
