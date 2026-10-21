@@ -29,6 +29,10 @@
 
 ## [Unreleased]
 
+### 管理后台（随下一批发布）
+- 协议与端点改为两行式：第一行协议开关，第二行整宽地址输入，解决 OpenAI/Messages 地址输入框过短的问题。
+- 本地 Key 与 EdgeOne 对齐：管理端编辑时可查看并修改实际密钥值（`/api/admin/config` 仅对中枢 `origin=vault` Key 掩码）；中枢 Key 保持掩码只读。
+
 ### 工程流程
 - 发版节奏改为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；P0 线上故障才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
 

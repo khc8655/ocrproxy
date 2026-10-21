@@ -350,6 +350,19 @@ async def test_vault_write_version_and_legacy_key_guard():
             assert (await get_config())["providers"]["legacy_p"]["keys"]["old"] == "sk-legacy-old", \
                 "legacy hub key under origin=vault provider must not be overwritable"
 
+            # 1b) 本地 Key 与管理端一致：可查看/可编辑（EdgeOne 同款），中枢 Key 仍掩码
+            cur = body_of(await c.get("/api/config", headers=H))
+            cur["providers"]["local_p"] = {
+                "name": "Local P", "origin": "local", "base_url": "https://local.example.com/v1",
+                "keys": {"mine": {"key": "sk-local-mine", "origin": "local", "is_local": True}},
+            }
+            assert (await c.post("/api/admin/config", headers=H, json=cur)).status_code == 200
+            shown = body_of(await c.get("/api/config", headers=H))
+            assert shown["providers"]["local_p"]["keys"]["mine"]["key"] == "sk-local-mine", \
+                f"local key must stay visible to the admin console: {shown['providers']['local_p']}"
+            assert shown["providers"]["legacy_p"]["keys"]["old"] == "●●●●●●●●", \
+                "hub key must stay masked even when local keys are visible"
+
             # 2) a vault pull bumps _version; a tab loaded before the pull must get 409,
             #    and the freshly pulled provider must survive
             stale = body_of(await c.get("/api/config", headers=H))

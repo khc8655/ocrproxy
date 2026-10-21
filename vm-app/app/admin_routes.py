@@ -391,10 +391,18 @@ async def get_config_endpoint(request: Request):
             for p_name, p_data in providers.items():
                 if isinstance(p_data, dict) and "keys" in p_data and isinstance(p_data["keys"], dict):
                     masked_keys = {}
+                    prov_origin = p_data.get("origin") if p_data.get("origin") in ("local", "vault") else "vault"
                     for k_lbl, k_val in p_data["keys"].items():
                         if k_lbl in ("public", "__public__") or k_val == "public":
                             masked_keys[k_lbl] = "public"
-                        elif isinstance(k_val, dict):
+                            continue
+                        # 本地 Key 与管理端保持一致：管理员可查看/编辑（EdgeOne 同款行为）；
+                        # 仅中枢（origin=vault）Key 继续掩码下发，保持只读。
+                        key_origin = secret_origin(k_val) if isinstance(k_val, dict) else None
+                        if (key_origin or ("local" if prov_origin == "local" else "vault")) == "local":
+                            masked_keys[k_lbl] = k_val
+                            continue
+                        if isinstance(k_val, dict):
                             if k_val.get("type") == "service_account" or "private_key" in k_val:
                                 masked_keys[k_lbl] = {"type": "service_account", "project_id": k_val.get("project_id", "masked"), "private_key": "●●●●●●●●"}
                             else:

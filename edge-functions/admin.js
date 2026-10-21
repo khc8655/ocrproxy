@@ -215,10 +215,11 @@ function pageHtml() {
     .model-card th:last-child, .model-card td:last-child { position: sticky; right: 0; box-shadow: -1px 0 0 var(--border); }
     .model-card thead th:last-child { background: var(--khc-neutral-50); }
     .model-card tbody td:last-child { background: inherit; }
-    .proto-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
-    .proto-row { display: flex; align-items: center; gap: 12px; }
-    .proto-row .proto-toggle { min-width: 190px; }
-    .proto-row .form-control { flex: 1; min-width: 0; }
+    .proto-list { display: flex; flex-direction: column; gap: 12px; padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+    /* 两行式：第一行协议开关，第二行整宽端点地址（地址太长，挤在一行看不清） */
+    .proto-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+    .proto-row .proto-toggle { min-width: 0; }
+    .proto-row .form-control { width: 100%; }
     #listAvailableModels { min-width: 0; max-width: 100%; }
     #listAvailableModels .model-chip-clickable { max-width: 100%; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
     #listAvailableModels .model-chip-clickable > span:first-child { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
