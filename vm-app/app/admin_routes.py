@@ -164,6 +164,24 @@ def _mask_config_secrets(config: dict, *, mask_local_keys: bool) -> dict:
     return masked
 
 
+def _vault_token_configured(config: dict) -> bool:
+    """True when the VM holds a vault credential, either in config or via environment.
+
+    Environment tokens (EDGEONE_VAULT_TOKEN / VAULT_ACCESS_TOKEN) are just as sensitive as
+    the saved one: a URL change made while only an env token exists must also require a
+    fresh token, otherwise the env token would be sent to the new (attacker) URL.
+    """
+    v_cfg = (config or {}).get("edgeone_vault") or {}
+    tok = (v_cfg.get("token") or "").strip()
+    if tok and not is_masked_secret(tok):
+        return True
+    for env_key in ("EDGEONE_VAULT_TOKEN", "VAULT_ACCESS_TOKEN"):
+        etok = (os.environ.get(env_key) or "").strip()
+        if etok and not is_masked_secret(etok):
+            return True
+    return False
+
+
 def _validate_vault_url(url: str) -> Optional[str]:
     raw = (url or "").strip()
     if not raw:
@@ -1000,7 +1018,8 @@ async def save_config_endpoint(request: Request):
             _curr_vu = ((current_config.get("edgeone_vault") or {}).get("edgeone_url")
                         or (current_config.get("edgeone_vault") or {}).get("url") or "").strip().rstrip("/")
             _new_vu = (v_u or "").strip().rstrip("/")
-            if (_new_vu and _curr_vu and _new_vu != _curr_vu and curr_v_tok
+            if (_new_vu and _curr_vu and _new_vu != _curr_vu
+                    and _vault_token_configured(current_config)
                     and (not in_v_tok or is_masked_secret(in_v_tok))):
                 # Same rule as /vault/config: the saved token never follows a URL change.
                 return JSONResponse(status_code=400, content={

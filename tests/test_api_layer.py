@@ -536,6 +536,38 @@ async def test_vault_provider_connection_fields_locked():
         assert p["base_url"] == "https://api.real.example/v1" and p["keys"]["k"]["key"] == "sk-HUB", p
 
 
+async def test_vault_env_token_not_sent_to_changed_url():
+    """A VM that relies on VAULT_ACCESS_TOKEN (env) must also refuse a URL change without
+    a new token: otherwise the env token would be sent to the attacker URL on the next
+    manifest/fetch call."""
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    old_env = os.environ.get("VAULT_ACCESS_TOKEN")
+    os.environ["VAULT_ACCESS_TOKEN"] = "ENV-REAL-TOKEN"
+    try:
+        save_to_disk({"providers": {}, "agent_models": {},
+                      "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []},
+                      "edgeone_vault": {"url": "https://hub.example.com",
+                                        "edgeone_url": "https://hub.example.com"}})
+        clear_cache()
+        H = {"Authorization": "Bearer test_admin_pass_123"}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+            body = (await c.get("/api/config", headers=H)).json()
+            body = body.get("data", body)
+            body["edgeone_vault"] = {"url": "https://evil.example.com",
+                                     "edgeone_url": "https://evil.example.com", "token": ""}
+            r = await c.post("/api/admin/config", headers=H, json=body)
+            assert r.status_code == 400, f"URL change must be refused while an env token exists: {r.status_code}"
+            cfg = await get_config()
+            assert (cfg["edgeone_vault"].get("edgeone_url") or cfg["edgeone_vault"].get("url")) == "https://hub.example.com"
+    finally:
+        if old_env is None:
+            os.environ.pop("VAULT_ACCESS_TOKEN", None)
+        else:
+            os.environ["VAULT_ACCESS_TOKEN"] = old_env
+    print("     PASS: env vault token does not follow a URL change")
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -583,6 +615,8 @@ async def _run_all_tests():
         print("  -> test_vault_provider_connection_fields_locked...")
         await test_vault_provider_connection_fields_locked()
         print("     PASS: test_vault_provider_connection_fields_locked")
+        print("  -> test_vault_env_token_not_sent_to_changed_url...")
+        await test_vault_env_token_not_sent_to_changed_url()
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:

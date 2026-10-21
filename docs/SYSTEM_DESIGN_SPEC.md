@@ -366,7 +366,8 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 
 - **中枢 Token 只写不读**：`/api/admin/config`、`/api/admin/config/export`、`/api/admin/vault/config` 一律只返回 `has_token`，永不返回 Token 明文或前后缀。
 - **导出全掩码**：`/api/admin/config/export` 对所有 provider Key 掩码、Token 置空；导入仍按"掩码保持原值"恢复。导出不再能作为"密钥备份"。
-- **改中枢地址必须重输 Token**：地址变更且未提供新 Token 直接 400，防止把中枢指向攻击者服务器后骗走 Bearer Token。
+- **Token 与地址绑定**：已保存的 Token（含环境变量 `VAULT_ACCESS_TOKEN` / `EDGEONE_VAULT_TOKEN`）只会发往已保存的中枢地址；`/vault/test`、`/vault/manifest`、`/vault/fetch-key`、`/vault/add-keys`、`/vault/sync` 与 `/api/admin/config` 保存，凡是换了地址就必须同时带新 Token，否则拒绝/不带 Token。防止仅凭管理密码把真 Token 发到攻击者服务器。
+- **中枢供应商连接字段只读**：`origin=vault` 供应商的 `origin` / `base_url` / `anthropic_base_url` / `adapter_rules` / `protocols` / `protocol` / `anthropic_messages` / `preset_id` 在配置保存时由后端强制还原，合并导入时直接跳过；否则仅凭管理密码就能改 `base_url`，让后续转发/探活把中枢 Key 明文发出去。规则更新只走 `/vault/sync` 或中枢重新拉取。
 - **中枢地址校验**：仅 http/https、禁止 URL 内嵌账号密码、禁止云厂商元数据/链路本地地址。
 - **登录限流抗伪造**：`X-Forwarded-For` / `X-Real-IP` 仅在请求来自本机回环（同机反代）或显式 `TRUST_PROXY_HEADERS=1` 时可信，避免攻击者轮换伪造 IP 绕过 5 次/10 分钟锁定。
 - **接受的残余风险（明确不做）**：OS/root 被攻破时，内存与可解密配置中的 Key 仍可被读取；不采用"中枢 Key 不落盘"或"hub 注入代转发"方案（会牺牲性能/离线可用性）。密钥价值以免费额度为主，泄露按轮换处理。

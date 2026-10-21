@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261021-04] - 2026-10-21
+
+### Security（安全热修复续，合并 PR #22 + 补强）
+- **Token 与中枢地址绑定**：vault 接口（`test` / `manifest` / `fetch-key` / `add-keys` / `sync`）此前请求体 URL 优先、Token 回退已保存值，仅凭管理密码即可把真 Token 发往任意地址；`/api/admin/config` 也可改 URL 而保留旧 Token。现在已保存 Token 只发往已保存地址，换地址必须带新 Token（v20261021-03 只堵了 `/vault/config` 一条路径）。
+- **中枢供应商连接字段后端只读**：`origin=vault` 供应商的 `origin` / `base_url` / `anthropic_base_url` / `adapter_rules` / `protocols` / `protocol` / `anthropic_messages` / `preset_id` 保存时强制还原、合并导入时跳过，防止改 `base_url` 后让转发/探活把中枢 Key 明文发出去；UI 本来就禁用，操作无变化；规则更新仍走 `/vault/sync` 或重新拉取。
+- **环境变量 Token 同样绑定地址**：仅依赖 `VAULT_ACCESS_TOKEN` / `EDGEONE_VAULT_TOKEN`（配置里无 Token）的部署，换中枢地址也必须重输 Token，否则 env Token 会被发往新地址（新增回归）。
+- **明确不采用**：撤回 PR 中的 `CLIENT_IP_HEADER` / XFF 最右项改动（改变挂 CDN 时限流行为），登录限流保持 v20261021-03 语义；线上无行为变化。
+- **回归**：`test_vault_token_never_follows_another_url`、`test_vault_provider_connection_fields_locked`、`test_vault_env_token_not_sent_to_changed_url` 全部通过。
+
+---
+
 ## [v20261021-03] - 2026-10-21
 
 ### Security（安全热修复，优先发布）
