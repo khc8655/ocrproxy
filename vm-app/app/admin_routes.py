@@ -391,7 +391,8 @@ async def get_config_endpoint(request: Request):
             for p_name, p_data in providers.items():
                 if isinstance(p_data, dict) and "keys" in p_data and isinstance(p_data["keys"], dict):
                     masked_keys = {}
-                    prov_origin = p_data.get("origin") if p_data.get("origin") in ("local", "vault") else "vault"
+                    # 与保存守卫 / 前端 resolveKeySource() 同一判定：仅 origin=vault 供应商下的未标记 Key 算中枢 Key
+                    prov_origin = "vault" if p_data.get("origin") == "vault" else "local"
                     for k_lbl, k_val in p_data["keys"].items():
                         if k_lbl in ("public", "__public__") or k_val == "public":
                             masked_keys[k_lbl] = "public"

@@ -384,6 +384,31 @@ async def test_vault_write_version_and_legacy_key_guard():
         restore()
 
 
+async def test_legacy_unmarked_provider_keys_stay_local():
+    """VM: a pre-origin provider (no `origin` field) holds keys the user typed on this VM.
+    Load-time migration and GET masking must treat them as local (visible + editable), the
+    same rule as the save guard and the console's resolveKeySource(); only providers with
+    origin=vault turn unmarked keys into read-only hub keys."""
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    save_to_disk({"providers": {"old_local": {"name": "Old", "base_url": "https://old.example.com/v1",
+                                              "keys": {"s": "sk-old-string", "d": {"key": "sk-old-dict"}}}},
+                  "agent_models": {}, "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []}})
+    clear_cache()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+        r = await c.get("/api/config", headers=H)
+        body = r.json(); body = body.get("data", body)
+        keys = body["providers"]["old_local"]["keys"]
+        assert keys["s"]["key"] == "sk-old-string" and keys["s"]["origin"] == "local", keys
+        assert keys["d"]["key"] == "sk-old-dict", keys
+        disk = (await get_config())["providers"]["old_local"]["keys"]["s"]
+        assert disk.get("origin") == "local", f"migration must not persist a local key as vault: {disk}"
+        body["providers"]["old_local"]["keys"]["s"] = {"key": "sk-new", "origin": "local", "is_local": True}
+        assert (await c.post("/api/admin/config", headers=H, json=body)).status_code == 200
+        assert (await get_config())["providers"]["old_local"]["keys"]["s"]["key"] == "sk-new"
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -420,6 +445,9 @@ async def _run_all_tests():
         print("  -> test_vault_write_version_and_legacy_key_guard...")
         await test_vault_write_version_and_legacy_key_guard()
         print("     PASS: test_vault_write_version_and_legacy_key_guard")
+        print("  -> test_legacy_unmarked_provider_keys_stay_local...")
+        await test_legacy_unmarked_provider_keys_stay_local()
+        print("     PASS: test_legacy_unmarked_provider_keys_stay_local")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:
