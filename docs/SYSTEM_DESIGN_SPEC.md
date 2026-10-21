@@ -373,6 +373,8 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 
 **部署提示**：若管理面在可信外部反向代理之后，设置 `TRUST_PROXY_HEADERS=1` 以恢复按真实客户端 IP 限流；否则保持默认，限流按直连 IP 计算。
 
+**中枢 Token 与地址绑定**：已保存的 Token 只会发往已保存的中枢地址；任何 vault 接口或配置保存指定了另一个地址时，必须同时带上新 Token（`config_store.vault_url_and_token()` 统一判定）。中枢供应商（origin=vault）的连接字段（origin/base_url/anthropic_base_url/adapter_rules/协议字段/preset_id）后端只读，只能经 /vault/sync 更新。
+
 ### 3.5.x 管理后台一致性补充（v20261021-01）
 
 - **供应商卡片徽章**：只显示 `规则 v{version}`，不再展示同步/更新日期（该日期无运维意义）。

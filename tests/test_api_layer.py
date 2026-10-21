@@ -470,6 +470,72 @@ async def test_security_hardening_export_and_vault_token():
     print("     PASS: export/token hardening")
 
 
+async def test_vault_token_never_follows_another_url():
+    """The saved hub token is bound to the saved hub URL: no vault endpoint and no config
+    save may send it to a different URL (stolen admin session -> attacker server)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    got = []
+
+    class _H(BaseHTTPRequestHandler):
+        def _h(self):
+            got.append(self.headers.get("Authorization"))
+            self.send_response(200); self.send_header("content-type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"ok":true,"providers":[]}')
+        do_GET = do_POST = _h
+        def log_message(self, *a): pass
+
+    srv = HTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    evil = f"http://127.0.0.1:{srv.server_address[1]}"
+    save_to_disk({"providers": {}, "agent_models": {}, "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []},
+                  "edgeone_vault": {"url": "https://hub.example.com", "edgeone_url": "https://hub.example.com",
+                                    "token": "REAL-VAULT-TOKEN"}})
+    clear_cache()
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+            for ep in ("/api/admin/vault/test", "/api/admin/vault/manifest"):
+                await c.post(ep, headers=H, json={"url": evil})
+            body = (await c.get("/api/config", headers=H)).json(); body = body.get("data", body)
+            body["edgeone_vault"] = {"url": evil, "edgeone_url": evil, "token": ""}
+            r = await c.post("/api/admin/config", headers=H, json=body)
+            assert r.status_code == 400, f"URL change without token must be rejected on config save: {r.status_code}"
+            assert (await get_config())["edgeone_vault"]["token"] == "REAL-VAULT-TOKEN"
+            assert (await get_config())["edgeone_vault"]["url"] == "https://hub.example.com"
+        assert "Bearer REAL-VAULT-TOKEN" not in got, f"saved vault token leaked to another URL: {got}"
+    finally:
+        srv.shutdown()
+
+
+async def test_vault_provider_connection_fields_locked():
+    """With only the admin password, an attacker must not be able to repoint a hub
+    provider (base_url / origin) and make the VM send hub keys to their server."""
+    from app.main import app
+    from app.config_store import get_config, save_to_disk, clear_cache
+    save_to_disk({"providers": {"hubp": {"name": "Hub", "origin": "vault", "base_url": "https://api.real.example/v1",
+                                         "keys": {"k": {"key": "sk-HUB", "origin": "vault", "is_local": False}}}},
+                  "agent_models": {}, "candidates": {"chat": [], "embedding": [], "reranker": [], "ocr": []}})
+    clear_cache()
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as c:
+        body = (await c.get("/api/config", headers=H)).json(); body = body.get("data", body)
+        body["providers"]["hubp"]["base_url"] = "https://attacker.example/v1"
+        body["providers"]["hubp"]["anthropic_base_url"] = "https://attacker.example"
+        body["providers"]["hubp"]["origin"] = "local"
+        assert (await c.post("/api/admin/config", headers=H, json=body)).status_code == 200
+        p = (await get_config())["providers"]["hubp"]
+        assert p["base_url"] == "https://api.real.example/v1" and p["origin"] == "vault", p
+        assert "anthropic_base_url" not in p, p
+        r = await c.post("/api/admin/config/import", headers=H, json={"mode": "merge", "config": {
+            "providers": {"hubp": {"base_url": "https://attacker.example/v1", "keys": {}}}}})
+        assert r.status_code == 200, r.text
+        p = (await get_config())["providers"]["hubp"]
+        assert p["base_url"] == "https://api.real.example/v1" and p["keys"]["k"]["key"] == "sk-HUB", p
+
+
 async def _run_all_tests():
     print("=== Running Layer 2 API Integration Tests ===")
     temp_dir = tempfile.mkdtemp(prefix="ocrprox_api_test_")
@@ -511,6 +577,12 @@ async def _run_all_tests():
         print("     PASS: test_legacy_unmarked_provider_keys_stay_local")
         print("  -> test_security_hardening_export_and_vault_token...")
         await test_security_hardening_export_and_vault_token()
+        print("  -> test_vault_token_never_follows_another_url...")
+        await test_vault_token_never_follows_another_url()
+        print("     PASS: test_vault_token_never_follows_another_url")
+        print("  -> test_vault_provider_connection_fields_locked...")
+        await test_vault_provider_connection_fields_locked()
+        print("     PASS: test_vault_provider_connection_fields_locked")
         print("=== ALL LAYER 2 API TESTS PASSED! ===")
     finally:
         if old_cfg_dir:
