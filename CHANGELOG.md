@@ -4,6 +4,29 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261021-01] - 2026-10-21
+
+### 去重收尾
+- 请求级内部键 `upstream_timeout` → `request_timeout_sec`（从不持久化），与保存的 `upstream_timeout_sec` 彻底区分，避免再次误读。
+- 旧字符串 Key 加载归一化：VM `config_store._migrate_string_secrets()` + EdgeOne `normalizeProviderKeys()` 把 `"KeyA": "sk-xxx"` 转成 `{key, origin, is_local}`（本地供应商→local，中枢供应商→vault），投影/编辑逻辑不再有字符串特例。
+
+### 修复与体验
+- **本地 Key 可编辑**：密钥值不回显（留空 = 保留原值，输入新值 = 替换）；Key 弹窗内标注「本地 Key · 可编辑 / 中枢 Key · 只读」。
+- **模型列表操作列底色**：修复 sticky 最后一列背景断层，行背景/悬停色覆盖整行。
+- **「单个供应商最多尝试 Key 数」**：替换原「单厂商重试 Key 上限」的复杂描述（换 Key 次数，非重试次数）。
+- **保存设置按钮**：统一为小尺寸，与「恢复推荐默认值」一致。
+- **新增 Agent 模型弹窗**：移除与胶囊选择重复的「当前已选绑定」列表。
+- **供应商卡片徽章**：只显示 `规则 v{版本}`，去掉无意义的同步日期。
+- **供应商弹窗协议合并**：OpenAI Chat / Anthropic Messages / OpenAI Responses 各自行内开关 + 地址（Messages 可独立端点，Responses 复用 OpenAI 地址）；中枢托管只读供应商的全部输入、协议开关、RPM 与保存按钮均禁用。
+- **首页 Top 3**：与统计卡片同宽同高，移除「今天共 N 个活跃模型」；移除「复制全部模型名」按钮。
+- **模型列表「测」**：明确为发送一次真实小请求（chat `max_tokens=16`；embedding/rerank 各自最小请求），不是仅连通性校验；按钮提示与 Toast 已改文案。
+- **「最近调用」口径**：改为服务端统计唯一来源，删除浏览器 `localStorage` 缓存，升级/重启后不再显示陈旧日期；探活用 `loadData()` 刷新服务端状态。
+
+### 版本与流程
+- 版本号按日期规范使用 **v20261021-01**（今天 21 日），并按 §〇 批次节奏一次性发布本批修复。
+
+---
+
 ## [Unreleased]
 
 ### 工程流程

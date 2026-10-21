@@ -8,7 +8,7 @@ aliases silently changed:
       (upstream_timeout_sec / upstream_timeout_chat; init_config writes
       upstream_timeout_chat=45 and a KB-mode settings save writes 15).
   R2  403 cooldown is NOT taken from the quota/arrears cooldown (cooldown_quota_sec).
-  R3  The per-request timeout a route sets (req_config["upstream_timeout"], e.g. OCR
+  R3  The per-request timeout a route sets (req_config["request_timeout_sec"], e.g. OCR
       60 s) beats a saved global upstream_timeout_sec — real schedule() against a
       slow local upstream.
   R4  EdgeOne hub exports plain string keys ("KeyA": "sk-xxx") in manifest and fetch.
@@ -30,7 +30,7 @@ os.environ.setdefault("no_proxy", "127.0.0.1,localhost")
 
 def r1_r2():
     from app.settings_schema import get_setting
-    for cfg in ({"upstream_timeout_sec": 15}, {"upstream_timeout_chat": 45, "upstream_timeout": 12}):
+    for cfg in ({"upstream_timeout_sec": 15}, {"upstream_timeout_chat": 45, "request_timeout_sec": 12}):
         v = get_setting(cfg, "agent_first_byte_timeout_sec", 120.0)
         assert float(v) == 120.0, f"R1: agent first-byte timeout picked up a KB timeout: {cfg} -> {v}"
     assert float(get_setting({"agent_first_byte_timeout_sec": 200}, "agent_first_byte_timeout_sec", 120.0)) == 200
@@ -61,7 +61,7 @@ async def _r3(port):
     from app import scheduler
     cfg = {
         "upstream_timeout_sec": 5,          # saved global KB timeout (schema min 5)
-        "upstream_timeout": 15,             # what the OCR route sets for this request
+        "request_timeout_sec": 15,             # what the OCR route sets for this request
         "request_total_budget_sec": 30,
         "max_retries": 1,
         "providers": {"p": {"base_url": f"http://127.0.0.1:{port}", "keys": {"k": "sk"}}},
@@ -83,7 +83,7 @@ def r3():
         try:
             sr, dt = asyncio.run(_r3(srv.server_address[1]))
         except Exception as e:
-            raise AssertionError(f"R3: per-request upstream_timeout (15s) lost to upstream_timeout_sec (5s): {e}")
+            raise AssertionError(f"R3: per-request request_timeout_sec (15s) lost to upstream_timeout_sec (5s): {e}")
         assert dt >= DELAY - 0.5, dt
     finally:
         srv.shutdown()

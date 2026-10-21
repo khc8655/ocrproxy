@@ -165,7 +165,7 @@ async def test_budget_decoupling_failover():
                 {"provider": "p2", "key": "k2", "model": "ocr-v1", "timeout_sec": 60.0},
             ]
         },
-        "upstream_timeout": 60.0,
+        "request_timeout_sec": 60.0,
         "request_total_budget_sec": 60.0,
         "max_retries": 2,
     }

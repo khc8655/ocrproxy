@@ -184,6 +184,34 @@ def _migrate_agent_models(config: dict) -> bool:
     return True
 
 
+def _migrate_string_secrets(config: dict) -> bool:
+    """Normalize legacy plain-string provider keys into the canonical object shape.
+
+    Historically a provider could store `"KeyA": "sk-xxx"`. That string carries no
+    provenance, so every consumer had to special-case it (and Edge's vault export had
+    to guess). Normalize once at load into {key, origin, is_local}:
+      * providers with origin == 'local'  -> local key (editable)
+      * everything else (hub parent)      -> vault key (read-only, deletable)
+    """
+    changed = False
+    providers = config.get("providers")
+    if not isinstance(providers, dict):
+        return False
+    for prov in providers.values():
+        if not isinstance(prov, dict):
+            continue
+        keys = prov.get("keys")
+        if not isinstance(keys, dict):
+            continue
+        prov_origin = prov.get("origin") if prov.get("origin") in ("local", "vault") else "vault"
+        for label, val in list(keys.items()):
+            if isinstance(val, str) and val.strip():
+                origin = "local" if prov_origin == "local" else "vault"
+                keys[label] = {"key": val, "origin": origin, "is_local": origin == "local"}
+                changed = True
+    return changed
+
+
 def _migrate_legacy_budget(config: dict) -> bool:
     """Migrate legacy schedule_total_budget to max_retries and request_total_budget_sec."""
     changed = False
@@ -229,6 +257,8 @@ def load_from_disk() -> dict:
     # converges to the current schema after the first read.
     migrated = _migrate_agent_models(config)
     if _migrate_legacy_budget(config):
+        migrated = True
+    if _migrate_string_secrets(config):
         migrated = True
     if migrated:
         try:

@@ -409,25 +409,6 @@
     } else {
       modalBindings = modalBindings.filter(b => !(b.provider === prov && b.key === keyVal));
     }
-    _renderSelectedBindingsSummary();
-  }
-
-  function _renderSelectedBindingsSummary() {
-    const summaryEl = document.getElementById('a_selectedBindingsSummary');
-    if (!summaryEl) return;
-    if (!modalBindings || modalBindings.length === 0) {
-      summaryEl.innerHTML = '';
-      summaryEl.style.display = 'none';
-      return;
-    }
-    const html = modalBindings.map(b => {
-      return `<span class="badge" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;background:var(--bg);border:1px solid var(--border);">
-        <strong style="color:var(--primary);">${_esc(b.provider)}:</strong> ${_esc(b.key)}
-        <button type="button" class="btn-ghost" data-action="remove-modal-binding" data-prov="${_esc(b.provider)}" data-key="${_esc(b.key)}" style="padding:0 2px;margin-left:4px;color:var(--error);font-weight:bold;line-height:1;cursor:pointer;" title="移除此绑定">×</button>
-      </span>`;
-    }).join('');
-    summaryEl.innerHTML = `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">当前已选绑定 (${modalBindings.length})：</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${html}</div>`;
-    summaryEl.style.display = 'block';
   }
 
   function _formatProviderOptionLabel(p) {
@@ -550,7 +531,6 @@
       if (quickTags) quickTags.innerHTML = '';
     }
 
-    _renderSelectedBindingsSummary();
     initModalDelegation();
   }
 
@@ -839,28 +819,13 @@
 
       const isSuccess = Boolean(d.success || d.ok);
       if (isSuccess) {
-        _toast(`[${b.provider}/${b.key}] 探活成功 (${latency}ms)`, 'ok');
+        _toast(`[${b.provider}/${b.key}] 测试成功 · 真实小请求 (${latency}ms)`, 'ok');
       } else {
-        _toast(`[${b.provider}/${b.key}] 探活失败: ${d.error || d.verdict || d.status}`, 'err');
+        _toast(`[${b.provider}/${b.key}] 测试失败: ${d.error || d.verdict || d.status}`, 'err');
       }
 
-      if (typeof window !== 'undefined') {
-        window.modelLatencyCache = window.modelLatencyCache || {};
-        const cacheEntry = {
-          ok: isSuccess,
-          latency_ms: latency,
-          status: isSuccess ? 200 : (d.status || 500),
-          time: Date.now()
-        };
-        window.modelLatencyCache[`agent:${name}:${b.provider}:${b.key}`] = cacheEntry;
-        window.modelLatencyCache[`model:${name}:${b.provider}:${b.key}`] = cacheEntry;
-        window.modelLatencyCache[`prov:${b.provider}:${b.key}`] = cacheEntry;
-        try {
-          localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
-        } catch (_) {}
-      }
     } catch(e) {
-      _toast(`[${b.provider}/${b.key}] 探活超时或异常: ${e.message}`, 'err');
+      _toast(`[${b.provider}/${b.key}] 测试超时或异常: ${e.message}`, 'err');
     } finally {
       probingKeys.delete(probeKeyId);
       if (btn) {
@@ -898,19 +863,6 @@
     const nk = 'agent:' + modelName + ':' + prov + ':' + key;
     let ns = candStatus[nk] || candStatus[prov + ':' + key] || candStatus[key];
 
-    if (!ns && typeof window !== 'undefined') {
-      if (!window.modelLatencyCache) {
-        try {
-          const saved = localStorage.getItem('ocrprox_model_latency_cache');
-          if (saved) window.modelLatencyCache = JSON.parse(saved);
-        } catch (_) {}
-      }
-      if (window.modelLatencyCache) {
-        ns = window.modelLatencyCache[nk] ||
-             window.modelLatencyCache[`model:${modelName}:${prov}:${key}`] ||
-             window.modelLatencyCache[`prov:${prov}:${key}`];
-      }
-    }
     let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
 
     if (ns) {
@@ -953,7 +905,7 @@
 
     const actions = `
       ${setActiveBtn}
-      <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-${_esc(probeKeyId)}" data-action="probe-key" data-model="${_esc(modelName)}" data-index="${i}" title="测试此 Key 连通性" ${isProbing ? 'disabled' : ''}>
+      <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-${_esc(probeKeyId)}" data-action="probe-key" data-model="${_esc(modelName)}" data-index="${i}" title="发送一次真实小请求（max_tokens=16）测试" ${isProbing ? 'disabled' : ''}>
         ${isProbing ? '<span class="spinner"></span>' : '测'}
       </button>
       <button class="btn btn-icon btn-sm btn-secondary-danger" data-action="delete-key" data-model="${_esc(modelName)}" data-index="${i}" title="删除绑定">×</button>

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20261020-09">
+  <link rel="stylesheet" href="/static/admin.css?v=20261021-01">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -33,7 +33,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261020-09</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261021-01</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -55,9 +55,6 @@
       <div class="section mb-4" id="db-access-section">
         <div class="section-head">
           <div class="section-title">接入网关与可用模型</div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="copyAllAvailableModels()">复制全部模型名</button>
-          </div>
         </div>
         <div class="gateway-card">
           <div class="gateway-row" style="border-bottom:1px solid var(--border);padding-bottom:10px;">
@@ -84,7 +81,7 @@
           <span class="badge badge-success" id="agentStatsMode">真实路由</span>
         </div>
         <div class="stats-grid" id="agentStatsGrid"></div>
-        <div id="agentTopModelsStrip" class="card card-pad mt-3" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 18px;background:var(--bg-subtle);"></div>
+        <div id="agentTopModelsStrip" class="stat" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;min-height:74px;"></div>
       </div>
 
       <!-- Section 2: KB Metrics Overview -->
@@ -305,8 +302,8 @@
 
             <div class="settings-row" id="st-item-max-attempts">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="单厂商重试 Key 上限 (max_attempts_per_provider)">单厂商重试 Key 上限 (max_attempts_per_provider)</span>
-                <span class="settings-row-hint" title="同厂商连续失败最多尝试 Key 数（默认 3 次）">同厂商连续失败最多尝试 Key 数（默认 3 次）</span>
+                <span class="settings-row-title" title="同一次请求内，单个供应商最多尝试几个不同的 Key">单个供应商最多尝试 Key 数</span>
+                <span class="settings-row-hint" title="换 Key 次数，不是重试次数；默认 3">换 Key 次数（非重试次数，默认 3）</span>
               </div>
               <div class="settings-row-ctrl">
                 <input type="number" id="s_maxAttemptsPerProvider" data-alias="set_max_attempts_per_provider" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
@@ -518,8 +515,8 @@
         <!-- Settings Bottom Sticky Action Bar -->
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
           <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn-primary" onclick="saveSettings()" style="display:flex;align-items:center;gap:6px;font-weight:600;padding:8px 20px;height:38px;">
-            <svg class="khc-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <button class="btn btn-primary btn-sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
+            <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span>保存设置并生效</span>
           </button>
         </div>
@@ -547,41 +544,32 @@
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
         <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova" oninput="applyPresetForProviderName()">
       </div>
-      <div class="form-group">
-        <label class="form-label">Base URL 接口基础地址</label>
-        <input type="text" id="p_url" class="form-control" placeholder="https://api.siliconflow.cn">
-      </div>
       <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">支持的协议类型 (可多选，模型将自动继承生效)</label>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_chat" checked>
-            <span class="badge badge-success" style="font-size:11px;padding:2px 6px;">OpenAI Chat</span>
-            <span class="text-secondary text-sm">(/v1/chat/completions)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_messages">
-            <span class="badge badge-warning" style="font-size:11px;padding:2px 6px;">Anthropic Messages</span>
-            <span class="text-secondary text-sm">(/v1/messages)</span>
-          </label>
-          <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="p_proto_responses">
-            <span class="badge badge-purple" style="font-size:11px;padding:2px 6px;">OpenAI Responses</span>
-            <span class="text-secondary text-sm">(/v1/responses)</span>
-          </label>
+        <label class="form-label">协议与端点（按需开启；模型继承所选协议）</label>
+        <div class="proto-list">
+          <div class="proto-row">
+            <label class="checkbox proto-toggle">
+              <input type="checkbox" id="p_proto_chat" checked onchange="onProtoToggleChange()">
+              <span class="badge badge-success">OpenAI Chat</span>
+            </label>
+            <input type="text" id="p_url" class="form-control form-control-compact mono" placeholder="https://api.example.com/v1">
+          </div>
+          <div class="proto-row">
+            <label class="checkbox proto-toggle">
+              <input type="checkbox" id="p_proto_messages" onchange="onProtoToggleChange()">
+              <span class="badge badge-warning">Anthropic Messages</span>
+            </label>
+            <input type="text" id="p_anthropic_url" class="form-control form-control-compact mono" placeholder="留空继承 OpenAI Base URL" disabled>
+          </div>
+          <div class="proto-row">
+            <label class="checkbox proto-toggle">
+              <input type="checkbox" id="p_proto_responses" onchange="onProtoToggleChange()">
+              <span class="badge badge-purple">OpenAI Responses</span>
+            </label>
+            <span class="text-secondary text-xs">复用 OpenAI Base URL</span>
+          </div>
         </div>
         <div id="p_proto_hint" class="text-secondary" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
-      </div>
-      <div class="form-group" id="p_custom_url_wrap" style="margin-top:14px;">
-        <label class="checkbox" style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
-          <input type="checkbox" id="p_custom_url_toggle" onchange="onCustomUrlToggleChange()">
-          <span>自定义协议独立端点 / 路径 (高级配置)</span>
-        </label>
-        <div id="p_custom_url_section" style="display:none;margin-top:8px;padding:12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-          <label class="form-label" style="font-size:12px;color:var(--text-secondary);">Anthropic Messages 独立 Base URL</label>
-          <input type="text" id="p_anthropic_url" class="form-control" placeholder="例如 https://api.minimax.cn/anthropic">
-          <div class="text-secondary text-xs mt-1" style="font-size:11px;">当上游的 Messages 协议与基础 Base URL 域名或路径不同时填写。</div>
-        </div>
       </div>
       <div class="form-group" style="margin-top:14px;">
         <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
@@ -591,7 +579,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveProvider()">保存并生效</button>
+      <button class="btn btn-primary" id="p_saveBtn" onclick="saveProvider()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -670,7 +658,6 @@
           <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
         </div>
         <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
-        <div id="a_selectedBindingsSummary" style="margin-top:8px;display:none;"></div>
       </div>
 
       <!-- Step 3: 模型快捷标签与探测 -->
@@ -815,14 +802,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=20261020-09"></script>
-  <script src="/static/js/settings-form.js?v=20261020-09"></script>
-  <script src="/static/js/core.js?v=20261020-09"></script>
-  <script src="/static/js/vault.js?v=20261020-09"></script>
-  <script src="/static/js/providers.js?v=20261020-09"></script>
-  <script src="/static/js/agent-models-ui.js?v=20261020-09"></script>
-  <script src="/static/js/models.js?v=20261020-09"></script>
-  <script src="/static/js/settings.js?v=20261020-09"></script>
-  <script src="/static/js/app.js?v=20261020-09"></script>
+  <script src="/static/js/host.js?v=20261021-01"></script>
+  <script src="/static/js/settings-form.js?v=20261021-01"></script>
+  <script src="/static/js/core.js?v=20261021-01"></script>
+  <script src="/static/js/vault.js?v=20261021-01"></script>
+  <script src="/static/js/providers.js?v=20261021-01"></script>
+  <script src="/static/js/agent-models-ui.js?v=20261021-01"></script>
+  <script src="/static/js/models.js?v=20261021-01"></script>
+  <script src="/static/js/settings.js?v=20261021-01"></script>
+  <script src="/static/js/app.js?v=20261021-01"></script>
 </body>
 </html>

@@ -31,14 +31,14 @@ from app.scheduler import (
 class TestP0ReliabilitySuite(unittest.TestCase):
 
     def test_timeout_precedence_logic(self):
-        """Verify per-endpoint upstream_timeout overrides global upstream_timeout_sec."""
-        config = {"upstream_timeout_sec": 30.0, "upstream_timeout": 60.0}
-        eff_timeout = max(1.0, float(config.get("upstream_timeout", config.get("upstream_timeout_sec", 15))))
+        """Verify per-request request_timeout_sec overrides global upstream_timeout_sec."""
+        config = {"upstream_timeout_sec": 30.0, "request_timeout_sec": 60.0}
+        eff_timeout = max(1.0, float(config.get("request_timeout_sec", config.get("upstream_timeout_sec", 15))))
         self.assertEqual(eff_timeout, 60.0, "Endpoint specific timeout (60s) must take precedence over global (30s)")
 
-        # When upstream_timeout is omitted, global takes effect
+        # When the per-request timeout is omitted, global takes effect
         config_no_endpoint = {"upstream_timeout_sec": 45.0}
-        eff_timeout_fallback = max(1.0, float(config_no_endpoint.get("upstream_timeout", config_no_endpoint.get("upstream_timeout_sec", 15))))
+        eff_timeout_fallback = max(1.0, float(config_no_endpoint.get("request_timeout_sec", config_no_endpoint.get("upstream_timeout_sec", 15))))
         self.assertEqual(eff_timeout_fallback, 45.0)
 
     def test_404_cooldown_evaluation(self):

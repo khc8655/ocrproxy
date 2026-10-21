@@ -357,9 +357,20 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 **已落地（v20261020-09）**：
 - `shared/config/runtime-profiles.json` 成为三运行时默认值唯一真理源；VM `runtime_profile.py` 解析（`scheduler._KB_DEFAULT_KEY_CONCURRENCY/_GLOBAL_MAX_CONCURRENCY/DEFAULT_COOLDOWN_410_SEC`、KB 熔断升级、OCR 默认值均取自 profile），EdgeOne 由 `build-presets.mjs` 生成 `lib/generated/runtime-profile.js`，删除 `lib/config.js` 与 `lib/cooldowns.js` 的手写默认值/冷却表；`tests/test_runtime_profiles.py` 校验两端一致 + 生成物不漂移。
 - `cooldown_quota_sec` / `cooldown_404_sec` / `cooldown_410_sec` / `circuit_escalation_sec` / `kb_global_max_concurrency` 成为独立 schema 字段（hosts: vm），不再借 `cooldown_403_sec` / 代码常量表达；`scheduler` 统一经 `get_setting()` 读取。
+- **旧字符串 Key 加载归一化**：VM `config_store._migrate_string_secrets()` 与 EdgeOne `normalizeProviderKeys()` 把 `"KeyA": "sk-xxx"` 一次性转成 `{key, origin, is_local}`（本地供应商→local，中枢供应商→vault），两端投影/编辑逻辑不再需要字符串特例。
+- **请求级超时键改名**：内部键 `upstream_timeout` → `request_timeout_sec`（从不持久化），与保存的 `upstream_timeout_sec` 彻底区分，避免再次出现"全局值覆盖 OCR 60s"的混淆。
+
+### 3.5.x 管理后台一致性补充（v20261021-01）
+
+- **供应商卡片徽章**：只显示 `规则 v{version}`，不再展示同步/更新日期（该日期无运维意义）。
+- **供应商弹窗**：协议与端点合并为行内布局（OpenAI Chat 开关+地址、Anthropic Messages 开关+地址、Responses 开关复用 OpenAI 地址）；只读（中枢托管）供应商的全部协议开关、地址、RPM 与保存按钮均禁用，杜绝"只读却可改 Messages"。
+- **Key 弹窗**：本地 Key 值不回显，留空 = 保留原值、输入新值 = 替换；弹窗内明确标注「本地 Key · 可编辑」/「中枢 Key · 只读」。
+- **模型列表「测」**：明确为发送一次真实小请求（chat `max_tokens=16`、embedding/rerank 各自最小请求），不是仅连通性校验；Key 录入时的校验仍走 `/verify-key` 连通性检查。
+- **「最近调用」只来自服务端统计**：删除浏览器 `localStorage` 缓存（升级/重启后不再显示 10-19 之类的陈旧时间）；探活后通过 `loadData()` 刷新服务端状态。
+- **首页**：热门模型 Top 3 与统计卡片同宽同高，移除「今天共 N 个活跃模型」与「复制全部模型名」等冗余信息。
 
 **已知未收敛项（需单独评审后实施，不阻塞当前版本）**：
-1. 把每请求内部键 `upstream_timeout` 重命名为 `request_timeout_sec`（避免与持久化的 `upstream_timeout_sec` 混淆），`schedule()` 也可改为显式参数；
+1. `schedule()` 可改为显式接收 `request_timeout_sec` 参数（当前仍从 config 读取内部键）；
 2. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
 3. 旧字符串 Key 在加载时统一归一化为 `{key, origin}`（两端各一次迁移），投影谓词即可去掉字符串特例；
 4. EdgeOne ↔ VM 的失败/冷却**触发条件**（Agent 是否冻结、KB 熔断）仍各自实现，需共享策略表后再统一（时长已收敛到 profile）；

@@ -1345,13 +1345,9 @@ async def schedule(
     try:
         # Per-request timeout (set by each endpoint in proxy_routes: OCR, KB chat,
         # embedding, rerank, agent chat) takes precedence over the global
-        # `upstream_timeout_sec`.  The previous order let the global default
-        # (30 s) silently override e.g. the 60 s OCR timeout.
-        # NOTE: get_setting() looks up the canonical key before its aliases, so it
-        # would let a saved `upstream_timeout_sec` beat the per-request
-        # `upstream_timeout` the route just set (OCR 60 s -> 15 s). Read the
-        # per-request value first, then fall back to the schema.
-        _route_timeout = config.get("upstream_timeout")
+        # `upstream_timeout_sec`.  The internal key is `request_timeout_sec` (it is
+        # never persisted), so it cannot be confused with the saved KB chat timeout.
+        _route_timeout = config.get("request_timeout_sec")
         upstream_timeout_sec = max(1.0, float(
             _route_timeout if _route_timeout not in (None, "") else get_setting(config, "upstream_timeout_sec", 15.0)))
     except (ValueError, TypeError):

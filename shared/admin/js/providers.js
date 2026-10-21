@@ -163,8 +163,7 @@ function renderProviders(){
       } else {
         ver = '默认';
       }
-      const dateText = meta.updated_at ? ` · ${meta.updated_at}` : '';
-      const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="适配规则版本与更新日期">${esc(ver + dateText)}</span>`;
+      const verBadge = `<span class="badge badge-neutral" style="font-size:11px;padding:2px 7px;" title="本地适配规则版本">${esc(ver)}</span>`;
       
       const lockIcon = `<svg class="khc-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
       let vaultBadge;
@@ -384,9 +383,14 @@ const PRESET_DEFINITIONS = new Proxy({}, {
 });
 
 // Custom URL Toggle Handler
-function onCustomUrlToggleChange(){
-  const isChecked = document.getElementById('p_custom_url_toggle').checked;
-  document.getElementById('p_custom_url_section').style.display = isChecked ? 'block' : 'none';
+function onProtoToggleChange(){
+  const msgOn = Boolean(document.getElementById('p_proto_messages')?.checked);
+  const aUrl = document.getElementById('p_anthropic_url');
+  if (!aUrl) return;
+  const readOnly = Boolean(state.providerReadOnly);
+  aUrl.disabled = readOnly || !msgOn;
+  aUrl.placeholder = msgOn ? '留空继承 OpenAI Base URL' : '启用 Anthropic Messages 后填写';
+  if (!msgOn) aUrl.value = '';
 }
 
 async function loadPresetsCatalog() {
@@ -547,13 +551,9 @@ function applyPresetForProviderName(){
   _applyProviderProtocols(protos, preset);
 
   const anthropicUrl = preset.anthropic_base_url || '';
-  const toggle = document.getElementById('p_custom_url_toggle');
-  const section = document.getElementById('p_custom_url_section');
-  if (anthropicUrl && protos.includes('messages') && toggle && section) {
-    toggle.checked = true;
-    section.style.display = 'block';
-    document.getElementById('p_anthropic_url').value = anthropicUrl;
-  }
+  const aUrlInput = document.getElementById('p_anthropic_url');
+  if (aUrlInput) aUrlInput.value = (protos.includes('messages') ? anthropicUrl : '');
+  onProtoToggleChange();
   const rpmInput = document.getElementById('p_rpm');
   const provRpm = preset.rpm_per_key || preset.rpm;
   if (rpmInput && !rpmInput.value.trim() && provRpm) rpmInput.value = String(provRpm);
@@ -599,11 +599,11 @@ async function onProviderPresetChange(){
     descEl.style.background = 'var(--bg-subtle)';
     descEl.style.color = 'var(--text-secondary)';
     descEl.innerHTML = `${icon('zap')} <strong>自定义模式（本地内置）</strong>：无需拉取云端规则，可直接填写任意私有部署或第三方 OpenAI / Anthropic 兼容端点。`;
-    document.getElementById('p_custom_url_toggle').checked = false;
-    document.getElementById('p_custom_url_section').style.display = 'none';
-    document.getElementById('p_anthropic_url').value = '';
+    const aUrl = document.getElementById('p_anthropic_url');
+    if (aUrl) aUrl.value = '';
     const pHint = document.getElementById('p_proto_hint');
     if (pHint) pHint.textContent = '';
+    onProtoToggleChange();
     return;
   }
 
@@ -630,15 +630,9 @@ async function onProviderPresetChange(){
     _applyProviderProtocols(presetProtos || hubProtos, matchedPreset);
 
     const anthropicUrl = (matchedPreset && matchedPreset.anthropic_base_url) || vaultProv.anthropic_base_url || '';
-    if (anthropicUrl && (presetProtos || hubProtos).includes('messages')) {
-      document.getElementById('p_custom_url_toggle').checked = true;
-      document.getElementById('p_custom_url_section').style.display = 'block';
-      document.getElementById('p_anthropic_url').value = anthropicUrl;
-    } else {
-      document.getElementById('p_custom_url_toggle').checked = false;
-      document.getElementById('p_custom_url_section').style.display = 'none';
-      document.getElementById('p_anthropic_url').value = '';
-    }
+    const aUrl = document.getElementById('p_anthropic_url');
+    if (aUrl) aUrl.value = ((presetProtos || hubProtos).includes('messages') ? anthropicUrl : '');
+    onProtoToggleChange();
 
     const rpmInput = document.getElementById('p_rpm');
     const provRpm = (matchedPreset && (matchedPreset.rpm_per_key || matchedPreset.rpm)) || vaultProv.rpm_per_key || vaultProv.rpm;
@@ -678,9 +672,15 @@ function openProviderModal(sourceModal){
   document.getElementById('p_proto_responses').checked = false;
   const pHint = document.getElementById('p_proto_hint');
   if (pHint) pHint.textContent = '';
-  document.getElementById('p_custom_url_toggle').checked = false;
-  document.getElementById('p_custom_url_section').style.display = 'none';
+  state.providerReadOnly = false;
+  const saveBtn = document.getElementById('p_saveBtn');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存并生效'; }
   document.getElementById('p_anthropic_url').value = '';
+  ['p_proto_chat', 'p_proto_messages', 'p_proto_responses', 'p_url', 'p_rpm'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+  onProtoToggleChange();
   const rpmInput = document.getElementById('p_rpm');
   if(rpmInput) rpmInput.value = '';
   loadPresetsCatalog();
@@ -713,15 +713,18 @@ function editProvider(name){
   document.getElementById('p_proto_messages').checked = protos.includes('messages');
   document.getElementById('p_proto_responses').checked = protos.includes('responses');
 
-  if(p.anthropic_base_url){
-    document.getElementById('p_custom_url_toggle').checked = true;
-    document.getElementById('p_custom_url_section').style.display = 'block';
-    document.getElementById('p_anthropic_url').value = p.anthropic_base_url;
-  } else {
-    document.getElementById('p_custom_url_toggle').checked = false;
-    document.getElementById('p_custom_url_section').style.display = 'none';
-    document.getElementById('p_anthropic_url').value = '';
+  state.providerReadOnly = Boolean(isVaultReadOnly);
+  const saveBtn = document.getElementById('p_saveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = Boolean(isVaultReadOnly);
+    saveBtn.textContent = isVaultReadOnly ? '只读不可改 (请在中枢修改)' : '保存并生效';
   }
+  document.getElementById('p_anthropic_url').value = p.anthropic_base_url || '';
+  ['p_proto_chat', 'p_proto_messages', 'p_proto_responses', 'p_rpm'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = Boolean(isVaultReadOnly);
+  });
+  onProtoToggleChange();
 
   const rpmEditInput = document.getElementById('p_rpm');
   const provRpm = p.rpm_per_key || p.rpm;
@@ -743,6 +746,10 @@ async function saveProvider(){
   const existingProv = (state.config && state.config.providers && state.config.providers[name]) || (typeof findVaultProvider === 'function' ? findVaultProvider(name) : null);
   const isVaultManaged = existingProv && (existingProv.origin === 'vault' || (isHostEdgeOne && existingProv.origin !== 'local'));
   const isVaultReadOnly = !isHostEdgeOne && isVaultManaged;
+  if (isVaultReadOnly) {
+    toast('中枢托管供应商为只读：请在中枢（EdgeOne）侧修改规则与端点', 'err');
+    return;
+  }
   const isFromModelModal = (state.providerModalSource === 'agent' || state.providerModalSource === 'candidate');
 
   const selectedProtos = [];
@@ -751,8 +758,8 @@ async function saveProvider(){
   if(document.getElementById('p_proto_responses').checked) selectedProtos.push('responses');
   if(!selectedProtos.length){ toast('请至少选择一种支持的协议类型', 'err'); return; }
 
-  const customUrlOpen = document.getElementById('p_custom_url_toggle').checked;
-  const anthropicUrl = customUrlOpen ? document.getElementById('p_anthropic_url').value.trim() : '';
+  const messagesEnabled = document.getElementById('p_proto_messages').checked;
+  const anthropicUrl = messagesEnabled ? (document.getElementById('p_anthropic_url').value.trim() || '') : '';
 
   const rpmInput = document.getElementById('p_rpm');
   let rpmVal = 0;
@@ -1072,7 +1079,11 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
   document.getElementById('k_oldLabel').value = ''; 
   document.getElementById('k_label').value = ''; 
   document.getElementById('k_label').disabled = false; 
-  document.getElementById('k_value').value = ''; 
+  const _kv = document.getElementById('k_value');
+  _kv.value = '';
+  _kv.placeholder = 'sk-...';
+  _kv.title = '';
+  state.editingKeyMasked = false;
   document.getElementById('k_skip').checked = false; 
   const diagBox = document.getElementById('k_diag_box');
   if(diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
@@ -1080,7 +1091,10 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
   const hintEl = document.getElementById('k_proto_hint');
   if(hintEl) {
     const protos = getProviderProtocols(prov);
-    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+    const srcBadge = isLocal
+      ? '<span class="badge badge-success" style="font-size:10px;">本地 Key · 可编辑</span>'
+      : '<span class="badge badge-primary" style="font-size:10px;">中枢 Key · 只读</span>';
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><span>所属供应商: <b>${esc(prov)}</b> ${srcBadge}</span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
 
   renderVaultKeyPicker(prov);
@@ -1130,7 +1144,13 @@ function editKey(prov, label){
   document.getElementById('k_oldLabel').value = label; 
   document.getElementById('k_label').value = label; 
   document.getElementById('k_label').disabled = false; 
-  document.getElementById('k_value').value = keyVal; 
+  const maskedVal = typeof keyVal === 'string'
+    && (keyVal.includes('●') || (keyVal.trim().length > 0 && keyVal.trim().split('').every(ch => ch === '*')) || keyVal.startsWith('***'));
+  const kvEl = document.getElementById('k_value');
+  kvEl.value = maskedVal ? '' : keyVal;
+  kvEl.placeholder = maskedVal ? '已设置（留空保留原值；输入新值则替换）' : 'sk-...';
+  kvEl.title = maskedVal ? '本地 Key 值不回显：留空保留原值，输入新值替换' : '';
+  state.editingKeyMasked = maskedVal;
   document.getElementById('k_skip').checked = true; 
 
   const diagBox = document.getElementById('k_diag_box');
@@ -1138,7 +1158,10 @@ function editKey(prov, label){
   const hintEl = document.getElementById('k_proto_hint');
   if(hintEl) {
     const protos = getProviderProtocols(prov);
-    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span>所属供应商: <b>${esc(prov)}</b></span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
+    const srcBadge = isLocal
+      ? '<span class="badge badge-success" style="font-size:10px;">本地 Key · 可编辑</span>'
+      : '<span class="badge badge-primary" style="font-size:10px;">中枢 Key · 只读</span>';
+    hintEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><span>所属供应商: <b>${esc(prov)}</b> ${srcBadge}</span><span>需校验协议: ${renderProtocolBadges(protos)}</span></div>`;
   }
 
   const vSec = document.getElementById('k_vertex_section');
@@ -1175,7 +1198,18 @@ async function saveKey(){
   const diagBox = document.getElementById('k_diag_box');
   if(diagBox) { diagBox.style.display = 'none'; diagBox.innerHTML = ''; }
 
-  if(!label||!val){ toast('Key 别名和密钥值不能为空','err'); return; }
+  const provObj = (state.config && state.config.providers && state.config.providers[prov]) || {};
+  const existingKey = (oldLabel && provObj.keys) ? provObj.keys[oldLabel] : undefined;
+  if(!label){ toast('Key 别名不能为空','err'); return; }
+  if(!val){
+    if(oldLabel && existingKey !== undefined){
+      // 本地 Key 的密钥值不回显：留空 = 保留原值，仅更新别名/元数据
+      const keep = (typeof existingKey === 'object' && existingKey !== null) ? { ...existingKey } : existingKey;
+      commitKey(prov, label, keep);
+      return;
+    }
+    toast('Key 别名和密钥值不能为空','err'); return;
+  }
 
   // If renaming an existing key and new label conflicts with another existing key
   if(label !== oldLabel && state.config.providers && state.config.providers[prov] && state.config.providers[prov].keys && state.config.providers[prov].keys[label] !== undefined){

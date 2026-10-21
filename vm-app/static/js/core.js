@@ -310,6 +310,9 @@ function clearLoginCacheAndReload(){
 // Data & Persistence & Vault
 
 async function loadData(){
+  // v20261021-01: last-call status is server-authored; drop the legacy localStorage cache
+  // that survived upgrades/restarts and showed stale dates in the model list.
+  try { localStorage.removeItem('ocrprox_model_latency_cache'); } catch (_) {}
   try {
     let cr, sr;
     try {
@@ -673,24 +676,6 @@ function copyDbClientKey() {
   copyText(keyVal, '客户端 API Key 已复制到剪贴板');
 }
 
-function copyAllAvailableModels() {
-  const runMode = (state.config?.run_mode || state.config?._run_mode || 'agent').toLowerCase();
-  let models = [];
-  if (runMode === 'agent') {
-    models = Object.keys(state.config?.agent_models || {});
-  } else {
-    const candidates = state.config?.candidates || {};
-    KB_TYPES.forEach(t => {
-      if ((candidates[t] || []).length > 0) models.push(t);
-    });
-  }
-  if (!models.length) {
-    toast('当前暂无可用模型', 'err');
-    return;
-  }
-  copyText(models.join(', '), '已复制全部模型名称');
-}
-
 function manageAllModels() {
   if (typeof switchTab === 'function') {
     if (document.getElementById('panel-models')) {
@@ -839,10 +824,10 @@ function renderDashboard(){
       topStrip.style.display = '';
       topStrip.innerHTML = `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);">
-          <span style="font-weight:600;color:var(--text);">热门模型 Top 3：</span>
+          <span style="font-weight:600;color:var(--text);">热门模型 Top 3</span>
           <span>今天暂无调用</span>
         </div>
-        <span class="badge badge-neutral">按调用量排行</span>
+        
       `;
     } else {
       topStrip.style.display = '';
@@ -861,13 +846,12 @@ function renderDashboard(){
       }).join('');
 
       topStrip.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span style="font-weight:700;font-size:13px;color:var(--text);">热门模型 Top 3</span>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;">
+          <span style="font-weight:600;font-size:12px;color:var(--text-tertiary);">热门模型 Top 3</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
             ${chips}
           </div>
         </div>
-        <span class="text-secondary text-sm">今天共 ${modelEntries.length} 个活跃模型</span>
       `;
     }
   }

@@ -26,7 +26,7 @@ class TestAgentTimeoutAndHeaders(unittest.TestCase):
 
     def test_agent_first_byte_timeout_logic(self):
         # Verify that category == "agent" defaults to 120.0s regardless of model name
-        config = {"upstream_timeout": 12.0, "agent_first_byte_timeout_sec": 120.0}
+        config = {"request_timeout_sec": 12.0, "agent_first_byte_timeout_sec": 120.0}
         category = "agent"
 
         # Explicit cand override
@@ -39,9 +39,9 @@ class TestAgentTimeoutAndHeaders(unittest.TestCase):
         cand_timeout_sec = float(config.get("agent_first_byte_timeout_sec", 120.0))
         self.assertEqual(cand_timeout_sec, 120.0)
 
-        # In KB category, it should take upstream_timeout
+        # In KB category, it should take the per-request timeout
         category_kb = "kb"
-        cand_timeout_sec_kb = float(config.get("upstream_timeout", 15.0))
+        cand_timeout_sec_kb = float(config.get("request_timeout_sec", 15.0))
         self.assertEqual(cand_timeout_sec_kb, 12.0)
 
     def test_budget_scale_agent_bounds(self):

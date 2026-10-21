@@ -41,18 +41,6 @@ function renderKbBindingRow(idx, binding, type, i, status){
   const nk = 'kb:' + type + ':' + binding.provider + ':' + binding.key + (binding.model ? (':' + binding.model) : '');
   let ns = status[nk] || status['kb:' + type + ':' + binding.provider + ':' + binding.key] || status[binding.provider + ':' + binding.key + ':' + type];
 
-  if (!ns && typeof window !== 'undefined') {
-    if (!window.modelLatencyCache) {
-      try {
-        const saved = localStorage.getItem('ocrprox_model_latency_cache');
-        if (saved) window.modelLatencyCache = JSON.parse(saved);
-      } catch (_) {}
-    }
-    if (window.modelLatencyCache) {
-      ns = window.modelLatencyCache[nk] ||
-           window.modelLatencyCache[`prov:${binding.provider}:${binding.key}`];
-    }
-  }
   let badge = '<span class="badge badge-neutral">未调用</span>', time = '—';
   if (ns) { 
     if (ns.is_quota || ns.status === 'quota') {
@@ -85,7 +73,7 @@ function renderKbBindingRow(idx, binding, type, i, status){
       onchange="reorderCandidate('${type}', ${i}, this.value)" title="修改数字直接调整顺序">`;
 
   const actions = `
-    <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-${esc(probeKeyId)}" onclick="testCandidate('${type}',${i})" title="测试此 Key 连通性" ${isProbing ? 'disabled' : ''}>
+    <button class="btn btn-icon btn-sm btn-secondary" id="probeBtn-${esc(probeKeyId)}" onclick="testCandidate('${type}',${i})" title="发送一次真实小请求（max_tokens=16）测试" ${isProbing ? 'disabled' : ''}>
       ${isProbing ? '<span class="spinner"></span>' : '测'}
     </button>
     <button class="btn btn-icon btn-sm btn-secondary-danger" onclick="deleteCandidate('${type}',${i})" title="删除">×</button>`;
@@ -395,27 +383,13 @@ async function testCandidate(type, i){
     clearTimeout(timer);
     const d = await r.json();
     const latency = Date.now() - start;
-    if(typeof window !== 'undefined'){
-      window.modelLatencyCache = window.modelLatencyCache || {};
-      const cacheEntry = {
-        ok: !!d.success,
-        latency_ms: latency,
-        status: d.success ? 200 : (d.status || 500),
-        time: Date.now()
-      };
-      window.modelLatencyCache[probeKeyId] = cacheEntry;
-      window.modelLatencyCache[`prov:${c.provider}:${c.key}`] = cacheEntry;
-      try {
-        localStorage.setItem('ocrprox_model_latency_cache', JSON.stringify(window.modelLatencyCache));
-      } catch (_) {}
-    }
     if(d.success){
-      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活成功 (${latency}ms)`, 'ok');
+      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 测试成功 · 真实小请求 (${latency}ms)`, 'ok');
     } else {
-      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活失败: ${d.error || d.status}`, 'err');
+      toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 测试失败: ${d.error || d.status}`, 'err');
     }
   } catch(e) {
-    toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 探活异常: ${e.message}`, 'err');
+    toast(`[${c.provider}/${c.key}${c.model ? `/${c.model}` : ''}] 测试超时或异常: ${e.message}`, 'err');
   } finally {
     state.probingKeys.delete(probeKeyId);
     await loadData();

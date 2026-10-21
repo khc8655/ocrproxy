@@ -234,8 +234,8 @@
     {
       "key": "max_attempts_per_provider",
       "group": "fault",
-      "label": "同一供应商最大重试 Key 数",
-      "hint": "同一家厂商遭遇连续失败时，最多尝试该厂商名下几个不同的 Key",
+      "label": "单个供应商最多尝试 Key 数",
+      "hint": "同一次请求内，单个供应商最多换几个不同的 Key（换 Key 次数，不是重试次数）",
       "type": "int",
       "default": 3,
       "min": 1,

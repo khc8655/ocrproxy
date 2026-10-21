@@ -54,6 +54,30 @@ export const DEFAULT_SETTINGS = Object.freeze({
  * Parse + validate a config payload.  Used by both the KV path and the
  * env-var path so the error messages are consistent.
  */
+/**
+ * Normalize legacy plain-string provider keys into the canonical object shape.
+ * Mirrors vm-app/app/config_store._migrate_string_secrets().
+ *   {"KeyA": "sk-xxx"} -> {"KeyA": {"key": "sk-xxx", "origin": "vault", "is_local": false}}
+ * Local providers (origin === 'local') get local keys; everything else is hub-owned.
+ */
+export function normalizeProviderKeys(config) {
+  let changed = false;
+  const providers = config && config.providers;
+  if (!providers || typeof providers !== 'object') return false;
+  for (const prov of Object.values(providers)) {
+    if (!prov || typeof prov !== 'object' || !prov.keys || typeof prov.keys !== 'object') continue;
+    const provOrigin = prov.origin === 'local' ? 'local' : 'vault';
+    for (const [label, val] of Object.entries(prov.keys)) {
+      if (typeof val === 'string' && val.trim()) {
+        const origin = provOrigin === 'local' ? 'local' : 'vault';
+        prov.keys[label] = { key: val, origin, is_local: origin === 'local' };
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
 function parseAndValidateConfig(raw, source) {
   let parsed;
   try {
@@ -87,6 +111,9 @@ function parseAndValidateConfig(raw, source) {
       parsed.settings[k] = parsed[k];
     }
   }
+
+  // Legacy plain-string keys -> canonical {key, origin} objects (single shape everywhere).
+  normalizeProviderKeys(parsed);
 
   // Backward compatibility migration for schedule_total_budget
   const legacyStb = parsed.settings.schedule_total_budget ?? parsed.schedule_total_budget;

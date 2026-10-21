@@ -1200,7 +1200,7 @@ async def _chat_completions_impl(request: Request):
     # Lightweight runtime config without deepcopying the entire global config dict
     req_config = {
         **config,
-        "upstream_timeout": chat_timeout,
+        "request_timeout_sec": chat_timeout,
         "candidates": {"chat": candidates_list},
     }
     if req_category == "kb":
@@ -1478,7 +1478,7 @@ async def _anthropic_messages_impl(request: Request):
 
     req_config = {
         **config,
-        "upstream_timeout": chat_timeout,
+        "request_timeout_sec": chat_timeout,
         "candidates": {"messages": candidates_list},
     }
 
@@ -1626,7 +1626,7 @@ async def embeddings(request: Request):
 
     req_config = {
         **config,
-        "upstream_timeout": emb_timeout,
+        "request_timeout_sec": emb_timeout,
         "candidates": {"embedding": candidates_list},
     }
     req_config["request_total_budget_sec"] = _kb_capped_budget(config, emb_timeout, 2.0, extra=5.0)
@@ -1717,7 +1717,7 @@ async def rerank(request: Request):
 
     req_config = {
         **config,
-        "upstream_timeout": rerank_timeout,
+        "request_timeout_sec": rerank_timeout,
         "candidates": {"reranker": candidates_list},
     }
     req_config["request_total_budget_sec"] = _kb_capped_budget(config, rerank_timeout, 2.0, extra=5.0)
@@ -1978,7 +1978,7 @@ async def _ocr_handle(request: Request, config: dict):
 
     req_config = {
         **config,
-        "upstream_timeout": ocr_timeout,
+        "request_timeout_sec": ocr_timeout,
         "request_total_budget_sec": _kb_capped_budget(config, ocr_timeout, 1.5),
     }
 
