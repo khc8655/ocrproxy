@@ -1,17 +1,15 @@
 {
-  "version": "v20261020-08",
+  "version": "v20261020-09",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "合并 PR #20 修复去重引入的运行时回归，并固化三运行时差异判定准则 (v20261020-08)",
+  "title": "三运行时默认值单一真理源（runtime-profiles）+ 独立冷却策略字段 (v20261020-09)",
   "changelog": [
-    "合并 PR #20（fix/dedupe-regressions）：修复 v20261020-07 把 settings.schema.json 的「展示/迁移别名」直接接入运行时 get_setting() 造成的 3 类回归；",
-    "R1 Agent 首包超时：agent_first_byte_timeout_sec 不再从 KB 的 upstream_timeout_chat / upstream_timeout_sec 别名兜底（新装模板会写 upstream_timeout_chat=45，KB 保存会写 15，曾把 Agent 首包从 120s 降到 45s/15s 并误判超时切 Key）；",
-    "R2 403 冷却：cooldown_403_sec 不再复用 cooldown_quota_sec 别名（只配欠费 1800s 时曾让 403 也冷却 1800s）；",
-    "R3 请求级超时优先：scheduler 先读本次请求设置的 upstream_timeout（OCR 60s），再回退 schema（避免全局 upstream_timeout_sec=15 覆盖 OCR 60s）；",
-    "R4 中枢字符串 Key：EdgeOne isVaultExportableKey() 对非空字符串 Key 放行（配置文档写法 \"KeyA\": \"sk-xxx\"），manifest 与 fetch 恢复一致导出，仍隐藏 is_local/origin=local；",
-    "设置页：Agent 模式超时输入框不再把 KB 的 upstream_timeout_sec 当作默认显示值；",
-    "测试：新增 tests/test_settings_resolution.py（T1，覆盖 R1~R4，R3 真实慢上游跑 schedule()，R4 真实跑 EdgeOne 函数）；PR 只把它加入 logic 层，本次补入发版全套 all 层，确保 test:full/发版必跑；",
-    "文档：SYSTEM_DESIGN_SPEC §3.4.x 新增「三运行时差异矩阵（EdgeOne / VM-Agent / VM-KB）」与判定准则——流程相同仅数值不同→默认参数/profile；能力有无、控制流、数据形状不同→代码分支/能力位；并更新遗留项（runtime-profiles、quota/404/410 独立 schema 字段、request_timeout_sec 重命名、字符串 Key 归一化、relay 骨架抽取、/api/config 契约化）；",
-    "验证：四层全量测试全绿（含新增 settings_resolution），T0 G1~G6 全绿。"
+    "新增 shared/config/runtime-profiles.json：edgeone / vm-agent / vm-kb 三套默认值（路由策略、超时、冷却、并发、重试、预算、peek/precommit 窗口），只承载「流程相同、数值不同」的参数，能力/控制流差异仍由代码分支表达；",
+    "VM 侧新增 vm-app/app/runtime_profile.py：scheduler 的 KB 并发默认（16）、全局并发闸门（30）、410 冷却（86400）、KB 熔断升级（1800）以及失败评估默认值改由 profile 解析，proxy 的 OCR 默认并发（12）/排队超时（30）同样取自 profile；显式配置仍通过 get_setting() 优先；",
+    "EdgeOne 侧由 build-presets.mjs 生成 lib/generated/runtime-profile.js（DEFAULT_SETTINGS / COOLDOWN_DURATIONS / 熔断阈值），lib/config.js 与 lib/cooldowns.js 删除手写默认值与冷却表；顺带修正 circuit_cooldown_sec 默认值内部漂移（config.js 60 vs cooldowns.js/VM 300，现统一 300）；",
+    "settings.schema.json 新增独立字段：cooldown_quota_sec(1800)、cooldown_404_sec(600)、cooldown_410_sec(86400)、circuit_escalation_sec(1800, KB)、kb_global_max_concurrency(30, KB)，hosts=vm；不再用 cooldown_403_sec 别名或代码常量表达不同策略；设置页按 modes/hosts 自动渲染（VM 可见、EdgeOne 不可见）；",
+    "新增 tests/test_runtime_profiles.py（T1）：校验 profile 与 schema 字段一一对应、VM 常量来自 profile、Edge 生成物与 JSON 一致、Edge 源码不得复活手写默认值；接入 logic 与发版全套 all 层（0.35s）；",
+    "文档：SYSTEM_DESIGN_SPEC §3.4.x 更新「已落地」与剩余未收敛项（请求级超时键重命名、relay 骨架抽取、字符串 Key 归一化、冷却触发条件共享策略表、/api/config 契约化）；",
+    "验证：四层全量测试 18.4s 全绿（含 runtime_profiles），T0 G1~G6 全绿。"
   ]
 }

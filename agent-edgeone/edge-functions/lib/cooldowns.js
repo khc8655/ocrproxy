@@ -36,20 +36,12 @@ const KV_TTL_SEC = 1200;
 const COOLDOWN_PREFIX = 'cd:';
 const FAIL_COUNT_PREFIX = 'fail:';
 
-// Cooldown durations in seconds, matching the VM (vm-app/app/scheduler.py).
-// Keep these in sync with the VM if either side is tuned.
-export const COOLDOWN_DURATIONS = Object.freeze({
-  TPM_429: 60,       // VM: cooldown_429_sec (default)
-  QUOTA_403: 600,    // VM: cooldown_403_sec (default)
-  SERVER_5XX: 30,    // VM: cooldown_5xx_sec (default)
-  READ_TIMEOUT: 2,   // VM: read_timeout short
-  EMPTY_STREAM: 5,   // 200 + zero bytes — provider glitch
-  CIRCUIT_BREAKER: 300, // VM: circuit_cooldown_sec — when fail_count >= threshold
-  KEY_DRIFT: 30,     // 401/404 — config drift
-  MODEL_GONE_410: 86400, // VM: cooldown_410_sec — model retired upstream (HTTP 410)
-});
+// Cooldown durations/threshold come from shared/config/runtime-profiles.json
+// (profile: edgeone) via the build-generated module — never hand-copied here.
+import { COOLDOWN_DURATIONS as PROFILE_COOLDOWN_DURATIONS, CIRCUIT_BREAKER_THRESHOLD as PROFILE_CIRCUIT_THRESHOLD } from './generated/runtime-profile.js';
 
-export const CIRCUIT_BREAKER_THRESHOLD = 3; // VM: circuit_break_threshold
+export const COOLDOWN_DURATIONS = PROFILE_COOLDOWN_DURATIONS;
+export const CIRCUIT_BREAKER_THRESHOLD = PROFILE_CIRCUIT_THRESHOLD;
 
 /**
  * Safely encode any string into [a-zA-Z0-9_] for EdgeOne KV keys.

@@ -4,6 +4,19 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261020-09] - 2026-10-21
+
+### 三运行时默认值单一真理源 + 独立冷却策略字段
+- **`shared/config/runtime-profiles.json`（新增）**：`edgeone` / `vm-agent` / `vm-kb` 三套默认值——路由策略、首包/快速/OCR 超时、429/5xx/403/欠费/404/410 冷却、熔断阈值与升级、并发上限、重试/预算、peek/precommit 窗口。只承载「流程相同、数值不同」的参数；能力有无、控制流、数据形状差异仍由代码分支/能力位表达（判定准则见 `SYSTEM_DESIGN_SPEC` §3.4.x）。
+- **VM 侧**：新增 `vm-app/app/runtime_profile.py`。`scheduler` 的 KB 每 Key 并发默认（16）、KB 全局并发闸门（30）、410 冷却（86400）、KB 熔断升级（1800）、失败评估默认值，以及 `proxy_routes` 的 OCR 默认并发（12）/排队超时（30）全部改由 profile 解析；显式配置仍经 `get_setting()` 优先。
+- **EdgeOne 侧**：`build-presets.mjs` 构建期生成 `lib/generated/runtime-profile.js`（`DEFAULT_SETTINGS` / `COOLDOWN_DURATIONS` / 熔断阈值），`lib/config.js`、`lib/cooldowns.js` 删除手写默认值与冷却表；顺带修正 `circuit_cooldown_sec` 默认值内部漂移（`config.js` 60 vs `cooldowns.js`/VM 300，现统一 **300**）。
+- **schema 独立字段**：新增 `cooldown_quota_sec`(1800)、`cooldown_404_sec`(600)、`cooldown_410_sec`(86400)、`circuit_escalation_sec`(1800, KB-only)、`kb_global_max_concurrency`(30, KB-only)，`hosts=vm`；不再借 `cooldown_403_sec` 别名或代码常量表达不同策略。设置页按 `modes`/`hosts` 自动渲染（VM 可见、EdgeOne 不可见）。
+- **测试**：新增 `tests/test_runtime_profiles.py`（T1，0.35s）：校验 profile ↔ schema 字段一一对应、VM 常量确来自 profile、Edge 生成物与 JSON 完全一致、Edge 源码不得复活手写默认值；接入 `logic` 与发版全套 `all` 层。
+- **文档**：`SYSTEM_DESIGN_SPEC` §3.4.x 增加「已落地」清单，剩余未收敛项收敛为：请求级超时键重命名、`v1` relay 骨架抽取、字符串 Key 加载归一化、冷却**触发条件**共享策略表、`/api/config` 契约化。
+- **验证**：四层全量测试 18.4s 全绿（含 `runtime_profiles` / `settings_resolution`），T0 G1~G6 全绿。
+
+---
+
 ## [v20261020-08] - 2026-10-21
 
 ### 合并 PR #20：修复去重引入的运行时回归（超时 / 冷却 / 中枢字符串 Key）

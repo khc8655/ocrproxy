@@ -429,6 +429,89 @@
       "hosts": [
         "vm"
       ]
+    },
+    {
+      "key": "cooldown_quota_sec",
+      "group": "fault",
+      "label": "欠费/额度耗尽冷却 (秒)",
+      "hint": "上游返回余额不足/额度耗尽时该 Key 的冷却时长（与 403 模型级冷却相互独立）",
+      "type": "int",
+      "default": 1800,
+      "min": 10,
+      "max": 3600,
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "cooldown_404_sec",
+      "group": "fault",
+      "label": "404 冷却 (秒)",
+      "hint": "供应商 404 时的候选 Key 冷却时长",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 3600,
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "cooldown_410_sec",
+      "group": "fault",
+      "label": "410 模型下线冷却 (秒)",
+      "hint": "上游返回 410（模型已下线）时该模型在所有 Key 上的冷却时长",
+      "type": "int",
+      "default": 86400,
+      "min": 60,
+      "max": 259200,
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "circuit_escalation_sec",
+      "group": "fault",
+      "label": "KB 熔断升级冷却 (秒)",
+      "hint": "KB 模式下连续失败触发熔断时的最小冷却时长（实际取 max(circuit_cooldown_sec, 本值)）",
+      "type": "int",
+      "default": 1800,
+      "min": 60,
+      "max": 86400,
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "kb_global_max_concurrency",
+      "group": "concurrency",
+      "label": "KB 全局最大并发",
+      "hint": "KB 模式全节点/全 Key 的总并发上限",
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 500,
+      "modes": [
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
     }
   ]
 }

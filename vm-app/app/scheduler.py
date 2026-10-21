@@ -23,6 +23,7 @@ from .logger_utils import clean_upstream_error_text
 
 logger = logging.getLogger("scheduler")
 from .settings_schema import get_setting
+from . import runtime_profile
 
 # ── Global concurrency limiter ───────────────────────────────────────
 # Caps the total number of in-flight upstream requests across ALL keys and
@@ -43,9 +44,11 @@ from .settings_schema import get_setting
 # turned the 31st concurrent Cursor/Cline stream into an instant 503 (with no
 # failover).  Agent traffic stays bounded by the per-key semaphore.
 # Override with config key `kb_global_max_concurrency`.
-_GLOBAL_MAX_CONCURRENCY = 30
+_KB_PROFILE = runtime_profile.settings({"run_mode": "kb"})
+_AGENT_PROFILE = runtime_profile.settings({"run_mode": "agent"})
+_GLOBAL_MAX_CONCURRENCY = int(_KB_PROFILE.get("kb_global_max_concurrency", 30))
 _GLOBAL_QUEUE_TIMEOUT_SEC = 2.0
-_KB_DEFAULT_KEY_CONCURRENCY = 16
+_KB_DEFAULT_KEY_CONCURRENCY = int(_KB_PROFILE.get("kb_max_concurrency_per_key", 16))
 _UNLIMITED_KEY_CONCURRENCY = 100000
 _global_semaphore: Optional[asyncio.Semaphore] = None
 _global_semaphore_limit: int = _GLOBAL_MAX_CONCURRENCY
@@ -207,7 +210,7 @@ _quota_exhausted_cands: Set[str] = set()
 # not resurrect a retired model; it is only dropped when the provider/model
 # leaves the config, or when the TTL expires.
 _gone_models: Dict[str, float] = {}
-DEFAULT_COOLDOWN_410_SEC = 86400.0
+DEFAULT_COOLDOWN_410_SEC = float(_AGENT_PROFILE.get("cooldown_410_sec", 86400.0))
 _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
 
@@ -508,13 +511,14 @@ def evaluate_candidate_failure(
     from KB mode (strict batch protection, circuit breakers, rate limit cool down).
     """
     is_agent = (category == "agent")
-    # Quota/arrears is a distinct policy (not the 403 alias), so it stays explicit.
-    cooldown_quota_sec = config_params.get("cooldown_quota_sec", 1800.0)
-    cooldown_tpm_sec = get_setting(config_params, "cooldown_429_sec", 15.0)
-    cooldown_403_sec = get_setting(config_params, "cooldown_403_sec", 600.0)
-    cooldown_5xx_sec = get_setting(config_params, "cooldown_5xx_sec", 30.0)
-    circuit_threshold = get_setting(config_params, "circuit_break_threshold", 3)
-    circuit_cooldown_sec = get_setting(config_params, "circuit_cooldown_sec", 300.0)
+    # Defaults come from the active runtime profile (single table); explicit values win.
+    _prof = runtime_profile.settings(config_params)
+    cooldown_quota_sec = get_setting(config_params, "cooldown_quota_sec", _prof.get("cooldown_quota_sec", 1800.0))
+    cooldown_tpm_sec = get_setting(config_params, "cooldown_429_sec", _prof.get("cooldown_429_sec", 60.0))
+    cooldown_403_sec = get_setting(config_params, "cooldown_403_sec", _prof.get("cooldown_403_sec", 600.0))
+    cooldown_5xx_sec = get_setting(config_params, "cooldown_5xx_sec", _prof.get("cooldown_5xx_sec", 30.0))
+    circuit_threshold = get_setting(config_params, "circuit_break_threshold", _prof.get("circuit_break_threshold", 3))
+    circuit_cooldown_sec = get_setting(config_params, "circuit_cooldown_sec", _prof.get("circuit_cooldown_sec", 300.0))
 
     # 1. Hard Quota / Arrears: applies to both KB and Agent (account has no money/credits)
     if is_quota:
@@ -616,7 +620,7 @@ def evaluate_candidate_failure(
         )
     elif status_code >= 500:
         is_circuit = consecutive_5xx_count >= circuit_threshold
-        cd = max(circuit_cooldown_sec, 1800.0) if is_circuit else cooldown_5xx_sec
+        cd = max(circuit_cooldown_sec, float(_prof.get("circuit_escalation_sec", 1800.0))) if is_circuit else cooldown_5xx_sec
         mark_down = status_code in (502, 503, 504)
         return FailureEvaluation(
             cooldown_sec=cd,
@@ -1333,6 +1337,10 @@ async def schedule(
 
     providers = config.get("providers", {})
 
+    # Profile defaults (shared/config/runtime-profiles.json) resolved once per request;
+    # explicit config values always win via get_setting().
+    _sched_prof = runtime_profile.settings(config)
+
     # Load settings from config with safe fallback and clamping
     try:
         # Per-request timeout (set by each endpoint in proxy_routes: OCR, KB chat,
@@ -1398,7 +1406,7 @@ async def schedule(
             concurrency_limit = _KB_DEFAULT_KEY_CONCURRENCY
 
     try:
-        kb_global_limit = max(1, int(config.get("kb_global_max_concurrency", _GLOBAL_MAX_CONCURRENCY)))
+        kb_global_limit = max(1, int(get_setting(config, "kb_global_max_concurrency", _sched_prof.get("kb_global_max_concurrency", _GLOBAL_MAX_CONCURRENCY))))
     except (ValueError, TypeError):
         kb_global_limit = _GLOBAL_MAX_CONCURRENCY
 
@@ -1412,25 +1420,25 @@ async def schedule(
         stream_idle_timeout_sec = 300.0
 
     try:
-        cooldown_404_sec = max(0.0, float(config.get("cooldown_404_sec", 600.0)))
+        cooldown_404_sec = max(0.0, float(get_setting(config, "cooldown_404_sec", _sched_prof.get("cooldown_404_sec", 600.0))))
     except (ValueError, TypeError):
         cooldown_404_sec = 600.0
 
     # 410 Gone (model retired upstream) - default 24 h; 0 disables parking.
     try:
-        cooldown_410_sec = max(0.0, float(config.get("cooldown_410_sec", DEFAULT_COOLDOWN_410_SEC)))
+        cooldown_410_sec = max(0.0, float(get_setting(config, "cooldown_410_sec", _sched_prof.get("cooldown_410_sec", DEFAULT_COOLDOWN_410_SEC))))
     except (ValueError, TypeError):
         cooldown_410_sec = DEFAULT_COOLDOWN_410_SEC
 
     # 429 TPM Rate Limit Cooldown (default 60s)
     try:
-        cooldown_tpm_sec = max(1.0, float(get_setting(config, "cooldown_429_sec", 60.0)))
+        cooldown_tpm_sec = max(1.0, float(get_setting(config, "cooldown_429_sec", _sched_prof.get("cooldown_429_sec", 60.0))))
     except (ValueError, TypeError):
         cooldown_tpm_sec = 60.0
 
     # 429/403 Quota Exhaustion Cooldown (default 1800s / 30m)
     try:
-        cooldown_quota_sec = max(1.0, float(config.get("cooldown_quota_sec", 1800.0)))
+        cooldown_quota_sec = max(1.0, float(get_setting(config, "cooldown_quota_sec", _sched_prof.get("cooldown_quota_sec", 1800.0))))
     except (ValueError, TypeError):
         cooldown_quota_sec = 1800.0
 

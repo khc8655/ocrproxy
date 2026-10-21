@@ -326,6 +326,7 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | 中枢凭据解析（url/edgeone_url、token 掩码） | `config_store.vault_url_and_token()` | 各 endpoint 重复读 `edgeone_vault.url/edgeone_url` 与掩码判断 |
 | 适配规则（presets）加载 | `vm-app/app/presets.py: get_presets_dir() / load_preset() / load_catalog() / clear_cache()` | admin_routes 与 proxy_routes 各写目录解析、文件名归一化与缓存 |
 | 参数默认值 / 别名 / 边界 | `shared/config/settings.schema.json` + `settings_schema.get_setting()`；config merge 的键清单由 `all_setting_keys()` 生成 | 代码里手写 `config.get(canonical) or config.get(alias) or default` 长链；手维护 merge 键名单 |
+| 三运行时默认值（EdgeOne / VM-Agent / VM-KB） | `shared/config/runtime-profiles.json`：VM 侧 `runtime_profile.settings()` 解析；EdgeOne 侧构建期生成 `lib/generated/runtime-profile.js`（`DEFAULT_SETTINGS` / `COOLDOWN_DURATIONS` / 阈值全部来自它） | 在 `scheduler.py`、`lib/config.js`、`lib/cooldowns.js` 里再手写一份数字/常量表 |
 | EdgeOne 中枢投影（manifest/fetch） | `lib/config.js: toVaultProviderView() / isVaultExportableKey()`（manifest=fetch 的同一投影，local 供应商与 local Key 统一过滤） | manifest 与 fetch 各写一份 provider 投影、过滤条件不一致 |
 | 预设注册表（shared/presets → JS） | `agent-edgeone/scripts/build-presets.mjs`（确定性输出：版本/日期取自 version.json，单写一次后镜像） | 手工 per-provider JSON 副本；用 `new Date()` 让每次构建产生脏 diff |
 | EdgeOne 根镜像（`edge-functions/`） | `build-admin.mjs: syncTree()`（带删除同步）；唯一的构建管线 `npm run build:assets` → `build:admin`；agent-edgeone 脚本委托根目录 | 用 `cp -R` 追加式复制、另写第二套构建步骤、手写 `agent-edgeone/admin.js` |
@@ -353,13 +354,16 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 
 **教训（v20261020-07 → PR #20）**：`settings.schema.json` 的 `aliases` 原本服务于"旧配置迁移/设置表单显示"，被直接接入运行时 `get_setting()` 后，把 KB 超时误当成 Agent 首包超时、把欠费冷却误当成 403 冷却。今后 schema 需区分 `aliases`（展示/迁移）与运行时解析；跨模式差异应落到**显式 profile**，而不是复用另一个策略的别名。
 
+**已落地（v20261020-09）**：
+- `shared/config/runtime-profiles.json` 成为三运行时默认值唯一真理源；VM `runtime_profile.py` 解析（`scheduler._KB_DEFAULT_KEY_CONCURRENCY/_GLOBAL_MAX_CONCURRENCY/DEFAULT_COOLDOWN_410_SEC`、KB 熔断升级、OCR 默认值均取自 profile），EdgeOne 由 `build-presets.mjs` 生成 `lib/generated/runtime-profile.js`，删除 `lib/config.js` 与 `lib/cooldowns.js` 的手写默认值/冷却表；`tests/test_runtime_profiles.py` 校验两端一致 + 生成物不漂移。
+- `cooldown_quota_sec` / `cooldown_404_sec` / `cooldown_410_sec` / `circuit_escalation_sec` / `kb_global_max_concurrency` 成为独立 schema 字段（hosts: vm），不再借 `cooldown_403_sec` / 代码常量表达；`scheduler` 统一经 `get_setting()` 读取。
+
 **已知未收敛项（需单独评审后实施，不阻塞当前版本）**：
-1. 引入 `shared/config/runtime-profiles.json`（edgeone / vm-agent / vm-kb 三套默认值），VM 侧以 profile 解析默认值，EdgeOne 侧构建期生成 `lib/generated/runtime-profile.js`，删除 `lib/config.js` 的 `DEFAULT_SETTINGS` 与 `cooldowns.js` 常量副本；
-2. `cooldown_quota_sec` / `cooldown_404_sec` / `cooldown_410_sec` 作为独立 schema 字段（hosts: vm）而非别名，`scheduler` 统一经 schema 读取；
-3. 把每请求内部键 `upstream_timeout` 重命名为 `request_timeout_sec`（避免与持久化的 `upstream_timeout_sec` 混淆），`schedule()` 也可改为显式参数；
-4. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
-5. 旧字符串 Key 在加载时统一归一化为 `{key, origin}`（两端各一次迁移），投影谓词即可去掉字符串特例；
-6. `/api/config` GET/PUT 的掩码与资产保留语义写入 `shared/contracts/admin-ui-backend.json` 并纳入契约场景。
+1. 把每请求内部键 `upstream_timeout` 重命名为 `request_timeout_sec`（避免与持久化的 `upstream_timeout_sec` 混淆），`schedule()` 也可改为显式参数；
+2. `v1/chat/completions.js` 与 `v1/messages.js` 的 relay 重试/SSE 管线仍有约 1000 行重复（协议差异合理，骨架需抽 `lib/relay.js`）；
+3. 旧字符串 Key 在加载时统一归一化为 `{key, origin}`（两端各一次迁移），投影谓词即可去掉字符串特例；
+4. EdgeOne ↔ VM 的失败/冷却**触发条件**（Agent 是否冻结、KB 熔断）仍各自实现，需共享策略表后再统一（时长已收敛到 profile）；
+5. `/api/config` GET/PUT 的掩码与资产保留语义写入 `shared/contracts/admin-ui-backend.json` 并纳入契约场景。
 
 ### 3.5 供应商预设规范、下拉格式与列表版本徽章真理源
 

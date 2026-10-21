@@ -41,21 +41,14 @@ export const KV_BINDING_CANDIDATES = [
   'agentKV', 'MY_KV',
 ];
 
-export const DEFAULT_SETTINGS = {
-  agent_routing_strategy: 'sticky_failover',
-  request_total_budget_sec: 300, // 300s budget for deep reasoning models (e.g. DeepSeek-R1 / Claude 3.7)
-  upstream_timeout_sec: 120,    // 120s per attempt default, supports up to 300s with SSE keepalive
-  max_retries: 3,               // max 3 total attempts per request
-  schedule_total_budget: 3,     // deprecated alias for max_retries
-  max_attempts_per_provider: 3, // max 3 attempts per provider to allow trying 3 keys of same provider
-  fast_failover_provider_down: true, // skip provider on 502/504/timeout if other providers exist
-  cooldown_429_sec: 60,
-  cooldown_5xx_sec: 30,
-  cooldown_403_sec: 600,
-  circuit_break_threshold: 3,
-  circuit_cooldown_sec: 60,
-  edge_peek_window_sec: 20,     // max client-visible silence before first byte (EdgeOne<->client idle ~25s)
-};
+import { DEFAULT_SETTINGS as PROFILE_DEFAULT_SETTINGS } from './generated/runtime-profile.js';
+
+// Defaults come from shared/config/runtime-profiles.json (single table). `schedule_total_budget`
+// is a deprecated alias kept only for legacy migration below.
+export const DEFAULT_SETTINGS = Object.freeze({
+  ...PROFILE_DEFAULT_SETTINGS,
+  schedule_total_budget: 3,
+});
 
 /**
  * Parse + validate a config payload.  Used by both the KV path and the

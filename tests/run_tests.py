@@ -65,6 +65,11 @@ CHECKS = {
         "desc": "VM Agent Dashboard Summary (tokens / TTFT / failures)",
         "cmd": [PYTHON_EXE, "tests/test_agent_metrics.py"],
     },
+    "runtime_profiles": {
+        "tier": "T1",
+        "desc": "Three-runtime default profiles (EdgeOne / VM-Agent / VM-KB) single source",
+        "cmd": [PYTHON_EXE, "tests/test_runtime_profiles.py"],
+    },
     "settings_resolution": {
         "tier": "T1",
         "desc": "Runtime settings resolution (first-byte/OCR timeout, 403 cooldown, hub string keys)",
@@ -122,14 +127,14 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "settings_resolution", "api_layer", "static_sync", "admin_static"],
+    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "settings_resolution", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
     "contract": ["contract_ui", "key_capsules", "vault_ui"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "settings_resolution", "api_layer", "static_sync", "admin_static",
+    "all": ["units", "security", "agent_metrics", "runtime_profiles", "settings_resolution", "api_layer", "static_sync", "admin_static",
             "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 

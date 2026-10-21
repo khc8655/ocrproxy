@@ -47,6 +47,7 @@ from . import agent_metrics
 
 from .config_store import get_config, clear_cache, get_run_mode
 from .settings_schema import get_setting
+from . import runtime_profile
 from .presets import load_preset as _get_preset
 from .scheduler import (
     schedule,
@@ -1827,11 +1828,12 @@ _ocr_semaphore_limit: int = 0
 
 def _ocr_limits(config: dict):
     try:
-        limit = max(1, int(config.get("ocr_max_inflight", _OCR_DEFAULT_MAX_INFLIGHT)))
+        _kb_prof = runtime_profile.settings({"run_mode": "kb"})
+        limit = max(1, int(get_setting(config, "ocr_max_inflight", _kb_prof.get("ocr_max_inflight", _OCR_DEFAULT_MAX_INFLIGHT))))
     except (ValueError, TypeError):
         limit = _OCR_DEFAULT_MAX_INFLIGHT
     try:
-        wait = max(0.0, float(config.get("ocr_queue_timeout_sec", _OCR_DEFAULT_QUEUE_TIMEOUT_SEC)))
+        wait = max(0.0, float(get_setting(config, "ocr_queue_timeout_sec", _kb_prof.get("ocr_queue_timeout_sec", _OCR_DEFAULT_QUEUE_TIMEOUT_SEC))))
     except (ValueError, TypeError):
         wait = _OCR_DEFAULT_QUEUE_TIMEOUT_SEC
     return limit, wait
