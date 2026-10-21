@@ -1,17 +1,13 @@
 {
-  "version": "v20261021-01",
+  "version": "v20261021-02",
   "release_date": "2026-10-21",
   "commit": "HEAD",
-  "title": "去重收尾 + 管理后台体验修复批次（本地 Key 编辑/协议合并/操作列底色/最近调用口径等）(v20261021-01)",
+  "title": "批次发布：协议端点两行式、本地 Key 可见可编辑、历史供应商 Key 来源判定修复 (v20261021-02)",
   "changelog": [
-    "去重收尾：请求级内部键 upstream_timeout → request_timeout_sec（与持久化 upstream_timeout_sec 彻底区分）；旧字符串 Key 在加载时归一化为 {key, origin, is_local}（VM config_store + EdgeOne normalizeProviderKeys），两端投影/编辑不再有字符串特例；",
-    "本地 Key 编辑：密钥值不再回显（配置接口本就掩码），留空=保留原值、输入新值=替换；Key 弹窗内标注「本地 Key · 可编辑 / 中枢 Key · 只读」；",
-    "模型列表：修复操作列（sticky 最后一列）底色断层，行背景/悬停色现在覆盖整行；「测」明确为发送一次真实小请求（chat max_tokens=16），按钮 tooltip/Toast 同步改文案；「最近调用」改为服务端统计唯一来源，删除浏览器 localStorage 陈旧缓存（升级/重启后不再显示旧日期）；",
-    "设置：单厂商重试 Key 上限文案简化为「单个供应商最多尝试 Key 数」（换 Key 次数，非重试次数）；设置页底部「保存设置并生效」统一为小尺寸按钮；",
-    "供应商：卡片徽章只显示「规则 v{版本}」，去掉无意义的同步日期；新增/编辑弹窗把协议与端点合并为行内开关+地址（OpenAI Messages 各自地址、Responses 复用 OpenAI 地址）；中枢托管只读供应商的全部输入、协议开关、RPM 与保存按钮均禁用；",
-    "模型弹窗：移除与胶囊选择重复的「当前已选绑定」列表；",
-    "首页：热门模型 Top 3 与统计卡片同宽同高，移除「今天共 N 个活跃模型」；移除「复制全部模型名」按钮；",
-    "版本与流程：版本号按日期规范使用 v20261021-01（今天 21 日），遵循批次发版节奏（本批集中修复后一次性发布）；",
-    "验证：四层全量测试（含 e2e 76 项、契约 S1~S7/U1~U4、vault_ui、overflow、runtime_profiles/settings_resolution）全绿；T0 G1~G6 全绿。"
+    "管理后台：供应商弹窗协议与端点改为两行式（第一行协议开关、第二行整宽地址），解决 OpenAI/Messages 地址输入框过短；只读供应商全部控件与保存按钮禁用；",
+    "本地 Key 与 EdgeOne 对齐：/api/admin/config 仅对显式 origin=vault 的中枢 Key 掩码，本地 Key 原值下发（管理员登录态），编辑弹窗可查看并修改；中枢 Key 保持掩码只读；",
+    "合并 PR #21：修复 4fbc327/a4ac0d7 把「无 origin 的历史供应商」误判为中枢供应商的问题——VM 上这类供应商是用户本机录入的本地供应商，其字符串 Key 迁移、GET 掩码、保存守卫与前端 resolveKeySource() 统一按本地处理；仅显式 origin=vault 才按中枢只读；EdgeOne 保持默认 vault（其本身即中枢）；",
+    "新增回归：本地 Key 可见/中枢 Key 仍掩码；无 origin 老供应商的 Key 迁移后保持 local 且可改；",
+    "验证：四层全量测试（E2E 76 项、契约 S1~S7/U1~U4、vault_ui、overflow、runtime_profiles/settings_resolution）全绿；T0 G1~G6 全绿；按批次节奏一次发布。"
   ]
 }

@@ -4,6 +4,21 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [v20261021-02] - 2026-10-21
+
+### 管理后台
+- 供应商弹窗的协议与端点改为**两行式**：第一行协议开关，第二行整宽地址输入，解决 OpenAI / Anthropic Messages 地址框过短的问题；只读（中枢托管）供应商的全部控件与保存按钮仍禁用。
+- 本地 Key 与 EdgeOne 对齐：`/api/admin/config` 仅对中枢 Key（显式 `origin=vault`）掩码，本地 Key 原值下发（管理员登录态），编辑弹窗可直接查看/修改；中枢 Key 保持掩码只读。
+
+### 修复
+- **合并 PR #21**：修复 v20261021-01 引入的 P1 问题——`_migrate_string_secrets()` 与 GET 掩码把「无 `origin` 字段的历史供应商」默认当成中枢供应商，导致 VM 上用户本机录入的 Key 被永久迁移为 `origin=vault`（管理端看不到原值，修改后被保存守卫静默还原）。现在与保存守卫、前端 `resolveKeySource()` 使用同一判定：**只有显式 `origin=vault` 的供应商下未标记 Key 才算中枢只读**；无 `origin` 的老供应商按本地处理。EdgeOne 仍默认 `vault`（其本身即中枢）。
+- 新增回归：`test_legacy_unmarked_provider_keys_stay_local`（main 上失败、修复后通过）；本地 Key 可见 / 中枢 Key 仍掩码的断言补强。
+
+### 验证
+- `npm run test:full` 全绿（E2E 76 项、契约 S1~S7/U1~U4、vault_ui、overflow、runtime_profiles/settings_resolution）；T0 G1~G6 全绿。
+
+---
+
 ## [v20261021-01] - 2026-10-21
 
 ### 去重收尾
@@ -28,10 +43,6 @@
 ---
 
 ## [Unreleased]
-
-### 管理后台（随下一批发布）
-- 协议与端点改为两行式：第一行协议开关，第二行整宽地址输入，解决 OpenAI/Messages 地址输入框过短的问题。
-- 本地 Key 与 EdgeOne 对齐：管理端编辑时可查看并修改实际密钥值（`/api/admin/config` 仅对中枢 `origin=vault` Key 掩码）；中枢 Key 保持掩码只读。
 
 ### 工程流程
 - 发版节奏改为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；P0 线上故障才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
