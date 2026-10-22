@@ -244,11 +244,46 @@ async def test_activity_middleware():
         pass
 
     mw = ActivityTrackerASGIMiddleware(app)
-    await mw({"type": "http", "path": "/v1/chat/completions"}, None, send)
+    await mw({"type": "http", "method": "POST", "path": "/v1/chat/completions"}, None, send)
     assert seen == [1, 1] and ms._inflight == 0 and ms._last_done > 0
     _set_activity(0, 0)
     await mw({"type": "http", "path": "/api/admin/stats"}, None, send)
     assert ms._last_done == 0, "admin traffic must not count as activity"
+    await mw({"type": "http", "method": "GET", "path": "/v1/models"}, None, send)
+    assert ms._last_done == 0, "GET /v1/models probes must not block a scheduled switch"
+
+
+async def test_preset_update_keeps_concurrent_switch():
+    """presets/update-rules 拉规则期间发生的 run_mode 切换不能被旧快照写回。"""
+    import httpx
+    from app.main import app
+    from app import admin_routes
+    from app.config_store import update_config
+    await _save({**(await _cfg()), "run_mode": "agent",
+                 "providers": {"p1": {"base_url": "http://127.0.0.1:1/v1", "keys": {"k": "sk"}, "preset_id": "p1"}}})
+    before = (await _cfg())["_version"]
+    orig = admin_routes._fetch_remote_json
+
+    async def slow_fetch(urls, timeout=2.5):
+        def flip(cfg):
+            cfg["run_mode"] = "kb"
+            cfg["_version"] = int(cfg.get("_version", 1)) + 1
+            return cfg
+        await update_config(flip)  # the scheduler switches while rules are downloading
+        return {"version": "9.9.9", "adapter_rules": {"x": 1}}
+
+    admin_routes._fetch_remote_json = slow_fetch
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            r = await client.post("/api/admin/presets/update-rules", headers=ADMIN, json={"provider_ids": ["p1"]})
+            assert r.status_code == 200, r.text
+    finally:
+        admin_routes._fetch_remote_json = orig
+    c = await _cfg()
+    assert c["run_mode"] == "kb", "rule update must not revert a concurrent mode switch"
+    assert c["providers"]["p1"]["preset_version"] == "9.9.9" and c["providers"]["p1"]["adapter_rules"] == {"x": 1}
+    assert c["_version"] == before + 2
 
 
 def main():
@@ -270,6 +305,7 @@ def main():
             await test_cas_conflict(); print("  PASS CAS conflict")
             test_leader_lock(); print("  PASS leader lock")
             await test_activity_middleware(); print("  PASS activity middleware")
+            await test_preset_update_keeps_concurrent_switch(); print("  PASS preset update keeps switch")
         asyncio.run(run())
     finally:
         for k, v in saved.items():
