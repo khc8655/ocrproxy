@@ -584,6 +584,12 @@ function pageHtml() {
     .settings-row.settings-row-full .settings-row-ctrl {
       flex: 0 1 clamp(280px, 50%, 540px);
     }
+    .settings-row-ctrl.mode-schedule-ctrl input[type="time"] {
+      width: 96px;
+      flex: 0 0 auto;
+      height: 32px;
+      font-size: 13px;
+    }
     /* Key row stretching (PROXY_API_KEY, Vault Token, etc.) */
     .settings-row.settings-row-key .settings-row-label {
       flex: 0 0 auto;
@@ -938,6 +944,24 @@ function pageHtml() {
                   <option value="agent">Agent 智能体直连模式 (专精 Cursor、Cline 真实模型)</option>
                   <option value="kb">KB 知识库入库模式 (4 大入库专用虚拟聚合模型)</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- VM: 按时段自动切换运行模式 -->
+            <div class="settings-row settings-row-full" data-cap="runModes" id="st-item-mode-schedule">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="按时段自动切换 (mode_schedule)">按时段自动切换 (mode_schedule)</span>
+                <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；入库未结束会等空闲 5 分钟再切回 Agent">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段</span>
+              </div>
+              <div class="settings-row-ctrl mode-schedule-ctrl">
+                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                  <input type="checkbox" id="s_modeScheduleEnabled" style="width:16px;height:16px;cursor:pointer;">
+                  <span style="font-weight:600;">启用</span>
+                </label>
+                <span>KB</span>
+                <input type="time" id="s_modeScheduleKbStart" class="form-control form-control-compact" value="22:00" step="60">
+                <span>–</span>
+                <input type="time" id="s_modeScheduleKbEnd" class="form-control form-control-compact" value="08:00" step="60">
               </div>
             </div>
           </div>
@@ -6125,6 +6149,10 @@ function renderSettings(){
   set('s_proxyApiKey', c.proxy_api_key || '');
   const modeEl = document.getElementById('s_runMode');
   if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'agent';
+  const msEn = document.getElementById('s_modeScheduleEnabled');
+  if (msEn) msEn.checked = !!c.mode_schedule_enabled;
+  set('s_modeScheduleKbStart', c.mode_schedule_kb_start || '22:00');
+  set('s_modeScheduleKbEnd', c.mode_schedule_kb_end || '08:00');
 
   // Card 2: Routing Strategies
   set('s_agentRouting', c.agent_routing_strategy === 'manual' ? 'manual' : 'sticky_failover');
@@ -6619,6 +6647,16 @@ async function saveSettings(silent=false){
   if (keyEl) c.proxy_api_key = keyEl.value.trim();
   const modeEl = document.getElementById('s_runMode');
   if (modeEl) c.run_mode = modeEl.value;
+  const msEnEl = document.getElementById('s_modeScheduleEnabled');
+  if (msEnEl && !(typeof HOST !== 'undefined' && HOST.isEdgeOne)) {
+    const hhmm = (id, dflt) => {
+      const v = (document.getElementById(id)?.value || '').trim();
+      return /^([01]\\d|2[0-3]):[0-5]\\d$/.test(v) ? v : dflt;
+    };
+    c.mode_schedule_enabled = !!msEnEl.checked;
+    c.mode_schedule_kb_start = hhmm('s_modeScheduleKbStart', '22:00');
+    c.mode_schedule_kb_end = hhmm('s_modeScheduleKbEnd', '08:00');
+  }
 
   // Card 2: Key Routing Strategies
   const agRouteEl = document.getElementById('s_agentRouting');

@@ -9,6 +9,10 @@ function renderSettings(){
   set('s_proxyApiKey', c.proxy_api_key || '');
   const modeEl = document.getElementById('s_runMode');
   if (modeEl) modeEl.value = c.run_mode || c._run_mode || 'agent';
+  const msEn = document.getElementById('s_modeScheduleEnabled');
+  if (msEn) msEn.checked = !!c.mode_schedule_enabled;
+  set('s_modeScheduleKbStart', c.mode_schedule_kb_start || '22:00');
+  set('s_modeScheduleKbEnd', c.mode_schedule_kb_end || '08:00');
 
   // Card 2: Routing Strategies
   set('s_agentRouting', c.agent_routing_strategy === 'manual' ? 'manual' : 'sticky_failover');
@@ -503,6 +507,16 @@ async function saveSettings(silent=false){
   if (keyEl) c.proxy_api_key = keyEl.value.trim();
   const modeEl = document.getElementById('s_runMode');
   if (modeEl) c.run_mode = modeEl.value;
+  const msEnEl = document.getElementById('s_modeScheduleEnabled');
+  if (msEnEl && !(typeof HOST !== 'undefined' && HOST.isEdgeOne)) {
+    const hhmm = (id, dflt) => {
+      const v = (document.getElementById(id)?.value || '').trim();
+      return /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : dflt;
+    };
+    c.mode_schedule_enabled = !!msEnEl.checked;
+    c.mode_schedule_kb_start = hhmm('s_modeScheduleKbStart', '22:00');
+    c.mode_schedule_kb_end = hhmm('s_modeScheduleKbEnd', '08:00');
+  }
 
   // Card 2: Key Routing Strategies
   const agRouteEl = document.getElementById('s_agentRouting');

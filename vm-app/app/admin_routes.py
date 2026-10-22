@@ -927,6 +927,11 @@ async def import_config_endpoint(request: Request):
         final_config.pop("_mode", None)
         final_config.pop("_run_mode", None)
         final_config["run_mode"] = local_run_mode
+        # 自动切换的时段标记属于本机运行状态，导入不得覆盖（否则会在时段中途重复切换）
+        if "_mode_schedule_slot" in current_config:
+            final_config["_mode_schedule_slot"] = current_config["_mode_schedule_slot"]
+        else:
+            final_config.pop("_mode_schedule_slot", None)
 
         if "candidates" not in final_config:
             final_config["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
@@ -1178,6 +1183,12 @@ async def save_config_endpoint(request: Request):
         # 4. Bump version monotonically
         next_ver = curr_ver + 1
         body["_version"] = next_ver
+
+        # 自动切换的时段标记由 mode_scheduler 维护，管理端保存一律沿用本机值
+        if "_mode_schedule_slot" in current_config:
+            body["_mode_schedule_slot"] = current_config["_mode_schedule_slot"]
+        else:
+            body.pop("_mode_schedule_slot", None)
 
         new_run_mode = body.get("run_mode")
         if new_run_mode:
