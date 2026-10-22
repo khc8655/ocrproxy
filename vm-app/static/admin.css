@@ -568,6 +568,12 @@
     .settings-row.settings-row-full .settings-row-ctrl {
       flex: 0 1 clamp(280px, 50%, 540px);
     }
+    .settings-row-ctrl.mode-schedule-ctrl input[type="time"] {
+      width: 96px;
+      flex: 0 0 auto;
+      height: 32px;
+      font-size: 13px;
+    }
     /* Key row stretching (PROXY_API_KEY, Vault Token, etc.) */
     .settings-row.settings-row-key .settings-row-label {
       flex: 0 0 auto;

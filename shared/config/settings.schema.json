@@ -40,6 +40,51 @@
       ]
     },
     {
+      "key": "mode_schedule_enabled",
+      "group": "auth",
+      "label": "按时段自动切换运行模式",
+      "hint": "开启后在 KB 时段自动切到 KB，其余时间切回 Agent（北京时间）。每个时段只切一次，时段内手动切换会保留；切回 Agent 最多等 KB 空闲 1 小时，切入 KB 最多等 15 分钟",
+      "type": "boolean",
+      "default": false,
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "mode_schedule_kb_start",
+      "group": "auth",
+      "label": "KB 时段开始 (HH:MM)",
+      "hint": "建议比夜间入库任务早几分钟",
+      "type": "string",
+      "default": "22:00",
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
+      "key": "mode_schedule_kb_end",
+      "group": "auth",
+      "label": "KB 时段结束 (HH:MM)",
+      "hint": "到点后等 KB 空闲 5 分钟再切回 Agent；最多顺延 1 小时",
+      "type": "string",
+      "default": "08:00",
+      "modes": [
+        "agent",
+        "kb"
+      ],
+      "hosts": [
+        "vm"
+      ]
+    },
+    {
       "key": "agent_routing_strategy",
       "group": "routing",
       "label": "智能体 Key 调度策略",

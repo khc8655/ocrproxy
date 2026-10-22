@@ -225,6 +225,24 @@
                 </select>
               </div>
             </div>
+
+            <!-- VM: 按时段自动切换运行模式 -->
+            <div class="settings-row settings-row-full" data-cap="runModes" id="st-item-mode-schedule">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="按时段自动切换 (mode_schedule)">按时段自动切换 (mode_schedule)</span>
+                <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；切回 Agent 最多等 1 小时，切入 KB 最多等 15 分钟">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段；切回 Agent 最多等 1 小时</span>
+              </div>
+              <div class="settings-row-ctrl mode-schedule-ctrl">
+                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                  <input type="checkbox" id="s_modeScheduleEnabled" style="width:16px;height:16px;cursor:pointer;">
+                  <span style="font-weight:600;">启用</span>
+                </label>
+                <span>KB</span>
+                <input type="time" id="s_modeScheduleKbStart" class="form-control form-control-compact" value="22:00" step="60">
+                <span>–</span>
+                <input type="time" id="s_modeScheduleKbEnd" class="form-control form-control-compact" value="08:00" step="60">
+              </div>
+            </div>
           </div>
         </div>
 
