@@ -17,8 +17,9 @@ from urllib.parse import urlparse
 from typing import Optional
 
 from . import settings_schema
-from .config_store import (get_config, save_config, _get_config_dir, is_masked_secret,
-                            get_run_mode, vault_url_and_token, secret_origin, stamp_secret_origin)
+from .config_store import (get_config, save_config, replace_config, ConfigVersionConflict,
+                            _get_config_dir, is_masked_secret, get_run_mode, vault_url_and_token,
+                            secret_origin, stamp_secret_origin)
 from .presets import (get_presets_dir as _get_presets_dir, load_catalog as _load_local_catalog,
                       load_preset as _load_local_preset, clear_cache as _clear_presets_cache)
 from .upstream import join_upstream, build_messages_upstream
@@ -96,7 +97,17 @@ async def _save_vault_config_change(cfg: dict) -> int:
     backup as manual saves.
     """
     _rolling_config_backup()
-    next_ver = int(cfg.get("_version", 1) or 1) + 1
+    # A concurrent scheduler tick may have switched run_mode after the caller read cfg.
+    # Re-read the cache and keep that newer mode/version so a vault pull cannot revert it.
+    try:
+        latest = await get_config()
+        if int(latest.get("_version", 1) or 1) > int(cfg.get("_version", 1) or 1):
+            cfg["run_mode"] = latest.get("run_mode", cfg.get("run_mode"))
+            next_ver = int(latest.get("_version", 1) or 1) + 1
+        else:
+            next_ver = int(cfg.get("_version", 1) or 1) + 1
+    except Exception:
+        next_ver = int(cfg.get("_version", 1) or 1) + 1
     cfg["_version"] = next_ver
     await save_config(cfg)
     return next_ver
@@ -927,21 +938,24 @@ async def import_config_endpoint(request: Request):
         final_config.pop("_mode", None)
         final_config.pop("_run_mode", None)
         final_config["run_mode"] = local_run_mode
-        # 自动切换的时段标记属于本机运行状态，导入不得覆盖（否则会在时段中途重复切换）
-        if "_mode_schedule_slot" in current_config:
-            final_config["_mode_schedule_slot"] = current_config["_mode_schedule_slot"]
-        else:
-            final_config.pop("_mode_schedule_slot", None)
+        # 自动切换的 slot 状态在独立的 mode_schedule_state.json，不随配置导入/导出。
+        final_config.pop("_mode_schedule_slot", None)
 
         if "candidates" not in final_config:
             final_config["candidates"] = current_config.get("candidates") or {"chat": [], "embedding": [], "reranker": [], "ocr": []}
         if "agent_models" not in final_config:
             final_config["agent_models"] = current_config.get("agent_models") or {}
 
-        # Monotonic version bump on import
+        # Monotonic version bump on import (CAS against the version we merged from)
         final_config["_version"] = current_config.get("_version", 1) + 1
-
-        await save_config(final_config)
+        try:
+            await replace_config(final_config, expected_version=current_config.get("_version", 1))
+        except ConfigVersionConflict as _conflict:
+            return JSONResponse(status_code=409, content={
+                "error": "配置已被其他窗口/进程更新，请刷新后重试",
+                "current_version": _conflict.current,
+                "client_version": _conflict.expected,
+            })
         summary = _get_config_summary(final_config)
         return JSONResponse(content={
             "success": True,
@@ -1007,6 +1021,7 @@ async def save_config_endpoint(request: Request):
     try:
         current_config = await get_config()
         curr_ver = current_config.get("_version", 1)
+        _prev_run_mode = get_run_mode(current_config)
         client_ver = body.get("_version")
 
         # 1. Optimistic Locking Version Check:
@@ -1184,18 +1199,34 @@ async def save_config_endpoint(request: Request):
         next_ver = curr_ver + 1
         body["_version"] = next_ver
 
-        # 自动切换的时段标记由 mode_scheduler 维护，管理端保存一律沿用本机值
-        if "_mode_schedule_slot" in current_config:
-            body["_mode_schedule_slot"] = current_config["_mode_schedule_slot"]
-        else:
-            body.pop("_mode_schedule_slot", None)
+        # slot 状态在独立的 mode_schedule_state.json，管理端保存不再碰它。
+        body.pop("_mode_schedule_slot", None)
 
         new_run_mode = body.get("run_mode")
+
+        # CAS 写入：从读到写之间如果调度器/vault 已经改过配置，返回 409，避免用旧 body
+        # 覆盖掉并发发生的改动（也保证 _version 单调）。
+        try:
+            await replace_config(body, expected_version=curr_ver)
+        except ConfigVersionConflict as _conflict:
+            vm_logger.warning("ConfigError", "Config version conflict on save (409, CAS)",
+                              client_version=_conflict.expected, remote_version=_conflict.current)
+            return JSONResponse(status_code=409, content={
+                "error": "配置已被其他窗口/进程更新，请刷新后重试",
+                "current_version": _conflict.current,
+                "client_version": _conflict.expected,
+            })
         if new_run_mode:
             _sync_env_run_mode(new_run_mode)
-
-        await save_config(body)
         vm_logger.info("ConfigAudit", "Configuration saved to disk successfully", version=next_ver, run_mode=new_run_mode or "unchanged")
+
+        # 手动切换 run_mode：标记当前时段，避免调度器在 deferred 窗口里又切回去。
+        if new_run_mode and new_run_mode != _prev_run_mode:
+            try:
+                from . import mode_scheduler
+                await mode_scheduler.note_manual_switch()
+            except Exception as _ms_err:
+                vm_logger.warning("ConfigAudit", "Could not mark manual mode switch slot", error=str(_ms_err))
 
         # 删除 Key/供应商后清理滚动备份：pre-delete 备份里仍有旧密钥，不能留。
         if deleted_providers or deleted_keys_set:

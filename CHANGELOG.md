@@ -85,6 +85,12 @@
 
 ## [Unreleased]
 
+### VM 运行模式时段调度（mode_schedule）
+- 系统设置新增「按时段自动切换」：默认关闭，开启后按北京时间在 KB（默认 22:00–08:00）与 Agent 之间自动切换；每个时段只切一次，手动切换保留到下一个边界。
+- 切换前等待 `/v1` 空闲：Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时（持续探活/零散流量不会把白天 Agent 永久占住）；进行中的请求继续使用旧配置。
+- 调度器使用 `config_store.update_config()` 原子 read-modify-write，只改 `run_mode`；管理端保存/导入改为带版本 CAS 的 `replace_config()`，并发写返回 409，避免后台切换覆盖并发的 Key/设置修改或让 `_version` 倒退。
+- slot 状态移至独立的 `mode_schedule_state.json`，边界时刻不再无意义写配置/生成备份；文件锁选主保证多 worker 只运行一个调度器。
+
 ### 工程流程
 - 发版节奏改为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；P0 线上故障才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
 

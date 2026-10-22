@@ -6,6 +6,7 @@ Uses Fernet symmetric encryption to protect API keys at rest.
 import os
 import json
 import time
+import copy
 import hashlib
 import logging
 import asyncio
@@ -384,10 +385,64 @@ def clear_cache():
 
 
 async def save_config(config: dict):
-    """Save config to disk and update cache with write-lock."""
+    """Save config to disk and update cache with write-lock (no CAS; callers own consistency)."""
     global _config, _loaded_at
     async with _get_lock():
         await asyncio.to_thread(save_to_disk, config)
         _config = config
         _loaded_at = time.time()
         _bump_version_if_changed(config)
+
+
+class ConfigVersionConflict(RuntimeError):
+    """Raised when an optimistic-lock writer based its update on a stale version."""
+
+    def __init__(self, expected, current):
+        self.expected = expected
+        self.current = current
+        super().__init__(f"config version conflict: expected {expected}, current {current}")
+
+
+async def replace_config(config: dict, expected_version: Optional[int] = None) -> dict:
+    """Atomically replace the whole config, optionally CAS-checking `_version`.
+
+    The check happens INSIDE the write lock against the freshly loaded file, so a save
+    cannot silently overwrite a write that landed between the caller's read and this
+    call (the bug that made background mode switches lose admin changes / bump versions
+    backwards).
+    """
+    global _config, _loaded_at
+    async with _get_lock():
+        current = await asyncio.to_thread(load_from_disk)
+        cur_ver = int((current or {}).get("_version", 1) or 1)
+        if expected_version is not None and int(expected_version) != cur_ver:
+            raise ConfigVersionConflict(int(expected_version), cur_ver)
+        await asyncio.to_thread(save_to_disk, config)
+        _config = config
+        _loaded_at = time.time()
+        _bump_version_if_changed(config)
+        return config
+
+
+async def update_config(mutator, expected_version: Optional[int] = None) -> dict:
+    """Atomic read-modify-write under the config lock.
+
+    `mutator` receives a fresh copy loaded from disk (never a caller-held snapshot) and
+    returns the new config. Use this for background writers such as the mode scheduler:
+    anything they do not touch (keys, tokens, providers, settings) is preserved.
+    """
+    global _config, _loaded_at
+    async with _get_lock():
+        current = await asyncio.to_thread(load_from_disk)
+        cur_ver = int((current or {}).get("_version", 1) or 1)
+        if expected_version is not None and int(expected_version) != cur_ver:
+            raise ConfigVersionConflict(int(expected_version), cur_ver)
+        fresh = copy.deepcopy(current)
+        updated = mutator(fresh)
+        if updated is None:
+            updated = fresh
+        await asyncio.to_thread(save_to_disk, updated)
+        _config = updated
+        _loaded_at = time.time()
+        _bump_version_if_changed(updated)
+        return updated
