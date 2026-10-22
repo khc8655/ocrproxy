@@ -58,13 +58,16 @@ _last_done = 0.0
 
 
 class ActivityTrackerASGIMiddleware:
-    """Counts in-flight /v1 requests; for streams the count drops after the last byte."""
+    """Counts in-flight POST /v1 requests; for streams the count drops after the last byte."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/v1"):
+        # 只统计真正干活的 POST（chat/messages/embeddings/rerank/ocr）；
+        # GET /v1/models 之类的探活/监控不算，否则会一直占着「非空闲」把切换拖到上限。
+        if (scope["type"] != "http" or scope.get("method") != "POST"
+                or not scope.get("path", "").startswith("/v1")):
             return await self.app(scope, receive, send)
         global _inflight, _last_done
         _inflight += 1

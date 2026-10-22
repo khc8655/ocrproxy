@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from typing import Optional
 
 from . import settings_schema
-from .config_store import (get_config, save_config, replace_config, ConfigVersionConflict,
+from .config_store import (get_config, save_config, replace_config, update_config, ConfigVersionConflict,
                             _get_config_dir, is_masked_secret, get_run_mode, vault_url_and_token,
                             secret_origin, stamp_secret_origin)
 from .presets import (get_presets_dir as _get_presets_dir, load_catalog as _load_local_catalog,
@@ -749,8 +749,12 @@ async def update_preset_rules_endpoint(request: Request):
     updated = []
     failed = []
 
+    # 只在副本上改规则，网络请求结束后再用 update_config 原子写回最新配置：
+    # 拉规则要几秒，期间时段调度切换 run_mode 或别的保存都不会被这份旧快照覆盖。
+    patches = {}
     for pid in valid_target_ids:
-        pdata = providers[pid]
+        pdata = copy.deepcopy(providers[pid])
+        patches[pid] = pdata
         pres_id = pdata.get("preset_id", pid)
 
         urls = [f"{base}/{pres_id}.json" for base in _CDN_PRESET_BASE_URLS]
@@ -786,7 +790,22 @@ async def update_preset_rules_endpoint(request: Request):
         })
 
     if updated:
-        await save_config(curr_cfg)
+        _rule_fields = ("adapter_rules", "preset_version", "preset_updated_at", "preset_update_notes",
+                        "rule_hash", "recommended_models", "features")
+        done_ids = {u["provider_id"] for u in updated}
+
+        def _apply_rules(cfg):
+            provs = cfg.get("providers") or {}
+            for pid in done_ids:
+                if pid in provs and isinstance(provs[pid], dict):
+                    for f in _rule_fields:
+                        if f in patches[pid]:
+                            provs[pid][f] = patches[pid][f]
+            cfg["_version"] = int(cfg.get("_version", 1) or 1) + 1
+            return cfg
+
+        _rolling_config_backup()
+        await update_config(_apply_rules)
         try:
             _clear_presets_cache()
         except Exception:
