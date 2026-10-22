@@ -754,7 +754,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261021-05</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261022-01</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -951,7 +951,7 @@ function pageHtml() {
             <div class="settings-row settings-row-full" data-cap="runModes" id="st-item-mode-schedule">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="按时段自动切换 (mode_schedule)">按时段自动切换 (mode_schedule)</span>
-                <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；入库未结束会等空闲 5 分钟再切回 Agent">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段</span>
+                <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；切回 Agent 最多等 1 小时，切入 KB 最多等 15 分钟">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段；切回 Agent 最多等 1 小时</span>
               </div>
               <div class="settings-row-ctrl mode-schedule-ctrl">
                 <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">

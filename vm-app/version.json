@@ -1,14 +1,14 @@
 {
-  "version": "v20261021-05",
-  "release_date": "2026-10-21",
+  "version": "v20261022-01",
+  "release_date": "2026-10-22",
   "commit": "HEAD",
-  "title": "批次发布：中枢配置独立保存、409 可行动提示、备份仅保留 1 份且删除即清理 (v20261021-05)",
+  "title": "批次发布：VM 运行模式时段自动切换（mode_schedule）+ 切换加固 (v20261022-01)",
   "changelog": [
-    "系统设置新增「保存中枢配置」按钮：中枢 URL/Token 走 /api/admin/vault/config 单独保存，不参与整包配置版本锁；URL/Token 输入框回车也走独立保存，修改 Token 不再被其它设置保存的 409 连累；",
-    "整包保存 409 冲突提示改为可行动文案：明确本次未写入、之前的保存不受影响，并回填刚输入的 Token（仍不回显），点「保存中枢配置」即可重试；",
-    "备份策略收紧：滚动配置备份由 20 份改为只保留 1 份；删除 Key/供应商保存成功后自动清理全部滚动备份，避免 pre-delete 快照长期保留已删除密钥；install.sh 安装备份仅保留最近 1 份并设 700；",
-    "删除确认提示补充：本地删除不会移除中枢中的 Key，彻底删除需在中枢操作；本地历史备份会一并清理；",
-    "新增回归：备份只保留 1 份、删除供应商后本地备份清空；",
-    "验证：四层全量测试全绿，T0 G1~G6 全绿。"
+    "VM 系统设置新增「按时段自动切换」：默认关闭，开启后按北京时间在 KB（默认 22:00–08:00）与 Agent 之间自动切换；每个时段只切一次，手动切换保留到下一个边界；",
+    "切换前等待 /v1 空闲：Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时；进行中请求继续用旧配置；",
+    "调度器使用 config_store.update_config() 原子读改写，只改 run_mode/_version；管理端保存/导入改为 replace_config(expected_version=...) CAS，并发写返回 409，避免后台切换覆盖改 Key/设置或让版本倒退；",
+    "slot 状态移到独立 mode_schedule_state.json，边界不再无意义写配置/生成备份；文件锁选主保证多 worker 只跑一个调度器；",
+    "加固（PR #24）：探活 GET /v1/models 不再算忙碌；presets/update-rules 改为副本修改 + update_config 原子写回，拉规则期间的模式切换不会被旧 run_mode 覆盖；",
+    "测试：mode_scheduler（时段/手动优先/原子写/CAS/leader lock/探活/preset 并发）、run_tests logic、全量测试与 G1~G6；"
   ]
 }

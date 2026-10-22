@@ -4,6 +4,30 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 
+## [Unreleased]
+
+### 工程流程
+- 发版节奏为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；只有 P0 线上故障/安全事件才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
+
+---
+
+## [v20261022-01] - 2026-10-22
+
+### VM 运行模式时段调度（mode_schedule，PR #23 + #24）
+- 系统设置新增「按时段自动切换」：默认关闭；开启后按北京时间在 KB（默认 22:00–08:00）与 Agent 之间自动切换；每个时段只切一次，手动切换保留到下一个边界。
+- **切换前等空闲**：`/v1` 无进行中请求且最近 5 分钟无请求结束才切；Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时；强制切换只影响新请求，已开始的请求继续用旧配置。
+- **原子写入**：调度器通过 `config_store.update_config()` 在写锁内重新读取最新配置，只改 `run_mode`/`_version`；管理端保存/导入改用 `replace_config(expected_version=...)` 版本 CAS，读到写之间被并发更新时返回 409。不会再出现调度器用旧快照覆盖新 Key/设置、`_version` 倒退或复活已删除 Key 的问题。
+- **手动切换优先**：管理端改 `run_mode` 后写入当前 slot 标记；调度器 deferred 窗口内也不会把手动选择改回去；tick 读后到写前发生手动切换时放弃本次自动切换。
+- **slot 独立存储**：`CONFIG_DIR/mode_schedule_state.json`；边界时刻不再无意义 bump 版本/生成备份/让管理端误收 409。
+- **加固（PR #24）**：`GET /v1/models` 等探活不计入忙碌；`presets/update-rules` 改为在副本上修改、最后 `update_config` 原子写回，拉规则期间发生的模式切换不会被旧 `run_mode` 回写。
+- **单实例选主**：`CONFIG_DIR/.mode_scheduler.lock` 文件锁，多 worker 只运行一个调度循环。
+- 回归：时段计算、手动优先（含 deferred）、原子写保留并发管理改动、CAS 冲突、KB 1h 强制、探活不算忙碌、preset 并发切换、leader lock、流式 activity 中间件。
+
+### 验证
+- `tests/test_mode_scheduler.py`、`run_tests --layer=logic`、全量测试与 T0 G1~G6 全绿。
+
+---
+
 ## [v20261021-05] - 2026-10-21
 
 ### 管理后台
@@ -83,18 +107,7 @@
 
 ---
 
-## [Unreleased]
 
-### VM 运行模式时段调度（mode_schedule）
-- 系统设置新增「按时段自动切换」：默认关闭，开启后按北京时间在 KB（默认 22:00–08:00）与 Agent 之间自动切换；每个时段只切一次，手动切换保留到下一个边界。
-- 切换前等待 `/v1` 空闲：Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时（持续探活/零散流量不会把白天 Agent 永久占住）；进行中的请求继续使用旧配置。
-- 调度器使用 `config_store.update_config()` 原子 read-modify-write，只改 `run_mode`；管理端保存/导入改为带版本 CAS 的 `replace_config()`，并发写返回 409，避免后台切换覆盖并发的 Key/设置修改或让 `_version` 倒退。
-- slot 状态移至独立的 `mode_schedule_state.json`，边界时刻不再无意义写配置/生成备份；文件锁选主保证多 worker 只运行一个调度器。
-
-### 工程流程
-- 发版节奏改为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；P0 线上故障才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
-
----
 
 ## [v20261020-09] - 2026-10-21
 

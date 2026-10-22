@@ -381,15 +381,15 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 
 **中枢 Token 与地址绑定**：已保存的 Token 只会发往已保存的中枢地址；任何 vault 接口或配置保存指定了另一个地址时，必须同时带上新 Token（`config_store.vault_url_and_token()` 统一判定）。中枢供应商（origin=vault）的连接字段（origin/base_url/anthropic_base_url/adapter_rules/协议字段/preset_id）后端只读，只能经 /vault/sync 更新。
 
-### 3.5.z VM 运行模式时段调度（mode_schedule，未发布）
+### 3.5.z VM 运行模式时段调度（mode_schedule，v20261022-01）
 
 > 仅 VM；EdgeOne 不显示、不写入。默认关闭，开启后按北京时间在 KB/Agent 之间自动切换。
 
 - **时段计算**：`[mode_schedule_kb_start, mode_schedule_kb_end)` 为 KB，其余为 Agent；支持跨零点；时区固定 Asia/Shanghai。
 - **每个时段只切一次**：已处理的 slot 记录在 `CONFIG_DIR/mode_schedule_state.json`，不写进主配置；因此边界时刻不会无意义地 bump `_version`、生成备份或让管理端误收 409。
 - **手动切换优先**：管理端手动改 `run_mode` 会把当前 slot 标记为已处理，直到下一个边界都不再自动改回（包括调度器 deferred 窗口）。
-- **切换前等空闲**：`/v1` 无进行中请求且最近 5 分钟无请求结束才切；Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时（避免健康检查/零散流量把白天 Agent 永久占住）；强制切换只影响新请求，已开始请求继续用旧配置。
-- **原子写入**：调度器通过 `config_store.update_config()` 在写锁内重新读取最新配置，只改 `run_mode`/`_version`；不会用旧快照覆盖并发的 Key/设置修改。管理端保存/导入用 `replace_config(expected_version=...)` CAS，检测到并发写返回 409。
+- **切换前等空闲**：只统计 POST `/v1`（GET 探活不算忙碌）；无进行中请求且最近 5 分钟无请求结束才切；Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时（避免健康检查/零散流量把白天 Agent 永久占住）；强制切换只影响新请求，已开始请求继续用旧配置。
+- **原子写入**：调度器通过 `config_store.update_config()` 在写锁内重新读取最新配置，只改 `run_mode`/`_version`；不会用旧快照覆盖并发的 Key/设置修改。管理端保存/导入用 `replace_config(expected_version=...)` CAS，检测到并发写返回 409；`presets/update-rules` 同样改为副本修改 + `update_config` 原子写回。
 - **单实例选主**：`CONFIG_DIR/.mode_scheduler.lock` 文件锁，只有抢到锁的 worker 运行调度循环；多 worker 部署不会重复切换。
 - **默认关闭**；开启后若中枢不可达不影响已经加载的配置，只是到边界时按本地配置切换。
 
