@@ -326,8 +326,8 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         save_settings_btn = page.locator("#panel-settings button:has-text('保存设置并生效')")
         check(await save_settings_btn.count() == 1, "系统设置面板保持单一清晰保存底栏按钮")
 
-        # 调整重试次数并保存
-        await page.fill("#s_maxRetries", "5")
+        # 调整首字节超时并保存（v20261023-03 已删除 max_retries 配置）
+        await page.fill("#s_chatTimeout", "150")
         await save_settings_btn.click()
         await page.wait_for_timeout(800)
 
@@ -336,7 +336,7 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
             r = await client.get(f"{base_url}/api/admin/config", headers={"Authorization": f"Bearer {admin_pw}"})
             check(r.status_code == 200, "读取系统配置接口返回 200")
             server_cfg = r.json()
-            check(server_cfg.get("max_retries") == 5, f"前端修改系统设置通过单一底栏原子持久化至磁盘配置: max_retries={server_cfg.get('max_retries')}")
+            check(server_cfg.get("agent_first_byte_timeout_sec") == 150, f"前端修改系统设置通过单一底栏原子持久化至磁盘配置: agent_first_byte_timeout_sec={server_cfg.get('agent_first_byte_timeout_sec')}")
 
         # 验证系统设置内嵌的底层 JSON 编辑器
         raw_details = page.locator("#rawJsonDetails")

@@ -23,11 +23,7 @@ function renderSettings(){
   const agTimeout = c.agent_first_byte_timeout_sec ?? 120;
   const kbTimeout = c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 15;
   set('s_chatTimeout', isKbInitial ? kbTimeout : agTimeout);
-  const baseTimeout = isKbInitial ? kbTimeout : agTimeout;
-  const derivedBudget = c.request_total_budget_sec ?? c.schedule_total_budget ?? (baseTimeout * (c.max_retries ?? 3));
-  set('s_budget', derivedBudget);
-  set('s_maxRetries', c.max_retries ?? 3);
-  set('s_maxAttemptsPerProvider', c.max_attempts_per_provider ?? 3);
+  // 硬总超时固定 300s（EdgeOne 平台上限 / VM 安全上限），不再作为用户配置。
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
   set('s_concurrency', c.kb_max_concurrency_per_key ?? 16);
   set('s_ocrMaxInflight', c.ocr_max_inflight ?? 12);
@@ -204,9 +200,6 @@ function restoreDefaultSettings(){
   if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
   set('s_chatTimeout', 30);
-  set('s_budget', 90);
-  set('s_maxRetries', 3);
-  set('s_maxAttemptsPerProvider', 2);
   set('s_kbTimeout', 60);
   set('s_concurrency', 16);
   const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
@@ -538,17 +531,18 @@ async function saveSettings(silent=false){
     // Keep upstream_timeout_sec safe for fallback
     if (!c.upstream_timeout_sec) c.upstream_timeout_sec = 15;
   }
-  c.max_retries = Number(document.getElementById('s_maxRetries').value) || 3;
-  // 预算由后端自适应计算或尊重用户自定义填写，不再强行写入已废弃的 schedule_total_budget
-  const budgetInput = document.getElementById('s_budget');
-  if (budgetInput && budgetInput.value.trim() !== '') {
-    const bVal = Number(budgetInput.value);
-    if (bVal > 0) c.request_total_budget_sec = bVal;
-  }
+  // 硬总超时固定 300s；旧的 request_total_budget_sec / max_retries /
+  // max_attempts_per_provider 已废弃，不再写入。
   delete c.schedule_total_budget;
-  if (c.settings) delete c.settings.schedule_total_budget;
-
-  c.max_attempts_per_provider = Number(document.getElementById('s_maxAttemptsPerProvider').value) || 3;
+  delete c.request_total_budget_sec;
+  delete c.max_retries;
+  delete c.max_attempts_per_provider;
+  if (c.settings) {
+    delete c.settings.schedule_total_budget;
+    delete c.settings.request_total_budget_sec;
+    delete c.settings.max_retries;
+    delete c.settings.max_attempts_per_provider;
+  }
   const kbTimeoutEl = document.getElementById('s_kbTimeout');
   c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
   c.upstream_timeout_ocr = c.upstream_timeout_kb;

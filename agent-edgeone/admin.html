@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20261023-02">
+  <link rel="stylesheet" href="/static/admin.css?v=20261023-03">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -33,7 +33,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261023-02</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261023-03</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -295,40 +295,6 @@
                 <span class="unit">秒</span>
               </div>
             </div>
-
-            <div class="settings-row">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="单请求全局总预算 (request_total_budget_sec)">单请求全局总预算 (request_total_budget_sec)</span>
-                <span class="settings-row-hint" title="10~900s，全局硬截止上限 (默认 300s)">10~900s，全局硬截止上限 (默认 300s)</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_budget" data-alias="set_request_total_budget_sec" class="form-control form-control-compact mono" placeholder="300" min="10" max="900" step="10" onwheel="this.blur()">
-                <span class="unit">秒</span>
-              </div>
-            </div>
-
-            <div class="settings-row" id="st-item-max-retries">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="单请求最大重试次数 (max_retries)">单请求最大重试次数 (max_retries)</span>
-                <span class="settings-row-hint" title="单次请求最多允许轮换尝试的候选 Key 数量上限（默认 3 次）">单次请求最多允许轮换尝试的候选 Key 数量上限</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_maxRetries" data-alias="set_max_retries" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
-                <span class="unit">次</span>
-              </div>
-            </div>
-
-            <div class="settings-row" id="st-item-max-attempts">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="同一次请求内，单个供应商最多尝试几个不同的 Key">单个供应商最多尝试 Key 数</span>
-                <span class="settings-row-hint" title="换 Key 次数，不是重试次数；默认 3">换 Key 次数（非重试次数，默认 3）</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_maxAttemptsPerProvider" data-alias="set_max_attempts_per_provider" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
-                <span class="unit">次</span>
-              </div>
-            </div>
-
             <div class="settings-row" id="st-item-kb-concurrency" data-cap="kb">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="KB 单 Key 最大并发 (kb_max_concurrency_per_key)">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
@@ -821,14 +787,14 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=20261023-02"></script>
-  <script src="/static/js/settings-form.js?v=20261023-02"></script>
-  <script src="/static/js/core.js?v=20261023-02"></script>
-  <script src="/static/js/vault.js?v=20261023-02"></script>
-  <script src="/static/js/providers.js?v=20261023-02"></script>
-  <script src="/static/js/agent-models-ui.js?v=20261023-02"></script>
-  <script src="/static/js/models.js?v=20261023-02"></script>
-  <script src="/static/js/settings.js?v=20261023-02"></script>
-  <script src="/static/js/app.js?v=20261023-02"></script>
+  <script src="/static/js/host.js?v=20261023-03"></script>
+  <script src="/static/js/settings-form.js?v=20261023-03"></script>
+  <script src="/static/js/core.js?v=20261023-03"></script>
+  <script src="/static/js/vault.js?v=20261023-03"></script>
+  <script src="/static/js/providers.js?v=20261023-03"></script>
+  <script src="/static/js/agent-models-ui.js?v=20261023-03"></script>
+  <script src="/static/js/models.js?v=20261023-03"></script>
+  <script src="/static/js/settings.js?v=20261023-03"></script>
+  <script src="/static/js/app.js?v=20261023-03"></script>
 </body>
 </html>

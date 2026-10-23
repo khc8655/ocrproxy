@@ -805,17 +805,14 @@ async def _stream_with_precommit(schedule_coro, finalize, config: dict, error_fo
 
 
 def _kb_capped_budget(config: dict, per_attempt_sec: float, factor: float, extra: float = 0.0) -> float:
-    """KB requests should fail fast: cap the whole request at ~factor x one
-    attempt (chat/embedding/rerank: 2 attempts + 5s; OCR: 1.5x so a stuck image
-    gets one short retry and is then skipped) instead of the agent-sized 300s
-    global budget.  A smaller user-set request_total_budget_sec still wins."""
-    cap = per_attempt_sec * factor + extra
-    try:
-        user = float(config.get("request_total_budget_sec") or 0)
-    except (TypeError, ValueError):
-        user = 0.0
-    return min(user, cap) if user > 0 else cap
+    """KB 请求也使用固定 300s 硬总超时（VM 安全上限），不再按尝试次数/用户预算截断。
 
+    统一超时模型（v20261023-03）：
+      * 粘性场景：单 Key 直通，硬超时 300s；
+      * 自动轮换：逐个候选 Key 尝试，成功/试完/300s 先到先停；
+      * KB 批量：正常轮换；全部 429/冷却时立刻返回 429 + Retry-After，由客户端重试。
+    """
+    return 300.0
 
 # Maximum JSON body size for chat/embedding/rerank endpoints (10 MB).
 # This is a backstop against malicious / accidental oversized payloads that

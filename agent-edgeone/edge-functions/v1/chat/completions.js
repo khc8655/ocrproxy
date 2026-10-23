@@ -141,10 +141,13 @@ export async function onRequestPost(context) {
   }
 
   const settings = config.settings || {};
-  const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
-  const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
-  const maxRetries = Number(settings.max_retries ?? settings.schedule_total_budget ?? 3);
-  const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 3);
+  // v20261023-03: 固定 300s 硬总超时（EdgeOne 平台上限）；自动轮换逐个候选 Key 试完，
+  // 成功 / 试完 / 300s 谁先到谁结束；不再使用旧的尝试次数/单供应商上限配置。
+  const HARD_TIMEOUT_SEC = 300;
+  const totalBudgetSec = HARD_TIMEOUT_SEC;
+  const upstreamTimeoutSec = Number(
+    settings.agent_first_byte_timeout_sec ?? settings.agent_attempt_timeout_sec ?? settings.upstream_timeout_sec ?? 120
+  );
   const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
   const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
   const deadline = startMs + totalBudgetSec * 1000;
@@ -172,12 +175,14 @@ export async function onRequestPost(context) {
   const downProviders = new Set();    // providers that suffered 5xx/timeout in this request
   let lastStatus = 0;
   let lastErrorText = '';
+  let blockedByCooldown = false;
+  let retryAfterSec = 0;
 
   const configuredActiveKey = config.agent_models?.[body.model]?.active_key;
   const candidatePool = orderBindings(allBindings, body.model, strategy, configuredActiveKey);
   const cooldowns = await getCooldownsBatch(candidatePool, kv);
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  for (let attempt = 0; attempt < candidatePool.length; attempt++) {
     // 1. Deadline check
     const now = Date.now();
     if (now >= deadline) {
@@ -205,8 +210,6 @@ export async function onRequestPost(context) {
     // 2. Pick next candidate respecting provider quotas, fast-failover down list, and cooldowns
     let binding = candidatePool.find((b) => {
       if (tried.has(bindingId(b))) return false;
-      const provAttempts = providerAttempts.get(b.provider) || 0;
-      if (provAttempts >= maxAttemptsPerProv) return false;
       if (downProviders.has(b.provider) && hasMultipleProviders) return false;
       const cdExpiry = cooldowns.get(bindingId(b)) || 0;
       if (cdExpiry > Date.now()) return false;
@@ -214,31 +217,14 @@ export async function onRequestPost(context) {
     });
 
     if (!binding) {
-      // Check if unattempted candidates are in cooldown and we can wait within budget
-      const unattempted = candidatePool.filter(b => !tried.has(bindingId(b)));
-      const expiries = unattempted
+      // 全部候选在冷却/不可用：不再排队等待，直接交给客户端按 Retry-After 重试。
+      const expiries = candidatePool
+        .filter(b => !tried.has(bindingId(b)))
         .map(b => cooldowns.get(bindingId(b)) || 0)
         .filter(exp => exp > Date.now());
-
-      if (expiries.length > 0 && attempt === 0) {
-        const minExpiry = Math.min(...expiries);
-        const waitMs = minExpiry - Date.now();
-        const remainingBudgetMs = deadline - Date.now();
-        if (waitMs > 0 && waitMs <= Math.min(3000, remainingBudgetMs)) {
-          await new Promise(r => setTimeout(r, waitMs + 50));
-          const refreshed = await getCooldownsBatch(candidatePool, kv);
-          for (const [k, v] of refreshed) cooldowns.set(k, v);
-          binding = candidatePool.find((b) => {
-            if (tried.has(bindingId(b))) return false;
-            const provAttempts = providerAttempts.get(b.provider) || 0;
-            if (provAttempts >= maxAttemptsPerProv) return false;
-            if (downProviders.has(b.provider) && hasMultipleProviders) return false;
-            const cd = cooldowns.get(bindingId(b)) || 0;
-            return cd <= Date.now();
-          });
-        }
-      }
-      if (!binding) break;
+      blockedByCooldown = expiries.length > 0;
+      if (expiries.length > 0) retryAfterSec = Math.max(1, Math.ceil((Math.min(...expiries) - Date.now()) / 1000));
+      break;
     }
 
     tried.add(bindingId(binding));
@@ -259,7 +245,8 @@ export async function onRequestPost(context) {
 
     // Calculate dynamic remaining timeout for this attempt
     const remainingMs = deadline - Date.now();
-    const modelTimeoutSec = binding.timeout_sec || upstreamTimeoutSec;
+    // 粘性场景固定 300s 直通；自动轮换使用单次尝试超时。
+    const modelTimeoutSec = strategy === 'manual' ? 300 : (binding.timeout_sec || upstreamTimeoutSec);
     const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
     const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
 
@@ -350,7 +337,8 @@ export async function onRequestPost(context) {
     }
 
     // Non-retriable? (e.g. 400 bad request, or manual mode) Return immediately
-    if (strategy === 'manual' || !shouldFailover(result.status, result.kind, lastErrorText)) {
+    if (strategy === 'manual') {
+      // 粘性场景：只尝试当前 Key，不轮换。
       if (result.response) {
         const headers = result.response.headers;
         headers.set('x-edgeone-relay', 'v8-3');
@@ -360,6 +348,19 @@ export async function onRequestPost(context) {
         headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
         return result.response;
       }
+      break;
+    }
+    if (!shouldFailover(result.status, result.kind, lastErrorText)) {
+      if (result.response) {
+        const headers = result.response.headers;
+        headers.set('x-edgeone-relay', 'v8-3');
+        headers.set('x-proxy-routed-via', `${binding.provider}/${binding.keyLabel}`);
+        headers.set('x-proxy-route', attemptLog.join('->'));
+        headers.set('x-proxy-attempts', String(attemptLog.length));
+        headers.set('x-proxy-latency-ms', String(Date.now() - startMs));
+        return result.response;
+      }
+      break;
     }
   }
 
@@ -368,9 +369,12 @@ export async function onRequestPost(context) {
   const lastDetail = cleanDetail ? `: ${cleanDetail.slice(0, 200)}` : '';
   const finalStatus = (lastStatus >= 400 && lastStatus < 600)
     ? lastStatus
-    : (attemptLog.some((a) => a.includes('timeout') || a.includes('read_timeout')) ? 504 : 503);
+    : (noAttempt && blockedByCooldown ? 429 : (attemptLog.some((a) => a.includes('timeout') || a.includes('read_timeout')) ? 504 : 503));
 
-  let userFriendlyMsg = `当前模型所有 ${tried.size} 个候选 Key 均已尝试但均失败 (${attemptLog.join(' -> ')})。`;
+  const noAttempt = tried.size === 0;
+  let userFriendlyMsg = noAttempt
+    ? `当前模型全部 ${candidatePool.length} 个候选 Key 均在冷却中，本次未发起请求（最近一次状态 ${lastStatus || '未知'}）。请 ${retryAfterSec || 5} 秒后重试。`
+    : `当前模型所有 ${tried.size} 个候选 Key 均已尝试但均失败 (${attemptLog.join(' -> ')})。`;
   if (finalStatus === 429) {
     userFriendlyMsg += ` 上游源站返回 429 频控/并发超限。服务暂不可用，建议切换备用模型。`;
   } else if (finalStatus === 410) {
@@ -411,7 +415,7 @@ export async function onRequestPost(context) {
         'x-proxy-route': attemptLog.join('->'),
         'x-proxy-attempts': String(attemptLog.length),
         'x-proxy-latency-ms': String(Date.now() - startMs),
-        ...(finalStatus === 429 ? { 'retry-after': '5' } : {}),
+        ...(finalStatus === 429 ? { 'retry-after': String(retryAfterSec || 5) } : {}),
       },
     }
   );

@@ -7,9 +7,6 @@ export const RUNTIME_PROFILE = Object.freeze({
   "settings": {
     "agent_routing_strategy": "sticky_failover",
     "upstream_timeout_sec": 120,
-    "request_total_budget_sec": 300,
-    "max_retries": 3,
-    "max_attempts_per_provider": 3,
     "fast_failover_provider_down": true,
     "cooldown_429_sec": 60,
     "cooldown_5xx_sec": 30,
@@ -37,9 +34,6 @@ export const RUNTIME_PROFILE = Object.freeze({
 export const DEFAULT_SETTINGS = Object.freeze({
   "agent_routing_strategy": "sticky_failover",
   "upstream_timeout_sec": 120,
-  "request_total_budget_sec": 300,
-  "max_retries": 3,
-  "max_attempts_per_provider": 3,
   "fast_failover_provider_down": true,
   "cooldown_429_sec": 60,
   "cooldown_5xx_sec": 30,

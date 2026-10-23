@@ -233,68 +233,6 @@
       ]
     },
     {
-      "key": "request_total_budget_sec",
-      "group": "timeout",
-      "label": "单请求全局总预算 (可选)",
-      "hint": "所有故障转移与重试累计耗时的最终截止预算。留空时系统将按 [单次超时 × 重试次数] 自动计算",
-      "type": "int",
-      "unit": "s",
-      "default": 300,
-      "min": 10,
-      "max": 900,
-      "optional": true,
-      "modes": [
-        "agent",
-        "kb"
-      ],
-      "hosts": [
-        "vm",
-        "edgeone"
-      ],
-      "aliases": [
-        "schedule_total_budget"
-      ]
-    },
-    {
-      "key": "max_retries",
-      "group": "fault",
-      "label": "单请求最大重试次数",
-      "hint": "单个用户请求在上游异常时允许轮换尝试不同 Key 的最大次数",
-      "type": "int",
-      "default": 3,
-      "min": 1,
-      "max": 10,
-      "modes": [
-        "agent",
-        "kb"
-      ],
-      "hosts": [
-        "vm",
-        "edgeone"
-      ],
-      "aliases": [
-        "schedule_total_budget_count"
-      ]
-    },
-    {
-      "key": "max_attempts_per_provider",
-      "group": "fault",
-      "label": "单个供应商最多尝试 Key 数",
-      "hint": "同一次请求内，单个供应商最多换几个不同的 Key（换 Key 次数，不是重试次数）",
-      "type": "int",
-      "default": 3,
-      "min": 1,
-      "max": 10,
-      "modes": [
-        "agent",
-        "kb"
-      ],
-      "hosts": [
-        "vm",
-        "edgeone"
-      ]
-    },
-    {
       "key": "fast_failover_provider_down",
       "group": "fault",
       "label": "供应商宕机快速跳过 (502/504/网络超时)",

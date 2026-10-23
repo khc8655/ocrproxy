@@ -132,3 +132,12 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 - 单 Key + 指定 `model`：只认真实 `chat/completions`（`max_tokens=16`）的结果；失败时**不得**用 `/models` 探测回退为成功，且必须把 status/latency 写入 `nodestat:*`，管理端模型列表据此刷新。
 - 无 `model`：仅做 `/models` 探测，响应标记 `mode: "probe"`；前端 Toast 显示“探测成功（/models，非模拟请求）”，与真实请求成功区分。
 - 单 Key 测试同时带 `agent_model` 时，无论成功/失败都记录为该模型绑定的最近调用，保证所有管理端会话看到一致状态。
+
+## 统一超时模型（v20261023-03）
+
+- **硬总超时固定 300s**：EdgeOne 为平台架构上限，VM 为安全上限；只用于防挂死，不参与"能尝试几个 Key"的计算。
+- 删除 `request_total_budget_sec`、`max_retries`、`max_attempts_per_provider`；设置页不再显示相关字段。
+- **粘性（manual）**：固定当前 Key，不轮换；VM 纯中转（300s 安全超时），EdgeOne 到 300s 返回超时。
+- **自动轮换**：按候选 Key 逐个尝试，成功 / 试完所有 Key / 300s 谁先到谁结束。
+- **KB**：正常轮换；全部 429/冷却 → `429 + Retry-After`，客户端自行重试，服务端不排队等待。
+- EdgeOne 使用 `agent_first_byte_timeout_sec` 作为单次尝试超时（不再把 `upstream_timeout_sec` 当全局超时）；全冷却不再返回"0 个候选均已尝试 / HTTP 0"。

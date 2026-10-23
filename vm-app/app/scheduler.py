@@ -1358,32 +1358,26 @@ async def schedule(
     except (ValueError, TypeError):
         agent_first_byte_timeout_sec = 120.0
 
-    # Max candidate retries per request
-    try:
-        max_retries = max(1, int(get_setting(config, "max_retries", 3)))
-    except (ValueError, TypeError):
-        max_retries = 3
-
+    # v20261023-03 timeout model: 固定 300s 硬总超时；自动轮换逐个候选 Key 试完，
+    # 成功 / 试完 / 300s 谁先到谁结束。不再有 max_retries / max_attempts_per_provider
+    # 这类会隐式截断候选 Key 的配置。
+    HARD_TIMEOUT_SEC = 300.0
+    max_retries = max(1, len(ordered_items))
+    max_attempts_per_provider = 10 ** 9
     min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
-    total_budget_sec = compute_request_budget(
-        min_single_attempt, max_retries, len(ordered_items), config.get("request_total_budget_sec")
-    )
-
-    # Max attempts per individual provider
-    try:
-        max_attempts_per_provider = max(1, int(get_setting(config, "max_attempts_per_provider", 3)))
-    except (ValueError, TypeError):
-        max_attempts_per_provider = 3
+    total_budget_sec = HARD_TIMEOUT_SEC
 
     fast_failover_provider_down = bool(get_setting(config, "fast_failover_provider_down", True))
     provider_attempts: Dict[str, int] = {}
     down_providers: Set[str] = set()
 
     if strategy == "manual":
-        # Pure manual passthrough: do not truncate deep thinking / reasoning models.
-        # Allow up to 300s safe bounded timeout, and let client decide when to disconnect.
-        upstream_timeout_sec = max(upstream_timeout_sec, 300.0)
-        total_budget_sec = upstream_timeout_sec + 5.0
+        # 粘性场景：单 Key 直通，不轮换；VM 纯中转但保留 300s 安全硬超时。
+        if category == "agent":
+            upstream_timeout_sec = 300.0
+        else:
+            upstream_timeout_sec = min(300.0, upstream_timeout_sec)
+        total_budget_sec = 300.0
 
     # Per-key in-flight cap.  Agent: 0 (default) = no local cap, so a session
     # never spills to another key just because the sticky key is busy (that
@@ -2349,8 +2343,9 @@ async def schedule(
             last_status_code = 429
         else:
             msg = (f"No available candidates for {model_type} – all are in cooldown. "
-                   f"Please retry in a few seconds.")
-            last_status_code = 503
+                   f"Please retry after the Retry-After interval.")
+            # 全部候选在冷却时统一返回 429，让客户端按 Retry-After 自行重试。
+            last_status_code = 429
         last_err_body = json.dumps({"detail": msg})
     # Soonest cooldown expiry among this request's candidates -> Retry-After.
     _now = time.time()

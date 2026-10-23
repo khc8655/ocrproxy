@@ -94,10 +94,12 @@ export async function onRequestPost(context) {
     }
 
     const settings = config.settings || {};
-    const totalBudgetSec = Number(settings.request_total_budget_sec || 300);
-    const upstreamTimeoutSec = Number(settings.upstream_timeout_sec || 120);
-    const maxRetries = Number(settings.max_retries || settings.schedule_total_budget || 3);
-    const maxAttemptsPerProv = Number(settings.max_attempts_per_provider || 3);
+    // v20261023-03: 固定 300s 硬总超时；自动轮换逐个候选 Key 试完，成功/试完/300s 先到先停。
+    const HARD_TIMEOUT_SEC = 300;
+    const totalBudgetSec = HARD_TIMEOUT_SEC;
+    const upstreamTimeoutSec = Number(
+      settings.agent_first_byte_timeout_sec ?? settings.agent_attempt_timeout_sec ?? settings.upstream_timeout_sec ?? 120
+    );
     const fastFailoverProvDown = settings.fast_failover_provider_down !== false;
     const strategy = settings.agent_routing_strategy || config.agent_routing_strategy || 'sticky_failover';
     const deadline = startMs + totalBudgetSec * 1000;
@@ -140,7 +142,7 @@ export async function onRequestPost(context) {
     const cooldowns = await getCooldownsBatch(candidatePool, kv);
     const anthropicVersion = request.headers.get('anthropic-version') || '2023-06-01';
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt < candidatePool.length; attempt++) {
       const now = Date.now();
       if (now >= deadline) {
         return new Response(
@@ -165,8 +167,6 @@ export async function onRequestPost(context) {
 
       let binding = candidatePool.find((b) => {
         if (tried.has(bindingId(b))) return false;
-        const provAttempts = providerAttempts.get(b.provider) || 0;
-        if (provAttempts >= maxAttemptsPerProv) return false;
         if (downProviders.has(b.provider) && hasMultipleProviders) return false;
         const cdExpiry = cooldowns.get(bindingId(b)) || 0;
         if (cdExpiry > Date.now()) return false;
@@ -174,31 +174,14 @@ export async function onRequestPost(context) {
       });
 
       if (!binding) {
-        // Check if unattempted candidates are in cooldown and we can wait within budget
-        const unattempted = candidatePool.filter(b => !tried.has(bindingId(b)));
-        const expiries = unattempted
+        // 全部候选在冷却/不可用：不排队等待，交给客户端按 Retry-After 重试。
+        const expiries = candidatePool
+          .filter(b => !tried.has(bindingId(b)))
           .map(b => cooldowns.get(bindingId(b)) || 0)
           .filter(exp => exp > Date.now());
-
-        if (expiries.length > 0 && attempt === 0) {
-          const minExpiry = Math.min(...expiries);
-          const waitMs = minExpiry - Date.now();
-          const remainingBudgetMs = deadline - Date.now();
-          if (waitMs > 0 && waitMs <= Math.min(3000, remainingBudgetMs)) {
-            await new Promise(r => setTimeout(r, waitMs + 50));
-            const refreshed = await getCooldownsBatch(candidatePool, kv);
-            for (const [k, v] of refreshed) cooldowns.set(k, v);
-            binding = candidatePool.find((b) => {
-              if (tried.has(bindingId(b))) return false;
-              const provAttempts = providerAttempts.get(b.provider) || 0;
-              if (provAttempts >= maxAttemptsPerProv) return false;
-              if (downProviders.has(b.provider) && hasMultipleProviders) return false;
-              const cd = cooldowns.get(bindingId(b)) || 0;
-              return cd <= Date.now();
-            });
-          }
-        }
-        if (!binding) break;
+        blockedByCooldown = expiries.length > 0;
+        if (expiries.length > 0) retryAfterSec = Math.max(1, Math.ceil((Math.min(...expiries) - Date.now()) / 1000));
+        break;
       }
 
       tried.add(bindingId(binding));
@@ -221,7 +204,7 @@ export async function onRequestPost(context) {
       const targetUrl = buildMessagesUrl(resolved.baseUrl, provCfg.anthropic_base_url, binding.provider);
 
       const remainingMs = deadline - Date.now();
-      const modelTimeoutSec = binding.timeout_sec || upstreamTimeoutSec;
+      const modelTimeoutSec = strategy === 'manual' ? 300 : (binding.timeout_sec || upstreamTimeoutSec);
       const effectiveTimeoutSec = Math.min(300, Number(modelTimeoutSec) || upstreamTimeoutSec);
       const perAttemptTimeoutMs = Math.min(effectiveTimeoutSec * 1000, Math.max(3000, remainingMs));
       const customHeaders = binding.adapterRules?.inject_headers || binding.adapterRules?.adapter_rules?.inject_headers;
@@ -276,6 +259,12 @@ export async function onRequestPost(context) {
 
       attemptLog.push(`${binding.provider}/${binding.keyLabel}=${lastStatus || result.kind}`);
 
+      if (strategy === 'manual') {
+        // 粘性场景：只尝试当前 Key，不轮换。
+        if (result.response) return result.response;
+        break;
+      }
+
       if (!shouldFailover(lastStatus, result.kind, result.errorText)) {
         return new Response(result.errorText || 'Upstream error', {
           status: lastStatus || 500,
@@ -289,22 +278,22 @@ export async function onRequestPost(context) {
       }
     }
 
-    // All retries failed
+    // All candidates exhausted / blocked by cooldown
+    const noAttempt = tried.size === 0;
+    const finalStatus = noAttempt && blockedByCooldown ? 429 : (lastStatus || 503);
+    const message = noAttempt
+      ? `All ${candidatePool.length} candidate keys are in cooldown; no upstream request was attempted. Retry after ${retryAfterSec || 5}s.`
+      : `All candidates failed. Attempts: ${attemptLog.join(' -> ')}. Last error (${lastStatus}): ${lastErrorText.slice(0, 300)}`;
     return new Response(
-      JSON.stringify({
-        type: 'error',
-        error: {
-          type: 'api_error',
-          message: `All candidates failed. Attempts: ${attemptLog.join(' -> ')}. Last error (${lastStatus}): ${lastErrorText.slice(0, 300)}`,
-        },
-      }),
+      JSON.stringify({ type: 'error', error: { type: finalStatus === 429 ? 'rate_limit_error' : 'api_error', message } }),
       {
-        status: lastStatus || 503,
+        status: finalStatus,
         headers: {
           'content-type': 'application/json',
           'x-proxy-route': attemptLog.join('->'),
           'x-proxy-attempts': String(attemptLog.length),
           'x-proxy-latency-ms': String(Date.now() - startMs),
+          ...(finalStatus === 429 ? { 'retry-after': String(retryAfterSec || 5) } : {}),
         },
       }
     );

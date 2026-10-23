@@ -1719,17 +1719,30 @@ test('PresetHub: updateConfiguredRules preserves user keys and updates rules', a
 // ============================================================================
 console.log('\n== Schema v2 Settings ==');
 
-test('DEFAULT_SETTINGS: contains all 10 standard fields with 300s budget', () => {
-  eq(DEFAULT_SETTINGS.request_total_budget_sec, 300);
+test('DEFAULT_SETTINGS: no legacy attempt/budget keys; timeout/cooldown defaults intact', () => {
+  // v20261023-03: 总预算/max_retries/max_attempts_per_provider 已删除；硬总超时固定 300s。
+  eq(DEFAULT_SETTINGS.request_total_budget_sec, undefined);
+  eq(DEFAULT_SETTINGS.max_retries, undefined);
+  eq(DEFAULT_SETTINGS.max_attempts_per_provider, undefined);
   eq(DEFAULT_SETTINGS.upstream_timeout_sec, 120);
-  eq(DEFAULT_SETTINGS.schedule_total_budget, 3);
-  eq(DEFAULT_SETTINGS.max_attempts_per_provider, 3);
   eq(DEFAULT_SETTINGS.fast_failover_provider_down, true);
   eq(DEFAULT_SETTINGS.agent_routing_strategy, 'sticky_failover');
   eq(DEFAULT_SETTINGS.cooldown_429_sec, 60);
   eq(DEFAULT_SETTINGS.cooldown_5xx_sec, 30);
   eq(DEFAULT_SETTINGS.cooldown_403_sec, 600);
   eq(DEFAULT_SETTINGS.circuit_break_threshold, 3);
+});
+
+test('chat/messages: hard 300s deadline, all-candidate rotation, no legacy caps', () => {
+  for (const rel of ['../edge-functions/v1/chat/completions.js', '../edge-functions/v1/messages.js']) {
+    const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
+    eq(src.includes('request_total_budget_sec'), false, rel + ' must not read request_total_budget_sec');
+    eq(src.includes('max_attempts_per_provider'), false, rel + ' must not read max_attempts_per_provider');
+    eq(src.includes('max_retries'), false, rel + ' must not read max_retries');
+    eq(src.includes('HARD_TIMEOUT_SEC = 300'), true, rel + ' must use fixed 300s hard deadline');
+    eq(src.includes('agent_first_byte_timeout_sec'), true, rel + ' must honor agent_first_byte_timeout_sec');
+    eq(src.includes('blockedByCooldown'), true, rel + ' must distinguish all-cooling from real attempts');
+  }
 });
 
 test('loadConfig: injects default settings when missing', async () => {

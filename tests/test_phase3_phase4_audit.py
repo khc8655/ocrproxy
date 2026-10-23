@@ -126,8 +126,8 @@ def test_edgeone_and_vm_ui_timeout_parity():
     )
     assert 'id="s_chatTimeout"' in eo_html or 'id="set_upstream_timeout_sec"' in eo_html, "timeout input missing"
     assert 'max="300"' in eo_html, "Red Line Violated: timeout input must have max='300'"
-    assert 'id="s_maxRetries"' in eo_html or 'id="set_max_retries"' in eo_html, "max_retries missing in agent-edgeone/admin.html"
-    assert 'id="s_requestTotalBudget"' in eo_html or 'id="set_request_total_budget_sec"' in eo_html, "budget missing in agent-edgeone/admin.html"
+    assert 'id="s_maxRetries"' not in eo_html, "legacy max_retries input must be removed from EdgeOne UI"
+    assert 'id="s_budget"' not in eo_html, "legacy total-budget input must be removed from EdgeOne UI"
     assert 'value="25"' not in eo_html, "Red Line Violated: ghost 'value=\"25\"' found in agent-edgeone/admin.html"
     assert "xsk/ocrprox" not in eo_html, "Red Line Violated: 404 mirror xsk/ocrprox found in agent-edgeone/admin.html"
 
@@ -167,7 +167,7 @@ def test_edgeone_and_vm_ui_timeout_parity():
     # 4. Default config timeouts
     cfg_path = os.path.join(root_dir, "edge-functions", "lib", "config.js")
     cfg_content = open(cfg_path, "r", encoding="utf-8").read()
-    assert "request_total_budget_sec: 300" in cfg_content, "DEFAULT_SETTINGS must have 300s budget"
+    assert "request_total_budget_sec: 300" not in cfg_content, "legacy 300s budget default must be removed"
     assert "upstream_timeout_sec: 120" in cfg_content, "DEFAULT_SETTINGS must have 120s upstream timeout"
 
 

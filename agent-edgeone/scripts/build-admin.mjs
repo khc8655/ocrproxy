@@ -204,10 +204,6 @@ if (!/id="s_chatTimeout"[^>]*max="300"/i.test(htmlBundled)) {
   console.error('FATAL BUILD ERROR: s_chatTimeout must have max="300"! Red Line 2 violated.');
   process.exit(1);
 }
-if (!htmlBundled.includes('id="s_maxRetries"')) {
-  console.error('FATAL BUILD ERROR: s_maxRetries input missing from admin HTML!');
-  process.exit(1);
-}
 
 // 7. Emit EdgeOne edge functions & synced copies
 writeFileSync(join(root, 'admin.bundled.html'), htmlBundled, 'utf8');
