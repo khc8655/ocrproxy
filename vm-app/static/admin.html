@@ -168,15 +168,7 @@
     <!-- Panel 4: System Settings -->
     <div id="panel-settings" class="panel">
       <!-- Hidden compatibility inputs for tests & dual lookup -->
-      <input type="hidden" id="set_upstream_timeout_sec" max="300" value="120">
-      <input type="hidden" id="set_request_total_budget_sec" value="300">
-      <input type="hidden" id="set_max_retries" value="3">
-      <input type="hidden" id="set_max_attempts_per_provider" value="3">
-      <input type="hidden" id="set_fast_failover_provider_down" value="true">
-      <input type="hidden" id="set_cooldown_429_sec" value="60">
-      <input type="hidden" id="set_cooldown_5xx_sec" value="30">
-      <input type="hidden" id="set_circuit_break_threshold" value="3">
-      <input type="hidden" id="set_cooldown_403_sec" value="600">
+      <input type="hidden" id="set_upstream_timeout_sec" max="300" value="90">
       <input type="hidden" id="set_routing_strategy" value="sticky_failover">
 
       <div class="section">
@@ -260,13 +252,13 @@
               </div>
               <div class="settings-row-ctrl">
                 <select id="s_agentRouting" data-alias="set_routing_strategy" class="form-control form-control-compact" onchange="onAgentRoutingChange()">
-                  <option value="sticky_failover">粘性故障转移 (sticky_failover) — 默认推荐</option>
-                  <option value="manual">纯手动直通 (manual) — 锁定当前 Key</option>
+                  <option value="sticky_failover">稳定模式 (sticky_failover) — 粘性 Key，429/欠费自动切换</option>
+                  <option value="manual">纯手动直通 (manual) — 锁定当前 Key，300s 超时</option>
                 </select>
               </div>
             </div>
 
-            <div class="settings-row settings-row-full" id="st-item-kb-routing" data-cap="kb">
+            <div class="settings-row settings-row-full" id="st-item-kb-routing">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="KB 知识库分流策略 (kb_routing_strategy)">KB 知识库分流策略 (kb_routing_strategy)</span>
                 <span class="settings-row-hint" title="知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力">知识库无状态批量入库推荐「轮询负载均衡」，平摊并发压力</span>
@@ -282,122 +274,126 @@
         </div>
 
         <!-- Group 3: Timeouts & Concurrency -->
-        <div class="card settings-card mb-3">
-          <div class="settings-group-title">3. 超时时钟与重试预算 (Timeouts & Concurrency)</div>
+        <div class="card settings-card mb-3" id="st-card-timeouts">
+          <div class="settings-group-title">3. 超时与并发 (Timeouts & Concurrency)</div>
           <div class="settings-grid">
-            <div class="settings-row">
+            <div class="settings-row" id="st-item-chat-timeout">
               <div class="settings-row-label">
-                <span class="settings-row-title" id="lbl_chatTimeout" title="单次请求等待超时 (agent_first_byte_timeout_sec)">单次请求等待超时 (agent_first_byte_timeout_sec)</span>
-                <span class="settings-row-hint" id="hint_chatTimeout" title="5~300s，智能体等待首字节响应的时限，发生超时立即安全切换备用 Key">5~300s，智能体等待首字节时限，超时立即切换备用 Key</span>
+                <span class="settings-row-title" id="lbl_chatTimeout" title="单 Key 首字节超时 (agent_first_byte_timeout_sec)">单 Key 首字节超时 (agent_first_byte_timeout_sec)</span>
+                <span class="settings-row-hint" id="hint_chatTimeout" title="单个 Key 等首字节的上限，超时换下一个 Key；整单 300s 封顶">单个 Key 等首字节的上限，超时换下一个 Key；整单 300s 封顶</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_chatTimeout" data-alias="set_upstream_timeout_sec" class="form-control form-control-compact mono" placeholder="120" min="5" max="300" step="5" onwheel="this.blur()">
+                <input type="number" id="s_chatTimeout" data-alias="set_upstream_timeout_sec" class="form-control form-control-compact mono" placeholder="90" min="5" max="300" step="5" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
-            <div class="settings-row" id="st-item-kb-concurrency" data-cap="kb">
+            <div class="settings-row" id="st-item-kb-embed-timeout">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="KB 单 Key 最大并发 (kb_max_concurrency_per_key)">KB 单 Key 最大并发 (kb_max_concurrency_per_key)</span>
-                <span class="settings-row-hint" title="KB 模式单 Key 在途并发上限（默认 16）；Agent 模式默认不限">KB 模式单个 Key 的在途并发上限（默认 16，Agent 不限）</span>
+                <span class="settings-row-title" title="Embedding / Rerank 单次超时 (upstream_timeout_sec)">Embedding / Rerank 单次超时 (upstream_timeout_sec)</span>
+                <span class="settings-row-hint" title="每个 Key 单次等待上限，超时换下一个 Key（默认 20s）">每个 Key 单次等待上限，超时换下一个 Key（默认 20s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="16" min="1" max="100" onwheel="this.blur()">
+                <input type="number" id="s_embedTimeout" class="form-control form-control-compact mono" placeholder="20" min="5" max="300" step="1" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+            <div class="settings-row" id="st-item-kb-timeout">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="OCR 单次超时 (upstream_timeout_kb)">OCR 单次超时 (upstream_timeout_kb)</span>
+                <span class="settings-row-hint" title="大图 OCR 每个 Key 单次等待上限（默认 60s）">大图 OCR 每个 Key 单次等待上限（默认 60s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" step="1" onwheel="this.blur()">
+                <span class="unit">秒</span>
+              </div>
+            </div>
+            <div class="settings-row" id="st-item-kb-concurrency">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="单 Key 最大并发 (kb_max_concurrency_per_key)">单 Key 最大并发 (kb_max_concurrency_per_key)</span>
+                <span class="settings-row-hint" title="单个 Key 同时在途请求上限；Key 多时调小，负载摊到所有 Key（默认 4）">单个 Key 同时在途请求上限；Key 多时调小，负载摊到所有 Key（默认 4）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_concurrency" class="form-control form-control-compact mono" placeholder="4" min="1" max="100" step="1" onwheel="this.blur()">
                 <span class="unit">个</span>
               </div>
             </div>
-
-            <div class="settings-row" id="st-item-kb-timeout" data-cap="kb">
+            <div class="settings-row" id="st-item-ocr-inflight">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="KB 大文件/OCR 处理超时 (upstream_timeout_kb)">KB 处理超时 (upstream_timeout_kb)</span>
-                <span class="settings-row-hint" title="长文本与大图片处理时限（默认 60s）">长文本与大图片处理时限（默认 60s）</span>
+                <span class="settings-row-title" title="OCR 处理图片数 (ocr_max_inflight)">OCR 处理图片数 (ocr_max_inflight)</span>
+                <span class="settings-row-hint" title="OCR 并发处理图片数（超出的排队不占内存，默认 12 张）">OCR 并发处理图片数（超出的排队不占内存，默认 12 张）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_kbTimeout" class="form-control form-control-compact mono" placeholder="60" min="10" max="300" onwheel="this.blur()">
-                <span class="unit">秒</span>
-              </div>
-            </div>
-
-            <div class="settings-row" id="st-item-ocr-inflight" data-cap="kb">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="OCR 同时处理图片数 (ocr_max_inflight)">OCR 处理图片数 (ocr_max_inflight)</span>
-                <span class="settings-row-hint" title="OCR 并发处理图片数（超出的排队不占内存，默认 12 张）">OCR 并发处理图片数（超出的排队不占内存）</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" onwheel="this.blur()">
+                <input type="number" id="s_ocrMaxInflight" class="form-control form-control-compact mono" placeholder="12" min="1" max="30" step="1" onwheel="this.blur()">
                 <span class="unit">张</span>
               </div>
             </div>
-
-            <div class="settings-row" id="st-item-ocr-queue" data-cap="kb">
+            <div class="settings-row" id="st-item-ocr-queue">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="OCR 排队最长等待 (ocr_queue_timeout_sec)">OCR 排队最长等待 (ocr_queue_timeout_sec)</span>
                 <span class="settings-row-hint" title="排队超过此时间返回 503 + Retry-After（默认 30s）">排队超过此时间返回 503 + Retry-After（默认 30s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" onwheel="this.blur()">
+                <input type="number" id="s_ocrQueueTimeout" class="form-control form-control-compact mono" placeholder="30" min="0" max="300" step="1" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
-
-            <div class="settings-row settings-row-full" id="st-item-fast-failover">
-              <div class="settings-row-label">
-                <span class="settings-row-title" title="跨厂商快速熔断 (fast_failover_provider_down)">跨厂商快速熔断 (fast_failover_provider_down)</span>
-                <span class="settings-row-hint" title="遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走">遇 502/504/连接超时且有其他可用厂商时，跳过该厂商剩余 Key 立即切走</span>
-              </div>
-              <div class="settings-row-ctrl">
-                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                  <input type="checkbox" id="s_fastFailover" data-alias="set_fast_failover_provider_down" checked style="width:16px;height:16px;cursor:pointer;">
-                  <span style="font-weight:600;">已开启</span>
-                </label>
-              </div>
-            </div>
+          </div>
+          <div id="manual-timeout-tip" hidden style="padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+            纯手动直通：固定使用当前 Key，整单 300s 超时，无其他参数。
           </div>
         </div>
 
         <!-- Group 4: Fault Tolerance & Cooldowns -->
         <div class="card settings-card mb-3">
-          <div class="settings-group-title">4. 容错熔断与冷却避让 (Fault Tolerance & Cooldowns)</div>
+          <div class="settings-group-title">4. 冷却与冷宫 (Cooldowns)</div>
           <div class="settings-grid mb-2" id="st-grid-cooldowns">
-            <div class="settings-row">
+            <div class="settings-row" id="st-item-cooldown-quota">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="429 限流冷却时长 (cooldown_429_sec)">429 限流冷却时长 (cooldown_429_sec)</span>
-                <span class="settings-row-hint" title="cooldown_429_sec · 命中 RPM/TPM 限流时的临时避让（默认 60s）">cooldown_429_sec · 命中 RPM/TPM 限流避让</span>
+                <span class="settings-row-title" title="冷宫时长 (cooldown_quota_sec)">冷宫时长 (cooldown_quota_sec)</span>
+                <span class="settings-row-hint" title="402 / 余额不足 / 401 Key 无效 / 403 封禁时停用该 Key（默认 24 小时，最长 7 天）；手动测试该 Key 成功即解除">402 / 余额不足 / 401 Key 无效 / 403 封禁时停用该 Key（默认 24 小时，最长 7 天）；手动测试该 Key 成功即解除</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown429" data-alias="set_cooldown_429_sec" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" step="5" onwheel="this.blur()">
+                <input type="number" id="s_cooldownQuotaHours" class="form-control form-control-compact mono" placeholder="24" min="1" max="168" step="1" onwheel="this.blur()">
+                <span class="unit">小时</span>
+              </div>
+            </div>
+            <div class="settings-row" id="st-item-cooldown-429">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="429 限流冷却 (cooldown_429_sec)">429 限流冷却 (cooldown_429_sec)</span>
+                <span class="settings-row-hint" title="某个 Key 遇 429 后暂停，请求轮到其他 Key；有 Retry-After 以其为准（默认 60s）">某个 Key 遇 429 后暂停，请求轮到其他 Key；有 Retry-After 以其为准（默认 60s）</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <input type="number" id="s_cooldown429" class="form-control form-control-compact mono" placeholder="60" min="5" max="600" step="5" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
-
-            <div class="settings-row">
+            <div class="settings-row" id="st-item-cooldown-5xx">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="5xx 故障冷却时长 (cooldown_5xx_sec)">5xx 故障冷却时长 (cooldown_5xx_sec)</span>
-                <span class="settings-row-hint" title="cooldown_5xx_sec · 上游源站 500/502/503/504 错误避让（默认 30s）">cooldown_5xx_sec · 上游 500/502/503/504 错误避让</span>
+                <span class="settings-row-title" title="5xx 单次冷却 (cooldown_5xx_sec)">5xx 单次冷却 (cooldown_5xx_sec)</span>
+                <span class="settings-row-hint" title="单次 500/502/503/504 后该 Key 暂停（默认 30s）">单次 500/502/503/504 后该 Key 暂停（默认 30s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown5xx" data-alias="set_cooldown_5xx_sec" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" step="5" onwheel="this.blur()">
+                <input type="number" id="s_cooldown5xx" class="form-control form-control-compact mono" placeholder="30" min="5" max="300" step="5" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>
-
-            <div class="settings-row">
+            <div class="settings-row" id="st-item-circuit-threshold">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="断路器熔断连续失败阈值 (circuit_break_threshold)">断路器连续失败阈值 (circuit_break_threshold)</span>
-                <span class="settings-row-hint" title="circuit_break_threshold · 单 Key 连续失败达到阈值即触发熔断（默认 3 次）">单 Key 连续失败达到阈值即触发熔断（默认 3 次）</span>
+                <span class="settings-row-title" title="熔断阈值 (circuit_break_threshold)">熔断阈值 (circuit_break_threshold)</span>
+                <span class="settings-row-hint" title="同一个 Key 连续 5xx 达到次数即熔断（默认 3 次）">同一个 Key 连续 5xx 达到次数即熔断（默认 3 次）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_circuitThreshold" data-alias="set_circuit_break_threshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
+                <input type="number" id="s_circuitThreshold" class="form-control form-control-compact mono" placeholder="3" min="1" max="10" step="1" onwheel="this.blur()">
                 <span class="unit">次</span>
               </div>
             </div>
-
-            <div class="settings-row">
+            <div class="settings-row" id="st-item-circuit-cooldown">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="403 鉴权失败/欠费隔离 (cooldown_403_sec)">403 鉴权失败隔离 (cooldown_403_sec)</span>
-                <span class="settings-row-hint" title="cooldown_403_sec · Key 无效或欠费的主动长效隔离（默认 600s）">Key 无效或欠费的主动长效隔离（默认 600s）</span>
+                <span class="settings-row-title" title="熔断冷却 (circuit_cooldown_sec)">熔断冷却 (circuit_cooldown_sec)</span>
+                <span class="settings-row-hint" title="熔断后该 Key 暂停（默认 600s）">熔断后该 Key 暂停（默认 600s）</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="number" id="s_cooldown403" data-alias="set_cooldown_403_sec" class="form-control form-control-compact mono" placeholder="600" min="30" max="3600" step="30" onwheel="this.blur()">
+                <input type="number" id="s_circuitCooldown" class="form-control form-control-compact mono" placeholder="600" min="5" max="7200" step="30" onwheel="this.blur()">
                 <span class="unit">秒</span>
               </div>
             </div>

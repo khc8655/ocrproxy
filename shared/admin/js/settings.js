@@ -18,24 +18,22 @@ function renderSettings(){
   set('s_agentRouting', c.agent_routing_strategy === 'manual' ? 'manual' : 'sticky_failover');
   set('s_kbRouting', c.kb_routing_strategy === 'manual' ? 'manual' : 'round_robin');
 
-  // Card 3: Timeouts & Budget
+  // Card 3: Timeouts & Concurrency（chat 超时框按模式显示 agent 首字节 / KB chat）
   const isKbInitial = (c.run_mode || c._run_mode) === 'kb';
-  const agTimeout = c.agent_first_byte_timeout_sec ?? 120;
-  const kbTimeout = c.upstream_timeout_sec ?? c.upstream_timeout_chat ?? 15;
-  set('s_chatTimeout', isKbInitial ? kbTimeout : agTimeout);
-  // 硬总超时固定 300s（EdgeOne 平台上限 / VM 安全上限），不再作为用户配置。
+  set('s_chatTimeout', isKbInitial ? (c.kb_chat_timeout_sec ?? 60) : (c.agent_first_byte_timeout_sec ?? 90));
+  set('s_embedTimeout', c.upstream_timeout_sec ?? 20);
   set('s_kbTimeout', c.upstream_timeout_kb ?? c.upstream_timeout_ocr ?? 60);
-  set('s_concurrency', c.kb_max_concurrency_per_key ?? 16);
+  set('s_concurrency', c.kb_max_concurrency_per_key ?? 4);
   set('s_ocrMaxInflight', c.ocr_max_inflight ?? 12);
   set('s_ocrQueueTimeout', c.ocr_queue_timeout_sec ?? 30);
-  const ffEl = document.getElementById('s_fastFailover');
-  if (ffEl) ffEl.checked = c.fast_failover_provider_down !== undefined ? !!c.fast_failover_provider_down : true;
 
-  // Card 4: Fault Tolerance & Cooldown
-  set('s_cooldown429', c.cooldown_429_sec ?? c.cooldown_tpm_sec ?? 60);
-  set('s_cooldown5xx', c.cooldown_5xx_sec ?? c.cooldown_duration ?? 30);
+  // Card 4: Cooldowns（冷宫以小时显示，存秒）
+  const quotaSec = Number(c.cooldown_quota_sec ?? (c.settings && c.settings.cooldown_quota_sec) ?? 86400) || 86400;
+  set('s_cooldownQuotaHours', Math.max(1, Math.round(quotaSec / 3600)));
+  set('s_cooldown429', c.cooldown_429_sec ?? 60);
+  set('s_cooldown5xx', c.cooldown_5xx_sec ?? 30);
   set('s_circuitThreshold', c.circuit_break_threshold ?? 3);
-  set('s_cooldown403', c.cooldown_403_sec ?? 600);
+  set('s_circuitCooldown', c.circuit_cooldown_sec ?? 600);
 
   // Card 6: EdgeOne Vault Hub
   const vCfg = c.edgeone_vault || {};
@@ -97,38 +95,19 @@ function onRunModeChange(){
   const modeEl = document.getElementById('s_runMode');
   if(!modeEl) return;
   const isKb = modeEl.value === 'kb';
-  const isAgent = modeEl.value === 'agent';
   const kbItem = document.getElementById('st-item-kb-routing');
   const agItem = document.getElementById('st-item-agent-routing');
-  const kbTimeout = document.getElementById('st-item-kb-timeout');
-  const kbConcurrency = document.getElementById('st-item-kb-concurrency');
-  if(kbItem) kbItem.hidden = isAgent;
+  if(kbItem) kbItem.hidden = !isKb;
   if(agItem) agItem.hidden = isKb;
-  if(kbTimeout) kbTimeout.hidden = isAgent;
-  if(kbConcurrency) kbConcurrency.hidden = isAgent;
-  ['st-item-ocr-inflight', 'st-item-ocr-queue'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.hidden = isAgent;
-  });
 
-  // Dynamic labels and values based on run mode
-  const lblChatTimeout = document.getElementById('lbl_chatTimeout');
-  const hintChatTimeout = document.getElementById('hint_chatTimeout');
-  const inputChatTimeout = document.getElementById('s_chatTimeout');
-  if (lblChatTimeout) {
-    lblChatTimeout.textContent = isKb ? 'KB 快速处理超时 (upstream_timeout_sec)' : '单次请求等待超时 (agent_first_byte_timeout_sec)';
+  const lbl = document.getElementById('lbl_chatTimeout');
+  const input = document.getElementById('s_chatTimeout');
+  if (lbl) {
+    lbl.textContent = isKb ? 'KB Chat 单次超时 (kb_chat_timeout_sec)' : '单 Key 首字节超时 (agent_first_byte_timeout_sec)';
+    lbl.title = lbl.textContent;
   }
-  if (hintChatTimeout) {
-    hintChatTimeout.textContent = isKb
-      ? '知识库模式下 Chat/Embedding/Reranker 处理时限（默认 15s）'
-      : '5~300s，智能体等待首字节时限，超时立即切换备用 Key';
-  }
-  if (inputChatTimeout && state.config) {
-    if (isKb) {
-      inputChatTimeout.value = state.config.upstream_timeout_sec ?? state.config.upstream_timeout_chat ?? 15;
-    } else {
-      inputChatTimeout.value = state.config.agent_first_byte_timeout_sec ?? 120;  // KB timeouts are not a fallback: runtime uses 120 s
-    }
+  if (input && state.config) {
+    input.value = isKb ? (state.config.kb_chat_timeout_sec ?? 60) : (state.config.agent_first_byte_timeout_sec ?? 90);
   }
   updateRoutingSettingsState();
 }
@@ -141,73 +120,59 @@ function onKbRoutingChange(){
   updateRoutingSettingsState();
 }
 
+// 各模式开放的参数（与 shared/config/settings.schema.json 的 modes/strategies 一致）：
+//   Agent 手动直通：无参数（固定 300s）
+//   Agent 稳定模式：首字节超时 + 冷宫时长
+//   KB：Chat / Embedding·Rerank / OCR 超时、单 Key 并发、OCR 队列、429/5xx/熔断、冷宫时长
+const KB_ONLY_ROWS = ['st-item-kb-embed-timeout', 'st-item-kb-timeout', 'st-item-kb-concurrency',
+  'st-item-ocr-inflight', 'st-item-ocr-queue', 'st-item-cooldown-429', 'st-item-cooldown-5xx',
+  'st-item-circuit-threshold', 'st-item-circuit-cooldown'];
+
 function updateRoutingSettingsState(){
   const modeEl = document.getElementById('s_runMode');
-  const isKb = modeEl && modeEl.value === 'kb';
-  const isAgent = modeEl && modeEl.value === 'agent';
+  const isKb = !!(modeEl && modeEl.value === 'kb');
   const agRouteEl = document.getElementById('s_agentRouting');
   const kbRouteEl = document.getElementById('s_kbRouting');
-  const isManual = isKb ? (kbRouteEl && kbRouteEl.value === 'manual') : (agRouteEl && agRouteEl.value === 'manual');
-  
-  const tipEl = document.getElementById('manual-routing-tip');
-  const hintEl = document.getElementById('agent-routing-hint');
-  if(tipEl) tipEl.hidden = !isManual;
-  if(hintEl) hintEl.hidden = (isManual || isKb);
+  const isManual = isKb ? !!(kbRouteEl && kbRouteEl.value === 'manual') : !!(agRouteEl && agRouteEl.value === 'manual');
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
 
-  // In manual mode, retry counts and attempts are bypassed completely
-  const manualHiddenIds = ['st-item-max-retries', 'st-item-max-attempts'];
-  manualHiddenIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.hidden = isManual;
-  });
+  show('manual-routing-tip', isManual);
+  show('agent-routing-hint', !isManual && !isKb);
 
-  // Fast failover: never in manual mode
-  const ffItem = document.getElementById('st-item-fast-failover');
-  if (ffItem) {
-    ffItem.hidden = isManual;
-  }
+  KB_ONLY_ROWS.forEach(id => show(id, isKb));
+  // 超时卡：Agent 手动直通没有任何可调参数，只显示提示
+  const agentManual = !isKb && isManual;
+  show('st-item-chat-timeout', !agentManual);
+  show('manual-timeout-tip', agentManual);
+  // 冷却卡：手动直通不冷却
+  show('st-grid-cooldowns', !isManual);
+  show('manual-cooldown-tip', isManual);
 
-  // Card 4: Cooldowns grid vs Manual Mode Tip
-  const cooldownGrid = document.getElementById('st-grid-cooldowns');
-  const cooldownTip = document.getElementById('manual-cooldown-tip');
-  if (cooldownGrid) cooldownGrid.hidden = isManual;
-  if (cooldownTip) cooldownTip.hidden = !isManual;
-
-  // Upstream timeout behavior
-  const chatTimeoutEl = document.getElementById('s_chatTimeout');
-  const hintChatTimeout = document.getElementById('hint_chatTimeout');
-  if (chatTimeoutEl) {
-    chatTimeoutEl.disabled = false;
-    if (isManual) {
-      chatTimeoutEl.placeholder = isKb ? '纯直通 (默认 15s)' : '纯直通已放宽至 300s';
-      if (hintChatTimeout) {
-        hintChatTimeout.textContent = isKb
-          ? '纯手动直通调试：锁定第一个候选节点直接请求，不自动重试、不切换候选，原始状态码与响应体 100% 原始透传。'
-          : '纯手动直通模式：超时自动放宽至 300s，不打断 o1/o3/DeepSeek-R1 深度长思考，由客户端自身决定断开时机。';
-      }
-    } else {
-      chatTimeoutEl.placeholder = isKb ? '默认 15' : '默认 120';
-      if (hintChatTimeout) {
-        hintChatTimeout.textContent = isKb
-          ? '知识库模式下 Chat/Embedding/Reranker 处理时限（默认 15s）'
-          : '智能体等待首字节响应的时限，发生超时立即安全切换备用 Key';
-      }
-    }
+  const hint = document.getElementById('hint_chatTimeout');
+  if (hint) {
+    hint.textContent = isKb
+      ? (isManual ? '纯手动直通调试：锁定第一个候选，不重试不切换' : '每个 Key 单次等待上限，超时换下一个 Key（默认 60s）')
+      : '单个 Key 等首字节的上限，超时换下一个 Key；整单 300s 封顶（默认 90s）';
+    hint.title = hint.textContent;
   }
 }
 
 function restoreDefaultSettings(){
   if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
-  set('s_chatTimeout', 30);
+  const isKb = document.getElementById('s_runMode')?.value === 'kb';
+  set('s_chatTimeout', isKb ? 60 : 90);
+  set('s_embedTimeout', 20);
   set('s_kbTimeout', 60);
-  set('s_concurrency', 16);
-  const ff = document.getElementById('s_fastFailover'); if(ff) ff.checked = true;
+  set('s_concurrency', 4);
+  set('s_ocrMaxInflight', 12);
+  set('s_ocrQueueTimeout', 30);
+  set('s_cooldownQuotaHours', 24);
   set('s_cooldown429', 60);
   set('s_cooldown5xx', 30);
   set('s_circuitThreshold', 3);
-  set('s_cooldown403', 600);
-  toast('已填入官方推荐默认参数，请点击「保存设置」生效', 'ok');
+  set('s_circuitCooldown', 600);
+  toast('已填入推荐默认参数，请点击「保存设置」生效', 'ok');
 }
 
 function generateRandomKey() {
@@ -517,54 +482,44 @@ async function saveSettings(silent=false){
   const kbRouteEl = document.getElementById('s_kbRouting');
   if (kbRouteEl) c.kb_routing_strategy = kbRouteEl.value === 'manual' ? 'manual' : 'round_robin';
 
-  // Card 3: Timeouts & Budget
+  // Card 3: Timeouts & Concurrency
+  const num = (id, dflt, lo, hi) => {
+    const el = document.getElementById(id);
+    if (!el || el.value.trim() === '') return dflt;
+    const v = Number(el.value);
+    return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt;
+  };
   const isKbMode = c.run_mode === 'kb';
-  const timeoutVal = Number(document.getElementById('s_chatTimeout').value) || (isKbMode ? 15 : 120);
-  if (isKbMode) {
-    c.upstream_timeout_sec = timeoutVal;
-    c.upstream_timeout_chat = timeoutVal;
-    c.chat_fast_timeout = timeoutVal;
-    c.upstream_timeout_embedding = timeoutVal;
-    c.upstream_timeout_rerank = timeoutVal;
-  } else {
-    c.agent_first_byte_timeout_sec = timeoutVal;
-    // Keep upstream_timeout_sec safe for fallback
-    if (!c.upstream_timeout_sec) c.upstream_timeout_sec = 15;
-  }
-  // 硬总超时固定 300s；旧的 request_total_budget_sec / max_retries /
-  // max_attempts_per_provider 已废弃，不再写入。
-  delete c.schedule_total_budget;
-  delete c.request_total_budget_sec;
-  delete c.max_retries;
-  delete c.max_attempts_per_provider;
-  if (c.settings) {
-    delete c.settings.schedule_total_budget;
-    delete c.settings.request_total_budget_sec;
-    delete c.settings.max_retries;
-    delete c.settings.max_attempts_per_provider;
-  }
-  const kbTimeoutEl = document.getElementById('s_kbTimeout');
-  c.upstream_timeout_kb = kbTimeoutEl ? (Number(kbTimeoutEl.value) || 60) : 60;
+  if (isKbMode) c.kb_chat_timeout_sec = num('s_chatTimeout', 60, 10, 300);
+  else c.agent_first_byte_timeout_sec = num('s_chatTimeout', 90, 5, 600);
+  if (document.getElementById('s_embedTimeout')) c.upstream_timeout_sec = num('s_embedTimeout', 20, 5, 300);
+  c.upstream_timeout_kb = num('s_kbTimeout', 60, 10, 300);
   c.upstream_timeout_ocr = c.upstream_timeout_kb;
-  c.kb_max_concurrency_per_key = Math.min(100, Math.max(1, Number(document.getElementById('s_concurrency').value) || 16));
-  const ocrInflightEl = document.getElementById('s_ocrMaxInflight');
-  if (ocrInflightEl) c.ocr_max_inflight = Math.min(30, Math.max(1, Number(ocrInflightEl.value) || 12));
-  const ocrQueueEl = document.getElementById('s_ocrQueueTimeout');
-  if (ocrQueueEl) {
-    const v = Number(ocrQueueEl.value);
-    c.ocr_queue_timeout_sec = (ocrQueueEl.value.trim() === '' || !Number.isFinite(v)) ? 30 : Math.min(300, Math.max(0, v));
-  }
-  const ffEl = document.getElementById('s_fastFailover');
-  c.fast_failover_provider_down = ffEl ? !!ffEl.checked : true;
+  if (document.getElementById('s_concurrency')) c.kb_max_concurrency_per_key = num('s_concurrency', 4, 1, 100);
+  if (document.getElementById('s_ocrMaxInflight')) c.ocr_max_inflight = num('s_ocrMaxInflight', 12, 1, 30);
+  if (document.getElementById('s_ocrQueueTimeout')) c.ocr_queue_timeout_sec = num('s_ocrQueueTimeout', 30, 0, 300);
 
-  // Card 4: Fault Tolerance & Cooldown
-  c.cooldown_429_sec = Number(document.getElementById('s_cooldown429').value) || 60;
-  c.cooldown_tpm_sec = c.cooldown_429_sec; // backward compatibility
-  c.cooldown_5xx_sec = Number(document.getElementById('s_cooldown5xx').value) || 30;
-  c.cooldown_duration = c.cooldown_5xx_sec; // backward compatibility
-  c.circuit_break_threshold = Number(document.getElementById('s_circuitThreshold').value) || 3;
-  c.cooldown_403_sec = Number(document.getElementById('s_cooldown403').value) || 600;
-  delete c.latency_based_routing;
+  // Card 4: Cooldowns
+  c.cooldown_quota_sec = Math.round(num('s_cooldownQuotaHours', 24, 1, 168) * 3600);
+  if (document.getElementById('s_cooldown429')) c.cooldown_429_sec = num('s_cooldown429', 60, 5, 600);
+  if (document.getElementById('s_cooldown5xx')) c.cooldown_5xx_sec = num('s_cooldown5xx', 30, 5, 300);
+  if (document.getElementById('s_circuitThreshold')) c.circuit_break_threshold = num('s_circuitThreshold', 3, 1, 10);
+  if (document.getElementById('s_circuitCooldown')) c.circuit_cooldown_sec = num('s_circuitCooldown', 600, 5, 7200);
+
+  // 已删除 / 并入其他参数的旧字段（与后端 _migrate_params_v2 一致）
+  ['schedule_total_budget', 'request_total_budget_sec', 'max_retries', 'max_attempts_per_provider',
+   'cooldown_403_sec', 'circuit_escalation_sec', 'fast_failover_provider_down', 'upstream_timeout_chat',
+   'chat_fast_timeout', 'upstream_timeout_embedding', 'upstream_timeout_rerank', 'cooldown_tpm_sec',
+   'cooldown_duration', 'latency_based_routing'].forEach(k => {
+    delete c[k];
+    if (c.settings) delete c.settings[k];
+  });
+  if (c.settings) {
+    ['agent_first_byte_timeout_sec', 'kb_chat_timeout_sec', 'upstream_timeout_sec', 'upstream_timeout_kb',
+     'kb_max_concurrency_per_key', 'cooldown_quota_sec', 'cooldown_429_sec', 'cooldown_5xx_sec',
+     'circuit_break_threshold', 'circuit_cooldown_sec'].forEach(k => { if (c[k] !== undefined) c.settings[k] = c[k]; });
+  }
+  c._params_rev = 2;
 
   // Integrate Schema-driven form values if present
   if (typeof SettingsForm !== 'undefined' && typeof SettingsForm.collect === 'function') {

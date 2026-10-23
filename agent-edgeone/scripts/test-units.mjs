@@ -891,9 +891,14 @@ test('classifyFailure: returns 60s for 429', () => {
   eq(COOLDOWN_DURATIONS.TPM_429, 60);
 });
 
-test('classifyFailure: returns 600s for 403', () => {
+test('classifyFailure: 401/402/403 go to the long ban (cooldown_quota_sec, default 24h)', () => {
   eq(classifyFailure(403, 'http'), COOLDOWN_DURATIONS.QUOTA_403);
-  eq(COOLDOWN_DURATIONS.QUOTA_403, 600);
+  eq(COOLDOWN_DURATIONS.QUOTA_403, 86400);
+  eq(classifyFailure(401, 'http', 'invalid api key'), COOLDOWN_DURATIONS.QUOTA_403);
+  eq(classifyFailure(402, 'http', 'payment required'), COOLDOWN_DURATIONS.QUOTA_403);
+  eq(classifyFailure(401, 'http', '', { cooldown_quota_sec: 7200 }), 7200);
+  // 402 with a rate-limit hint stays a short 429-style cooldown path (not a ban)
+  eq(classifyFailure(429, 'http', 'rate limit'), COOLDOWN_DURATIONS.TPM_429);
 });
 
 test('classifyFailure: returns 30s for 5xx', () => {
@@ -1725,11 +1730,13 @@ test('DEFAULT_SETTINGS: no legacy attempt/budget keys; timeout/cooldown defaults
   eq(DEFAULT_SETTINGS.max_retries, undefined);
   eq(DEFAULT_SETTINGS.max_attempts_per_provider, undefined);
   eq(DEFAULT_SETTINGS.upstream_timeout_sec, 120);
-  eq(DEFAULT_SETTINGS.fast_failover_provider_down, true);
+  eq(DEFAULT_SETTINGS.fast_failover_provider_down, undefined);
   eq(DEFAULT_SETTINGS.agent_routing_strategy, 'sticky_failover');
+  eq(DEFAULT_SETTINGS.agent_first_byte_timeout_sec, 90);
   eq(DEFAULT_SETTINGS.cooldown_429_sec, 60);
   eq(DEFAULT_SETTINGS.cooldown_5xx_sec, 30);
-  eq(DEFAULT_SETTINGS.cooldown_403_sec, 600);
+  eq(DEFAULT_SETTINGS.cooldown_403_sec, undefined);
+  eq(DEFAULT_SETTINGS.cooldown_quota_sec, 86400);
   eq(DEFAULT_SETTINGS.circuit_break_threshold, 3);
 });
 

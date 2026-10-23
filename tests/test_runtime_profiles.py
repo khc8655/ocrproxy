@@ -33,12 +33,14 @@ def test_profiles_shape():
     agent = profiles["vm-agent"]["settings"]
     kb = profiles["vm-kb"]["settings"]
     edge = profiles["edgeone"]["settings"]
-    assert agent["agent_first_byte_timeout_sec"] == 120
-    assert kb["upstream_timeout_sec"] == 15 and kb["upstream_timeout_kb"] == 60
+    assert agent["agent_first_byte_timeout_sec"] == 90
+    assert kb["upstream_timeout_sec"] == 20 and kb["upstream_timeout_kb"] == 60
+    assert kb["kb_chat_timeout_sec"] == 60 and kb["kb_max_concurrency_per_key"] == 4
+    assert edge["agent_first_byte_timeout_sec"] == 90
     assert edge["upstream_timeout_sec"] == 120
     # KB-only knobs must not leak into the agent profile
     for kb_only in ("kb_max_concurrency_per_key", "kb_global_max_concurrency",
-                    "ocr_max_inflight", "circuit_escalation_sec"):
+                    "ocr_max_inflight", "kb_chat_timeout_sec"):
         assert kb_only not in agent, f"{kb_only} must be KB-only"
     print("PASS profiles: three runtime profiles with mode-specific defaults")
 
@@ -52,12 +54,16 @@ def test_profile_keys_exist_in_schema():
             assert key in keys, f"profile {name} setting {key} has no schema field"
     # independently-configurable policies, no cross-policy aliases
     by_key = {f["key"]: f for f in schema["fields"]}
-    for key, default in (("cooldown_quota_sec", 1800), ("cooldown_404_sec", 600),
-                         ("cooldown_410_sec", 86400), ("circuit_escalation_sec", 1800),
+    for key, default in (("cooldown_quota_sec", 86400), ("cooldown_404_sec", 600),
+                         ("cooldown_410_sec", 86400), ("circuit_cooldown_sec", 600),
                          ("kb_global_max_concurrency", 30)):
         assert key in by_key, f"missing schema field {key}"
         assert by_key[key].get("default") == default, (key, by_key[key].get("default"))
-    assert "cooldown_quota_sec" not in (by_key["cooldown_403_sec"].get("aliases") or [])
+    # 参数精简 v2：401/403 并入冷宫，熔断只剩一个冷却参数，快速跳过不再可配
+    for gone in ("cooldown_403_sec", "circuit_escalation_sec", "fast_failover_provider_down"):
+        assert gone not in by_key, f"{gone} should be removed from the schema"
+        for prof in profiles.values():
+            assert gone not in (prof.get("settings") or {}), f"{gone} still in a runtime profile"
     assert "upstream_timeout_chat" not in (by_key["agent_first_byte_timeout_sec"].get("aliases") or [])
     print("PASS schema: profile keys are schema fields; distinct policies are not aliases")
 

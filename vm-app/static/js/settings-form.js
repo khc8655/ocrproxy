@@ -27,6 +27,7 @@
   }
 
   function isFieldVisible(fld, host, mode) {
+    if (fld.hidden) return false;
     if (fld.hosts && !fld.hosts.includes(host)) return false;
     if (fld.modes && !fld.modes.includes(mode)) return false;
     return true;

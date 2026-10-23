@@ -365,10 +365,10 @@ def test_403_region_model_isolation():
         is_key_issue_400=False,
         category="agent",
         consecutive_5xx_count=0,
-        config_params={"is_model_level_403": True, "cooldown_404_sec": 600.0, "cooldown_403_sec": 600.0}
+        config_params={"is_model_level_403": True, "cooldown_404_sec": 600.0, "cooldown_quota_sec": 86400.0}
     )
-    # Model-level 403 gets candidate cooldown
-    assert eval_region.cooldown_sec == 600.0
+    # 参数精简 v2：模型级 403（tier/地区）也进冷宫，但只停这个候选（调用方不做 Key 级冷却）
+    assert eval_region.cooldown_sec == 86400.0
     assert not eval_region.is_quota
 
     # Genuine auth 403 gets full key cooldown
@@ -378,9 +378,9 @@ def test_403_region_model_isolation():
         is_key_issue_400=False,
         category="agent",
         consecutive_5xx_count=0,
-        config_params={"is_model_level_403": False, "cooldown_403_sec": 600.0}
+        config_params={"is_model_level_403": False, "cooldown_quota_sec": 86400.0}
     )
-    assert eval_auth.cooldown_sec == 600.0
+    assert eval_auth.cooldown_sec == 86400.0
     print("  ✓ 403 region/model restriction isolated from key-level freeze")
 
 

@@ -43,12 +43,35 @@ export const KV_BINDING_CANDIDATES = [
 
 import { DEFAULT_SETTINGS as PROFILE_DEFAULT_SETTINGS } from './generated/runtime-profile.js';
 
-// Defaults come from shared/config/runtime-profiles.json (single table). `schedule_total_budget`
-// is a deprecated alias kept only for legacy migration below.
+// Defaults come from shared/config/runtime-profiles.json (single table).
 export const DEFAULT_SETTINGS = Object.freeze({
   ...PROFILE_DEFAULT_SETTINGS,
-  schedule_total_budget: 3,
 });
+
+// 参数精简（v2，与 VM config_store._migrate_params_v2 一致）：仍停在旧默认值的参数换成新默认值，
+// 删除已废弃字段。用 _params_rev 标记，管理端保存后不再重复迁移。
+const PARAMS_V2_DEFAULTS = {
+  agent_first_byte_timeout_sec: [120, 90],
+  cooldown_quota_sec: [1800, 86400],
+};
+const PARAMS_V2_OBSOLETE = [
+  'schedule_total_budget', 'max_retries', 'request_total_budget_sec', 'max_attempts_per_provider',
+  'cooldown_403_sec', 'circuit_escalation_sec', 'fast_failover_provider_down',
+  'cooldown_tpm_sec', 'cooldown_duration',
+];
+export const PARAMS_REV = 2;
+
+export function migrateParamsV2(parsed) {
+  if (Number(parsed._params_rev || 0) >= PARAMS_REV) return false;
+  for (const blk of [parsed, parsed.settings || {}]) {
+    for (const [k, [oldV, newV]] of Object.entries(PARAMS_V2_DEFAULTS)) {
+      if (blk[k] !== undefined && Number(blk[k]) === oldV) blk[k] = newV;
+    }
+    for (const k of PARAMS_V2_OBSOLETE) delete blk[k];
+  }
+  parsed._params_rev = PARAMS_REV;
+  return true;
+}
 
 /**
  * Parse + validate a config payload.  Used by both the KV path and the
@@ -115,24 +138,7 @@ function parseAndValidateConfig(raw, source) {
   // Legacy plain-string keys -> canonical {key, origin} objects (single shape everywhere).
   normalizeProviderKeys(parsed);
 
-  // Backward compatibility migration for schedule_total_budget
-  const legacyStb = parsed.settings.schedule_total_budget ?? parsed.schedule_total_budget;
-  if (legacyStb !== undefined) {
-    const stbNum = Number(legacyStb);
-    if (!isNaN(stbNum)) {
-      if (stbNum <= 10 && stbNum > 0) {
-        if (parsed.settings.max_retries === undefined || parsed.settings.max_retries === DEFAULT_SETTINGS.max_retries) {
-          parsed.settings.max_retries = Math.round(stbNum);
-        }
-      } else if (stbNum > 10) {
-        if (parsed.settings.request_total_budget_sec === undefined || parsed.settings.request_total_budget_sec === DEFAULT_SETTINGS.request_total_budget_sec) {
-          parsed.settings.request_total_budget_sec = stbNum;
-        }
-      }
-    }
-    delete parsed.settings.schedule_total_budget;
-    delete parsed.schedule_total_budget;
-  }
+  migrateParamsV2(parsed);
 
   return parsed;
 }

@@ -26,9 +26,8 @@
  *   meta:config                        value = JSON-encoded full config
  *                                       (set by the VM admin panel for live updates)
  *
- * TTL: every write includes a KV-level expiration so dead keys self-clean.
- * The TTL is set generously (1200s) to cover the longest possible cooldown
- * (600s quota) plus a buffer.
+ * Cooldown values are absolute expiry timestamps (no KV-level TTL), so long
+ * bans (cooldown_quota_sec, default 24h) survive as long as configured.
  */
 
 const KV_TTL_SEC = 1200;
@@ -296,20 +295,19 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
   ));
 
   const isQuota = Boolean(
-    [400, 401, 402, 403, 429].includes(status) &&
-    hasHardQuotaKw &&
+    (([400, 401, 402, 403, 429].includes(status) && hasHardQuotaKw) || status === 402) &&
     !hasRateLimitKw
   );
 
   if (isQuota) return quotaSec;
   if (status >= 300 && status < 400) return 0; // 3xx Base URL configuration error, do not cooldown key
   if (status === 429) return tpmSec;
-  if (status === 403) {
-    if (lower && MODEL_LEVEL_403_PHRASES.some(p => lower.includes(p))) {
-      return Number(settings.cooldown_404_sec) || COOLDOWN_DURATIONS.KEY_DRIFT;
-    }
-    return quotaSec;
+  // 401 Key 无效 / 403 封禁：与欠费一样打入冷宫（cooldown_quota_sec，默认 24h），与 VM 一致。
+  // 403 模型/地区限制只短暂停该模型：EdgeOne 边缘节点地区不固定，换个节点可能就能用。
+  if (status === 403 && lower && MODEL_LEVEL_403_PHRASES.some(p => lower.includes(p))) {
+    return Number(settings.cooldown_404_sec) || COOLDOWN_DURATIONS.KEY_DRIFT;
   }
+  if (status === 401 || status === 403) return quotaSec;
 
   if (status === 400) {
     if (lower && KEY_ISSUE_400_PHRASES.some(p => lower.includes(p))) {
@@ -319,7 +317,7 @@ export function classifyFailure(status, kind /* 'http' | 'empty_stream' | 'read_
   }
 
   if (status === 410) return COOLDOWN_DURATIONS.MODEL_GONE_410;
-  if (status === 401 || status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
+  if (status === 404) return COOLDOWN_DURATIONS.KEY_DRIFT;
   if (status >= 500) return s5xxSec;
   return 0;
 }
