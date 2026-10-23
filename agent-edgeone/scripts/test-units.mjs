@@ -2369,6 +2369,7 @@ test('api/test.js: real chat result is authoritative and updates the model-list 
     data = await res.json();
     eq(data.ok, true);
     eq(data.mode, 'probe');
+    eq((await stat()).status, 200, 'probe must not overwrite the last real-call status');
   } finally {
     globalThis.fetch = originalFetch;
   }

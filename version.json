@@ -1,12 +1,12 @@
 {
-  "version": "v20261023-01",
+  "version": "v20261023-02",
   "release_date": "2026-10-23",
   "commit": "HEAD",
-  "title": "修复 EdgeOne 模型测试：真实小请求为准并同步模型列表 + 探测/真实请求文案区分 (v20261023-01)",
+  "title": "修复 EdgeOne 探测覆盖真实调用状态 + 模型测试语义收尾 (v20261023-02)",
   "changelog": [
-    "EdgeOne /api/test 单 Key + 指定模型时只认真实 chat 请求结果（max_tokens=16）：失败不再用 /models 探测回退成“成功”，并把成功/失败状态与耗时写入 nodestats，模型列表会同步显示最新状态/耗时/最近调用；",
-    "无目标模型的探测路径显式标记 mode=probe；前端 toast 区分「真实小请求」与「/models 探测」，不再把探测成功显示成真实请求成功；",
-    "回归：EdgeOne 单测新增 429 真实请求不得回退成功、失败状态要写列表、成功写 200、探测路径标记 probe；",
-    "说明：EdgeOne 控制台需重新部署 admin bundle 才能拿到本修复；旧部署仍会显示过时的预设供应商下拉。EdgeOne 仅 Agent 模式、且本身是 Hub，故不显示“从中枢拉取”来源，这是能力位差异而非两套代码。"
+    "EdgeOne /api/test 的 /models 探测路径不再写入 nodestat：探测只是诊断，不能把真实调用留下的 429/403 覆盖成 200；模型列表始终显示最近一次真实请求状态；",
+    "真实 chat 成功/失败仍写入 nodestat（v20261023-01 已修）；无 model 的探测响应保持 mode=probe，前端 Toast 标注“探测”而非真实请求；",
+    "回归：单测覆盖“探测不得覆盖最近一次真实状态”；",
+    "说明：EdgeOne 需重新 deploy 才生效；VM 升级后仅 Toast 文案同步。"
   ]
 }

@@ -355,7 +355,6 @@ export async function onRequestPost(context) {
   const latency = Date.now() - start;
 
   if (!resp) {
-    await recordTestStat(0, latency);
     return new Response(
       JSON.stringify({
         ok: false,
@@ -393,7 +392,8 @@ export async function onRequestPost(context) {
     verdict = `status ${resp.status}`;
   }
 
-  await recordTestStat(resp.status, latency);
+  // A /models probe is diagnostics only: never overwrite the last REAL call status
+  // (otherwise a probe 200 would mask a real 429/401 in the model list).
   return new Response(
     JSON.stringify({
       ok,
