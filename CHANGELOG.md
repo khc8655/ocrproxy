@@ -9,7 +9,9 @@
 ### 工程流程
 - 发版节奏为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；只有 P0 线上故障/安全事件才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
 
-### 参数精简 v2（KB / Agent 按模式开放参数）
+## [v20261023-04] - 2026-10-23
+
+### 参数精简 v2（PR #25：KB / Agent 按模式开放参数）
 - **按模式开放参数**：Agent 手动直通不显示任何参数（固定 300s）；Agent 稳定模式只显示首字节超时（默认 120→**90s**）和冷宫时长；KB 显示 Chat / Embedding·Rerank / OCR 三个超时、单 Key 并发、OCR 队列、429/5xx/熔断和冷宫时长。
 - **冷宫**：402、余额不足/欠费关键词、401 Key 无效、403 封禁或无权访问该模型，统一使用 `cooldown_quota_sec`，默认 1800s→**24h**（上限 7 天，设置页按小时填写）。删除 `cooldown_403_sec`。VM 把冷宫写入 `CONFIG_DIR/key_bans.json`，重启后不丢；在模型列表手动测试该 Key 成功即解除，「解除所有冷却」会全部清空。EdgeOne 的 401 原来只冷却 30s，现在同样进冷宫；403 模型/地区限制仍是短冷却（边缘节点地区不固定）。
 - **KB 单供应商多 Key**：修复某个 Key 一次 502/503/504 或读超时，就跳过同供应商其余所有 Key 的问题（20 个 Key 只有 1 个供应商时会直接整单失败）。现在只有配置了多个供应商时才跳过；读超时不再触发跳过。删除 `fast_failover_provider_down` 配置。
@@ -19,6 +21,13 @@
 - Agent 模式不再显示 429/5xx/熔断参数（Agent 遇 429 先在当前 Key 上按 Retry-After 等待，最多 20s，再切下一个 Key；5xx 不冷却）；EdgeOne 熔断参数本来就不读配置，也一并隐藏。KB 策略只保留「轮询」和「手动」两个后端实际支持的选项。
 - **旧配置迁移**（`_params_rev=2`，VM 和 EdgeOne 一致）：仍停在旧默认值的参数自动换成新默认值，改过的值保持不变；同时删除废弃字段（`max_retries` / `request_total_budget_sec` / `cooldown_403_sec` 等）。
 - 测试：新增 `tests/test_param_simplify.py`（已接入 run_tests）。
+
+### 设置项生效契约（UI 参数不生效根因修复）
+
+- 根因一：KB 设置行使用 `data-cap="kb"`，但 `HOST.capabilities` 没有 `kb`；`applyCapabilities()` 会把整行 `hidden`，保存后用户看不到/改不了参数。修复：移除不存在的 `data-cap`，按 schema `modes`/`strategies` 显隐。
+- 根因二：EdgeOne UI 写 `agent_first_byte_timeout_sec`，运行时却读 `upstream_timeout_sec`，形成"UI 有、后端不认"的静默漂移。修复：统一 UI 保存键与 runtime 读取键，EdgeOne 真正读取 `agent_first_byte_timeout_sec`。
+- 新增 `tests/test_settings_binding_contract.py`：校验所有 `data-cap` 必须来自 `HOST.capabilities`、`data-arch` 合法、已删除配置不得复活、schema 字段必须有运行时读取点；已接入 `run_tests` T1。
+- 文档纠偏：`ARCHITECTURE_STANDARDS.md` 的 EdgeOne 25s/30s 预算改为固定 300s；`SYSTEM_DESIGN_SPEC.md` 删除过期的 `request_total_budget_sec`/`max_retries` 和"文档先行"表述，改为契约先行（讨论确认 → 代码+测试 → 文档同批）；新增 `CLAUDE.md` 明确冲突时以 schema + runtime + tests 为准。
 
 ---
 

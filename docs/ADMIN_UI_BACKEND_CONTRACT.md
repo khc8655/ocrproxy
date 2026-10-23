@@ -141,3 +141,22 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 - **自动轮换**：按候选 Key 逐个尝试，成功 / 试完所有 Key / 300s 谁先到谁结束。
 - **KB**：正常轮换；全部 429/冷却 → `429 + Retry-After`，客户端自行重试，服务端不排队等待。
 - EdgeOne 使用 `agent_first_byte_timeout_sec` 作为单次尝试超时（不再把 `upstream_timeout_sec` 当全局超时）；全冷却不再返回"0 个候选均已尝试 / HTTP 0"。
+
+## 设置项生效契约（Settings Binding Contract，v20261023-04）
+
+> 2026-10-23 事故：KB 设置行带 `data-cap="kb"`，但 `HOST.capabilities` 没有 `kb`；`applyCapabilities()` 直接 `hidden`，保存后整行消失。同时 EdgeOne UI 写 `agent_first_byte_timeout_sec`，运行时却读 `upstream_timeout_sec`，造成"UI 改了、保存了、后端不认"。
+
+强制规则：
+
+1. **一个设置项必须同时具备四段映射**，缺一不可：
+   - `shared/config/settings.schema.json` 的 canonical key（含 `hosts` / `modes` / `strategies`）；
+   - `shared/admin/admin.html` 的可见控件及 `data-arch`/`data-cap`（只能引用 `HOST.capabilities` 真实存在的键）；
+   - `shared/admin/js/settings.js` 保存时写入**同名 canonical key**；
+   - VM 或 EdgeOne 运行时读取**同名 canonical key**。
+2. **禁止 UI-only / runtime-only 字段**：`data-alias` 只允许用于旧配置迁移或表单兼容，不得让 UI 写 A、后端读 B。
+3. **禁止发明能力位**：`data-cap="kb"` 不是合法能力位；KB 字段的显隐使用 schema `modes`/`strategies` 或既有 `runModes`，不得新造。
+4. **自动化门禁**：`tests/test_settings_binding_contract.py` 校验：
+   - 所有 `data-cap` ∈ `HOST.capabilities`，`data-arch` ∈ {vm, edgeone}；
+   - 已删除的 `request_total_budget_sec` / `max_retries` / `max_attempts_per_provider` 不得回到 schema/UI/runtime；
+   - `agent_first_byte_timeout_sec` 必须被 VM 与 EdgeOne 同时读取；
+   - schema 中 `hosts` 含 edgeone 的字段必须在 EdgeOne 代码中有读取点。

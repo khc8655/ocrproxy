@@ -341,11 +341,11 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 | 运行模式存在性 | 仅 agent（无 KB 候选/挂载） | agent | kb | **代码/能力位**（`HOST.runModes`、`vaultClient`、`systemUpdate`） |
 | 中枢角色 | 中枢服务端（manifest/fetch） | 客户端（拉取/同步） | 客户端 | **代码**（同一份 UI 由能力位裁剪） |
 | 路由策略默认 | sticky_failover | sticky_failover | round_robin | **默认参数**（按 mode 取值） |
-| 单次请求超时 | 以 agent 首包为准 | 首包 120 s | 快速 15 s / OCR 60 s | **默认参数 + 请求级覆盖**：分类默认值属参数；路由按 category 覆盖属代码 |
+| 单次请求超时 | agent 单次尝试 90s（manual 固定 300s） | agent 单次尝试 90s（manual 固定 300s） | KB Chat 60s / Embedding·Rerank 20s / OCR 60s | **默认参数 + 模式覆盖**：硬总超时固定 300s，不参与次数规划 |
 | 并发控制 | 无 KB 全局闸门 | 每 Key 0（不限） | 每 Key 16 + 全局闸门 | **默认参数**（限额）+ **代码分支**（KB 全局闸门是否存在） |
 | 冷却时长 | 429 60 s / 5xx 30 s | 429 依 Retry-After（无人工冻结） | 429 60 s / 5xx 30 s / 403 600 s / 欠费 1800 s | **默认参数**（时长） |
 | 冷却/熔断触发条件 | 无 KB 熔断语义 | 瞬时 5xx/超时**不冻结**、自由换 Key | 连续失败熔断（3 次→1800 s）、严格失败保护 | **代码分支**（控制流不同，不能只改数值） |
-| 重试/总预算 | 单请求预算 | 3 次 / 300 s | 由分类推导的预算上限 | **默认参数**（次数/预算）+ 代码选择 category 预算 |
+| 重试/总预算 | 固定 300s 硬上限，逐个候选 Key 试完 | 固定 300s 硬上限，逐个候选 Key 试完 | 固定 300s 硬上限；全 429 立即 429+Retry-After | **代码分支**：不再有总预算/重试次数/单供应商 Key 上限配置 |
 | 流式首包保障 | peek 窗口（20 s） | stream precommit grace（45 s） | 同 VM | **默认参数**（窗口大小）+ 实现差异（edge peek vs precommit） |
 | 统计口径 | 当前快照（KV 聚合） | 今日累计（本地落盘） | 今日累计 | **代码分支**（持久化介质/语义不同） |
 | 配置存储/鉴权 | KV + 环境变量 | 加密文件 + `_version` 锁 | 同 VM | **代码**（存储适配层，不做参数化） |
@@ -549,7 +549,7 @@ sequenceDiagram
 1. **双端静默宽限期参数契约**：
    - **EdgeOne 边缘版**：`edge_peek_window_sec = 20s`（在平台边缘超时前提前预提交并开始保活心跳）；
    - **VM 独立版**：`stream_precommit_grace_sec = 45s`（默认在 45s 内尽量保留真实状态码与故障转移能力，超过 45s 发送心跳）；
-   - 若用户在设置中显式指定了更紧凑的 `request_total_budget_sec`，系统自适应取最小值作为硬截止点。
+   - 硬总超时固定 **300s**（EdgeOne 平台架构上限 / VM 安全上限），不再作为设置项；自动轮换按"成功 / 试完所有候选 / 300s 先到先停"执行。
 2. **预提交后的错误下发契约**：
    若已提前提交 HTTP 200 但上游最终全量重试失败，网关将合规地以 SSE 错误事件收尾：
    - OpenAI 协议：下发包含 `{"error": ...}` 的 JSON 数据包并附带 `data: [DONE]` 终止符；
@@ -704,12 +704,11 @@ vm-app/static/        agent-edgeone/
   "version": "v2",
   "settings": {
     "proxy_api_key": "sk-client-key-here",
-    "upstream_timeout_sec": 120,
-    "max_retries": 3,
     "agent_routing_strategy": "sticky_failover",
     "kb_routing_strategy": "round_robin",
-    "stream_precommit_grace_sec": 45,
-    "edge_peek_window_sec": 20
+    "agent_first_byte_timeout_sec": 90,
+    "kb_chat_timeout_sec": 60,
+    "upstream_timeout_kb": 60
   },
   "providers": {
     "stepfun": {
@@ -769,7 +768,9 @@ vm-app/static/        agent-edgeone/
    - `current_key`：当前粘性激活驻留的 Key 标签别名；
    - `keys`：已绑定的有序候选 Key 列表。调度引擎按此列表进行粘性故障转移。
 3. **`settings` (系统运行与可靠性参数)**：
-   - `upstream_timeout_sec`：单次上游请求等待上限，合法范围 `5 ~ 300` 秒；
+   - 字段、默认值、host/mode/策略可见性**一律以 `shared/config/settings.schema.json` 为唯一真理源**；本文示例只做结构说明，禁止在文档里维护会漂移的完整字段清单。
+   - `agent_first_byte_timeout_sec` / `kb_chat_timeout_sec` / `upstream_timeout_kb`：各模式单次尝试超时；
+   - 全局硬总超时固定 **300s**，不是设置项；`request_total_budget_sec` / `max_retries` / `max_attempts_per_provider` 已于 v20261023-03 删除；
    - `agent_routing_strategy`：智能体分流策略，枚举值严格为 `["sticky_failover", "manual"]`；
    - `kb_routing_strategy`：知识库分流策略，枚举值严格为 `["round_robin", "manual"]`。
 
@@ -779,12 +780,14 @@ vm-app/static/        agent-edgeone/
 
 为彻底根除“每次改完代码不更新文档、下次开发效率低下”的痛点，确立以下研发铁律：
 
-1. **文档先行门禁 (Document-First)**：
-   任何功能调整、字段增减或策略变更，**必须首先在本设计规格书中完成对应章节的修改**并与用户达成共识后，方可编写代码；
+1. **契约先行 (Contract-First)**：
+   任何功能调整、字段增减或策略变更，**必须先在讨论中确认行为契约**（字段属于哪个 host/mode/策略、UI 写哪个 key、runtime 读哪个 key），再写代码与测试；文档与代码同批更新，禁止"文档先行但代码不跟"或"代码先改但文档长期滞后"。
+   > 2026-10-23 教训：`ARCHITECTURE_STANDARDS.md` 仍写着 EdgeOne 25s 预算、`SYSTEM_DESIGN_SPEC.md` 仍列 `request_total_budget_sec/max_retries`，而实际已改为 300s/无这两项；同时设置页存在 `data-cap="kb"` 这种不存在的能力位，加载 `applyCapabilities()` 后把 KB 参数整行隐藏。结果是"UI 改了、保存了，但看不到/不生效"。这类问题必须靠可执行契约拦截，而不是靠人肉读文档。
 2. **测试门禁与断言联动 (Automated Gatekeeper)**：
    自动化测试套件必须与本文档契约直接挂钩：
    - `agent-edgeone/scripts/test-units.mjs` 负责断言 EdgeOne 运行契约与 UI 规则；
-   - `tests/test_unified_ui.cjs` 与 `tests/test_key_capsules.cjs` 负责断言双端 UI 与徽章契约；
+   - `tests/test_settings_binding_contract.py` 负责断言"schema 字段 ↔ UI data-cap/data-arch ↔ runtime 读取键"一致；
+   - `tests/test_param_simplify.py` 负责各模式/部署开放的参数集合；
    - 未通过自动化回归断言的代码绝对禁止发版或交付。
 3. **私密信息绝不外溢**：
    本文档不包含任何私有主机 IP、密码或密钥，所有私密拓扑与测试环境账号密码严格锁定于本地私有配置文件 `LOCAL_ENV_SECRETS.md`。
