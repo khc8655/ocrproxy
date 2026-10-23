@@ -1,14 +1,12 @@
 {
-  "version": "v20261022-01",
-  "release_date": "2026-10-22",
+  "version": "v20261023-01",
+  "release_date": "2026-10-23",
   "commit": "HEAD",
-  "title": "批次发布：VM 运行模式时段自动切换（mode_schedule）+ 切换加固 (v20261022-01)",
+  "title": "修复 EdgeOne 模型测试：真实小请求为准并同步模型列表 + 探测/真实请求文案区分 (v20261023-01)",
   "changelog": [
-    "VM 系统设置新增「按时段自动切换」：默认关闭，开启后按北京时间在 KB（默认 22:00–08:00）与 Agent 之间自动切换；每个时段只切一次，手动切换保留到下一个边界；",
-    "切换前等待 /v1 空闲：Agent→KB 最多顺延 15 分钟，KB→Agent 最多顺延 1 小时；进行中请求继续用旧配置；",
-    "调度器使用 config_store.update_config() 原子读改写，只改 run_mode/_version；管理端保存/导入改为 replace_config(expected_version=...) CAS，并发写返回 409，避免后台切换覆盖改 Key/设置或让版本倒退；",
-    "slot 状态移到独立 mode_schedule_state.json，边界不再无意义写配置/生成备份；文件锁选主保证多 worker 只跑一个调度器；",
-    "加固（PR #24）：探活 GET /v1/models 不再算忙碌；presets/update-rules 改为副本修改 + update_config 原子写回，拉规则期间的模式切换不会被旧 run_mode 覆盖；",
-    "测试：mode_scheduler（时段/手动优先/原子写/CAS/leader lock/探活/preset 并发）、run_tests logic、全量测试与 G1~G6；"
+    "EdgeOne /api/test 单 Key + 指定模型时只认真实 chat 请求结果（max_tokens=16）：失败不再用 /models 探测回退成“成功”，并把成功/失败状态与耗时写入 nodestats，模型列表会同步显示最新状态/耗时/最近调用；",
+    "无目标模型的探测路径显式标记 mode=probe；前端 toast 区分「真实小请求」与「/models 探测」，不再把探测成功显示成真实请求成功；",
+    "回归：EdgeOne 单测新增 429 真实请求不得回退成功、失败状态要写列表、成功写 200、探测路径标记 probe；",
+    "说明：EdgeOne 控制台需重新部署 admin bundle 才能拿到本修复；旧部署仍会显示过时的预设供应商下拉。EdgeOne 仅 Agent 模式、且本身是 Hub，故不显示“从中枢拉取”来源，这是能力位差异而非两套代码。"
   ]
 }

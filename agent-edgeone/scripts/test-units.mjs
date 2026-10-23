@@ -2304,6 +2304,76 @@ test('api/test.js: single key probe and batch model probe routes work correctly 
   eq(data2.total, 1);
 });
 
+test('api/test.js: real chat result is authoritative and updates the model-list stat', async () => {
+  const { onRequestPost } = await import('../edge-functions/api/test.js');
+  const kv = makeMockKV();
+  const testConfig = {
+    providers: {
+      test_prov: {
+        base_url: 'https://api.example.com/v1',
+        keys: { k1: 'sk-test-123' },
+      },
+    },
+    agent_models: {
+      'my-agent-model': {
+        upstream_model: 'real-upstream-model',
+        keys: [{ provider: 'test_prov', key: 'k1' }],
+      },
+    },
+  };
+  await kv.put('config', JSON.stringify(testConfig));
+  const env = { ADMIN_PASSWORD: 'adminpass123', agent_kv: kv };
+  const makeReq = (body) => new Request('http://localhost/api/test', {
+    method: 'POST',
+    headers: { authorization: 'Bearer adminpass123', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const stat = async () => JSON.parse(await kv.get('nodestat:agent:my-agent-model:test_prov:k1'));
+
+  const originalFetch = globalThis.fetch;
+  try {
+    // 1. A 429 real chat must be reported as failure; it must NOT fall through to a
+    //    successful /models probe, and the failure must be recorded for the model list.
+    const calls = [];
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), body: opts?.body });
+      return new Response('rate limited', { status: 429 });
+    };
+    let res = await onRequestPost({ request: makeReq({ provider: 'test_prov', key: 'k1',
+      model: 'real-upstream-model', agent_model: 'my-agent-model' }), env });
+    let data = await res.json();
+    eq(data.ok, false, '429 real chat must not be reported as success');
+    eq(data.status, 429);
+    eq(data.mode, 'chat');
+    eq(calls.length, 1, 'must not fall back to a /models probe after a real chat attempt');
+    eq((await stat()).status, 429, 'failed real chat must update the model-list status');
+
+    // 2. A successful real chat reports success and records 200.
+    calls.length = 0;
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), body: opts?.body });
+      return new Response('{"choices":[]}', { status: 200 });
+    };
+    res = await onRequestPost({ request: makeReq({ provider: 'test_prov', key: 'k1',
+      model: 'real-upstream-model', agent_model: 'my-agent-model' }), env });
+    data = await res.json();
+    eq(data.ok, true);
+    eq(data.mode, 'chat');
+    eq(data.status, 200);
+    eq((await stat()).status, 200);
+
+    // 3. No target model -> /models probe path is explicitly labelled "probe".
+    globalThis.fetch = async () => new Response('{"data":[{"id":"x"}]}', { status: 200 });
+    res = await onRequestPost({ request: makeReq({ provider: 'test_prov', key: 'k1',
+      agent_model: 'my-agent-model' }), env });
+    data = await res.json();
+    eq(data.ok, true);
+    eq(data.mode, 'probe');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('admin UI alignment: routing strategy restricted to 2 options, proxy key disabled on EdgeOne, and copy button removed', () => {
   const adminHtml = readFileSync(new URL('../admin.html', import.meta.url), 'utf8');
 

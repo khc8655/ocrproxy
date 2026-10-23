@@ -125,3 +125,10 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
 [第三步: 契约测试] ──> 运行 python tests/test_backend_contract.py
                       输出 VM=PASS | EdgeOne=PASS，全绿方可合并提交！
 ```
+
+
+## EdgeOne /api/test 语义（v20261023-01）
+
+- 单 Key + 指定 `model`：只认真实 `chat/completions`（`max_tokens=16`）的结果；失败时**不得**用 `/models` 探测回退为成功，且必须把 status/latency 写入 `nodestat:*`，管理端模型列表据此刷新。
+- 无 `model`：仅做 `/models` 探测，响应标记 `mode: "probe"`；前端 Toast 显示“探测成功（/models，非模拟请求）”，与真实请求成功区分。
+- 单 Key 测试同时带 `agent_model` 时，无论成功/失败都记录为该模型绑定的最近调用，保证所有管理端会话看到一致状态。

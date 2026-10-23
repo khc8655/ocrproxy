@@ -234,13 +234,32 @@ export async function onRequestPost(context) {
     );
   }
 
-  // If a target model is specified, try probing chat completions directly first for accurate model latency
+  // If a target model is specified, perform a REAL minimal chat request. Its result is
+  // authoritative: a failed chat must NOT be reported as success just because a
+  // /models probe succeeds, and the failure is recorded so the admin model list
+  // updates (badge/latency/time) for every admin session.
   const targetModel = String(body?.model || body?.target_model || '').trim();
+  const agentModel = String(body?.agent_model || '').trim();
+  const recordTestStat = async (status, latency) => {
+    if (!agentModel || !config.agent_models?.[agentModel]) return;
+    try {
+      await recordNodeStat(kv, {
+        model: agentModel,
+        provider: providerName,
+        keyLabel,
+        status,
+        latencyMs: latency,
+      }, true);
+    } catch (_) {}
+  };
+
   if (targetModel) {
     const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+    const chatStart = Date.now();
+    let chatResp = null;
+    let chatErr = null;
     try {
-      const chatStart = Date.now();
-      const chatResp = await fetch(chatUrl, {
+      chatResp = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'authorization': `Bearer ${apiKey}`,
@@ -249,28 +268,43 @@ export async function onRequestPost(context) {
         body: JSON.stringify({
           model: targetModel,
           messages: [{ role: 'user', content: 'hi' }],
-          max_tokens: 4,
+          max_tokens: 16,
         }),
         redirect: 'manual',
-        eo: { timeoutSetting: { connectTimeout: 8_000, readTimeout: 12_000, writeTimeout: 4_000 } },
+        eo: { timeoutSetting: { connectTimeout: 8_000, readTimeout: 15_000, writeTimeout: 4_000 } },
       });
-      if (chatResp && chatResp.status >= 200 && chatResp.status < 300) {
-        const chatLatency = Date.now() - chatStart;
-        const agentModel = String(body?.agent_model || '').trim();
-        if (agentModel && config.agent_models?.[agentModel]) {
-          await recordNodeStat(kv, {
-            model: agentModel, provider: providerName, keyLabel, status: chatResp.status, latencyMs: chatLatency,
-          }, true);
-        }
-        return new Response(JSON.stringify({
-          ok: true,
-          verdict: `model ${targetModel} verified`,
-          upstream: baseUrl,
-          status: chatResp.status,
-          latency_ms: chatLatency,
-        }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-      }
-    } catch (_) {}
+    } catch (e) {
+      chatErr = e;
+    }
+    const chatLatency = Date.now() - chatStart;
+    let chatText = '';
+    if (chatResp) {
+      try { chatText = (await chatResp.text()).slice(0, 300); } catch {}
+    }
+    const chatStatus = chatResp ? chatResp.status : 502;
+    const chatOk = Boolean(chatResp && chatStatus >= 200 && chatStatus < 300);
+    await recordTestStat(chatStatus, chatLatency);
+    if (chatOk) {
+      return new Response(JSON.stringify({
+        ok: true,
+        success: true,
+        mode: 'chat',
+        verdict: `model ${targetModel} verified`,
+        upstream: baseUrl,
+        status: chatStatus,
+        latency_ms: chatLatency,
+      }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    }
+    return new Response(JSON.stringify({
+      ok: false,
+      success: false,
+      mode: 'chat',
+      verdict: `model ${targetModel} real request failed`,
+      upstream: baseUrl,
+      status: chatStatus,
+      latency_ms: chatLatency,
+      error: chatErr?.message || chatText || `HTTP ${chatStatus}`,
+    }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   }
 
   // Probe upstream models endpoint
@@ -321,9 +355,11 @@ export async function onRequestPost(context) {
   const latency = Date.now() - start;
 
   if (!resp) {
+    await recordTestStat(0, latency);
     return new Response(
       JSON.stringify({
         ok: false,
+        mode: 'probe',
         upstream: baseUrl,
         status: 0,
         latency_ms: latency,
@@ -357,9 +393,11 @@ export async function onRequestPost(context) {
     verdict = `status ${resp.status}`;
   }
 
+  await recordTestStat(resp.status, latency);
   return new Response(
     JSON.stringify({
       ok,
+      mode: 'probe',
       verdict,
       upstream: baseUrl,
       status: resp.status,

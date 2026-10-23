@@ -754,7 +754,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261022-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261023-01</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav">
@@ -5509,10 +5509,14 @@ function commitKey(prov, label, val){
       const latency = Date.now() - start;
 
       const isSuccess = Boolean(d.success || d.ok);
+      const isProbe = d.mode === 'probe';
       if (isSuccess) {
-        _toast(\`[\${b.provider}/\${b.key}] 测试成功 · 真实小请求 (\${latency}ms)\`, 'ok');
+        _toast(isProbe
+          ? \`[\${b.provider}/\${b.key}] 探测成功（/models，非模拟请求）(\${latency}ms)\`
+          : \`[\${b.provider}/\${b.key}] 测试成功 · 真实小请求 (\${latency}ms)\`, 'ok');
       } else {
-        _toast(\`[\${b.provider}/\${b.key}] 测试失败: \${d.error || d.verdict || d.status}\`, 'err');
+        const detail = d.error || d.verdict || (d.status ? \`HTTP \${d.status}\` : '未知错误');
+        _toast(\`[\${b.provider}/\${b.key}] \${isProbe ? '探测失败' : '测试失败'}: \${detail}\`, 'err');
       }
 
     } catch(e) {

@@ -818,10 +818,14 @@
       const latency = Date.now() - start;
 
       const isSuccess = Boolean(d.success || d.ok);
+      const isProbe = d.mode === 'probe';
       if (isSuccess) {
-        _toast(`[${b.provider}/${b.key}] 测试成功 · 真实小请求 (${latency}ms)`, 'ok');
+        _toast(isProbe
+          ? `[${b.provider}/${b.key}] 探测成功（/models，非模拟请求）(${latency}ms)`
+          : `[${b.provider}/${b.key}] 测试成功 · 真实小请求 (${latency}ms)`, 'ok');
       } else {
-        _toast(`[${b.provider}/${b.key}] 测试失败: ${d.error || d.verdict || d.status}`, 'err');
+        const detail = d.error || d.verdict || (d.status ? `HTTP ${d.status}` : '未知错误');
+        _toast(`[${b.provider}/${b.key}] ${isProbe ? '探测失败' : '测试失败'}: ${detail}`, 'err');
       }
 
     } catch(e) {
