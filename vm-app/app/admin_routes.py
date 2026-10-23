@@ -1615,6 +1615,11 @@ async def test_candidate_endpoint(request: Request):
                     stats.record_agent(model_name, resp.status_code, lat_sec, provider=provider_name, key=key_label, is_probe=True, set_active=False)
                 else:
                     stats.record_kb(cand_type, resp.status_code, lat_sec, provider=provider_name, key=key_label, model=model, is_probe=True)
+                try:  # 手动测试通过 = Key 已恢复（充值/换号），解除冷宫
+                    from . import scheduler as _sched
+                    _sched.clear_key_ban(provider_name, key_label, model)
+                except Exception:
+                    pass
                 return JSONResponse(content={"success": True, "status": resp.status_code, "latency_ms": lat_ms, "message": "OK"})
 
             err_text = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
@@ -1722,6 +1727,11 @@ async def test_agent_model_endpoint(request: Request):
                 stats.record_agent(name, resp.status_code, lat_sec,
                                    provider=b.get("provider"), key=b.get("key"),
                                    is_probe=True, set_active=False)
+                try:  # 测试通过即解除该 Key 的冷宫
+                    from . import scheduler as _sched
+                    _sched.clear_key_ban(b.get("provider"), b.get("key"), payload.get("model"))
+                except Exception:
+                    pass
             else:
                 stats.record_agent(name, resp.status_code, lat_sec,
                                    provider=b.get("provider"), key=b.get("key"),

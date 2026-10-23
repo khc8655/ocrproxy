@@ -6,20 +6,19 @@
       "settings": {
         "agent_routing_strategy": "sticky_failover",
         "upstream_timeout_sec": 120,
-        "fast_failover_provider_down": true,
         "cooldown_429_sec": 60,
         "cooldown_5xx_sec": 30,
-        "cooldown_403_sec": 600,
-        "cooldown_quota_sec": 1800,
+        "cooldown_quota_sec": 86400,
         "cooldown_404_sec": 600,
         "cooldown_410_sec": 86400,
         "circuit_break_threshold": 3,
         "circuit_cooldown_sec": 300,
-        "edge_peek_window_sec": 20
+        "edge_peek_window_sec": 20,
+        "agent_first_byte_timeout_sec": 90
       },
       "cooldowns": {
         "TPM_429": 60,
-        "QUOTA_403": 600,
+        "QUOTA_403": 86400,
         "SERVER_5XX": 30,
         "READ_TIMEOUT": 2,
         "EMPTY_STREAM": 5,
@@ -32,40 +31,35 @@
     "vm-agent": {
       "settings": {
         "agent_routing_strategy": "sticky_failover",
-        "agent_first_byte_timeout_sec": 120,
+        "agent_first_byte_timeout_sec": 90,
         "upstream_timeout_sec": 15,
         "stream_precommit_grace_sec": 45,
-        "fast_failover_provider_down": true,
         "cooldown_429_sec": 60,
         "cooldown_5xx_sec": 30,
-        "cooldown_403_sec": 600,
-        "cooldown_quota_sec": 1800,
+        "cooldown_quota_sec": 86400,
         "cooldown_404_sec": 600,
         "cooldown_410_sec": 86400,
         "circuit_break_threshold": 3,
-        "circuit_cooldown_sec": 300
+        "circuit_cooldown_sec": 600
       }
     },
     "vm-kb": {
       "settings": {
         "kb_routing_strategy": "round_robin",
-        "upstream_timeout_sec": 15,
+        "upstream_timeout_sec": 20,
         "upstream_timeout_kb": 60,
-        "stream_precommit_grace_sec": 45,
-        "fast_failover_provider_down": true,
         "cooldown_429_sec": 60,
         "cooldown_5xx_sec": 30,
-        "cooldown_403_sec": 600,
-        "cooldown_quota_sec": 1800,
+        "cooldown_quota_sec": 86400,
         "cooldown_404_sec": 600,
         "cooldown_410_sec": 86400,
         "circuit_break_threshold": 3,
-        "circuit_cooldown_sec": 300,
-        "circuit_escalation_sec": 1800,
-        "kb_max_concurrency_per_key": 16,
+        "circuit_cooldown_sec": 600,
+        "kb_max_concurrency_per_key": 4,
         "kb_global_max_concurrency": 30,
         "ocr_max_inflight": 12,
-        "ocr_queue_timeout_sec": 30
+        "ocr_queue_timeout_sec": 30,
+        "kb_chat_timeout_sec": 60
       }
     }
   }

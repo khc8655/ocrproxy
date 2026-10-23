@@ -1183,9 +1183,11 @@ async def _chat_completions_impl(request: Request):
             body["stream"] = False
             is_stream = False
         try:
-            chat_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
+            # KB chat 单独一个超时（默认 60s）：免费 chat 非流式生成常超过 15s，
+            # 不能和 embedding/rerank 共用 upstream_timeout_sec。
+            chat_timeout = max(1.0, float(get_setting(config, "kb_chat_timeout_sec", None) or 60.0))
         except (ValueError, TypeError):
-            chat_timeout = 15.0
+            chat_timeout = 60.0
         candidates_list = config.get("candidates", {}).get("chat", [])
 
     if not candidates_list:
@@ -1617,7 +1619,7 @@ async def embeddings(request: Request):
     # global default (12s) — one timeout would burn the whole failover
     # budget and the remaining keys would never be tried.
     try:
-        emb_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
+        emb_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", None) or 20.0))
     except (ValueError, TypeError):
         emb_timeout = 15.0
 
@@ -1708,7 +1710,7 @@ async def rerank(request: Request):
     # Rerank requests can also be slow on long candidate lists — same
     # per-type timeout + budget treatment as embeddings.
     try:
-        rerank_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", 15.0) or 15.0))
+        rerank_timeout = max(1.0, float(get_setting(config, "upstream_timeout_sec", None) or 20.0))
     except (ValueError, TypeError):
         rerank_timeout = 15.0
 

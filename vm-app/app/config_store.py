@@ -223,24 +223,47 @@ def _migrate_string_secrets(config: dict) -> bool:
     return changed
 
 
-def _migrate_legacy_budget(config: dict) -> bool:
-    """Migrate legacy schedule_total_budget to max_retries and request_total_budget_sec."""
-    changed = False
-    stb = config.get("schedule_total_budget")
-    if stb is not None:
-        try:
-            f = float(stb)
-            if 0 < f <= 10.0:
-                if "max_retries" not in config:
-                    config["max_retries"] = int(f)
-                    changed = True
-            elif f > 10.0:
-                if "request_total_budget_sec" not in config:
-                    config["request_total_budget_sec"] = f
-                    changed = True
-        except (ValueError, TypeError):
-            pass
-    return changed
+# 参数精简（v2）：把仍停在旧默认值的参数换成新默认值；用户改过的值不动。
+# 每项：key -> (旧默认, 新默认)
+_PARAMS_V2_DEFAULTS = {
+    "agent_first_byte_timeout_sec": (120, 90),
+    "kb_max_concurrency_per_key": (16, 4),
+    "upstream_timeout_sec": (15, 20),
+    "circuit_cooldown_sec": (300, 600),
+    "cooldown_quota_sec": (1800, 86400),
+}
+# 已删除 / 并入其他参数的旧字段（含旧别名）
+_PARAMS_V2_OBSOLETE = (
+    "schedule_total_budget", "max_retries", "request_total_budget_sec", "max_attempts_per_provider",
+    "cooldown_403_sec", "circuit_escalation_sec", "fast_failover_provider_down",
+    "upstream_timeout_chat", "chat_fast_timeout", "upstream_timeout_embedding", "upstream_timeout_rerank",
+    "cooldown_tpm_sec", "cooldown_duration",
+)
+PARAMS_REV = 2
+
+
+def _migrate_params_v2(config: dict) -> bool:
+    try:
+        rev = int(config.get("_params_rev") or 0)
+    except (ValueError, TypeError):
+        rev = 0
+    if rev >= PARAMS_REV:
+        return False
+    blocks = [config]
+    if isinstance(config.get("settings"), dict):
+        blocks.append(config["settings"])
+    for blk in blocks:
+        for key, (old, new) in _PARAMS_V2_DEFAULTS.items():
+            if key in blk:
+                try:
+                    if float(blk[key]) == float(old):
+                        blk[key] = new
+                except (ValueError, TypeError):
+                    pass
+        for key in _PARAMS_V2_OBSOLETE:
+            blk.pop(key, None)
+    config["_params_rev"] = PARAMS_REV
+    return True
 
 
 def load_from_disk() -> dict:
@@ -267,7 +290,7 @@ def load_from_disk() -> dict:
     # One-way schema migration; persist immediately so the encrypted file
     # converges to the current schema after the first read.
     migrated = _migrate_agent_models(config)
-    if _migrate_legacy_budget(config):
+    if _migrate_params_v2(config):
         migrated = True
     if _migrate_string_secrets(config):
         migrated = True

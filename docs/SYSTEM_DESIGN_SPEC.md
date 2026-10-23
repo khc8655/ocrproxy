@@ -357,6 +357,7 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 **已落地（v20261020-09）**：
 - `shared/config/runtime-profiles.json` 成为三运行时默认值唯一真理源；VM `runtime_profile.py` 解析（`scheduler._KB_DEFAULT_KEY_CONCURRENCY/_GLOBAL_MAX_CONCURRENCY/DEFAULT_COOLDOWN_410_SEC`、KB 熔断升级、OCR 默认值均取自 profile），EdgeOne 由 `build-presets.mjs` 生成 `lib/generated/runtime-profile.js`，删除 `lib/config.js` 与 `lib/cooldowns.js` 的手写默认值/冷却表；`tests/test_runtime_profiles.py` 校验两端一致 + 生成物不漂移。
 - `cooldown_quota_sec` / `cooldown_404_sec` / `cooldown_410_sec` / `circuit_escalation_sec` / `kb_global_max_concurrency` 成为独立 schema 字段（hosts: vm），不再借 `cooldown_403_sec` / 代码常量表达；`scheduler` 统一经 `get_setting()` 读取。
+- 参数精简 v2：401/402/403/欠费统一由 `cooldown_quota_sec` 控制（冷宫，默认 24h，VM 写入 key_bans.json 落盘），删除 `cooldown_403_sec`、`circuit_escalation_sec`、`fast_failover_provider_down`。schema 字段新增 `strategies`（只在指定调度策略下显示）和 `hidden`（内部常量，不在设置页显示）。各模式开放的参数集合由 `tests/test_param_simplify.py::test_schema_visibility` 锁定。
 - **旧字符串 Key 加载归一化**：VM `config_store._migrate_string_secrets()` 与 EdgeOne `normalizeProviderKeys()` 把 `"KeyA": "sk-xxx"` 一次性转成 `{key, origin, is_local}`（本地供应商→local，中枢供应商→vault），两端投影/编辑逻辑不再需要字符串特例。
 - **请求级超时键改名**：内部键 `upstream_timeout` → `request_timeout_sec`（从不持久化），与保存的 `upstream_timeout_sec` 彻底区分，避免再次出现"全局值覆盖 OCR 60s"的混淆。
 

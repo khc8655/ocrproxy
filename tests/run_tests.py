@@ -75,6 +75,11 @@ CHECKS = {
         "desc": "VM run_mode time-window auto switch (edge-triggered, idle-wait, keeps manual switch)",
         "cmd": [PYTHON_EXE, "tests/test_mode_scheduler.py"],
     },
+    "param_simplify": {
+        "tier": "T1",
+        "desc": "Param simplify v2 (24h ban for 401/402/403 + persisted, KB single-provider keeps rotating, migration, per-mode schema)",
+        "cmd": [PYTHON_EXE, "tests/test_param_simplify.py"],
+    },
     "settings_resolution": {
         "tier": "T1",
         "desc": "Runtime settings resolution (first-byte/OCR timeout, 403 cooldown, hub string keys)",
@@ -132,14 +137,14 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "settings_resolution", "api_layer", "static_sync", "admin_static"],
+    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "settings_resolution", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
     "contract": ["contract_ui", "key_capsules", "vault_ui"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "settings_resolution", "api_layer", "static_sync", "admin_static",
+    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "settings_resolution", "api_layer", "static_sync", "admin_static",
             "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 

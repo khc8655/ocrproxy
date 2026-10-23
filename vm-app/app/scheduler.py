@@ -214,6 +214,77 @@ DEFAULT_COOLDOWN_410_SEC = float(_AGENT_PROFILE.get("cooldown_410_sec", 86400.0)
 _semaphores: Dict[str, asyncio.Semaphore] = {}
 _semaphore_limits: Dict[str, int] = {}
 
+# 冷宫（欠费 / Key 失效 / 封禁，默认 24h）落盘：重启或升级后不把已经确认没钱/失效的
+# Key 重新放回轮换。只写剩余 >= 5 分钟的冷却，文件很小；手动测试该 Key 成功即解除。
+_BAN_FILE_NAME = "key_bans.json"
+LONG_BAN_SEC = 3600.0
+_bans_loaded = False
+
+
+def _bans_path() -> str:
+    return os.path.join(os.environ.get("CONFIG_DIR") or "/opt/ocrproxy/config", _BAN_FILE_NAME)
+
+
+def _load_bans() -> None:
+    global _bans_loaded
+    if _bans_loaded:
+        return
+    _bans_loaded = True
+    try:
+        with open(_bans_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        logger.warning("key ban file unreadable: %s", e)
+        return
+    now = time.time()
+    for k, exp in (data.get("keys") or {}).items():
+        if isinstance(exp, (int, float)) and exp > now:
+            _key_cooldown_until[k] = max(float(exp), _key_cooldown_until.get(k, 0.0))
+    for k, exp in (data.get("cands") or {}).items():
+        if isinstance(exp, (int, float)) and exp > now:
+            _cooldown_until[k] = max(float(exp), _cooldown_until.get(k, 0.0))
+    for k in data.get("quota") or []:
+        if k in _cooldown_until:
+            _quota_exhausted_cands.add(k)
+
+
+def _save_bans() -> None:
+    now = time.time()
+    keep = now + 300.0
+    data = {
+        "keys": {k: v for k, v in _key_cooldown_until.items() if v >= keep},
+        "cands": {k: v for k, v in _cooldown_until.items() if v >= keep},
+    }
+    data["quota"] = [k for k in _quota_exhausted_cands if k in data["cands"]]
+    path = _bans_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except Exception as e:
+        logger.warning("key ban file write failed: %s", e)
+
+
+def clear_key_ban(provider: str, key_label: str, model: Optional[str] = None) -> bool:
+    """手动测试成功后解除冷宫：Key 级冷却 + 该 Key 下的候选冷却（指定 model 时只清该候选）。"""
+    _load_bans()
+    changed = _key_cooldown_until.pop(f"{provider}:{key_label}", None) is not None
+    prefix = f"{provider}:{key_label}:"
+    for cid in list(_cooldown_until.keys()):
+        if cid.startswith(prefix) and (model is None or cid == prefix + str(model)):
+            _cooldown_until.pop(cid, None)
+            _quota_exhausted_cands.discard(cid)
+            _consecutive_failures.pop(cid, None)
+            changed = True
+    if changed:
+        _save_bans()
+    return changed
+
 # Optional per-key RPM limiter (provider field `rpm_per_key`; absent/0 = off).
 # "provider:key" -> monotonic timestamps of upstream dispatches in the last
 # 60 s.  Each deque holds at most `rpm_per_key` entries, so memory is bounded
@@ -513,12 +584,11 @@ def evaluate_candidate_failure(
     is_agent = (category == "agent")
     # Defaults come from the active runtime profile (single table); explicit values win.
     _prof = runtime_profile.settings(config_params)
-    cooldown_quota_sec = get_setting(config_params, "cooldown_quota_sec", _prof.get("cooldown_quota_sec", 1800.0))
+    cooldown_quota_sec = get_setting(config_params, "cooldown_quota_sec", _prof.get("cooldown_quota_sec", 86400.0))
     cooldown_tpm_sec = get_setting(config_params, "cooldown_429_sec", _prof.get("cooldown_429_sec", 60.0))
-    cooldown_403_sec = get_setting(config_params, "cooldown_403_sec", _prof.get("cooldown_403_sec", 600.0))
     cooldown_5xx_sec = get_setting(config_params, "cooldown_5xx_sec", _prof.get("cooldown_5xx_sec", 30.0))
     circuit_threshold = get_setting(config_params, "circuit_break_threshold", _prof.get("circuit_break_threshold", 3))
-    circuit_cooldown_sec = get_setting(config_params, "circuit_cooldown_sec", _prof.get("circuit_cooldown_sec", 300.0))
+    circuit_cooldown_sec = get_setting(config_params, "circuit_cooldown_sec", _prof.get("circuit_cooldown_sec", 600.0))
 
     # 1. Hard Quota / Arrears: applies to both KB and Agent (account has no money/credits)
     if is_quota:
@@ -553,23 +623,19 @@ def evaluate_candidate_failure(
             model_gone=True,
         )
 
+    # 1d. 401/403（Key 失效、账号封禁、该 Key 无权访问此模型）：和欠费一样打入冷宫
+    # （cooldown_quota_sec，默认 24h），Agent/KB 一致。参考 freellmapi：402/封禁/403 tier
+    # 都按 1 天处理；new-api 直接自动禁用。模型级 403 只停这个候选（provider:key:model）。
+    if status_code in (401, 403):
+        return FailureEvaluation(
+            cooldown_sec=cooldown_quota_sec,
+            is_quota=False,
+            mark_provider_down=False,
+            circuit_breaker_triggered=False,
+        )
+
     # 2. Agent Mode: Only hard quota or auth failure causes long cooldown. Transient errors do NOT freeze the key.
     if is_agent:
-        if status_code in (401, 403):
-            if status_code == 403 and config_params.get("is_model_level_403"):
-                return FailureEvaluation(
-                    cooldown_sec=config_params.get("cooldown_404_sec", 600.0),
-                    is_quota=False,
-                    mark_provider_down=False,
-                    circuit_breaker_triggered=False,
-                )
-            # Auth failure (bad key token)
-            return FailureEvaluation(
-                cooldown_sec=cooldown_403_sec,
-                is_quota=False,
-                mark_provider_down=False,
-                circuit_breaker_triggered=False,
-            )
         # 429 with alternatives: honour Retry-After (capped at 60s) or apply 10s backoff cooldown
         retry_after = config_params.get("retry_after_sec")
         if status_code == 429 and config_params.get("has_alternatives", True):
@@ -597,20 +663,6 @@ def evaluate_candidate_failure(
             mark_provider_down=False,
             circuit_breaker_triggered=False,
         )
-    elif status_code in (401, 403):
-        if status_code == 403 and config_params.get("is_model_level_403"):
-            return FailureEvaluation(
-                cooldown_sec=config_params.get("cooldown_404_sec", 600.0),
-                is_quota=False,
-                mark_provider_down=False,
-                circuit_breaker_triggered=False,
-            )
-        return FailureEvaluation(
-            cooldown_sec=cooldown_403_sec,
-            is_quota=False,
-            mark_provider_down=False,
-            circuit_breaker_triggered=False,
-        )
     elif status_code == 400 and is_key_issue_400:
         return FailureEvaluation(
             cooldown_sec=10.0,
@@ -620,7 +672,8 @@ def evaluate_candidate_failure(
         )
     elif status_code >= 500:
         is_circuit = consecutive_5xx_count >= circuit_threshold
-        cd = max(circuit_cooldown_sec, float(_prof.get("circuit_escalation_sec", 1800.0))) if is_circuit else cooldown_5xx_sec
+        # 熔断只用一个参数 circuit_cooldown_sec（原来取 max(它, circuit_escalation_sec)，导致它在 KB 永远无效）
+        cd = circuit_cooldown_sec if is_circuit else cooldown_5xx_sec
         mark_down = status_code in (502, 503, 504)
         return FailureEvaluation(
             cooldown_sec=cd,
@@ -912,6 +965,7 @@ def reset_runtime_state():
     In-flight requests keep references to the old semaphore objects, so the
     effective per-key limit may briefly double — acceptable for a manual
     ops action."""
+    _load_bans()
     _cooldown_until.clear()
     _key_cooldown_until.clear()
     _consecutive_failures.clear()
@@ -923,6 +977,7 @@ def reset_runtime_state():
     _semaphore_limits.clear()
     _sticky_agent_active_keys.clear()
     _rr_kb_indices.clear()
+    _save_bans()
 
 
 async def _peek_first_chunk(resp: httpx.Response):
@@ -1247,6 +1302,7 @@ async def schedule(
     if not candidates:
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
 
+    _load_bans()
     # Prune stale runtime state (cooldowns, semaphores, ...) when the config
     # changed on disk — near-zero cost thanks to the version check.
     v = get_config_version()
@@ -1367,7 +1423,8 @@ async def schedule(
     min_single_attempt = agent_first_byte_timeout_sec if category == "agent" else upstream_timeout_sec
     total_budget_sec = HARD_TIMEOUT_SEC
 
-    fast_failover_provider_down = bool(get_setting(config, "fast_failover_provider_down", True))
+    # 不再作为用户配置：只在配置了多个供应商时才跳过同供应商其余 Key（见下方 _multi_provider 判断）。
+    fast_failover_provider_down = True
     provider_attempts: Dict[str, int] = {}
     down_providers: Set[str] = set()
 
@@ -1428,15 +1485,12 @@ async def schedule(
 
     # 429/403 Quota Exhaustion Cooldown (default 1800s / 30m)
     try:
-        cooldown_quota_sec = max(1.0, float(get_setting(config, "cooldown_quota_sec", _sched_prof.get("cooldown_quota_sec", 1800.0))))
+        cooldown_quota_sec = max(1.0, float(get_setting(config, "cooldown_quota_sec", _sched_prof.get("cooldown_quota_sec", 86400.0))))
     except (ValueError, TypeError):
-        cooldown_quota_sec = 1800.0
+        cooldown_quota_sec = 86400.0
 
-    # 403 Auth Failure Cooldown (default 600s)
-    try:
-        cooldown_403_sec = max(1.0, float(get_setting(config, "cooldown_403_sec", 600.0)))
-    except (ValueError, TypeError):
-        cooldown_403_sec = 600.0
+    # 401/403 不再单独配置：与欠费共用 cooldown_quota_sec（冷宫）。
+    cooldown_403_sec = cooldown_quota_sec
 
     # 5xx Server Error Cooldown (default 30s)
     try:
@@ -1453,9 +1507,9 @@ async def schedule(
         circuit_break_threshold = 3
 
     try:
-        circuit_cooldown = max(1.0, float(get_setting(config, "circuit_cooldown_sec", 300.0)))
+        circuit_cooldown = max(1.0, float(get_setting(config, "circuit_cooldown_sec", _sched_prof.get("circuit_cooldown_sec", 600.0))))
     except (ValueError, TypeError):
-        circuit_cooldown = 300.0
+        circuit_cooldown = 600.0
 
     cooldown_cfg = {
         "cooldown_quota_sec": cooldown_quota_sec,
@@ -1951,8 +2005,8 @@ async def schedule(
                     # Hard quota/arrears requires explicit quota keywords and NO rate-limit indicators.
                     # Upstreams like B.AI/OneAPI return HTTP 400 with "credit insufficient balance"
                     _is_quota = bool(
-                        status_code in (400, 401, 402, 403, 429)
-                        and _has_hard_quota_kw
+                        (status_code in (400, 401, 402, 403, 429) and _has_hard_quota_kw
+                         or status_code == 402)  # 402 Payment Required 本身就是欠费
                         and not _has_rate_limit_kw
                     )
 
@@ -2107,6 +2161,10 @@ async def schedule(
                         # parks the entire key (all models bound to provider:key)
                         if (status_code in (401, 403) and not _403_is_model_level) or eval_res.is_quota or _400_is_key_issue:
                             _key_cooldown_until[f"{provider_name}:{key_label}"] = time.time() + eval_res.cooldown_sec
+                        if eval_res.cooldown_sec >= LONG_BAN_SEC:
+                            if eval_res.is_quota:
+                                _quota_exhausted_cands.add(cand_id)
+                            _save_bans()
                     else:
                         _cooldown_until.pop(cand_id, None)
 
@@ -2141,7 +2199,7 @@ async def schedule(
                     if eval_res.circuit_breaker_triggered:
                         logger.warning(f"[VM:CircuitBreaker] Circuit breaker triggered for {cand_id} ({cf} consecutive 5xx errors). Cool down for {eval_res.cooldown_sec:.0f}s.")
 
-                    if eval_res.mark_provider_down and fast_failover_provider_down and not is_agent:
+                    if eval_res.mark_provider_down and fast_failover_provider_down and not is_agent and _multi_provider:
                         down_providers.add(provider_name)
                         logger.warning(f"Fast failover: provider {provider_name} returned {status_code}, skipping remaining keys for this request")
                     elif (is_agent and fast_failover_provider_down and _multi_provider
@@ -2156,8 +2214,8 @@ async def schedule(
 
                 except httpx.ReadTimeout as e:
                     last_transport_status = 504
-                    if fast_failover_provider_down and category != "agent":
-                        down_providers.add(provider_name)
+                    # 读超时只说明这个 Key/这次请求慢，不代表整个供应商挂了：
+                    # 不再跳过同供应商的其余 Key（KB 单供应商 20 个 Key 时一次超时就整单失败）。
                     if strategy == "manual":
                         raise AllCandidatesFailedError(
                             f"{cand_id} encountered ReadTimeout after {cand_timeout_sec:.0f}s",
@@ -2202,7 +2260,7 @@ async def schedule(
 
                 except httpx.ConnectTimeout as e:
                     last_transport_status = 502
-                    if fast_failover_provider_down and category != "agent":
+                    if fast_failover_provider_down and category != "agent" and _multi_provider:
                         down_providers.add(provider_name)
                     if strategy == "manual":
                         raise AllCandidatesFailedError(

@@ -7,20 +7,19 @@ export const RUNTIME_PROFILE = Object.freeze({
   "settings": {
     "agent_routing_strategy": "sticky_failover",
     "upstream_timeout_sec": 120,
-    "fast_failover_provider_down": true,
     "cooldown_429_sec": 60,
     "cooldown_5xx_sec": 30,
-    "cooldown_403_sec": 600,
-    "cooldown_quota_sec": 1800,
+    "cooldown_quota_sec": 86400,
     "cooldown_404_sec": 600,
     "cooldown_410_sec": 86400,
     "circuit_break_threshold": 3,
     "circuit_cooldown_sec": 300,
-    "edge_peek_window_sec": 20
+    "edge_peek_window_sec": 20,
+    "agent_first_byte_timeout_sec": 90
   },
   "cooldowns": {
     "TPM_429": 60,
-    "QUOTA_403": 600,
+    "QUOTA_403": 86400,
     "SERVER_5XX": 30,
     "READ_TIMEOUT": 2,
     "EMPTY_STREAM": 5,
@@ -34,21 +33,20 @@ export const RUNTIME_PROFILE = Object.freeze({
 export const DEFAULT_SETTINGS = Object.freeze({
   "agent_routing_strategy": "sticky_failover",
   "upstream_timeout_sec": 120,
-  "fast_failover_provider_down": true,
   "cooldown_429_sec": 60,
   "cooldown_5xx_sec": 30,
-  "cooldown_403_sec": 600,
-  "cooldown_quota_sec": 1800,
+  "cooldown_quota_sec": 86400,
   "cooldown_404_sec": 600,
   "cooldown_410_sec": 86400,
   "circuit_break_threshold": 3,
   "circuit_cooldown_sec": 300,
-  "edge_peek_window_sec": 20
+  "edge_peek_window_sec": 20,
+  "agent_first_byte_timeout_sec": 90
 });
 
 export const COOLDOWN_DURATIONS = Object.freeze({
   "TPM_429": 60,
-  "QUOTA_403": 600,
+  "QUOTA_403": 86400,
   "SERVER_5XX": 30,
   "READ_TIMEOUT": 2,
   "EMPTY_STREAM": 5,
