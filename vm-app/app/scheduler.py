@@ -1295,11 +1295,16 @@ async def schedule(
     Records stats directly to in-memory stats module with Agent vs KB isolation.
     """
     req_model_name = request_model or model_type
+    _attempted_upstream = False
     _metrics_tr = agent_metrics.current() if category == "agent" else None
     if _metrics_tr is not None:
         _metrics_tr.note_schedule(req_model_name)
     candidates = config.get("candidates", {}).get(model_type, [])
     if not candidates:
+        try:
+            stats.record_gateway_error(model_type, 503, f"No active candidates configured for model type: {model_type}", category)
+        except Exception:
+            logger.debug("no-candidates stats.record_gateway_error failed", exc_info=True)
         raise RuntimeError(f"No active candidates configured for model type: {model_type}")
 
     _load_bans()
@@ -1709,6 +1714,24 @@ async def schedule(
             logger.debug(f"Attempt {attempt_seq}: Routing {model_type} to {cand_id} (timeout={cand_timeout_sec:.0f}s)")
 
             cand_start = time.time()
+
+            def _record_early_failure(code: int, msg: str) -> None:
+                """Record a failure that aborts before the normal stats.record() site.
+
+                Manual/sticky and 400/413 early-abort paths raise AllCandidatesFailedError
+                before the regular failure accounting. Without this, the dashboard summary
+                counts a failure but error_logs stays empty (2026-10-25 incident).
+                """
+                try:
+                    stats.record(
+                        model_type, int(code), max(0.0, time.time() - cand_start),
+                        provider=provider_name, key=key_label, error_msg=msg,
+                        category=category, request_model=req_model_name,
+                        is_fallback=(attempt_seq > 1), cand_model=cand.get("model"),
+                    )
+                except Exception:
+                    logger.debug("early failure stats.record failed", exc_info=True)
+
             now_mono = time.monotonic()
             if now_mono >= deadline:
                 errors.append(f"budget_exhausted_before_acquire")
@@ -1742,6 +1765,11 @@ async def schedule(
                     await asyncio.wait_for(global_sem.acquire(), timeout=_GLOBAL_QUEUE_TIMEOUT_SEC)
                 except asyncio.TimeoutError:
                     sem.release()
+                    try:
+                        stats.record_gateway_error(model_type, 503,
+                            f"KB global queue semaphore timed out after {_GLOBAL_QUEUE_TIMEOUT_SEC:.0f}s", category)
+                    except Exception:
+                        logger.debug("global queue stats.record_gateway_error failed", exc_info=True)
                     raise GlobalOverloadError(retry_after=_GLOBAL_QUEUE_TIMEOUT_SEC)
 
             lease = ConcurrencyLease(key_sem=sem, global_sem=global_sem)
@@ -1764,6 +1792,7 @@ async def schedule(
                         provider_attempts[provider_name] = max(0, provider_attempts.get(provider_name, 1) - 1)
                     continue
                 try:
+                    _attempted_upstream = True
                     # Build request arguments (method, url, headers, json_body / raw_bytes)
                     method, url, headers, req_body = build_request(cand, api_key, base_url)
 
@@ -2045,8 +2074,10 @@ async def schedule(
                             logger.warning(
                                 f"Aborting failover for non-retriable client error HTTP {status_code} from {cand_id}: {clean_400_msg[:120]}"
                             )
+                            _early_msg = f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {clean_400_msg[:200]}"
+                            _record_early_failure(status_code, _early_msg)
                             raise AllCandidatesFailedError(
-                                f"Candidate {cand_id} returned non-retriable HTTP {status_code}: {clean_400_msg[:200]}",
+                                _early_msg,
                                 last_status_code=status_code,
                                 last_response_body=err_body_text,
                             )
@@ -2067,8 +2098,10 @@ async def schedule(
                             logger.warning(
                                 f"Aborting failover for HTTP 413 (Payload Too Large) from {cand_id}: {clean_413_msg[:120]}"
                             )
+                            _early_msg = f"Candidate {cand_id} returned HTTP 413: {clean_413_msg}"
+                            _record_early_failure(413, _early_msg)
                             raise AllCandidatesFailedError(
-                                f"Candidate {cand_id} returned HTTP 413: {clean_413_msg}",
+                                _early_msg,
                                 last_status_code=413,
                                 last_response_body=err_body_text,
                             )
@@ -2089,8 +2122,10 @@ async def schedule(
                     # 2. Manual routing strategy: no failover, raise immediately
                     if strategy == "manual":
                         clean_manual_msg = clean_upstream_error_text(err_body_text, status_code=status_code)
+                        _early_msg = f"Candidate {cand_id} failed with HTTP {status_code}: {clean_manual_msg[:200]}"
+                        _record_early_failure(status_code, _early_msg)
                         raise AllCandidatesFailedError(
-                            f"Candidate {cand_id} failed with HTTP {status_code}: {clean_manual_msg[:200]}",
+                            _early_msg,
                             last_status_code=status_code,
                             last_response_body=err_body_text,
                         )
@@ -2217,8 +2252,10 @@ async def schedule(
                     # 读超时只说明这个 Key/这次请求慢，不代表整个供应商挂了：
                     # 不再跳过同供应商的其余 Key（KB 单供应商 20 个 Key 时一次超时就整单失败）。
                     if strategy == "manual":
+                        _early_msg = f"{cand_id} encountered ReadTimeout after {cand_timeout_sec:.0f}s"
+                        _record_early_failure(599, _early_msg)
                         raise AllCandidatesFailedError(
-                            f"{cand_id} encountered ReadTimeout after {cand_timeout_sec:.0f}s",
+                            _early_msg,
                             last_status_code=504,
                             last_response_body=None,
                         )
@@ -2250,8 +2287,13 @@ async def schedule(
                     # Local outbound pool saturated: do NOT cool down / count a
                     # failure against this key (it never reached the upstream),
                     # and trying other keys would only queue on the same pool.
-                    logger.warning(f"{cand_id}: local upstream connection pool exhausted "
-                                   f"({_POOL_MAX_CONNECTIONS} conns, waited {_POOL_WAIT_SEC:.0f}s)")
+                    _pool_msg = (f"{cand_id}: local upstream connection pool exhausted "
+                                 f"({_POOL_MAX_CONNECTIONS} conns, waited {_POOL_WAIT_SEC:.0f}s)")
+                    logger.warning(_pool_msg)
+                    try:
+                        stats.record_gateway_error(model_type, 503, _pool_msg, category)
+                    except Exception:
+                        logger.debug("pool timeout stats.record_gateway_error failed", exc_info=True)
                     raise GlobalOverloadError(
                         retry_after=5.0,
                         message=(f"The proxy's upstream connection pool is full ({_POOL_MAX_CONNECTIONS} "
@@ -2263,8 +2305,10 @@ async def schedule(
                     if fast_failover_provider_down and category != "agent" and _multi_provider:
                         down_providers.add(provider_name)
                     if strategy == "manual":
+                        _early_msg = f"{cand_id} encountered ConnectTimeout: {str(e)}"
+                        _record_early_failure(598, _early_msg)
                         raise AllCandidatesFailedError(
-                            f"{cand_id} encountered ConnectTimeout: {str(e)}",
+                            _early_msg,
                             last_status_code=502,
                             last_response_body=None,
                         )
@@ -2300,9 +2344,12 @@ async def schedule(
                     if strategy == "manual":
                         # Network-level failures are gateway errors (502/504) so
                         # clients retry them; 500 is kept for genuine proxy bugs.
+                        _early_code = _transport_status or 500
+                        _early_msg = f"{cand_id} encountered {type(e).__name__}: {str(e)}"
+                        _record_early_failure(_early_code, _early_msg)
                         _err = AllCandidatesFailedError(
-                            f"{cand_id} encountered {type(e).__name__}: {str(e)}",
-                            last_status_code=_transport_status or 500,
+                            _early_msg,
+                            last_status_code=_early_code,
                             last_response_body=None,
                         )
                         _err.internal = _transport_status is None
@@ -2404,6 +2451,12 @@ async def schedule(
                    f"Please retry after the Retry-After interval.")
             # 全部候选在冷却时统一返回 429，让客户端按 Retry-After 自行重试。
             last_status_code = 429
+        # 没有真正发出任何上游请求时也必须留下错误日志，否则概览失败数与日志表不一致。
+        if not _attempted_upstream:
+            try:
+                stats.record_gateway_error(model_type, last_status_code, msg, category)
+            except Exception:
+                logger.debug("no-attempt stats.record_gateway_error failed", exc_info=True)
         last_err_body = json.dumps({"detail": msg})
     # Soonest cooldown expiry among this request's candidates -> Retry-After.
     _now = time.time()

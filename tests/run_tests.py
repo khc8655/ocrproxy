@@ -80,6 +80,11 @@ CHECKS = {
         "desc": "Param simplify v2 (24h ban for 401/402/403 + persisted, KB single-provider keeps rotating, migration, per-mode schema)",
         "cmd": [PYTHON_EXE, "tests/test_param_simplify.py"],
     },
+    "failure_logging": {
+        "tier": "T1",
+        "desc": "Failure stats/error_logs consistency (manual 4xx/5xx, all-cooldown, gateway overload)",
+        "cmd": [PYTHON_EXE, "tests/test_failure_logging_consistency.py"],
+    },
     "settings_binding": {
         "tier": "T1",
         "desc": "Settings binding contract (schema/UI data-cap/runtime key, no removed configs)",
@@ -142,14 +147,14 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static"],
+    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
     "contract": ["contract_ui", "key_capsules", "vault_ui"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static",
+    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static",
             "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 

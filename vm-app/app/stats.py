@@ -365,6 +365,24 @@ def record(
         )
 
 
+def record_gateway_error(model_name: str, status_code: int, error_msg: str, category: str = "agent") -> None:
+    """Log a gateway-level failure that has no candidate key (pool/queue overload,
+    no candidates, all cooling). Keeps the dashboard failure count and error_logs
+    consistent without marking any real Key as unhealthy."""
+    with _lock:
+        now_ms = int(time.time() * 1000)
+        _record_error_log_locked(
+            category=category,
+            type_name=category,
+            model_name=model_name or category,
+            provider="gateway",
+            key="-",
+            code=int(status_code),
+            error_msg=error_msg or f"gateway error {status_code}",
+            now_ms=now_ms,
+        )
+
+
 def reset():
     """Reset all statistics to zero."""
     with _lock:

@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### 失败统计与错误日志一致性（未发版）
+- 修复 Agent 粘性（manual）上游 4xx/5xx 时 `agent_metrics` 记失败、但 `stats.error_logs` 为空的问题：manual、400/413 提前 abort、读/连接超时等路径在 `raise` 前补写 `stats.record`。
+- 全候选冷却（未真正发起请求）时补一条 429 错误日志，避免概览失败数与日志表不一致。
+- 连接池耗尽等无候选的网关级失败（`record_gateway_error`）也写入错误日志，不误标具体 Key。
+- 新增 `tests/test_failure_logging_consistency.py` 并接入 T1。
+
 ### 工程流程
 - 发版节奏为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；只有 P0 线上故障/安全事件才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
 
