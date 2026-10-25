@@ -5,6 +5,9 @@
 > 1. [Runtime APIs - Fetch (文档 81897)](https://cloud.tencent.com/document/product/1552/81897)
 > 2. [edgeone.json 配置规范 (文档 127389)](https://cloud.tencent.com/document/product/1552/127389)
 > 3. [Makers Functions 概览 (文档 127415)](https://cloud.tencent.com/document/product/1552/127415)
+> 4. [日志分析 (文档 127413)](https://cloud.tencent.com/document/product/1552/127413)
+>
+> 所有外部文档链接统一登记在 [`docs/EXTERNAL_REFERENCES.md`](EXTERNAL_REFERENCES.md)。
 
 ---
 
@@ -42,6 +45,15 @@
 - **Agents**：
   * 单次任务执行最大秒数：**30 ~ 3600 秒**；
   * 沙箱存活时长：**300 ~ 3600 秒**。
+
+---
+
+## 一.5 日志与可观测性（官方归属）
+
+- EdgeOne 的日志统一在 **腾讯云 Makers 控制台 → 日志分析** 查看，**不在 OCRProxy 管理 UI**；不要在 EdgeOne 控制台新增"最近错误日志"页面。
+- 官方日志来源当前为 **SSR / Cloud Functions / Agents**；官方文档注明 **Edge Functions（`edge-functions/`）日志正在规划中**（文档 127413，最近更新 2026-06-12）。EdgeOne 侧代码按平台规范输出结构化 `console.log` / `console.error`，由平台统一收集。
+- VM 的 `stats.error_logs` / "最近错误日志"仅属于 VM 运行时；EdgeOne 不复制该页面。
+- 本仓库外部文档索引见 [`docs/EXTERNAL_REFERENCES.md`](EXTERNAL_REFERENCES.md)。
 
 ---
 

@@ -470,7 +470,7 @@ npm run deploy      # 一键发布至 EdgeOne
   - `createKeepAliveStream` 彻底废除 `while(true)` 无限循环，重构为符合 Web Streams 规范的标准 `pull(controller)` 按需驱动模式，当下游消费缓慢时自动停止拉取，背压完全生效；
   - 边缘流式转发集成首块预读（Chunk Peeking）：在返回响应给下游前先预读第一包数据，若上游返回 HTTP 200 但立即断连发送 0 字节，边缘节点捕获后主动判定为 `empty_stream` 并触发下一个候选节点 Failover，杜绝向客户端吐出空流。
 
-### 6. EdgeOne Marks 与 VM 双端统一日志体系与安全脱敏 (Unified Logging & Zero Secret Leakage)
+### 6. EdgeOne Makers 与 VM 双端统一日志体系与安全脱敏 (Unified Logging & Zero Secret Leakage)
 - **双端标准事件标签 (Unified Event Tags)**：EdgeOne 边缘函数（腾讯云 Serverless V8）与 VM 服务端（FastAPI / Uvicorn）在严重错误与关键审计事件中采用完全对齐的标准标签：
   - `[AuthError]`：密码错误、客户端 Key 无效、Vault 越权、缺少必需环境变量 (503/401/403)；
   - `[AuthBlocked]`：触发防暴力破解 IP 临时封禁；
@@ -482,7 +482,8 @@ npm run deploy      # 一键发布至 EdgeOne
 - **Zero Secret Leakage 安全脱敏守卫**：
   - 双端日志模块（`agent-edgeone/edge-functions/lib/logger.js` 与 `vm-app/app/logger_utils.py`）内置严格脱敏过滤器；
   - 密钥统一输出别名或掩码（如 `sk-20e7****fcb3`），密码与 Token 一律为 `[REDACTED_SECRET]`，绝对禁止明文泄露至日志流；
-  - 严格遵守 EdgeOne 单条日志 4KB 长度限制，长文本自动截断。
+  - 严格遵守 EdgeOne 单条日志 4KB 长度限制，长文本自动截断；
+  - **日志归属**：VM 的"最近错误日志"来自本地 `stats.error_logs`；EdgeOne 日志统一在腾讯云 Makers 控制台「日志分析」查看，**不在 OCRProxy UI 中展示**（官方文档 1552/127413，Edge Functions 日志来源仍在规划中）。外部文档统一登记在 [`docs/EXTERNAL_REFERENCES.md`](docs/EXTERNAL_REFERENCES.md)。
 
 ---
 
@@ -558,7 +559,7 @@ ocrproxy upgrade   # 或在管理后台「系统设置」点击一键平滑升�
 
 ## 📚 文档规划体系与开发规范 (Documentation Index)
 
-OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规划体系，拒绝信息噪音与内容混乱：
+OCRProxy 遵循「单一真理源、职责明确、契约先行」的文档规划体系，拒绝信息噪音与内容混乱。外部官方文档统一登记在 [`docs/EXTERNAL_REFERENCES.md`](docs/EXTERNAL_REFERENCES.md)。
 
 | 文档路径 | 核心职责说明 | 维护与发版原则 |
 |---|---|---|
@@ -568,6 +569,7 @@ OCRProxy 遵循「单一真理源、职责明确、文档先行」的文档规�
 | **[`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md)** | **生产运维与部署指南**：Caddy/Nginx 反代配置、端口规划、日常排错与服务监控。 | 运维方案更新时维护 |
 | **[`docs/SECURITY_SPEC.md`](docs/SECURITY_SPEC.md)** | **安全架构与红线标准**：三权分立鉴权矩阵、SSRF 防御白名单、Fail-Closed 基线。 | 安全机制变更时更新 |
 | **[`docs/EDGEONE_RUNTIME_SPEC.md`](docs/EDGEONE_RUNTIME_SPEC.md)** | **EdgeOne 官方运行时规范**：腾讯云 EdgeOne 官方 Fetch 规范、超时闭环与并发硬限制治理。 | 边缘运行时升级时维护 |
+| **[`docs/EXTERNAL_REFERENCES.md`](docs/EXTERNAL_REFERENCES.md)** | **外部权威文档索引**：EdgeOne 官方文档、厂商 API/协议文档、日志归属与更新规则。 | 收到新官方链接或官方改版时更新 |
 | **[`docs/RELEASE_SPEC.md`](docs/RELEASE_SPEC.md)** | **发版准入与版本升级纪律**：明确发版红线与全自动化测试 Checklist。 | 发版流程升级时维护 |
 
 ---

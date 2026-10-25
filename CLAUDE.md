@@ -39,7 +39,13 @@
 - KB：全部 429/冷却 → `429 + Retry-After`，客户端自行重试，服务端不排队等待；
 - 设置页按 host/mode 只显示真实生效的参数。
 
-## 5. 发布前
+## 5. 外部官方文档与日志归属
+
+- 所有 EdgeOne / 厂商官方文档链接统一登记在 [`docs/EXTERNAL_REFERENCES.md`](docs/EXTERNAL_REFERENCES.md)，禁止散落在聊天或临时笔记里；收到新链接先更新该表，再同步相关 spec。
+- EdgeOne 日志统一在腾讯云 Makers 控制台「日志分析」查看，**不在 OCRProxy 管理 UI**；EdgeOne 控制台不得新增错误日志页。VM 的 `stats.error_logs` 仅属于 VM。
+- 官方平台行为与项目文档冲突时，以官方文档 + 可执行契约（schema/runtime/tests）为准，并同步更新文档。
+
+## 6. 发布前
 
 ```bash
 npm run build:admin
