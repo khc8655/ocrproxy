@@ -1,3 +1,5 @@
+export type SettingValue = string | number | boolean
+
 export type PageId = 'overview' | 'providers' | 'models' | 'settings'
 
 export type HostKind = 'vm' | 'edgeone'

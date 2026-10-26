@@ -8,7 +8,11 @@
 - [x] 原型隔离到 `design/console-v2`，移除了开发平台残留（`.vibex/.cursor/vibex-local`）。
 - [x] 移除了 `useConsole.ts` 的种子 `proxy_api_key`；原型不再内置 Key。
 - [x] 设计规范保存为 `docs/UI_DESIGN_SPEC_DRAFT.md`，**未替换**现有规范。
-- [ ] 真实 API / 登录 / Schema / 构建 / 测试（本计划后续阶段）。
+- [x] 真实 API 脚手架：`src/lib/api.ts`（登录、配置读写、统计、探测，host-aware）。
+- [x] Schema 适配脚手架：`src/lib/backend-schema.ts`（保留未知字段/真实 Key，不写 masked 值）。
+- [ ] 把 `useConsole`/页面接到 API（下一步：登录页 → 真实配置加载 → 写回）。
+- [x] 原型构建验证：`pnpm exec tsc -b`、`pnpm lint`、`pnpm build` 均通过（Vite 产物 354 KB JS / 106 KB gzip）。
+- [ ] 服务端静态托管/单文件打包集成（下一步）。
 
 ## 1. 最小闭环（P0）
 
