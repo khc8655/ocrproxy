@@ -88,3 +88,26 @@
 - 无真实 Key 进入前端 bundle/localStorage/URL；
 - 现有全量测试与 G1~G6 通过；
 - 取得用户确认后才替换原 UI 与设计规范。
+
+## 5. 体积与架构预算（2026-10-26 实测）
+
+| 产物 | 当前 `/admin` | Console v2 | 变化 |
+|---|---|---|---|
+| EdgeOne 单文件 HTML（raw） | 319 KB | 381 KB（JS 354 + CSS 26 + HTML） | **+19%** |
+| EdgeOne 单文件 HTML（gzip） | 79 KB | 110 KB | **+39%** |
+| VM 静态资源合计（raw） | 319 KB | 388 KB | +22% |
+| VM 静态资源合计（gzip） | 87 KB | 114 KB | +31% |
+| 生产依赖数量 | 无 Node 运行时 | 48 个 prod deps / 16 个 dev deps | 构建链明显变重 |
+| 主 JS（raw/gzip） | 313 KB / 80 KB（admin.js） | 354 KB / 104 KB | +13% / +30% |
+
+**结论：EdgeOne 不在边缘执行 React，运行时 CPU 不受影响；重的是构建链、依赖面与首屏 payload，不是边缘函数。**
+
+准入预算（未达不得替换 `/admin`）：
+
+- EdgeOne 单文件 HTML：**raw ≤ 360 KB，gzip ≤ 90 KB**；不得有外部 JS/CSS/字体请求；
+- VM 静态资源合计：**gzip ≤ 100 KB**；
+- 生产依赖：先 prune 到实际使用的包，禁止 `miniprogram-ci/pocketbase/recharts` 等无关依赖进入构建；
+- 只能在构建期使用 Node/Vite，运行期不得依赖 Node；
+- 未达预算前，v2 只作为设计原型/VM 旁路预览，不部署 EdgeOne。
+
+当前 v2 未达 EdgeOne 预算（381 KB / 110 KB gzip），需要先做依赖裁剪与运行时替换评估（例如 Preact 兼容或只移植设计 token 到现有原生控制台）。
