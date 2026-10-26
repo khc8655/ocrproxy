@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.16);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 222 100% 98%;
+    --foreground: 220 43% 11%;
+    --card-foreground: 220 43% 11%;
+    --popover-foreground: 220 43% 11%;
+    --card: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --secondary: 220 100% 96%;
+    --muted: 220 100% 96%;
+    --accent: 220 100% 96%;
+    --secondary-foreground: 218 24% 27%;
+    --accent-foreground: 218 24% 27%;
+    --muted-foreground: 221 13% 46%;
+    --border: 218 43% 89%;
+    --input: 218 43% 89%;
+    --primary: 221 83% 53%;
+    --ring: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --success: 158 64% 34%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 42%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 40%;
+    --info-foreground: 0 0% 100%;
+    --violet: 262 72% 56%;
+    --teal: 173 70% 32%;
+    --radius: var(--radius-md);
+
+    --space-1: 4px;
+    --space-12: 48px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --radius-md: 16px;
+    --elev-flat: none;
+    --focus-ring: 0 0 0 4px rgba(37, 99, 235, 0.22);
+    --elev-raised: 0 20px 52px rgba(16, 24, 40, 0.11);
+    --elev-ring: 0 0 0 1px var(--border);
+    --text-2xl: 36px;
+    --text-3xl: 54px;
+    --text-4xl: 76px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-sm: 14px;
+    --text-xl: 24px;
+    --text-xs: 12px;
+    --leading-body: 1.52;
+    --leading-tight: 1.06;
+    --font-display: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --font-body: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --font-mono: "SF Mono", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", ui-monospace, Menlo, monospace;
+  }
+}
+
+/* 统一的下拉箭头：所有 select 共用同一套图标与位置 */
+.select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+}

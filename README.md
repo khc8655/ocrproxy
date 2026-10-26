@@ -570,6 +570,7 @@ OCRProxy 遵循「单一真理源、职责明确、契约先行」的文档规�
 | **[`docs/SECURITY_SPEC.md`](docs/SECURITY_SPEC.md)** | **安全架构与红线标准**：三权分立鉴权矩阵、SSRF 防御白名单、Fail-Closed 基线。 | 安全机制变更时更新 |
 | **[`docs/EDGEONE_RUNTIME_SPEC.md`](docs/EDGEONE_RUNTIME_SPEC.md)** | **EdgeOne 官方运行时规范**：腾讯云 EdgeOne 官方 Fetch 规范、超时闭环与并发硬限制治理。 | 边缘运行时升级时维护 |
 | **[`docs/EXTERNAL_REFERENCES.md`](docs/EXTERNAL_REFERENCES.md)** | **外部权威文档索引**：EdgeOne 官方文档、厂商 API/协议文档、日志归属与更新规则。 | 收到新官方链接或官方改版时更新 |
+| **[`docs/UI_DESIGN_SPEC_DRAFT.md`](docs/UI_DESIGN_SPEC_DRAFT.md)** | **UI v2 设计规范草稿**：仅用于 `design/console-v2` 原型，未替换现有规范；接入完成后再评估。 | 设计原型阶段维护 |
 | **[`docs/RELEASE_SPEC.md`](docs/RELEASE_SPEC.md)** | **发版准入与版本升级纪律**：明确发版红线与全自动化测试 Checklist。 | 发版流程升级时维护 |
 
 ---
