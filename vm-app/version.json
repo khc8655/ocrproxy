@@ -1,11 +1,11 @@
 {
-  "version": "v20261028-02",
+  "version": "v20261028-03",
   "release_date": "2026-10-28",
   "commit": "HEAD",
-  "title": "控制台 UI 空态回归修复 (v20261028-02)",
+  "title": "OAuth 入口按供应商显示 + UI 空态修复 (v20261028-03)",
   "changelog": [
-    "修复 v20261028-01 中 `.empty` 组件样式与 KB 模型表 `td.empty` 冲突，导致“暂无候选节点”空态被裁切的问题；",
-    "空态组件样式限定为 `.empty:not(td)`，表格空态恢复原居中显示；",
-    "控制台 UI 其余 token/壳层/页面头与 OAuth 入口不变。"
+    "OAuth 登录入口仅对带官方 OAuth 配方的供应商显示，普通 Key 不再出现误导入口；新增 GET /api/admin/oauth/providers；",
+    "保留 v20261028-02 的 KB 空表 `.empty:not(td)` 修复；",
+    "版本 7 处同步；全量测试与 G1~G6 通过。"
   ]
 }

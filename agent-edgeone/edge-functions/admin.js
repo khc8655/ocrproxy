@@ -900,7 +900,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-02</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-03</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -4508,9 +4508,12 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
   const oauthSec = document.getElementById('k_oauth_section');
   const oauthHint = document.getElementById('k_oauth_hint');
   if (oauthSec) {
-    // VM 且供应商有官方 OAuth 配置时显示；无配置由后端返回明确错误。
-    oauthSec.style.display = (typeof HOST !== 'undefined' && HOST.capabilities && HOST.capabilities.oauthLogin) ? 'block' : 'none';
+    // 只有后端确认该供应商 preset 带官方 OAuth 配方时才显示；避免对普通 Key 误导。
+    oauthSec.style.display = 'none';
     if (oauthHint) oauthHint.textContent = '';
+    if (typeof HOST !== 'undefined' && HOST.capabilities && HOST.capabilities.oauthLogin) {
+      refreshOAuthProviderVisibility(prov, oauthSec);
+    }
   }
 
   const vSec = document.getElementById('k_vertex_section');
@@ -4607,6 +4610,21 @@ async function deleteKey(prov,label){
   await persistConfig(\`Key「\${label}」已删除并立即生效\`);
   renderProviders();
   renderModels();
+}
+
+let _oauthProviderCache = null;
+async function refreshOAuthProviderVisibility(prov, sectionEl){
+  if (!sectionEl) return;
+  try {
+    if (!_oauthProviderCache) {
+      const r = await fetch('/api/admin/oauth/providers', { headers: headers() });
+      const d = await r.json().catch(() => ({}));
+      _oauthProviderCache = new Set(Array.isArray(d.providers) ? d.providers : []);
+    }
+    if (_oauthProviderCache.has(prov)) sectionEl.style.display = 'block';
+  } catch (_) {
+    sectionEl.style.display = 'none';
+  }
 }
 
 async function startOAuthLogin(){

@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [v20261028-03] - 2026-10-28
+
+### OAuth 入口可见性修复
+- OAuth 登录入口只对带官方 OAuth 配方的供应商显示，普通 Key 不再出现误导入口。
+- 新增 `GET /api/admin/oauth/providers`，按 preset 的 `auth.type` 返回可用供应商。
+- 保留 v20261028-02 的 KB 空表 `.empty:not(td)` 修复。
+
 ## [v20261028-02] - 2026-10-28
 
 ### 控制台 UI 空态回归修复

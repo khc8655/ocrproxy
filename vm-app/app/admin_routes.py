@@ -1444,6 +1444,24 @@ async def oauth_relogin_endpoint(request: Request):
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
+@router.get("/oauth/providers")
+async def oauth_providers_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    cfg = await get_config()
+    out = []
+    for provider_id, provider in (cfg.get("providers") or {}).items():
+        if not isinstance(provider, dict):
+            continue
+        auth = provider.get("auth") if isinstance(provider.get("auth"), dict) else {}
+        if not auth:
+            preset = _get_local_preset(provider.get("preset_id") or provider_id) or {}
+            auth = preset.get("auth") if isinstance(preset.get("auth"), dict) else {}
+        if auth.get("type") in ("oauth_device", "oauth_paste"):
+            out.append(provider_id)
+    return JSONResponse({"providers": out})
+
+
 @router.get("/oauth/status")
 async def oauth_status_endpoint(request: Request):
     if not _check_auth(request):
