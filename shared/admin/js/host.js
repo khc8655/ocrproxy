@@ -38,6 +38,7 @@
       vaultClient: kind === 'vm',
       vaultHub: kind === 'edgeone',
       systemUpdate: kind === 'vm',
+      oauthLogin: kind === 'vm',
       accessGuides: true,
       rawEditor: true,
       keyStatus: true,

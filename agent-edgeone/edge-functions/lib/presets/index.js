@@ -4,8 +4,8 @@
  */
 
 export const CATALOG = {
-  "version": "2026.10.27",
-  "updated_at": "2026-10-27T00:00:00.000Z",
+  "version": "2026.10.28",
+  "updated_at": "2026-10-28T00:00:00.000Z",
   "providers": [
     {
       "id": "agnes",
@@ -121,6 +121,25 @@ export const CATALOG = {
         "tools": true
       },
       "recommended_models_count": 5
+    },
+    {
+      "id": "minimax-code",
+      "name": "MiniMax Code",
+      "version": "1.0.0",
+      "updated_at": "2026-10-28",
+      "update_notes": "MiniMax Code 官方 OAuth 设备码登录（仅 VM），Anthropic Messages 协议直通",
+      "rule_hash": "5c46e0122183",
+      "protocol": "anthropic",
+      "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+      "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+      "doc_url": "https://platform.minimax.cn/docs",
+      "description": "MiniMax Code 订阅（官方 OAuth 设备码）；登录凭据仅保存在本机 VM",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "anthropic_messages": true
+      },
+      "recommended_models_count": 1
     },
     {
       "id": "minimax",
@@ -722,6 +741,69 @@ export const PRESETS = [
       },
       "sanitization": {
         "unsupported_params": []
+      }
+    }
+  },
+  {
+    "id": "minimax-code",
+    "name": "MiniMax Code",
+    "version": "1.0.0",
+    "updated_at": "2026-10-28",
+    "update_notes": "MiniMax Code 官方 OAuth 设备码登录（仅 VM），Anthropic Messages 协议直通",
+    "protocol": "anthropic",
+    "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+    "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+    "doc_url": "https://platform.minimax.cn/docs",
+    "description": "MiniMax Code 订阅（官方 OAuth 设备码）；登录凭据仅保存在本机 VM",
+    "features": {
+      "native_thinking": true,
+      "tools": true,
+      "anthropic_messages": true
+    },
+    "recommended_models": [
+      {
+        "name": "MiniMax-M3.1-Flash-Preview",
+        "upstream_model": "MiniMax-M3.1-Flash-Preview",
+        "description": "MiniMax Code 订阅可用，1M 上下文、强制思考"
+      }
+    ],
+    "auth": {
+      "type": "oauth_device",
+      "client_id": "mcode-public",
+      "scope": "agent.default",
+      "audience": "agent-backend",
+      "pkce": "S256",
+      "device_endpoint": "https://account.minimax.cn/oauth2/device/code",
+      "token_endpoint": "https://account.minimax.cn/oauth2/token",
+      "authorize_endpoint": null,
+      "redirect_uri": null,
+      "refresh_lead_sec": 600,
+      "refresh_rotates": true,
+      "signed_out_errors": [
+        "invalid_grant"
+      ],
+      "account_claims": {
+        "subject": "sub",
+        "account_id": "account_id"
+      },
+      "device_quirks": [
+        "expired_in_ms_or_epoch",
+        "interval_ms",
+        "status_field",
+        "poll_by_user_code"
+      ]
+    },
+    "adapter_rules": {
+      "auth_header": "Authorization",
+      "auth_format": "Bearer {key}",
+      "inject_headers": {
+        "User-Agent": "MiniMaxAgent",
+        "X-Mavis-Agent-Id": "main",
+        "X-Mavis-Session-Id": "${random_session_id}",
+        "anthropic-version": "2023-06-01"
+      },
+      "reasoning": {
+        "strategy": "openai_passthrough"
       }
     }
   },

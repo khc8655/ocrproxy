@@ -145,6 +145,12 @@ def is_masked_secret(val) -> bool:
             s = pk.strip()
             if "●" in s or s == "********" or s.startswith("***"):
                 return True
+        oauth = val.get("oauth")
+        if isinstance(oauth, dict):
+            for field in ("access", "refresh"):
+                v = oauth.get(field)
+                if isinstance(v, str) and ("●" in v or v == "********" or v.startswith("***")):
+                    return True
     return False
 
 
@@ -220,6 +226,16 @@ def _migrate_string_secrets(config: dict) -> bool:
                 origin = prov_origin
                 keys[label] = {"key": val, "origin": origin, "is_local": origin == "local"}
                 changed = True
+            elif isinstance(val, dict) and val.get("kind") == "oauth":
+                # OAuth 凭据只能属于本机；即使上游误标 origin=vault 也强制纠正。
+                if val.get("origin") != "local" or val.get("is_local") is not True or val.get("key"):
+                    val["origin"] = "local"
+                    val["is_local"] = True
+                    val["key"] = ""
+                    changed = True
+                if not isinstance(val.get("oauth"), dict):
+                    val["oauth"] = {}
+                    changed = True
     return changed
 
 
@@ -346,6 +362,19 @@ def save_to_disk(config: dict) -> None:
                                         if is_masked_secret(k_val.get("private_key")) and isinstance(orig, dict) and orig.get("private_key"):
                                             k_val["private_key"] = orig["private_key"]
                                             logger.info("Kernel Guard: Restored masked service account private_key for %s/%s from disk.", p_name, k_lbl)
+                                        # OAuth access/refresh 也是密钥：不能把 GET 的掩码写回磁盘。
+                                        if isinstance(orig, dict) and orig.get("kind") == "oauth":
+                                            src_oauth = orig.get("oauth") if isinstance(orig.get("oauth"), dict) else {}
+                                            dst_oauth = k_val.get("oauth") if isinstance(k_val.get("oauth"), dict) else {}
+                                            for f in ("access", "refresh"):
+                                                if is_masked_secret(dst_oauth.get(f)) and src_oauth.get(f):
+                                                    dst_oauth[f] = src_oauth[f]
+                                            k_val["oauth"] = dst_oauth
+                                            k_val["kind"] = "oauth"
+                                            k_val["origin"] = "local"
+                                            k_val["is_local"] = True
+                                            k_val["key"] = ""
+                                            logger.info("Kernel Guard: Restored masked OAuth tokens for %s/%s from disk.", p_name, k_lbl)
                                     else:
                                         logger.warning("Kernel Guard: Removed masked key %s/%s with no disk counterpart.", p_name, k_lbl)
                                         p_data["keys"].pop(k_lbl, None)

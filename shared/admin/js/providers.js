@@ -1098,6 +1098,13 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
   }
 
   renderVaultKeyPicker(prov);
+  const oauthSec = document.getElementById('k_oauth_section');
+  const oauthHint = document.getElementById('k_oauth_hint');
+  if (oauthSec) {
+    // VM 且供应商有官方 OAuth 配置时显示；无配置由后端返回明确错误。
+    oauthSec.style.display = (typeof HOST !== 'undefined' && HOST.capabilities && HOST.capabilities.oauthLogin) ? 'block' : 'none';
+    if (oauthHint) oauthHint.textContent = '';
+  }
 
   const vSec = document.getElementById('k_vertex_section');
   if (isVertexProvider(prov) && vSec) {
@@ -1113,6 +1120,12 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
 }
 
 function editKey(prov, label){ 
+  const _p = state.config && state.config.providers ? state.config.providers[prov] : null;
+  const _kd = _p && _p.keys ? _p.keys[label] : null;
+  if (_kd && typeof _kd === 'object' && _kd.kind === 'oauth') {
+    toast('OAuth 账号不能直接编辑密钥；失效时请重新发起账号登录', 'err');
+    return;
+  }
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const keySrc = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, label) : 'local';
   if (!isHostEdgeOne && keySrc === 'vault') {
@@ -1187,6 +1200,52 @@ async function deleteKey(prov,label){
   await persistConfig(`Key「${label}」已删除并立即生效`);
   renderProviders();
   renderModels();
+}
+
+async function startOAuthLogin(){
+  const prov = document.getElementById('k_provider').value;
+  const hint = document.getElementById('k_oauth_hint');
+  if (!prov) return;
+  if (hint) hint.textContent = '正在申请登录…';
+  try {
+    const r = await fetch('/api/admin/oauth/start', {
+      method: 'POST', headers: headers(), body: JSON.stringify({ provider: prov })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || '该供应商未配置官方 OAuth 登录');
+    if (!d.session) throw new Error('未获得登录会话');
+    const tip = `请在浏览器打开：${d.verification_url || '(见厂商页面)'}\n输入代码：${d.user_code}\n\n完成后等待自动确认。`;
+    if (hint) hint.textContent = `验证码 ${d.user_code} · ${d.verification_url || ''}`;
+    alert(tip);
+    const session = d.session;
+    const interval = Math.max(2, Number(d.interval) || 5) * 1000;
+    const timer = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/admin/oauth/poll', {
+          method: 'POST', headers: headers(), body: JSON.stringify({ session })
+        });
+        const pd = await pr.json().catch(() => ({}));
+        if (pd.status === 'done') {
+          clearInterval(timer);
+          toast(`OAuth 登录成功：${pd.account || pd.label || ''}`, 'ok');
+          closeModal('keyModal');
+          setTimeout(() => location.reload(), 400);
+        } else if (pr.ok === false || pd.error) {
+          clearInterval(timer);
+          if (hint) hint.textContent = pd.error || '登录失败';
+          toast(pd.error || 'OAuth 登录失败', 'err');
+        } else if (pd.message && hint) {
+          hint.textContent = pd.message;
+        }
+      } catch (e) {
+        clearInterval(timer);
+        if (hint) hint.textContent = '轮询失败：' + e.message;
+      }
+    }, interval);
+  } catch (e) {
+    if (hint) hint.textContent = e.message;
+    toast(e.message, 'err');
+  }
 }
 
 async function saveKey(){

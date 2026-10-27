@@ -1,10 +1,20 @@
-# OAuth 订阅凭据规格（SYSTEM_DESIGN_SPEC §3 补充，草案 v0.1）
+# OAuth 订阅凭据规格（SYSTEM_DESIGN_SPEC §3 补充，草案 v0.2）
 
 > 状态：草案，未实现。目标：在**不改变现有二元凭据架构**（§3：中枢下发规则、本地 Key 不出机）的前提下，让 VM 端支持"用厂商账号 OAuth 登录"代替粘贴 API Key。一次定型，后续新增厂商只加 preset JSON。
 >
 > 参考实现：magpie-community/plugins `packages/minimax`（MIT）的 MiniMax Code 设备码登录。
 
 ---
+
+## 0.1 非目标（v0.2 明确）
+
+本项目**只借鉴 OAuth 认证方式**，不做以下事情：
+
+- 不集成 magpie，不运行 Bun 插件宿主，不引入其调度/路由/账号池；
+- 不集成 Antigravity、WorkBuddy 等非官方订阅/私有协议客户端；
+- 不实现非官方 client id/endpoint、不逆向私有 API、不做多账号自动轮换；
+- P1 只做 **MiniMax Code（官方 OAuth 设备码）**；后续只接厂商官方公开的 OAuth 授权流程（如 Google/GPT 的官方订阅认证），并逐家评审；
+- 非标准私有协议如果需要，单独做 sidecar/独立服务，不进入 OCRProxy 核心。
 
 ## 0. 一句话架构
 
@@ -214,8 +224,8 @@ api_key, base_url = await credentials.resolve_auth(provider_name, key_label, api
 | 期 | 内容 | 验收 |
 |---|---|---|
 | P1 | 凭据层（kind/oauth 字段、resolve_auth、401 路径、刷新单飞与落盘、保活）+ `oauth_device` + MiniMax Code 两个 preset + UI 登录胶囊 | MiniMax Code 账号在 VM-Agent 下可登录、对话、自动续期、失效提示 |
-| P2 | `oauth_paste`（授权码 + PKCE + 粘贴回调）通用实现 | 任一标准 OAuth 厂商只加 preset 即可接入 |
-| P3（可选） | 私有协议厂商：adapter 层新增 `protocol` 取值（如 Google Code Assist 信封） | 按需逐家评估，不影响 P1/P2 结构 |
+| P2 | `oauth_paste`（授权码 + PKCE + 粘贴回调）通用实现；仅接官方公开 OAuth 流程 | 标准 OAuth 厂商只加 preset 即可接入；不做非官方/私有协议 |
+| P3 | **不做** magpie / Antigravity / WorkBuddy / 非官方插件适配 | 如未来确需，另立独立 sidecar 项目评审 |
 
 ## 12. 明确不做
 

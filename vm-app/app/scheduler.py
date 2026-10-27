@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from . import stats
 from . import agent_metrics
+from . import oauth_credentials
 from .config_store import get_config_version
 from .logger_utils import clean_upstream_error_text
 
@@ -1562,6 +1563,7 @@ async def schedule(
     _rpm_blocked: Dict[str, float] = {}
 
     _same_key_backoff_override: Dict[str, float] = {}
+    _oauth_refreshed: Set[str] = set()
 
     def _maybe_retry_same_key(orig_idx_, cand_, cid_, min_backoff: float = 0.0) -> bool:
         if category != "agent" or strategy != "sticky_failover" or same_key_retries <= 0:
@@ -1658,7 +1660,24 @@ async def schedule(
                 logger.warning(f"Key {key_label} not found for provider {provider_name}")
                 continue
 
-            if isinstance(api_key_raw, dict):
+            is_oauth_key = isinstance(api_key_raw, dict) and api_key_raw.get("kind") == "oauth"
+            if is_oauth_key:
+                try:
+                    api_key = await oauth_credentials.resolve_auth(provider_name, key_label, provider, api_key_raw)
+                except oauth_credentials.OAuthReloginRequired as exc:
+                    err_msg = f"{cand_id} OAuth 需要重新登录: {exc}"
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
+                    _trail_add(provider_name, key_label, "oauth_relogin")
+                    continue
+                except oauth_credentials.OAuthError as exc:
+                    err_msg = f"{cand_id} OAuth 凭证解析失败: {exc}"
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
+                    _trail_add(provider_name, key_label, "oauth_error")
+                    continue
+                base_url = (api_key_raw.get("base_url") if isinstance(api_key_raw, dict) else None) or provider.get("base_url", "")
+            elif isinstance(api_key_raw, dict):
                 api_key = str(api_key_raw.get("key", ""))
                 base_url = api_key_raw.get("base_url") or provider.get("base_url", "")
             else:
@@ -2008,6 +2027,38 @@ async def schedule(
 
                     # Close response immediately to return socket to pool
                     await resp.aclose()
+
+                    # OAuth 401：先强制刷新一次并重试同一 Key；不得按普通 401 直接 24h 冷宫。
+                    if status_code == 401 and is_oauth_key:
+                        from .oauth_credentials import OAuthReloginRequired, OAuthError as _OAuthError
+                        if cand_id not in _oauth_refreshed:
+                            _oauth_refreshed.add(cand_id)
+                            try:
+                                await oauth_credentials.refresh_auth(provider_name, key_label, force=True)
+                                _queue.insert(_qi, (orig_idx, cand))
+                                _same_key_retry_ids.add(cand_id)
+                                _same_key_backoff_override[cand_id] = 0.5
+                                continue
+                            except OAuthReloginRequired as exc:
+                                await oauth_credentials.mark_needs_relogin(provider_name, key_label, str(exc))
+                                err_msg = f"{cand_id} OAuth 刷新失效: {exc}"
+                                logger.warning(err_msg)
+                                errors.append(err_msg)
+                                _trail_add(provider_name, key_label, "oauth_relogin")
+                                continue
+                            except _OAuthError as exc:
+                                err_msg = f"{cand_id} OAuth 刷新暂时失败: {exc}"
+                                logger.warning(err_msg)
+                                errors.append(err_msg)
+                                _trail_add(provider_name, key_label, "oauth_refresh")
+                                continue
+                        else:
+                            await oauth_credentials.mark_needs_relogin(provider_name, key_label, "refresh 后仍 401")
+                            err_msg = f"{cand_id} OAuth 刷新后仍 401，标记需重新登录"
+                            logger.warning(err_msg)
+                            errors.append(err_msg)
+                            _trail_add(provider_name, key_label, "oauth_relogin")
+                            continue
 
                     body_lower = (err_body_text or "").lower()
                     _has_rate_limit_kw = bool(body_lower and any(w in body_lower for w in RATE_LIMIT_KEYWORDS))

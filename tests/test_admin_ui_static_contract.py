@@ -64,7 +64,7 @@ REQUIRED_IDS = [
 ]
 
 KNOWN_ARCH = {"vm", "edgeone"}
-KNOWN_CAPS = {"runModes", "kb", "vaultClient", "vaultHub", "systemUpdate"}
+KNOWN_CAPS = {"runModes", "kb", "vaultClient", "vaultHub", "systemUpdate", "oauthLogin"}
 
 # handler names that are JS keywords / DOM built-ins rather than our functions
 HANDLER_IGNORES = {"if", "return", "this", "event", "window", "document"}
@@ -96,7 +96,7 @@ def main():
     check(not dupes, f"no duplicate ids in shared/admin/admin.html{f': {dupes[:5]}' if dupes else ''}")
 
     print("[2] nav tabs ↔ panels")
-    nav = re.search(r'<nav id="topNav">(.*?)</nav>', html, re.S)
+    nav = re.search(r'<nav id="topNav"[^>]*>(.*?)</nav>', html, re.S)
     check(bool(nav), "topNav exists")
     if nav:
         buttons = re.findall(r'<button[^>]*onclick="switchTab\(\'([\w-]+)\'\)"', nav.group(1))

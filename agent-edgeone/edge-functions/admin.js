@@ -52,32 +52,32 @@ function pageHtml() {
       --khc-danger-600: #DC2626;
 
       --bg: #FFFFFF;
-      --bg-subtle: #F8FAFC;
+      --bg-subtle: #F5F8FF;
       --bg-card: #FFFFFF;
       --text: #0F172A;
       --text-secondary: #475569;
-      --text-tertiary: #94A3B8;
-      --border: #E2E8F0;
-      --border-subtle: #E2E8F0;
-      --border-strong: #CBD5E1;
-      --primary: #1664FF;
-      --primary-hover: #3F7AFF;
-      --primary-soft: #E6EEFF;
-      --primary-border: #C5D7FF;
-      --success: #10B981;
-      --success-soft: #ECFDF5;
-      --success-border: #A7F3D0;
-      --warn: #F59E0B;
+      --text-tertiary: #64748B;
+      --border: #D6DEE8;
+      --border-subtle: #E3E9F2;
+      --border-strong: #B8C4D6;
+      --primary: #2563EB;
+      --primary-hover: #1D4ED8;
+      --primary-soft: #EFF6FF;
+      --primary-border: #BFDBFE;
+      --success: #15803D;
+      --success-soft: #F0FDF4;
+      --success-border: #BBF7D0;
+      --warn: #B45309;
       --warn-soft: #FFFBEB;
       --warn-border: #FDE68A;
-      --error: #EF4444;
+      --error: #DC2626;
       --error-soft: #FEF2F2;
       --error-border: #FECACA;
 
-      --radius-sm: 2px;
-      --radius-md: 4px;
-      --radius-lg: 8px;
-      --radius-xl: 12px;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
 
       /* Spacing Scale (4px base) */
       --space-1: 4px;
@@ -93,15 +93,48 @@ function pageHtml() {
       --ctrl-height-md: 32px;
       --row-height: 52px;
 
-      --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
-      --shadow: 0 2px 4px 0 rgba(15, 23, 42, 0.06);
-      --shadow-md: 0 4px 8px rgba(15, 23, 42, 0.08);
-      --shadow-lg: 0 8px 16px rgba(15, 23, 42, 0.10);
+      --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+      --shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
+      --shadow-md: 0 8px 22px rgba(16, 24, 40, 0.09);
+      --shadow-lg: 0 20px 52px rgba(16, 24, 40, 0.13);
 
       --font: 'PingFang SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: 'SF Mono', 'Roboto Mono', Menlo, Monaco, Consolas, monospace;
       --font-size-body: 14px;
       --font-size-h3: 16px;
+
+      /* Console v2 semantic aliases (single vocabulary; old --khc-* kept for legacy pages) */
+      --c-bg: #F5F8FF;
+      --c-surface: #FFFFFF;
+      --c-surface-muted: #F5F8FF;
+      --c-border: #D6DEE8;
+      --c-border-strong: #B8C4D6;
+      --c-text: var(--text);
+      --c-text-muted: var(--text-secondary);
+      --c-text-subtle: var(--text-tertiary);
+      --c-primary: #2563EB;
+      --c-primary-hover: #1D4ED8;
+      --c-primary-soft: #EFF6FF;
+      --c-success: var(--success);
+      --c-success-soft: var(--success-soft);
+      --c-warning: var(--warn);
+      --c-warning-soft: var(--warn-soft);
+      --c-danger: var(--error);
+      --c-danger-soft: var(--error-soft);
+      --c-info: #2563eb;
+      --c-info-soft: #eff6ff;
+      --c-violet: #7e22ce;
+      --c-violet-soft: #f3e8ff;
+      --c-teal: #0f766e;
+      --c-teal-soft: #f0fdfa;
+      --c-sky: #0369a1;
+      --c-sky-soft: #f0f9ff;
+      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+      --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+      --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
+      --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+      --sh-sm: var(--shadow-sm); --sh-md: var(--shadow-md); --sh-modal: var(--shadow-lg);
+      --dur-fast: 120ms; --dur-base: 180ms;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg-subtle); -webkit-font-smoothing: antialiased; }
@@ -726,6 +759,121 @@ function pageHtml() {
     }
 
 
+
+    /* §4 Console v2 component layer (ui.js) */
+    .btn--primary { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
+    .btn--primary:hover:not(:disabled) { background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
+    .btn--secondary { background: var(--c-surface); color: var(--c-text-muted); border-color: var(--c-border); }
+    .btn--secondary:hover:not(:disabled) { background: var(--c-bg); border-color: var(--c-border-strong); color: var(--c-text); }
+    .btn--ghost { background: transparent; color: var(--c-text-muted); border-color: transparent; }
+    .btn--ghost:hover:not(:disabled) { background: var(--c-bg); color: var(--c-text); }
+    .btn--danger { background: var(--c-danger-soft); color: var(--c-danger); border-color: var(--c-danger-soft); }
+    .btn--danger:hover:not(:disabled) { background: var(--c-danger); color: #fff; }
+    .btn--sm { padding: 4px 10px; font-size: var(--fs-xs); height: 28px; }
+    .btn--icon { padding: 0; width: 28px; height: 28px; justify-content: center; }
+    .badge--neutral { background: var(--c-bg); color: var(--c-text-subtle); }
+    .badge--primary { background: var(--c-primary-soft); color: var(--c-primary); }
+    .badge--success { background: var(--c-success-soft); color: var(--c-success); }
+    .badge--warning { background: var(--c-warning-soft); color: var(--c-warning); }
+    .badge--danger { background: var(--c-danger-soft); color: var(--c-danger); }
+    .badge--info { background: var(--c-info-soft); color: var(--c-info); }
+    .badge--violet { background: var(--c-violet-soft); color: var(--c-violet); }
+    .badge--teal { background: var(--c-teal-soft); color: var(--c-teal); }
+    .badge--sky { background: var(--c-sky-soft); color: var(--c-sky); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dot--neutral { background: var(--c-text-subtle); }
+    .dot--primary { background: var(--c-primary); }
+    .dot--success { background: var(--c-success); }
+    .dot--warning { background: var(--c-warning); }
+    .dot--danger { background: var(--c-danger); }
+    .dot--info { background: var(--c-info); }
+    .dot--violet { background: var(--c-violet); }
+    .dot--teal { background: var(--c-teal); }
+    .dot--sky { background: var(--c-sky); }
+    .capsule { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--c-surface-muted); border: 1px solid var(--c-border); font-size: var(--fs-xs); color: var(--c-text-muted); }
+    .capsule__label { font-family: var(--font-mono); }
+    .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-6); }
+    .page-header__title { font-size: var(--fs-xl); line-height: 1.3; font-weight: 700; color: var(--c-text); }
+    .page-header__desc { margin-top: var(--sp-1); font-size: var(--fs-sm); color: var(--c-text-muted); }
+    .page-header__actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+    .card__head { padding: 14px 20px; border-bottom: 1px solid var(--c-border); display: flex; justify-content: space-between; gap: var(--sp-3); }
+    .card__title { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); }
+    .card__sub { margin-top: 2px; font-size: var(--fs-xs); color: var(--c-text-subtle); }
+    .card__body { padding: 20px; }
+    .field { display: flex; flex-direction: column; gap: var(--sp-1); }
+    .field__label { font-size: var(--fs-xs); font-weight: 600; color: var(--c-text-muted); }
+    .field__required { color: var(--c-danger); }
+    .field__hint { font-size: var(--fs-xs); color: var(--c-text-subtle); }
+    .field__error { font-size: var(--fs-xs); color: var(--c-danger); }
+    .empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-8) var(--sp-4); color: var(--c-text-subtle); text-align: center; }
+    .empty__title { font-size: var(--fs-md); color: var(--c-text-muted); }
+    .empty__desc { font-size: var(--fs-xs); }
+
+
+    /* §5 P1 shell / shared visual overrides */
+    body { background: var(--c-bg); color: var(--c-text); }
+    .appbar { height: 56px; padding: 0 24px; background: var(--c-surface); border-bottom: 1px solid var(--c-border); box-shadow: var(--sh-sm); gap: 20px; }
+    .brand-title { font-size: 15px; letter-spacing: -0.01em; }
+    .brand-logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--c-primary), #1E40AF); box-shadow: 0 2px 8px rgba(37,99,235,.28); }
+    .appbar nav { gap: 2px; background: var(--c-surface-muted); padding: 3px; border-radius: var(--r-pill); }
+    .appbar nav button { padding: 6px 14px; border-radius: var(--r-pill); color: var(--c-text-muted); font-size: 13px; }
+    .appbar nav button:hover { background: var(--c-surface); color: var(--c-text); }
+    .appbar nav button.active { background: var(--c-surface); color: var(--c-primary); box-shadow: var(--sh-sm); }
+    .main { max-width: 1200px; padding: 28px 24px 48px; }
+    .page-header { padding: 4px 0 0; margin-bottom: 20px; }
+    .page-header__title { font-size: 24px; letter-spacing: -0.02em; }
+    .page-header__desc { font-size: 13px; color: var(--c-text-muted); max-width: 760px; }
+    .card { border-radius: var(--r-lg); border-color: var(--c-border); box-shadow: var(--sh-sm); }
+    .card:hover { box-shadow: var(--sh-md); }
+    .section-head { margin-bottom: 12px; }
+    .section-title { font-size: 15px; }
+    .section-desc { font-size: 12px; color: var(--c-text-muted); }
+    .form-control { border-radius: var(--r-sm); border-color: var(--c-border); background: var(--c-surface); }
+    .form-control:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); outline: none; }
+    .btn { border-radius: var(--r-sm); font-weight: 600; letter-spacing: -0.01em; }
+    .btn-primary, .btn--primary { box-shadow: 0 1px 2px rgba(37,99,235,.22); }
+    .btn-sm, .btn--sm { border-radius: var(--r-sm); }
+    .badge { border-radius: var(--r-pill); font-weight: 600; }
+    .key-chip, .key-capsule { border-radius: var(--r-pill); background: var(--c-surface-muted); border-color: var(--c-border); }
+    .modal-box { border-radius: var(--r-lg); border-color: var(--c-border); box-shadow: var(--sh-modal); }
+    .modal-head { padding: 16px 20px; }
+    .modal-foot { background: var(--c-surface-muted); border-color: var(--c-border); }
+    .toast { border-radius: var(--r-md); box-shadow: var(--sh-md); border-color: var(--c-border); }
+    .login-overlay { background: rgba(15,23,42,.48); backdrop-filter: blur(10px); }
+    .login-box { width: 400px; padding: 32px; border-radius: var(--r-lg); border-color: var(--c-border); }
+    .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .login-brand h2 { font-size: 22px; margin: 0; }
+    .login-brand p { margin: 2px 0 0; font-size: 12px; color: var(--c-text-subtle); letter-spacing: .08em; text-transform: uppercase; }
+    .login-box .field { margin-bottom: 14px; }
+    .login-box .btn--block { width: 100%; justify-content: center; margin-top: 8px; padding: 9px 12px; }
+    .login-error { margin-top: 12px; padding: 9px 10px; border-radius: var(--r-sm); background: var(--c-danger-soft); border: 1px solid var(--c-danger-soft); color: var(--c-danger); font-size: 12px; text-align: center; }
+    .btn--block { width: 100%; justify-content: center; }
+    .table th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-subtle); background: var(--c-surface-muted); }
+    .table td { border-color: var(--c-border); }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .mono { font-family: var(--font-mono); }
+    .muted { color: var(--c-text-muted); }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .is-hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 720px) {
+      .main { padding: 20px 14px 40px; }
+      .appbar { padding: 10px 14px; height: auto; }
+      .page-header__title { font-size: 21px; }
+    }
+
+
+    /* P0 form primitives */
+    .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-muted); cursor: pointer; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch__track { width: 34px; height: 20px; border-radius: 999px; background: var(--c-border-strong); position: relative; transition: background var(--dur-fast); flex-shrink: 0; }
+    .switch__track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.18); transition: transform var(--dur-fast); }
+    .switch input:checked + .switch__track { background: var(--c-primary); }
+    .switch input:checked + .switch__track::after { transform: translateX(14px); }
+    .segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: var(--c-surface-muted); border: 1px solid var(--c-border); }
+    .segmented__item { border: 0; background: transparent; padding: 5px 12px; border-radius: var(--r-pill); font-size: 12px; color: var(--c-text-muted); cursor: pointer; }
+    .segmented__item.is-active { background: var(--c-surface); color: var(--c-primary); box-shadow: var(--sh-sm); font-weight: 600; }
+
 </style>
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
@@ -733,16 +881,14 @@ function pageHtml() {
 
 <!-- Login -->
 <div id="loginOverlay" class="login-overlay">
-  <form class="login-box" onsubmit="event.preventDefault(); login();">
-    <h2>OCRProxy</h2>
-    <p>OCRProxy 控制台</p>
-    <div class="form-group">
-      <label class="form-label" for="loginKey">管理员凭证</label>
+  <form class="login-box card" onsubmit="event.preventDefault(); login();">
+    <div class="login-brand"><span class="brand-logo">O</span><div><h2>OCRProxy</h2><p>Control Console</p></div></div>
+    <label class="field"><span class="field__label">管理员凭证</span>
       <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 管理员密码" autocomplete="current-password">
-    </div>
-    <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
-    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
-    <button type="button" class="btn btn-ghost btn-sm" onclick="clearLoginCacheAndReload()" style="width:100%;margin-top:10px;font-size:12px;color:var(--text-secondary, #8c8c8c);">清除本地登录缓存并刷新</button>
+    </label>
+    <button type="submit" class="btn btn--primary btn--block">进入控制台</button>
+    <div id="loginErr" class="login-error" hidden></div>
+    <button type="button" class="btn btn--ghost btn--sm btn--block" onclick="clearLoginCacheAndReload()">清除本地登录缓存并刷新</button>
   </form>
 </div>
 
@@ -754,24 +900,27 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261027-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-01</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
-    <nav id="topNav">
+    <nav id="topNav" aria-label="主导航">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
       <button onclick="switchTab('providers')">供应商</button>
       <button onclick="switchTab('models')">模型及路由</button>
       <button onclick="switchTab('settings')">系统设置</button>
     </nav>
     <div class="actions">
-      <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
+      <button class="btn btn--secondary btn--sm" onclick="loadData()" title="刷新数据">刷新</button>
+      <button class="btn btn--ghost btn--sm" onclick="logout()">退出</button>
     </div>
   </header>
 
   <main class="main">
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
+      <div class="page-header">
+        <div><h1 class="page-header__title section-title">概览</h1><p class="page-header__desc">接入网关、实时请求统计与错误日志</p></div>
+      </div>
       <!-- Section 0: Gateway Access & Available Models -->
       <div class="section mb-4" id="db-access-section">
         <div class="section-head">
@@ -838,14 +987,9 @@ function pageHtml() {
 
     <!-- Panel: Providers -->
     <div id="panel-providers" class="panel">
-      <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div class="section-title">供应商</div>
-          <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
-        </div>
+      <div class="page-header">
+        <div><h1 class="page-header__title section-title">供应商</h1><p class="page-header__desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</p></div>
+        <div class="page-header__actions"><button class="btn btn--primary btn--sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button></div>
       </div>
       <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
         <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
@@ -861,25 +1005,17 @@ function pageHtml() {
       <div id="panel-agents" style="display:contents;">
       <!-- Sub-tab: Agent Models -->
       <div id="mtab-agents" class="model-subtab panel-agents active">
-        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="section-title">模型及路由</div>
-            <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
-          </div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">模型及路由</h1><p class="page-header__desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</p></div>
+          <div class="page-header__actions"><button class="btn btn--primary btn--sm" onclick="openAgentModal()">+ 新增 Agent 模型</button></div>
         </div>
         <div id="agentModelsBox"></div>
       </div>
 
       <!-- Sub-tab: KB View -->
       <div id="mtab-kb" class="model-subtab">
-        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="section-title">模型及路由</div>
-            <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</div>
-          </div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">模型及路由</h1><p class="page-header__desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</p></div>
         </div>
         <div id="kbModelsBox"></div>
       </div>
@@ -893,9 +1029,8 @@ function pageHtml() {
       <input type="hidden" id="set_routing_strategy" value="sticky_failover">
 
       <div class="section">
-        <div style="margin-bottom:16px;">
-          <div class="section-title">系统设置</div>
-          <div class="section-desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">系统设置</h1><p class="page-header__desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</p></div>
         </div>
 
         <!-- Group 1: Run Mode & Client Auth -->
@@ -1321,6 +1456,11 @@ function pageHtml() {
           <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
+      <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
+        <div id="k_oauth_hint" class="hint mt-1" style="font-size:11px;margin-top:6px;"></div>
+      </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
       <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
@@ -1547,6 +1687,7 @@ window.__HOST_KIND__ = 'edgeone';
       vaultClient: kind === 'vm',
       vaultHub: kind === 'edgeone',
       systemUpdate: kind === 'vm',
+      oauthLogin: kind === 'vm',
       accessGuides: true,
       rawEditor: true,
       keyStatus: true,
@@ -4364,6 +4505,13 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
   }
 
   renderVaultKeyPicker(prov);
+  const oauthSec = document.getElementById('k_oauth_section');
+  const oauthHint = document.getElementById('k_oauth_hint');
+  if (oauthSec) {
+    // VM 且供应商有官方 OAuth 配置时显示；无配置由后端返回明确错误。
+    oauthSec.style.display = (typeof HOST !== 'undefined' && HOST.capabilities && HOST.capabilities.oauthLogin) ? 'block' : 'none';
+    if (oauthHint) oauthHint.textContent = '';
+  }
 
   const vSec = document.getElementById('k_vertex_section');
   if (isVertexProvider(prov) && vSec) {
@@ -4379,6 +4527,12 @@ function openKeyModal(prov, onSavedCallback = null, isLocal = false){
 }
 
 function editKey(prov, label){ 
+  const _p = state.config && state.config.providers ? state.config.providers[prov] : null;
+  const _kd = _p && _p.keys ? _p.keys[label] : null;
+  if (_kd && typeof _kd === 'object' && _kd.kind === 'oauth') {
+    toast('OAuth 账号不能直接编辑密钥；失效时请重新发起账号登录', 'err');
+    return;
+  }
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   const keySrc = (typeof resolveKeySource === 'function') ? resolveKeySource(prov, label) : 'local';
   if (!isHostEdgeOne && keySrc === 'vault') {
@@ -4453,6 +4607,52 @@ async function deleteKey(prov,label){
   await persistConfig(\`Key「\${label}」已删除并立即生效\`);
   renderProviders();
   renderModels();
+}
+
+async function startOAuthLogin(){
+  const prov = document.getElementById('k_provider').value;
+  const hint = document.getElementById('k_oauth_hint');
+  if (!prov) return;
+  if (hint) hint.textContent = '正在申请登录…';
+  try {
+    const r = await fetch('/api/admin/oauth/start', {
+      method: 'POST', headers: headers(), body: JSON.stringify({ provider: prov })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || '该供应商未配置官方 OAuth 登录');
+    if (!d.session) throw new Error('未获得登录会话');
+    const tip = \`请在浏览器打开：\${d.verification_url || '(见厂商页面)'}\\n输入代码：\${d.user_code}\\n\\n完成后等待自动确认。\`;
+    if (hint) hint.textContent = \`验证码 \${d.user_code} · \${d.verification_url || ''}\`;
+    alert(tip);
+    const session = d.session;
+    const interval = Math.max(2, Number(d.interval) || 5) * 1000;
+    const timer = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/admin/oauth/poll', {
+          method: 'POST', headers: headers(), body: JSON.stringify({ session })
+        });
+        const pd = await pr.json().catch(() => ({}));
+        if (pd.status === 'done') {
+          clearInterval(timer);
+          toast(\`OAuth 登录成功：\${pd.account || pd.label || ''}\`, 'ok');
+          closeModal('keyModal');
+          setTimeout(() => location.reload(), 400);
+        } else if (pr.ok === false || pd.error) {
+          clearInterval(timer);
+          if (hint) hint.textContent = pd.error || '登录失败';
+          toast(pd.error || 'OAuth 登录失败', 'err');
+        } else if (pd.message && hint) {
+          hint.textContent = pd.message;
+        }
+      } catch (e) {
+        clearInterval(timer);
+        if (hint) hint.textContent = '轮询失败：' + e.message;
+      }
+    }, interval);
+  } catch (e) {
+    if (hint) hint.textContent = e.message;
+    toast(e.message, 'err');
+  }
 }
 
 async function saveKey(){

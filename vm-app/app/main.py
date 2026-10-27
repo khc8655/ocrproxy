@@ -41,9 +41,12 @@ async def lifespan(app: FastAPI):
         logger.warning("PROXY_API_KEY is not set — every /v1 request will be rejected with 401.")
     import asyncio
     from . import mode_scheduler
+    from . import oauth_credentials
     _mode_task = asyncio.create_task(mode_scheduler.run_forever())
+    _oauth_task = asyncio.create_task(oauth_credentials.keepalive_loop())
     yield
     _mode_task.cancel()
+    _oauth_task.cancel()
     # Clean up resources on shutdown.
     try:
         from . import agent_metrics

@@ -1,6 +1,6 @@
 {
-  "version": "2026.10.27",
-  "updated_at": "2026-10-27T00:00:00.000Z",
+  "version": "2026.10.28",
+  "updated_at": "2026-10-28T00:00:00.000Z",
   "providers": [
     {
       "id": "agnes",
@@ -116,6 +116,25 @@
         "tools": true
       },
       "recommended_models_count": 5
+    },
+    {
+      "id": "minimax-code",
+      "name": "MiniMax Code",
+      "version": "1.0.0",
+      "updated_at": "2026-10-28",
+      "update_notes": "MiniMax Code 官方 OAuth 设备码登录（仅 VM），Anthropic Messages 协议直通",
+      "rule_hash": "5c46e0122183",
+      "protocol": "anthropic",
+      "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+      "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
+      "doc_url": "https://platform.minimax.cn/docs",
+      "description": "MiniMax Code 订阅（官方 OAuth 设备码）；登录凭据仅保存在本机 VM",
+      "features": {
+        "native_thinking": true,
+        "tools": true,
+        "anthropic_messages": true
+      },
+      "recommended_models_count": 1
     },
     {
       "id": "minimax",
