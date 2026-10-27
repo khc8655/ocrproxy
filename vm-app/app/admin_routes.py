@@ -2016,17 +2016,22 @@ async def check_system_update_endpoint(request: Request):
     ]
     remote_data = None
     fetch_error = None
+    candidates = []
     async with httpx.AsyncClient(timeout=3.5, follow_redirects=True) as client:
         for url in remote_urls:
             try:
                 resp = await client.get(url)
                 if resp.status_code == 200:
-                    remote_data = resp.json()
-                    if isinstance(remote_data, dict) and "version" in remote_data:
-                        break
+                    data = resp.json()
+                    if isinstance(data, dict) and data.get("version"):
+                        candidates.append(data)
             except Exception as e:
                 fetch_error = str(e)
                 logger.warning(f"Failed to fetch remote version from {url}: {e}")
+    # GitHub raw 与镜像/CDN 的缓存时间不同：不能取第一个 200，必须取版本号最新的源，
+    # 否则 raw 还在上一版时会误报「已是最新」。
+    if candidates:
+        remote_data = max(candidates, key=lambda d: _parse_version_tuple(str(d.get("version", ""))))
 
     if not remote_data or not isinstance(remote_data, dict) or "version" not in remote_data:
         return JSONResponse(content={
