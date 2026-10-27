@@ -894,7 +894,7 @@
     select.form-control:hover, select.form-control-compact:hover { border-color: var(--c-primary); }
     select.form-control:focus, select.form-control-compact:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
     .settings-row-ctrl select { min-height: 38px; }
-    select.form-control-compact { height: 38px !important; }
+    select.form-control-compact { height: 38px !important; background-color: var(--c-surface-muted); }
 
     /* Settings: card separation + calmer action rows */
     .settings-card + .settings-card { margin-top: 20px; }

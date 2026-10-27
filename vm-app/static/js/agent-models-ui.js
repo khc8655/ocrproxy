@@ -892,8 +892,8 @@
     const isProbing = probingKeys.has(probeKeyId);
     const keyBadgeHtml = `<span class="mono" style="font-weight:600;color:var(--text);font-size:12px;background:var(--bg-subtle);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">${_esc(key)}</span>`;
 
-    const orderInputHtml = `<input type="number" min="1" max="${totalKeys}" value="${idx}" 
-        style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+    const orderInputHtml = `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="${String(totalKeys).length}" value="${idx}" 
+        style="width:38px;height:24px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
         onwheel="this.blur()"
         data-action="reorder-key" data-model="${_esc(modelName)}" data-index="${i}" title="修改数字直接调整顺序">`;
 

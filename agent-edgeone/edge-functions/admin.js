@@ -910,7 +910,7 @@ function pageHtml() {
     select.form-control:hover, select.form-control-compact:hover { border-color: var(--c-primary); }
     select.form-control:focus, select.form-control-compact:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
     .settings-row-ctrl select { min-height: 38px; }
-    select.form-control-compact { height: 38px !important; }
+    select.form-control-compact { height: 38px !important; background-color: var(--c-surface-muted); }
 
     /* Settings: card separation + calmer action rows */
     .settings-card + .settings-card { margin-top: 20px; }
@@ -947,7 +947,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-05</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-06</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -5834,8 +5834,8 @@ function commitKey(prov, label, val){
     const isProbing = probingKeys.has(probeKeyId);
     const keyBadgeHtml = \`<span class="mono" style="font-weight:600;color:var(--text);font-size:12px;background:var(--bg-subtle);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">\${_esc(key)}</span>\`;
 
-    const orderInputHtml = \`<input type="number" min="1" max="\${totalKeys}" value="\${idx}" 
-        style="width:38px;height:22px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
+    const orderInputHtml = \`<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="\${String(totalKeys).length}" value="\${idx}" 
+        style="width:38px;height:24px;text-align:center;font-size:12px;font-weight:700;padding:0;border:1px solid #d0d7de;border-radius:4px;"
         onwheel="this.blur()"
         data-action="reorder-key" data-model="\${_esc(modelName)}" data-index="\${i}" title="修改数字直接调整顺序">\`;
 
