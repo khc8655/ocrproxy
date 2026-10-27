@@ -888,12 +888,12 @@ function renderDashboard(){
   renderLogsTable();
 }
 
-async function resetStats(){
-  if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
-  const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
+async function clearErrorLogs(){
+  if(!confirm('确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\n如需清零全部统计，请到「系统运维」重启服务。')) return;
+  const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'clear_logs'})});
   const resetData=await r.json().catch(()=>({}));
   state.stats=(resetData && resetData.stats) || resetData || {};
-  toast('统计与日志已清空','ok'); renderDashboard();
+  toast('错误日志已清空，统计保留','ok'); renderDashboard();
 }
 
 function handlePrimaryModelAction(){

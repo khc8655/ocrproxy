@@ -309,6 +309,31 @@ async def test_vault_add_keys_explicit():
         restore()
 
 
+async def test_clear_error_logs_keeps_request_statistics():
+    """清空错误日志只能清 error_logs，不能重置请求计数/成功率/今日汇总。"""
+    from app.main import app
+    from app import stats
+    H = {"Authorization": "Bearer test_admin_pass_123"}
+    stats.reset()
+    stats.record("chat", 200, 0.12, provider="p1", key="k1", category="agent", request_model="m1")
+    stats.record("chat", 500, 0.2, provider="p1", key="k1", error_msg="upstream boom",
+                 category="agent", request_model="m1")
+    before = stats.get_stats()
+    assert len(before["error_logs"]) >= 1
+    assert before["agent"]["count"] >= 2
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+        r = await c.post("/api/admin/stats", headers=H, json={"action": "clear_logs"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["stats"]["error_logs"] == []
+        after = body["stats"]
+        assert after["agent"]["count"] == before["agent"]["count"], "request count must be preserved"
+        assert after["agent"]["success"] == before["agent"]["success"], "success count must be preserved"
+        assert after["agent"]["5xx"] == before["agent"]["5xx"], "failure count must be preserved"
+    stats.reset()
+
+
 async def test_vault_write_version_and_legacy_key_guard():
     """Layer 2: vault writes bump `_version` (a stale tab gets 409 instead of silently
     deleting what was just pulled) and legacy bare-string hub keys stay read-only.
