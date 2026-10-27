@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [v20261028-01] - 2026-10-28
+
+### OAuth 订阅登录（VM）
+- 新增 MiniMax Code 官方 OAuth 设备码登录：设备码申请/轮询、access/refresh token 加密存储、后台续期；OAuth Key 强制 `origin=local`，永不下发中枢。
+- 调度器只在取 Key 处增加 `resolve_auth()`；401 先刷新重试同 Key，`invalid_grant` 标记 `needs_relogin` 且不走普通 401 24h 冷宫。
+- 管理接口 `POST /api/admin/oauth/start|poll|relogin`、`GET /oauth/status`；EdgeOne 不提供登录。
+- 新增 `shared/presets/minimax-code.json`；仅官方 OAuth，不集成 magpie/Antigravity/WorkBuddy。
+
+### 控制台 UI 标准化
+- 落地 v2 语义 token（色板/圆角/阴影/间距）、`ui.js` 组件层（button/badge/capsule/card/pageHeader/field/table/empty 等）。
+- 登录页、顶栏、导航、四个页面 pageHeader、弹窗/Toast 统一为 v2 视觉；供应商/模型/设置/概览沿用现有数据流与 DOM 契约。
+- 保留 OAuth 账号登录入口；EdgeOne 通过 `oauthLogin` 能力位隐藏。
+- 新增 `tests/test_ui_standard.py` 地基守卫。
+
+### 回归
+- 全量测试通过，G1~G6 通过；EdgeOne 单文件体积仍在预算内。
+
 ## [v20261027-01] - 2026-10-27
 
 ### 失败统计与错误日志一致性

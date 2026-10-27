@@ -77,6 +77,48 @@
     return `<span class="capsule" title="${esc(o.label || '')}">${o.locked ? icon('lock', 12) : ''}<span class="capsule__label">${esc(o.label || '')}</span>${o.origin ? badge({ text: o.origin, tone: toneOf('origin', o.origin) }) : ''}${o.status ? badge({ text: o.status, tone: toneOf('status', o.status) }) : ''}${o.actionsHtml || ''}</span>`;
   }
 
+  function input(opts) {
+    const o = opts || {};
+    const cls = `form-control${o.className ? ' ' + esc(o.className) : ''}`;
+    const attrsHtml = [
+      `class="${cls}"`, `type="${esc(o.type || 'text')}"`,
+      o.id ? `id="${esc(o.id)}"` : '', o.value !== undefined ? `value="${esc(o.value)}"` : '',
+      o.placeholder ? `placeholder="${esc(o.placeholder)}"` : '',
+      o.disabled ? 'disabled' : '', attrs(o.attrs)
+    ].filter(Boolean).join(' ');
+    return `<input ${attrsHtml}>`;
+  }
+
+  function select(opts) {
+    const o = opts || {};
+    const optsHtml = (o.options || []).map(opt => {
+      const value = typeof opt === 'string' ? opt : opt.value;
+      const label = typeof opt === 'string' ? opt : opt.label;
+      return `<option value="${esc(value)}"${String(value) === String(o.value) ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
+    return `<select class="form-control"${o.id ? ` id="${esc(o.id)}"` : ''}${o.disabled ? ' disabled' : ''}${attrs(o.attrs)}>${optsHtml}</select>`;
+  }
+
+  function textarea(opts) {
+    const o = opts || {};
+    return `<textarea class="form-control"${o.id ? ` id="${esc(o.id)}"` : ''}${o.placeholder ? ` placeholder="${esc(o.placeholder)}"` : ''}${o.rows ? ` rows="${Number(o.rows)}"` : ''}${attrs(o.attrs)}>${esc(o.value || '')}</textarea>`;
+  }
+
+  function switchControl(opts) {
+    const o = opts || {};
+    return `<label class="switch"><input type="checkbox"${o.id ? ` id="${esc(o.id)}"` : ''}${o.checked ? ' checked' : ''}${attrs(o.attrs)}><span class="switch__track" aria-hidden="true"></span><span class="switch__label">${esc(o.label || '')}</span></label>`;
+  }
+
+  function segmented(opts) {
+    const o = opts || {};
+    const items = (o.options || []).map(opt => {
+      const value = typeof opt === 'string' ? opt : opt.value;
+      const label = typeof opt === 'string' ? opt : opt.label;
+      return `<button type="button" class="segmented__item${String(value) === String(o.value) ? ' is-active' : ''}" data-value="${esc(value)}" onclick="${esc(o.onclick || '')}">${esc(label)}</button>`;
+    }).join('');
+    return `<div class="segmented" role="group">${items}</div>`;
+  }
+
   function card(opts) {
     const o = opts || {};
     const head = o.title || o.actionsHtml ? `<div class="card__head"><div><div class="card__title">${esc(o.title || '')}</div>${o.subtitle ? `<div class="card__sub">${esc(o.subtitle)}</div>` : ''}</div>${o.actionsHtml || ''}</div>` : '';
@@ -119,7 +161,7 @@
   }
 
   global.UI = {
-    esc, icon, button, badge, dot, capsule, card, pageHeader, field, table, empty,
+    esc, icon, button, badge, dot, capsule, card, pageHeader, field, input, select, textarea, switch: switchControl, segmented, table, empty,
     toneOf, toast, openModal, closeModal, confirm,
     TONE: TONES
   };

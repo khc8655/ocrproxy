@@ -5,23 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20261027-01">
+  <link rel="stylesheet" href="/static/admin.css?v=20261028-01">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
 
 <!-- Login -->
 <div id="loginOverlay" class="login-overlay">
-  <form class="login-box" onsubmit="event.preventDefault(); login();">
-    <h2>OCRProxy</h2>
-    <p>OCRProxy 控制台</p>
-    <div class="form-group">
-      <label class="form-label" for="loginKey">管理员凭证</label>
+  <form class="login-box card" onsubmit="event.preventDefault(); login();">
+    <div class="login-brand"><span class="brand-logo">O</span><div><h2>OCRProxy</h2><p>Control Console</p></div></div>
+    <label class="field"><span class="field__label">管理员凭证</span>
       <input type="password" id="loginKey" class="form-control" placeholder="请输入 ADMIN_PASSWORD 管理员密码" autocomplete="current-password">
-    </div>
-    <button type="submit" class="btn btn-primary" style="width:100%;padding:10px;">进入控制台</button>
-    <div id="loginErr" style="display:none;margin-top:14px;padding:10px;border-radius:var(--radius-md);background:var(--error-soft);border:1px solid var(--error-border);color:var(--error);font-size:12px;text-align:center;"></div>
-    <button type="button" class="btn btn-ghost btn-sm" onclick="clearLoginCacheAndReload()" style="width:100%;margin-top:10px;font-size:12px;color:var(--text-secondary, #8c8c8c);">清除本地登录缓存并刷新</button>
+    </label>
+    <button type="submit" class="btn btn--primary btn--block">进入控制台</button>
+    <div id="loginErr" class="login-error" hidden></div>
+    <button type="button" class="btn btn--ghost btn--sm btn--block" onclick="clearLoginCacheAndReload()">清除本地登录缓存并刷新</button>
   </form>
 </div>
 
@@ -33,24 +31,27 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261027-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-01</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
-    <nav id="topNav">
+    <nav id="topNav" aria-label="主导航">
       <button class="active" onclick="switchTab('dashboard')">概览</button>
       <button onclick="switchTab('providers')">供应商</button>
       <button onclick="switchTab('models')">模型及路由</button>
       <button onclick="switchTab('settings')">系统设置</button>
     </nav>
     <div class="actions">
-      <button class="btn btn-secondary btn-sm" onclick="loadData()" title="刷新数据">刷新</button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">退出</button>
+      <button class="btn btn--secondary btn--sm" onclick="loadData()" title="刷新数据">刷新</button>
+      <button class="btn btn--ghost btn--sm" onclick="logout()">退出</button>
     </div>
   </header>
 
   <main class="main">
     <!-- Panel: Dashboard -->
     <div id="panel-dashboard" class="panel active">
+      <div class="page-header">
+        <div><h1 class="page-header__title section-title">概览</h1><p class="page-header__desc">接入网关、实时请求统计与错误日志</p></div>
+      </div>
       <!-- Section 0: Gateway Access & Available Models -->
       <div class="section mb-4" id="db-access-section">
         <div class="section-head">
@@ -117,14 +118,9 @@
 
     <!-- Panel: Providers -->
     <div id="panel-providers" class="panel">
-      <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div class="section-title">供应商</div>
-          <div class="section-desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button>
-        </div>
+      <div class="page-header">
+        <div><h1 class="page-header__title section-title">供应商</h1><p class="page-header__desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</p></div>
+        <div class="page-header__actions"><button class="btn btn--primary btn--sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button></div>
       </div>
       <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
         <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
@@ -140,25 +136,17 @@
       <div id="panel-agents" style="display:contents;">
       <!-- Sub-tab: Agent Models -->
       <div id="mtab-agents" class="model-subtab panel-agents active">
-        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="section-title">模型及路由</div>
-            <div class="section-desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 新增 Agent 模型</button>
-          </div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">模型及路由</h1><p class="page-header__desc">对外暴露标准 OpenAI 兼容模型，按 Key 序列自动负载与 429/5xx 故障自动切换</p></div>
+          <div class="page-header__actions"><button class="btn btn--primary btn--sm" onclick="openAgentModal()">+ 新增 Agent 模型</button></div>
         </div>
         <div id="agentModelsBox"></div>
       </div>
 
       <!-- Sub-tab: KB View -->
       <div id="mtab-kb" class="model-subtab">
-        <div class="section-head mb-3" style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div class="section-title">模型及路由</div>
-            <div class="section-desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</div>
-          </div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">模型及路由</h1><p class="page-header__desc">聚合 4 大知识库专有模型节点 (chat/embedding/reranker/ocr) · 各分类独立按需挂载</p></div>
         </div>
         <div id="kbModelsBox"></div>
       </div>
@@ -172,9 +160,8 @@
       <input type="hidden" id="set_routing_strategy" value="sticky_failover">
 
       <div class="section">
-        <div style="margin-bottom:16px;">
-          <div class="section-title">系统设置</div>
-          <div class="section-desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</div>
+        <div class="page-header">
+          <div><h1 class="page-header__title section-title">系统设置</h1><p class="page-header__desc">统一配置大模型路由策略、超时时钟、故障避让与系统运维</p></div>
         </div>
 
         <!-- Group 1: Run Mode & Client Auth -->
@@ -788,15 +775,15 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=20261027-01"></script>
-  <script src="/static/js/ui.js?v=20261027-01"></script>
-  <script src="/static/js/settings-form.js?v=20261027-01"></script>
-  <script src="/static/js/core.js?v=20261027-01"></script>
-  <script src="/static/js/vault.js?v=20261027-01"></script>
-  <script src="/static/js/providers.js?v=20261027-01"></script>
-  <script src="/static/js/agent-models-ui.js?v=20261027-01"></script>
-  <script src="/static/js/models.js?v=20261027-01"></script>
-  <script src="/static/js/settings.js?v=20261027-01"></script>
-  <script src="/static/js/app.js?v=20261027-01"></script>
+  <script src="/static/js/host.js?v=20261028-01"></script>
+  <script src="/static/js/ui.js?v=20261028-01"></script>
+  <script src="/static/js/settings-form.js?v=20261028-01"></script>
+  <script src="/static/js/core.js?v=20261028-01"></script>
+  <script src="/static/js/vault.js?v=20261028-01"></script>
+  <script src="/static/js/providers.js?v=20261028-01"></script>
+  <script src="/static/js/agent-models-ui.js?v=20261028-01"></script>
+  <script src="/static/js/models.js?v=20261028-01"></script>
+  <script src="/static/js/settings.js?v=20261028-01"></script>
+  <script src="/static/js/app.js?v=20261028-01"></script>
 </body>
 </html>

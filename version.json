@@ -1,14 +1,14 @@
 {
-  "version": "v20261027-01",
-  "release_date": "2026-10-27",
+  "version": "v20261028-01",
+  "release_date": "2026-10-28",
   "commit": "HEAD",
-  "title": "失败统计/错误日志一致性 + 清空日志语义修正 (v20261027-01)",
+  "title": "OAuth 订阅登录 + 控制台 UI 标准化 (v20261028-01)",
   "changelog": [
-    "Agent 粘性(manual)上游 4xx/5xx 时补写 stats.record，概览失败数与最近错误日志不再割裂；",
-    "400/413 提前 abort、读/连接超时、全候选冷却、连接池/队列等无候选路径也写入错误日志；",
-    "「清空错误日志」改为只清 error_logs，保留请求数/成功/失败/今日汇总；全部清零请重启服务；",
-    "新增 stats.clear_error_logs / action=clear_logs，保留显式 reset 给运维/测试；",
-    "文档：外部权威文档索引（EdgeOne 官方文档/厂商文档/日志归属）、CLAUDE.md 契约优先级；",
-    "回归：failure_logging / test_api_layer 新增断言；全量测试与 G1~G6 通过。"
+    "VM 新增 MiniMax Code 官方 OAuth 设备码登录：access/refresh token 仅存本机加密配置，origin=local，不进中枢、不进入 vault；",
+    "调度器 401 先刷新重试同一 Key，invalid_grant 标记 needs_relogin，不走普通 401 的 24h 冷宫；后台 keepalive 续期；",
+    "管理端新增账号登录（OAuth）入口与 /api/admin/oauth/start|poll|relogin|status；EdgeOne 不启用登录；",
+    "控制台 UI 标准化：v2 语义 token/圆角/色板、ui.js 组件层、统一登录页/顶栏/导航/pageHeader/弹窗/Toast；",
+    "供应商、Key、模型、设置、概览沿用现有数据流与 DOM 契约，仅换视图；OAuth 入口在 Key 弹窗内；",
+    "新增 tests/test_oauth_credentials.py、tests/test_ui_standard.py；全量测试与 G1~G6 通过。"
   ]
 }
