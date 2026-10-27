@@ -383,6 +383,12 @@ def record_gateway_error(model_name: str, status_code: int, error_msg: str, cate
         )
 
 
+def clear_error_logs() -> None:
+    """只清空「最近错误日志」，保留所有请求/成功/失败计数与今日汇总。"""
+    with _lock:
+        _stats["error_logs"] = []
+
+
 def reset():
     """Reset all statistics to zero."""
     with _lock:

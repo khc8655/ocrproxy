@@ -1333,10 +1333,18 @@ async def post_stats_endpoint(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
+    if body.get("action") in ("clear_logs", "clear_error_logs"):
+        # 「清空错误日志」只清日志，不能把请求计数/成功率/今日汇总一起清零。
+        stats.clear_error_logs()
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Error logs cleared; request statistics are kept.",
+            "stats": _stats_payload_with_cooldowns(),
+        })
+
     if body.get("action") in ("reset", "clear_stats"):
+        # 保留给运维/测试的显式全量重置；管理端按钮不再使用此 action。
         stats.reset()
-        # Return the fresh stats as well: the console assigns this payload to state.stats,
-        # and a bare {status} made the dashboard fall back to an empty "当前快照".
         return JSONResponse(content={
             "status": "success",
             "message": "All statistics and error logs have been reset.",

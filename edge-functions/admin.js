@@ -825,7 +825,7 @@ function pageHtml() {
               <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
             </div>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="resetStats()">清空错误日志</button>
+          <button class="btn btn-danger btn-sm" onclick="clearErrorLogs()">清空错误日志</button>
         </div>
         <div class="card table-wrap">
           <table>
@@ -2673,12 +2673,12 @@ function renderDashboard(){
   renderLogsTable();
 }
 
-async function resetStats(){
-  if(!confirm('确定要清空所有请求统计与历史错误日志吗？')) return;
-  const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'reset'})});
+async function clearErrorLogs(){
+  if(!confirm('确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\\n如需清零全部统计，请到「系统运维」重启服务。')) return;
+  const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'clear_logs'})});
   const resetData=await r.json().catch(()=>({}));
   state.stats=(resetData && resetData.stats) || resetData || {};
-  toast('统计与日志已清空','ok'); renderDashboard();
+  toast('错误日志已清空，统计保留','ok'); renderDashboard();
 }
 
 function handlePrimaryModelAction(){
