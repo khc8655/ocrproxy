@@ -26,6 +26,7 @@ from .upstream import join_upstream, build_messages_upstream
 from . import stats
 from .auth import verify_admin_auth
 from .logger_utils import vm_logger, mask_secret
+from . import oauth_credentials as _oauth
 
 router = APIRouter(prefix="/api/admin")
 logger = logging.getLogger("admin_routes")
@@ -180,6 +181,16 @@ def _mask_config_secrets(config: dict, *, mask_local_keys: bool) -> dict:
                     continue
                 key_origin = secret_origin(k_val) if isinstance(k_val, dict) else None
                 is_local = (key_origin or ("local" if prov_origin == "local" else "vault")) == "local"
+                if isinstance(k_val, dict) and k_val.get("kind") == "oauth":
+                    # OAuth Key 即使属于 local，也绝不下发 access/refresh。
+                    m_dict = dict(k_val)
+                    oauth = dict(m_dict.get("oauth") or {})
+                    oauth["access"] = "●●●●●●●●" if oauth.get("access") else ""
+                    oauth["refresh"] = "●●●●●●●●" if oauth.get("refresh") else ""
+                    m_dict["oauth"] = oauth
+                    m_dict["key"] = ""
+                    masked_keys[k_lbl] = m_dict
+                    continue
                 if is_local and not mask_local_keys:
                     masked_keys[k_lbl] = k_val
                     continue
@@ -1160,6 +1171,20 @@ async def save_config_endpoint(request: Request):
                             # 保持中枢 Key 不可篡改明文，强制恢复中枢母本
                             in_keys[k_lbl] = orig_secret
                             continue
+                        if (isinstance(k_val, dict) and k_val.get("kind") == "oauth"
+                                and isinstance(orig_secret, dict) and orig_secret.get("kind") == "oauth"):
+                            # UI 只回写非敏感字段；access/refresh 永远以服务端为准。
+                            merged = dict(orig_secret)
+                            for f in ("status", "subject", "account_id", "last_error"):
+                                if f in k_val:
+                                    merged[f] = k_val[f]
+                            merged["kind"] = "oauth"
+                            merged["origin"] = "local"
+                            merged["is_local"] = True
+                            merged["key"] = ""
+                            merged.update({k: v for k, v in k_val.items() if k not in ("oauth", "key", "origin", "is_local")})
+                            in_keys[k_lbl] = merged
+                            continue
                         if is_masked_secret(k_val):
                             if isinstance(k_val, dict):
                                 if orig_secret and not is_masked_secret(orig_secret):
@@ -1352,6 +1377,83 @@ async def post_stats_endpoint(request: Request):
         })
 
     return JSONResponse(status_code=400, content={"error": "Invalid stats action"})
+
+
+# ── OAuth 登录（VM 独有；EdgeOne 不实现） ──────────────────────────────
+async def _oauth_provider_or_error(provider_id: str):
+    cfg = await get_config()
+    provider = (cfg.get("providers") or {}).get(provider_id)
+    if not isinstance(provider, dict):
+        return None, JSONResponse(status_code=404, content={"error": "Provider not found"})
+    return provider, None
+
+
+@router.post("/oauth/start")
+async def oauth_start_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    provider_id = str(body.get("provider") or "")
+    provider, err = await _oauth_provider_or_error(provider_id)
+    if err:
+        return err
+    try:
+        return JSONResponse(await _oauth.start_device(provider_id, provider, str(body.get("label") or "")))
+    except _oauth.OAuthError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@router.post("/oauth/poll")
+async def oauth_poll_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    try:
+        result = await _oauth.poll_device(str(body.get("session") or ""))
+        return JSONResponse(result)
+    except _oauth.OAuthPending as exc:
+        return JSONResponse({"status": "pending", "message": str(exc), "interval": exc.interval})
+    except _oauth.OAuthError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@router.post("/oauth/relogin")
+async def oauth_relogin_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    provider_id = str(body.get("provider") or "")
+    label = str(body.get("label") or "")
+    provider, err = await _oauth_provider_or_error(provider_id)
+    if err:
+        return err
+    if not label:
+        return JSONResponse(status_code=400, content={"error": "label required"})
+    try:
+        return JSONResponse(await _oauth.start_device(provider_id, provider, label))
+    except _oauth.OAuthError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@router.get("/oauth/status")
+async def oauth_status_endpoint(request: Request):
+    if not _check_auth(request):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    cfg = await get_config()
+    out = []
+    for provider_id, provider in (cfg.get("providers") or {}).items():
+        if isinstance(provider, dict):
+            out.extend(await _oauth.status_for(provider_id, provider.get("keys") or {}))
+    return JSONResponse({"oauth": out})
 
 
 @router.post("/verify-key")

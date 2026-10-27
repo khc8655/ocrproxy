@@ -64,7 +64,7 @@ REQUIRED_IDS = [
 ]
 
 KNOWN_ARCH = {"vm", "edgeone"}
-KNOWN_CAPS = {"runModes", "kb", "vaultClient", "vaultHub", "systemUpdate"}
+KNOWN_CAPS = {"runModes", "kb", "vaultClient", "vaultHub", "systemUpdate", "oauthLogin"}
 
 # handler names that are JS keywords / DOM built-ins rather than our functions
 HANDLER_IGNORES = {"if", "return", "this", "event", "window", "document"}
