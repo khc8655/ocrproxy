@@ -6,7 +6,9 @@
 
 ## [Unreleased]
 
-### 失败统计与错误日志一致性（未发版）
+## [v20261027-01] - 2026-10-27
+
+### 失败统计与错误日志一致性
 - 修复 Agent 粘性（manual）上游 4xx/5xx 时 `agent_metrics` 记失败、但 `stats.error_logs` 为空的问题：manual、400/413 提前 abort、读/连接超时等路径在 `raise` 前补写 `stats.record`。
 - 全候选冷却（未真正发起请求）时补一条 429 错误日志，避免概览失败数与日志表不一致。
 - 连接池耗尽等无候选的网关级失败（`record_gateway_error`）也写入错误日志，不误标具体 Key。
@@ -14,6 +16,19 @@
 
 ### 工程流程
 - 发版节奏为**批次发布**：一个 patch 版本聚合一批相关变更，同一天最多 1 个常规版本；只有 P0 线上故障/安全事件才允许 hotfix 立即发版。未到发版点的变更只合并 `main` 并记入本节，`version.json` 保持上一个已发布版本。详见 `docs/RELEASE_SPEC.md` §〇。
+
+### 清空错误日志语义修正
+- 管理端「清空错误日志」原来调用 `action=reset`，会把请求计数、成功率、Agent 今日汇总一并清零；现改为 `action=clear_logs`。
+- 新增 `stats.clear_error_logs()`：只清 `error_logs`，保留所有统计与今日汇总。
+- UI 确认文案明确“统计会保留；如需全部清零请到系统运维重启服务”；显式 `reset` action 保留给运维/测试，不再由该按钮触发。
+- 回归：`tests/test_api_layer.py` 断言 clear_logs 后 agent count/success/5xx 不变、error_logs 为空。
+
+### 文档与契约
+- 新增 `docs/EXTERNAL_REFERENCES.md`：集中登记 EdgeOne 官方文档（Fetch/edgeone.json/Makers/日志分析）、厂商 API 文档与更新规则。
+- 明确 EdgeOne 日志在腾讯云 Makers 控制台查看，不在 OCRProxy UI；Edge Functions 日志来源按官方当前规划处理。
+- `CLAUDE.md` 明确冲突优先级：schema + runtime + tests > 近期文档 > 历史架构文档。
+
+---
 
 ## [v20261023-04] - 2026-10-23
 

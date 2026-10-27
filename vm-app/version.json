@@ -1,14 +1,14 @@
 {
-  "version": "v20261023-04",
-  "release_date": "2026-10-23",
+  "version": "v20261027-01",
+  "release_date": "2026-10-27",
   "commit": "HEAD",
-  "title": "参数精简 v2 + 设置生效契约门禁，修复 UI 参数不生效 (v20261023-04)",
+  "title": "失败统计/错误日志一致性 + 清空日志语义修正 (v20261027-01)",
   "changelog": [
-    "合并 PR #25：按模式开放参数、24h 冷宫、KB 单供应商不再整单失败、KB 熔断只保留 circuit_cooldown_sec；",
-    "修复 UI 参数不生效根因：移除 data-cap=\"kb\"（HOST.capabilities 不存在该能力位，applyCapabilities 会把 KB 设置整行 hidden）；",
-    "修复设置映射漂移：UI 保存键与运行读取键统一，EdgeOne 真正读取 agent_first_byte_timeout_sec；新增 settings binding 契约测试；",
-    "文档纠偏：ARCHITECTURE_STANDARDS 的 EdgeOne 25s/30s 预算改为 300s；SYSTEM_DESIGN_SPEC 删除过期的 request_total_budget_sec/max_retries；文档先行改为契约先行；",
-    "新增 CLAUDE.md，明确冲突时以 schema + runtime + tests 为准；",
-    "回归：全量测试、G1~G6、设置契约门禁全部通过。"
+    "Agent 粘性(manual)上游 4xx/5xx 时补写 stats.record，概览失败数与最近错误日志不再割裂；",
+    "400/413 提前 abort、读/连接超时、全候选冷却、连接池/队列等无候选路径也写入错误日志；",
+    "「清空错误日志」改为只清 error_logs，保留请求数/成功/失败/今日汇总；全部清零请重启服务；",
+    "新增 stats.clear_error_logs / action=clear_logs，保留显式 reset 给运维/测试；",
+    "文档：外部权威文档索引（EdgeOne 官方文档/厂商文档/日志归属）、CLAUDE.md 契约优先级；",
+    "回归：failure_logging / test_api_layer 新增断言；全量测试与 G1~G6 通过。"
   ]
 }
