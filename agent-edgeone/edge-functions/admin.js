@@ -805,7 +805,7 @@ function pageHtml() {
     .field__required { color: var(--c-danger); }
     .field__hint { font-size: var(--fs-xs); color: var(--c-text-subtle); }
     .field__error { font-size: var(--fs-xs); color: var(--c-danger); }
-    .empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-8) var(--sp-4); color: var(--c-text-subtle); text-align: center; }
+    .empty:not(td) { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-8) var(--sp-4); color: var(--c-text-subtle); text-align: center; }
     .empty__title { font-size: var(--fs-md); color: var(--c-text-muted); }
     .empty__desc { font-size: var(--fs-xs); }
 
@@ -900,7 +900,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-02</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
