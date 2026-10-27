@@ -874,6 +874,49 @@ function pageHtml() {
     .segmented__item { border: 0; background: transparent; padding: 5px 12px; border-radius: var(--r-pill); font-size: 12px; color: var(--c-text-muted); cursor: pointer; }
     .segmented__item.is-active { background: var(--c-surface); color: var(--c-primary); box-shadow: var(--sh-sm); font-weight: 600; }
 
+
+    /* §5 Readability: model tables + select affordance + settings grouping */
+    #agentModelsBox table, #kbModelsBox table, .model-card table { font-size: 14px; }
+    #agentModelsBox th, #kbModelsBox th, .model-card th {
+      padding: 12px 16px; font-size: 12px; letter-spacing: .03em;
+    }
+    #agentModelsBox td, #kbModelsBox td, .model-card td {
+      padding: 12px 16px; font-size: 14px; line-height: 1.45;
+    }
+    .model-card .card-head { padding: 13px 20px; }
+    .model-card .card-head h3, .model-card .card-head .section-title { font-size: 15px; }
+    .model-card .model-id > span:first-child { font-size: 14px; }
+    .model-card .btn-sm, .model-card .btn--sm { height: 30px; padding: 4px 10px; font-size: 12.5px; }
+    .model-card .key-chip { padding: 4px 10px; font-size: 12.5px; }
+    .model-card .badge { font-size: 11.5px; }
+    .model-card .table-wrap { border-top: 1px solid var(--c-border); }
+
+    select.form-control, select.form-control-compact {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-color: var(--c-surface);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 13px center;
+      background-size: 16px;
+      padding-right: 42px;
+      border-color: var(--c-border-strong);
+      box-shadow: inset 0 1px 1px rgba(16,24,40,.03);
+    }
+    select.form-control:hover, select.form-control-compact:hover { border-color: var(--c-primary); }
+    select.form-control:focus, select.form-control-compact:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
+    .settings-row-ctrl select { min-height: 38px; }
+
+    /* Settings: card separation + calmer action rows */
+    .settings-card + .settings-card { margin-top: 20px; }
+    .settings-card .settings-group-title { padding-bottom: 12px; }
+    .settings-card .settings-row { padding-top: 12px; padding-bottom: 12px; }
+    .settings-card .settings-row-full { border-top: 1px solid var(--c-border); margin-top: 4px; padding-top: 16px; }
+    .settings-card .settings-row-full:first-of-type { border-top: 0; margin-top: 0; }
+    .settings-card .settings-row-ctrl { justify-content: flex-end; flex-wrap: wrap; }
+    .settings-card .settings-row-ctrl .btn { margin-left: 2px; }
+
 </style>
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
@@ -900,7 +943,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-03</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-04</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -1259,9 +1302,9 @@ function pageHtml() {
           </div>
         </div>
 
-        <!-- Group 5: Vault Hub & Operations -->
+        <!-- Group 5: Vault Hub -->
         <div class="card settings-card mb-3" data-cap="vaultClient" data-arch="vm">
-          <div class="settings-group-title">5. EdgeOne 凭据中枢与系统运维 (Vault Hub & Operations)</div>
+          <div class="settings-group-title">5. EdgeOne 凭据中枢 (Vault Hub)</div>
           <div class="settings-grid mb-2">
             <div class="settings-row">
               <div class="settings-row-label">
@@ -1272,7 +1315,6 @@ function pageHtml() {
                 <input type="text" id="cfg_vault_url" class="form-control form-control-compact" placeholder="https://api.example.com">
               </div>
             </div>
-
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="中枢访问 Token">中枢访问 Token</span>
@@ -1288,37 +1330,61 @@ function pageHtml() {
 
             <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
-                <span class="settings-row-hint" title="修改中枢地址/Token 后请点「保存中枢配置」（单独保存，不与其它设置共用版本锁）；可测试连接或增量同步规则">修改地址/Token 后点「保存中枢配置」；可测试连接或增量同步规则</span>
+                <span class="settings-row-title" title="单独保存中枢地址与 Token">保存中枢连接配置</span>
+                <span class="settings-row-hint" title="单独保存，不参与其它设置的整包版本锁">地址或 Token 改动后先保存；不会影响其它设置。</span>
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
                 <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="中枢连通性诊断与增量同步">诊断与同步</span>
+                <span class="settings-row-hint" title="测试与中枢的连通性，或增量同步供应商规则（不覆盖本地 Key）">先测试连通性，再按需增量同步规则；不会修改本地 Key。</span>
+              </div>
+              <div class="settings-row-ctrl">
                 <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
-                <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
             </div>
             <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
+          </div>
+        </div>
 
-            <div class="settings-row settings-row-full" data-cap="systemUpdate">
+        <!-- Group 6: Updates & Operations -->
+        <div class="card settings-card mb-3" data-cap="systemUpdate">
+          <div class="settings-group-title">6. 系统版本与运维 (Updates & Operations)</div>
+          <div class="settings-grid mb-2">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="系统版本检测与平滑重启">系统版本检测与平滑重启</span>
-                <span class="settings-row-hint" title="检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程">检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程</span>
+                <span class="settings-row-title" title="检查 GitHub 官方发行版本与 OTA 升级">程序版本检测</span>
+                <span class="settings-row-hint" title="检查官方发行版本；发现新版本后在此处一键在线平滑升级">检查是否有新版本；确认后再升级，不会自动改配置。</span>
               </div>
               <div class="settings-row-ctrl">
                 <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
-                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
-                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
               </div>
             </div>
             <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
             <div id="presetsUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
+
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="运行维护">运行维护</span>
+                <span class="settings-row-hint" title="解除所有 Key 冷却，或平滑重启网关守护进程">解除所有冷却、平滑重启；升级与重启分开操作。</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
+                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Group 6: Data & Raw JSON Config -->
+        <!-- Group 7: Data & Raw JSON Config -->
         <div class="card settings-card mb-3">
-          <div class="settings-group-title">6. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
+          <div class="settings-group-title">7. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
           <div class="settings-grid mb-3">
             <div class="settings-row" style="grid-column: 1 / -1;">
               <div class="settings-row-label">
@@ -5791,12 +5857,12 @@ function commitKey(prov, label, val){
 
     return \`<tr>
       <td style="width:52px;text-align:center;">\${orderInputHtml}</td>
-      <td style="width:140px;" class="truncate" title="\${_esc(prov)}"><b>\${_esc(prov)}</b></td>
-      <td style="width:160px;" class="truncate" title="\${_esc(key)}">\${keyBadgeHtml}</td>
+      <td style="width:200px;" class="truncate" title="\${_esc(prov)}"><b>\${_esc(prov)}</b></td>
+      <td style="width:180px;" class="truncate" title="\${_esc(key)}">\${keyBadgeHtml}</td>
       <td style="width:80px;text-align:center;">\${sourceBadge}</td>
       <td style="width:130px;text-align:center;">\${badge}</td>
       <td style="width:140px;text-align:center;" class="text-sm text-secondary">\${time}</td>
-      <td style="width:160px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">\${actions}</div></td>
+      <td style="width:180px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">\${actions}</div></td>
     </tr>\`;
   }
 
@@ -5856,14 +5922,14 @@ function commitKey(prov, label, val){
           <table style="table-layout: fixed; width: 100%;">
             <colgroup>
               <col style="width: 52px;">
-              <col style="width: 140px;">
-              <col style="width: 160px;">
+              <col style="width: 200px;">
+              <col style="width: 180px;">
               <col style="width: 80px;">
               <col style="width: 130px;">
               <col style="width: 140px;">
-              <col style="width: 160px;">
+              <col style="width: 180px;">
             </colgroup>
-            <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:140px;">供应商</th><th style="width:160px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:160px;text-align:right;">操作</th></tr></thead>
+            <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:200px;">供应商</th><th style="width:180px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:180px;text-align:right;">操作</th></tr></thead>
             <tbody>\${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>

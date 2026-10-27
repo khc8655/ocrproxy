@@ -285,9 +285,11 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
         source_badges = page.locator("#agentModelsBox table td:nth-child(4) span.badge-primary")
         check(await source_badges.count() > 0, f"模型列表中来源徽章采用醒目 badge-primary: count={await source_badges.count()}")
 
-        # 验证模型列表单元格垂直内边距紧凑微调 (<= 8px)
+        # 模型列表可读性：单元格留出足够呼吸空间，不再压到 <=8px
         td_pad_top = await page.eval_on_selector(".model-card td", "el => window.getComputedStyle(el).paddingTop")
-        check(int(float(td_pad_top.replace("px", ""))) <= 8, f"模型列表单元格内边距微调紧凑 (<= 8px): {td_pad_top}")
+        td_font = await page.eval_on_selector(".model-card td", "el => window.getComputedStyle(el).fontSize")
+        check(int(float(td_pad_top.replace("px", ""))) <= 16, f"模型列表单元格内边距留白 (<= 16px): {td_pad_top}")
+        check(float(td_font.replace("px", "")) >= 14, f"模型列表单元格字号 >=14px: {td_font}")
 
         # 验证全系统区块标题与菜单规范统一
         prov_title = (await page.locator("#panel-providers .section-title").first.inner_text()).strip()

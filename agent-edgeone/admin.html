@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20261028-03">
+  <link rel="stylesheet" href="/static/admin.css?v=20261028-04">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-03</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-04</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -390,9 +390,9 @@
           </div>
         </div>
 
-        <!-- Group 5: Vault Hub & Operations -->
+        <!-- Group 5: Vault Hub -->
         <div class="card settings-card mb-3" data-cap="vaultClient" data-arch="vm">
-          <div class="settings-group-title">5. EdgeOne 凭据中枢与系统运维 (Vault Hub & Operations)</div>
+          <div class="settings-group-title">5. EdgeOne 凭据中枢 (Vault Hub)</div>
           <div class="settings-grid mb-2">
             <div class="settings-row">
               <div class="settings-row-label">
@@ -403,7 +403,6 @@
                 <input type="text" id="cfg_vault_url" class="form-control form-control-compact" placeholder="https://api.example.com">
               </div>
             </div>
-
             <div class="settings-row">
               <div class="settings-row-label">
                 <span class="settings-row-title" title="中枢访问 Token">中枢访问 Token</span>
@@ -419,37 +418,61 @@
 
             <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="中枢连通性诊断与增量同步">中枢连通性诊断与增量同步</span>
-                <span class="settings-row-hint" title="修改中枢地址/Token 后请点「保存中枢配置」（单独保存，不与其它设置共用版本锁）；可测试连接或增量同步规则">修改地址/Token 后点「保存中枢配置」；可测试连接或增量同步规则</span>
+                <span class="settings-row-title" title="单独保存中枢地址与 Token">保存中枢连接配置</span>
+                <span class="settings-row-hint" title="单独保存，不参与其它设置的整包版本锁">地址或 Token 改动后先保存；不会影响其它设置。</span>
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
                 <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
+              </div>
+            </div>
+
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="中枢连通性诊断与增量同步">诊断与同步</span>
+                <span class="settings-row-hint" title="测试与中枢的连通性，或增量同步供应商规则（不覆盖本地 Key）">先测试连通性，再按需增量同步规则；不会修改本地 Key。</span>
+              </div>
+              <div class="settings-row-ctrl">
                 <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
-                <button type="button" class="btn btn-primary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
             </div>
             <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
+          </div>
+        </div>
 
-            <div class="settings-row settings-row-full" data-cap="systemUpdate">
+        <!-- Group 6: Updates & Operations -->
+        <div class="card settings-card mb-3" data-cap="systemUpdate">
+          <div class="settings-group-title">6. 系统版本与运维 (Updates & Operations)</div>
+          <div class="settings-grid mb-2">
+            <div class="settings-row settings-row-full">
               <div class="settings-row-label">
-                <span class="settings-row-title" title="系统版本检测与平滑重启">系统版本检测与平滑重启</span>
-                <span class="settings-row-hint" title="检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程">检查 GitHub 官方发行版本与 OTA 升级，或平滑重启网关守护进程</span>
+                <span class="settings-row-title" title="检查 GitHub 官方发行版本与 OTA 升级">程序版本检测</span>
+                <span class="settings-row-hint" title="检查官方发行版本；发现新版本后在此处一键在线平滑升级">检查是否有新版本；确认后再升级，不会自动改配置。</span>
               </div>
               <div class="settings-row-ctrl">
                 <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
-                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
-                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
               </div>
             </div>
             <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
             <div id="presetsUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
+
+            <div class="settings-row settings-row-full">
+              <div class="settings-row-label">
+                <span class="settings-row-title" title="运行维护">运行维护</span>
+                <span class="settings-row-hint" title="解除所有 Key 冷却，或平滑重启网关守护进程">解除所有冷却、平滑重启；升级与重启分开操作。</span>
+              </div>
+              <div class="settings-row-ctrl">
+                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
+                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Group 6: Data & Raw JSON Config -->
+        <!-- Group 7: Data & Raw JSON Config -->
         <div class="card settings-card mb-3">
-          <div class="settings-group-title">6. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
+          <div class="settings-group-title">7. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
           <div class="settings-grid mb-3">
             <div class="settings-row" style="grid-column: 1 / -1;">
               <div class="settings-row-label">
@@ -775,15 +798,15 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=20261028-03"></script>
-  <script src="/static/js/ui.js?v=20261028-03"></script>
-  <script src="/static/js/settings-form.js?v=20261028-03"></script>
-  <script src="/static/js/core.js?v=20261028-03"></script>
-  <script src="/static/js/vault.js?v=20261028-03"></script>
-  <script src="/static/js/providers.js?v=20261028-03"></script>
-  <script src="/static/js/agent-models-ui.js?v=20261028-03"></script>
-  <script src="/static/js/models.js?v=20261028-03"></script>
-  <script src="/static/js/settings.js?v=20261028-03"></script>
-  <script src="/static/js/app.js?v=20261028-03"></script>
+  <script src="/static/js/host.js?v=20261028-04"></script>
+  <script src="/static/js/ui.js?v=20261028-04"></script>
+  <script src="/static/js/settings-form.js?v=20261028-04"></script>
+  <script src="/static/js/core.js?v=20261028-04"></script>
+  <script src="/static/js/vault.js?v=20261028-04"></script>
+  <script src="/static/js/providers.js?v=20261028-04"></script>
+  <script src="/static/js/agent-models-ui.js?v=20261028-04"></script>
+  <script src="/static/js/models.js?v=20261028-04"></script>
+  <script src="/static/js/settings.js?v=20261028-04"></script>
+  <script src="/static/js/app.js?v=20261028-04"></script>
 </body>
 </html>

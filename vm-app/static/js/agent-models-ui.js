@@ -919,12 +919,12 @@
 
     return `<tr>
       <td style="width:52px;text-align:center;">${orderInputHtml}</td>
-      <td style="width:140px;" class="truncate" title="${_esc(prov)}"><b>${_esc(prov)}</b></td>
-      <td style="width:160px;" class="truncate" title="${_esc(key)}">${keyBadgeHtml}</td>
+      <td style="width:200px;" class="truncate" title="${_esc(prov)}"><b>${_esc(prov)}</b></td>
+      <td style="width:180px;" class="truncate" title="${_esc(key)}">${keyBadgeHtml}</td>
       <td style="width:80px;text-align:center;">${sourceBadge}</td>
       <td style="width:130px;text-align:center;">${badge}</td>
       <td style="width:140px;text-align:center;" class="text-sm text-secondary">${time}</td>
-      <td style="width:160px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
+      <td style="width:180px;text-align:right;"><div class="flex gap-2" style="justify-content:flex-end;align-items:center;">${actions}</div></td>
     </tr>`;
   }
 
@@ -984,14 +984,14 @@
           <table style="table-layout: fixed; width: 100%;">
             <colgroup>
               <col style="width: 52px;">
-              <col style="width: 140px;">
-              <col style="width: 160px;">
+              <col style="width: 200px;">
+              <col style="width: 180px;">
               <col style="width: 80px;">
               <col style="width: 130px;">
               <col style="width: 140px;">
-              <col style="width: 160px;">
+              <col style="width: 180px;">
             </colgroup>
-            <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:140px;">供应商</th><th style="width:160px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:160px;text-align:right;">操作</th></tr></thead>
+            <thead><tr><th style="width:52px;text-align:center;">#</th><th style="width:200px;">供应商</th><th style="width:180px;">Key 别名</th><th style="width:80px;text-align:center;">来源</th><th style="width:130px;text-align:center;">响应耗时 / 状态</th><th style="width:140px;text-align:center;">最近调用</th><th style="width:180px;text-align:right;">操作</th></tr></thead>
             <tbody>${rows.filter(Boolean).length ? rows.filter(Boolean).join('') : '<tr><td colspan="7" class="empty">暂无绑定 Key</td></tr>'}</tbody>
           </table>
         </div>
