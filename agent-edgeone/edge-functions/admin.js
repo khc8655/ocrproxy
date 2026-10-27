@@ -216,8 +216,10 @@ function pageHtml() {
     /* 彻底去除所有数字输入框原生上下小箭头，确保纯键盘打字体验 */
     input[type="number"]::-webkit-outer-spin-button,
     input[type="number"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
+      -webkit-appearance: none !important;
+      appearance: none !important;
+      display: none !important;
+      margin: 0 !important;
     }
     input[type="number"] {
       -moz-appearance: textfield;
@@ -893,6 +895,8 @@ function pageHtml() {
 
     select.form-control, select.form-control-compact {
       cursor: pointer;
+      padding-right: 42px !important;
+      min-height: 38px;
       appearance: none;
       -webkit-appearance: none;
       background-color: var(--c-surface);
@@ -900,13 +904,13 @@ function pageHtml() {
       background-repeat: no-repeat;
       background-position: right 13px center;
       background-size: 16px;
-      padding-right: 42px;
       border-color: var(--c-border-strong);
       box-shadow: inset 0 1px 1px rgba(16,24,40,.03);
     }
     select.form-control:hover, select.form-control-compact:hover { border-color: var(--c-primary); }
     select.form-control:focus, select.form-control-compact:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
     .settings-row-ctrl select { min-height: 38px; }
+    select.form-control-compact { height: 38px !important; }
 
     /* Settings: card separation + calmer action rows */
     .settings-card + .settings-card { margin-top: 20px; }
@@ -943,7 +947,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-04</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-05</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
