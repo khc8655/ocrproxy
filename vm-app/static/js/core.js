@@ -20,7 +20,8 @@ const state = {
   cachedPresets: {},
   ruleUpdatesMap: {},
   currentSelectedPreset: null,
-  vaultManifest: null
+  vaultManifest: null,
+  oauthProviders: null
 };
 
 const tabs = [
@@ -405,6 +406,9 @@ async function persistConfig(msg='配置已保存并立即生效'){
       state.config._version = respData._version;
     }
     if (msg) toast(msg,'ok');
+    // 新增/删除供应商后 OAuth 入口缓存必须失效，否则要刷新页面才会出现。
+    state.oauthProviders = null;
+    try { if (typeof _oauthProviderCache !== 'undefined') _oauthProviderCache = null; } catch (_) {}
     await loadData();
   } catch(e){ 
     toast(e.message,'err'); 

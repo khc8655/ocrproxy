@@ -57,11 +57,24 @@ function getPresetProtocolLabel(p) {
   return formatProtocolLabel(getPresetProtocols(p) || ['chat']);
 }
 
+async function loadOAuthProviders(){
+  if (typeof HOST === 'undefined' || !HOST.capabilities || !HOST.capabilities.oauthLogin) return;
+  if (state.oauthProviders !== null) return;
+  state.oauthProviders = new Set();
+  try {
+    const r = await fetch('/api/admin/oauth/providers', { headers: headers() });
+    const d = await r.json().catch(() => ({}));
+    state.oauthProviders = new Set(Array.isArray(d.providers) ? d.providers : []);
+  } catch (_) {}
+  if (state.config) renderProviders();
+}
+
 function renderProviders(){
   const box = document.getElementById('providersBox');
   const rail = document.getElementById('alphabetNavRail');
   const railInner = document.getElementById('alphaRailInner');
   if (!box) return;
+  loadOAuthProviders();
   box.innerHTML = '';
   const p = (state && state.config && state.config.providers) ? state.config.providers : (window.cfg?.providers || {});
   const names = Object.keys(p).sort((a,b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -183,7 +196,11 @@ function renderProviders(){
         ? `<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('${esc(name)}')">${icon('arrowUp')} 升级至 v${esc(hasUpdate.remote_version)}${updateDateText}</button>`
         : '';
 
+      const oauthEntry = (state.oauthProviders && state.oauthProviders.has(name))
+        ? `<button class="btn btn-secondary btn-sm" onclick="startOAuthLogin('${esc(name)}')" title="使用官方 OAuth 账号登录">账号登录</button>`
+        : '';
       const actionButtons = `
+        ${oauthEntry}
         <button class="btn btn-secondary btn-sm" onclick="editProvider('${esc(name)}')">编辑</button>
         <button class="btn btn-secondary btn-sm" onclick="openKeyModal('${esc(name)}')">+ Key</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProvider('${esc(name)}')">删除</button>
@@ -1220,8 +1237,8 @@ async function refreshOAuthProviderVisibility(prov, sectionEl){
   }
 }
 
-async function startOAuthLogin(){
-  const prov = document.getElementById('k_provider').value;
+async function startOAuthLogin(provOverride){
+  const prov = provOverride || document.getElementById('k_provider')?.value;
   const hint = document.getElementById('k_oauth_hint');
   if (!prov) return;
   if (hint) hint.textContent = '正在申请登录…';

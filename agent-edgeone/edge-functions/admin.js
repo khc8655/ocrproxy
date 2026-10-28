@@ -947,7 +947,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-07</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-09</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -1446,6 +1446,7 @@ function pageHtml() {
           <option value="">-- 自定义供应商 (手动填写) --</option>
         </select>
         <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
+        <div class="hint" style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.55;">OAuth 订阅登录：供应商标识填写 <code>minimax-code</code>，保存后可在供应商卡片点「账号登录」，或进入「+ Key」使用「账号登录（OAuth）」。</div>
       </div>
       <div class="form-group">
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
@@ -2016,7 +2017,8 @@ const state = {
   cachedPresets: {},
   ruleUpdatesMap: {},
   currentSelectedPreset: null,
-  vaultManifest: null
+  vaultManifest: null,
+  oauthProviders: null
 };
 
 const tabs = [
@@ -2401,6 +2403,9 @@ async function persistConfig(msg='配置已保存并立即生效'){
       state.config._version = respData._version;
     }
     if (msg) toast(msg,'ok');
+    // 新增/删除供应商后 OAuth 入口缓存必须失效，否则要刷新页面才会出现。
+    state.oauthProviders = null;
+    try { if (typeof _oauthProviderCache !== 'undefined') _oauthProviderCache = null; } catch (_) {}
     await loadData();
   } catch(e){ 
     toast(e.message,'err'); 
@@ -3534,11 +3539,24 @@ function getPresetProtocolLabel(p) {
   return formatProtocolLabel(getPresetProtocols(p) || ['chat']);
 }
 
+async function loadOAuthProviders(){
+  if (typeof HOST === 'undefined' || !HOST.capabilities || !HOST.capabilities.oauthLogin) return;
+  if (state.oauthProviders !== null) return;
+  state.oauthProviders = new Set();
+  try {
+    const r = await fetch('/api/admin/oauth/providers', { headers: headers() });
+    const d = await r.json().catch(() => ({}));
+    state.oauthProviders = new Set(Array.isArray(d.providers) ? d.providers : []);
+  } catch (_) {}
+  if (state.config) renderProviders();
+}
+
 function renderProviders(){
   const box = document.getElementById('providersBox');
   const rail = document.getElementById('alphabetNavRail');
   const railInner = document.getElementById('alphaRailInner');
   if (!box) return;
+  loadOAuthProviders();
   box.innerHTML = '';
   const p = (state && state.config && state.config.providers) ? state.config.providers : (window.cfg?.providers || {});
   const names = Object.keys(p).sort((a,b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -3660,7 +3678,11 @@ function renderProviders(){
         ? \`<button class="btn btn-warning btn-sm" onclick="applySingleProviderRuleUpdate('\${esc(name)}')">\${icon('arrowUp')} 升级至 v\${esc(hasUpdate.remote_version)}\${updateDateText}</button>\`
         : '';
 
+      const oauthEntry = (state.oauthProviders && state.oauthProviders.has(name))
+        ? \`<button class="btn btn-secondary btn-sm" onclick="startOAuthLogin('\${esc(name)}')" title="使用官方 OAuth 账号登录">账号登录</button>\`
+        : '';
       const actionButtons = \`
+        \${oauthEntry}
         <button class="btn btn-secondary btn-sm" onclick="editProvider('\${esc(name)}')">编辑</button>
         <button class="btn btn-secondary btn-sm" onclick="openKeyModal('\${esc(name)}')">+ Key</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProvider('\${esc(name)}')">删除</button>
@@ -4697,8 +4719,8 @@ async function refreshOAuthProviderVisibility(prov, sectionEl){
   }
 }
 
-async function startOAuthLogin(){
-  const prov = document.getElementById('k_provider').value;
+async function startOAuthLogin(provOverride){
+  const prov = provOverride || document.getElementById('k_provider')?.value;
   const hint = document.getElementById('k_oauth_hint');
   if (!prov) return;
   if (hint) hint.textContent = '正在申请登录…';
