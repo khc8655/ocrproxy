@@ -964,7 +964,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-12</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-13</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -1463,7 +1463,7 @@ function pageHtml() {
           <option value="">-- 自定义供应商 (手动填写) --</option>
         </select>
         <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
-        <div class="hint" style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.55;">OAuth 订阅登录：供应商标识填写 <code>minimax-code</code>，保存后可在供应商卡片点「账号登录」，或进入「+ Key」使用「账号登录（OAuth）」。</div>
+        <div class="hint" style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.55;">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div></div>
       </div>
       <div class="form-group">
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>

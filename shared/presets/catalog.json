@@ -118,25 +118,6 @@
       "recommended_models_count": 5
     },
     {
-      "id": "minimax-code",
-      "name": "MiniMax Code",
-      "version": "1.0.1",
-      "updated_at": "2026-10-28",
-      "update_notes": "修正推荐模型为 MiniMax-M3.1-Flash（Preview 不存在）",
-      "rule_hash": "5c46e0122183",
-      "protocol": "anthropic",
-      "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
-      "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
-      "doc_url": "https://platform.minimax.cn/docs",
-      "description": "MiniMax Code 订阅（官方 OAuth 设备码）；登录凭据仅保存在本机 VM",
-      "features": {
-        "native_thinking": true,
-        "tools": true,
-        "anthropic_messages": true
-      },
-      "recommended_models_count": 1
-    },
-    {
       "id": "minimax",
       "name": "MiniMax",
       "version": "1.4.0",

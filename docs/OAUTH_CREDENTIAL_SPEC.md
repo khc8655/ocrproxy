@@ -2,7 +2,7 @@
 
 > 状态：草案，未实现。目标：在**不改变现有二元凭据架构**（§3：中枢下发规则、本地 Key 不出机）的前提下，让 VM 端支持"用厂商账号 OAuth 登录"代替粘贴 API Key。一次定型，后续新增厂商只加 preset JSON。
 >
-> 参考实现：magpie-community/plugins `packages/minimax`（MIT）的 MiniMax Code 设备码登录。
+> 说明：OAuth 引擎是通用的；具体厂商只由独立 preset 的 `auth` 块声明，主代码不内置任何厂商。当前仓库不内置任何厂商适配。
 
 ---
 
@@ -13,7 +13,7 @@
 - 不集成 magpie，不运行 Bun 插件宿主，不引入其调度/路由/账号池；
 - 不集成 Antigravity、WorkBuddy 等非官方订阅/私有协议客户端；
 - 不实现非官方 client id/endpoint、不逆向私有 API、不做多账号自动轮换；
-- P1 只做 **MiniMax Code（官方 OAuth 设备码）**；后续只接厂商官方公开的 OAuth 授权流程（如 Google/GPT 的官方订阅认证），并逐家评审；
+- P1 只做官方 OAuth 设备码；具体厂商由独立 preset 的 `auth` 块声明，主代码不内置任何厂商；后续只接厂商官方公开的 OAuth 授权流程（如 Google/GPT 的官方订阅认证），并逐家评审；
 - 非标准私有协议如果需要，单独做 sidecar/独立服务，不进入 OCRProxy 核心。
 
 ## 0. 一句话架构
@@ -47,7 +47,7 @@
 
 ```jsonc
 {
-  "id": "minimax-code",
+  "id": "example-oauth",
   "protocol": "anthropic",
   "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
   "auth": {
@@ -81,7 +81,7 @@
 ```
 
 说明：
-- 中国站 / 国际站做成两个 preset（`minimax-code`、`minimax-code-global`），与现有"一个厂商一个 preset"一致。
+- 每个厂商独立 preset；删除 preset 不应要求改 OAuth 主代码。
 - `device_quirks` 用于容纳非标准实现（MiniMax 设备码响应可能用 `expired_in`（秒/毫秒/绝对时间戳）、`interval` 毫秒、返回体 `status` 字段代替标准 error、无 `device_code` 时用 `user_code` 轮询）。默认按 RFC 8628 标准解析，quirk 只放宽不改语义。
 - 请求头复用现有 `inject_headers` 与 `${random_session_id}` 占位符，**无需新机制**。
 
@@ -89,7 +89,7 @@
 
 ```jsonc
 "providers": {
-  "minimax-code": {
+  "example-oauth": {
     "keys": {
       "me@example.com": {
         "kind": "oauth",              // 缺省 = "api_key"
@@ -223,7 +223,7 @@ api_key, base_url = await credentials.resolve_auth(provider_name, key_label, api
 
 | 期 | 内容 | 验收 |
 |---|---|---|
-| P1 | 凭据层（kind/oauth 字段、resolve_auth、401 路径、刷新单飞与落盘、保活）+ `oauth_device` + MiniMax Code 两个 preset + UI 登录胶囊 | MiniMax Code 账号在 VM-Agent 下可登录、对话、自动续期、失效提示 |
+| P1 | 凭据层（kind/oauth 字段、resolve_auth、401 路径、刷新单飞与落盘、保活）+ `oauth_device` + 独立厂商 preset + UI 登录胶囊 | 官方 OAuth 账号在 VM-Agent 下可登录、对话、自动续期、失效提示 |
 | P2 | `oauth_paste`（授权码 + PKCE + 粘贴回调）通用实现；仅接官方公开 OAuth 流程 | 标准 OAuth 厂商只加 preset 即可接入；不做非官方/私有协议 |
 | P3 | **不做** magpie / Antigravity / WorkBuddy / 非官方插件适配 | 如未来确需，另立独立 sidecar 项目评审 |
 

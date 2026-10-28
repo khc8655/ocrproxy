@@ -1,11 +1,12 @@
 {
-  "version": "v20261028-12",
+  "version": "v20261028-13",
   "release_date": "2026-10-28",
   "commit": "HEAD",
-  "title": "MiniMax Code OAuth 探测与模型修正 (v20261028-12)",
+  "title": "移除 minimax-code 适配，OAuth 框架保持通用 (v20261028-13)",
   "changelog": [
-    "管理端模型探测/测试端点正确解析 OAuth access token，不再出现 Bearer 空值；",
-    "MiniMax Code 推荐模型修正为 MiniMax-M3.1-Flash（Preview 不存在）；",
+    "删除 shared/presets/minimax-code.json 及其 catalog/生成的 preset 镜像；",
+    "OAuth 凭据层保持通用，不内置任何厂商；厂商仅通过独立 preset.auth 声明；",
+    "测试改用内联 auth 的通用 provider，不再依赖 minimax-code；",
     "全量测试与 G1~G6 通过。"
   ]
 }

@@ -1,4 +1,4 @@
-"""OAuth 订阅凭据（一期：MiniMax Code 官方设备码）。
+"""OAuth 订阅凭据（通用官方设备码/授权码；具体厂商由 preset.auth 声明）。
 
 设计边界（docs/OAUTH_CREDENTIAL_SPEC.md）：
 - 只处理厂商官方 OAuth；不集成 magpie/非官方插件；

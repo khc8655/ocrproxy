@@ -17,8 +17,14 @@ from app import config_store, oauth_credentials as oc  # noqa: E402
 
 CFG = {
     "providers": {
-        "minimax-code": {
-            "name": "MiniMax Code", "origin": "local", "protocol": "anthropic",
+        "test-oauth": {
+            "name": "Test OAuth", "origin": "local", "protocol": "anthropic",
+            "auth": {
+                "type": "oauth_device", "client_id": "test-client", "scope": "test",
+                "device_endpoint": "https://example.com/device/code",
+                "token_endpoint": "https://example.com/token",
+                "refresh_lead_sec": 600, "signed_out_errors": ["invalid_grant"],
+            },
             "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1", "keys": {},
         }
     },
@@ -34,7 +40,7 @@ def _reset_config():
 
 async def test_device_login_refresh_and_relogin():
     _reset_config()
-    provider = CFG["providers"]["minimax-code"]
+    provider = CFG["providers"]["test-oauth"]
     calls = []
 
     async def fake_post(url, data):
@@ -52,22 +58,22 @@ async def test_device_login_refresh_and_relogin():
         return {"status": 400, "body": {"error": "invalid_grant"}}
 
     oc._post_form = fake_post  # type: ignore
-    started = await oc.start_device("minimax-code", provider)
+    started = await oc.start_device("test-oauth", provider)
     assert started["user_code"] == "ABCD-EFGH"
     done = await oc.poll_device(started["session"])
     assert done["status"] == "done" and done["label"]
     cfg = await config_store.get_config()
-    key = cfg["providers"]["minimax-code"]["keys"][done["label"]]
+    key = cfg["providers"]["test-oauth"]["keys"][done["label"]]
     assert key["kind"] == "oauth" and key["origin"] == "local" and key["is_local"] is True
     assert key["key"] == ""
     assert key["oauth"]["access"] == "access-1"
 
-    access = await oc.resolve_auth("minimax-code", done["label"], provider, key)
+    access = await oc.resolve_auth("test-oauth", done["label"], provider, key)
     assert access == "access-1"
-    refreshed = await oc.refresh_auth("minimax-code", done["label"], force=True)
+    refreshed = await oc.refresh_auth("test-oauth", done["label"], force=True)
     assert refreshed == "access-2"
     cfg = await config_store.get_config()
-    key2 = cfg["providers"]["minimax-code"]["keys"][done["label"]]
+    key2 = cfg["providers"]["test-oauth"]["keys"][done["label"]]
     assert key2["oauth"]["refresh"] == "refresh-2"
 
     async def invalid_post(url, data):
@@ -75,12 +81,12 @@ async def test_device_login_refresh_and_relogin():
 
     oc._post_form = invalid_post  # type: ignore
     try:
-        await oc.refresh_auth("minimax-code", done["label"], force=True)
+        await oc.refresh_auth("test-oauth", done["label"], force=True)
         raise AssertionError("expected relogin")
     except oc.OAuthReloginRequired:
         pass
     cfg = await config_store.get_config()
-    assert cfg["providers"]["minimax-code"]["keys"][done["label"]]["oauth"]["status"] == "needs_relogin"
+    assert cfg["providers"]["test-oauth"]["keys"][done["label"]]["oauth"]["status"] == "needs_relogin"
     print("PASS oauth: device login -> refresh -> invalid_grant -> needs_relogin")
 
 

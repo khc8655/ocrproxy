@@ -24,7 +24,7 @@
     {
       "name": "MiniMax-M3.1-Flash-Preview",
       "upstream_model": "MiniMax-M3.1-Flash-Preview",
-      "description": "1M 上下文、强制思考、reasoning_effort low~max（目前仅 M Plan / MiniMax Code 可用）"
+      "description": "1M 上下文、强制思考、reasoning_effort low~max（目前仅 M Plan 可用）"
     }
   ],
   "adapter_rules": {

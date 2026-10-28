@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [v20261028-13] - 2026-10-28
+
+### 移除 minimax-code 适配
+- 删除 `shared/presets/minimax-code.json` 及其 catalog/生成的 preset 镜像。
+- OAuth 凭据层保持通用，不内置任何厂商；厂商仅通过独立 preset 的 `auth` 块声明。
+- 测试改用内联 `auth` 的通用 provider，不再依赖 minimax-code。
+
 ## [v20261028-12] - 2026-10-28
 
 ### MiniMax Code OAuth 探测与模型修正
