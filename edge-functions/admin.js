@@ -933,8 +933,8 @@ function pageHtml() {
     .ui-dialog__desc { margin: 0; white-space: pre-wrap; }
     .ui-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--c-border); background: var(--c-surface-muted); }
     .oauth-device-code { font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--c-text); background: var(--c-surface-muted); border: 1px dashed var(--c-border-strong); border-radius: var(--r-md); padding: 14px; margin: 10px 0; user-select: all; }
-    .oauth-device-link { display: flex; gap: 6px; align-items: center; }
-    .oauth-device-link input { flex: 1; min-width: 0; }
+    .oauth-device-link { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; }
+    .oauth-device-url { flex: 1 1 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--r-sm); background: var(--c-surface-muted); font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; user-select: all; color: var(--c-text); }
     .oauth-device-step { margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--c-text-muted); }
     .oauth-device-status { margin-top: 14px; font-size: 12px; color: var(--c-text-subtle); }
 
@@ -964,7 +964,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-10</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-11</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -4762,10 +4762,10 @@ async function startOAuthLogin(provOverride){
         <div style="display:flex;justify-content:center;margin-bottom:4px;">
           <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceCode').textContent, '验证码已复制')">复制验证码</button>
         </div>
-        <div class="oauth-device-step">2. 打开授权页</div>
+        <div class="oauth-device-step">2. 打开授权页（链接已包含 user_code）</div>
         <div class="oauth-device-link">
-          <input type="text" class="form-control mono" readonly value="\${esc(url)}" id="oauthDeviceUrl">
-          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').value, '授权链接已复制')">复制链接</button>
+          <div class="oauth-device-url" id="oauthDeviceUrl" tabindex="0">\${esc(url)}</div>
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').textContent, '授权链接已复制')">复制链接</button>
           <a class="btn btn--primary btn--sm" href="\${esc(url)}" target="_blank" rel="noopener noreferrer">打开</a>
         </div>
         <div class="oauth-device-status" id="oauthDeviceStatus">等待你在浏览器完成授权…</div>\`,

@@ -1263,10 +1263,10 @@ async function startOAuthLogin(provOverride){
         <div style="display:flex;justify-content:center;margin-bottom:4px;">
           <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceCode').textContent, '验证码已复制')">复制验证码</button>
         </div>
-        <div class="oauth-device-step">2. 打开授权页</div>
+        <div class="oauth-device-step">2. 打开授权页（链接已包含 user_code）</div>
         <div class="oauth-device-link">
-          <input type="text" class="form-control mono" readonly value="${esc(url)}" id="oauthDeviceUrl">
-          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').value, '授权链接已复制')">复制链接</button>
+          <div class="oauth-device-url" id="oauthDeviceUrl" tabindex="0">${esc(url)}</div>
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').textContent, '授权链接已复制')">复制链接</button>
           <a class="btn btn--primary btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">打开</a>
         </div>
         <div class="oauth-device-status" id="oauthDeviceStatus">等待你在浏览器完成授权…</div>`,
