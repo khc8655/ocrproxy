@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [v20261028-12] - 2026-10-28
+
+### MiniMax Code OAuth 探测与模型修正
+- 管理端模型探测/测试端点正确解析 OAuth access token，不再出现 `Bearer ` 空值。
+- MiniMax Code 推荐模型修正为 `MiniMax-M3.1-Flash`（Preview 不存在）。
+
 ## [v20261028-11] - 2026-10-28
 
 ### OAuth 授权链接完整展示

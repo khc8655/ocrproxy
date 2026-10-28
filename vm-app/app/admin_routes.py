@@ -1698,12 +1698,10 @@ async def test_candidate_endpoint(request: Request):
     if not api_key_raw:
         return JSONResponse(status_code=400, content={"error": f"Key '{key_label}' not found for provider '{provider_name}'"})
 
-    if isinstance(api_key_raw, dict):
-        api_key = str(api_key_raw.get("key", ""))
-        base_url = api_key_raw.get("base_url") or provider.get("base_url", "")
-    else:
-        api_key = str(api_key_raw)
-        base_url = provider.get("base_url", "")
+    try:
+        api_key, base_url = await _resolve_admin_key(provider_name, provider, key_label, api_key_raw)
+    except Exception as ke:
+        return JSONResponse(status_code=400, content={"valid": False, "success": False, "error": f"OAuth 凭据解析失败: {ke}"})
     try:
         _reason = await _admin_upstream_block_reason(base_url, config)
         if _reason:
@@ -2113,6 +2111,16 @@ async def upgrade_system_endpoint(request: Request):
     })
 
 
+async def _resolve_admin_key(provider_name: str, provider: dict, label: str, raw):
+    """Resolve an admin-side probe key; OAuth keys have no inline `key` (Bearer empty bug)."""
+    if isinstance(raw, dict) and raw.get("kind") == "oauth":
+        access = await _oauth.resolve_auth(provider_name, label, provider, raw)
+        return access, provider.get("base_url", "")
+    if isinstance(raw, dict):
+        return str(raw.get("key", "")), raw.get("base_url") or provider.get("base_url", "")
+    return str(raw), provider.get("base_url", "")
+
+
 @router.post("/probe-models")
 async def probe_models_endpoint(request: Request):
     if not _check_auth(request):
@@ -2229,8 +2237,11 @@ async def probe_models_endpoint(request: Request):
         cand_base_url = base_url
         cand_api_key = sec_key
         if isinstance(sec_key, dict):
-            cand_api_key = str(sec_key.get("key", ""))
-            cand_base_url = sec_key.get("base_url") or base_url
+            try:
+                cand_api_key, cand_base_url = await _resolve_admin_key(provider, p_local, label, sec_key)
+            except Exception as ke:
+                probe_errors.append(f"[{label}] {base_url}/models -> OAuth 凭据解析失败: {ke}")
+                continue
         if label in vault_key_labels and vault_base_url:
             # 中枢 Key 只发往中枢声明的端点，忽略调用方传入的 base_url
             cand_base_url = vault_base_url

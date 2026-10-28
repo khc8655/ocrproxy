@@ -1,11 +1,11 @@
 {
-  "version": "v20261028-11",
+  "version": "v20261028-12",
   "release_date": "2026-10-28",
   "commit": "HEAD",
-  "title": "OAuth 授权链接完整展示 (v20261028-11)",
+  "title": "MiniMax Code OAuth 探测与模型修正 (v20261028-12)",
   "changelog": [
-    "OAuth 弹窗中的授权链接改为可换行、可整体选中的只读文本块，完整显示 user_code；",
-    "保留复制验证码/链接/打开授权页，统一自定义弹窗；",
+    "管理端模型探测/测试端点正确解析 OAuth access token，不再出现 Bearer 空值；",
+    "MiniMax Code 推荐模型修正为 MiniMax-M3.1-Flash（Preview 不存在）；",
     "全量测试与 G1~G6 通过。"
   ]
 }

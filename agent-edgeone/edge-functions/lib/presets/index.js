@@ -125,9 +125,9 @@ export const CATALOG = {
     {
       "id": "minimax-code",
       "name": "MiniMax Code",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "updated_at": "2026-10-28",
-      "update_notes": "MiniMax Code 官方 OAuth 设备码登录（仅 VM），Anthropic Messages 协议直通",
+      "update_notes": "修正推荐模型为 MiniMax-M3.1-Flash（Preview 不存在）",
       "rule_hash": "5c46e0122183",
       "protocol": "anthropic",
       "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
@@ -747,9 +747,9 @@ export const PRESETS = [
   {
     "id": "minimax-code",
     "name": "MiniMax Code",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "updated_at": "2026-10-28",
-    "update_notes": "MiniMax Code 官方 OAuth 设备码登录（仅 VM），Anthropic Messages 协议直通",
+    "update_notes": "修正推荐模型为 MiniMax-M3.1-Flash（Preview 不存在）",
     "protocol": "anthropic",
     "base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
     "anthropic_base_url": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
@@ -762,8 +762,8 @@ export const PRESETS = [
     },
     "recommended_models": [
       {
-        "name": "MiniMax-M3.1-Flash-Preview",
-        "upstream_model": "MiniMax-M3.1-Flash-Preview",
+        "name": "MiniMax-M3.1-Flash",
+        "upstream_model": "MiniMax-M3.1-Flash",
         "description": "MiniMax Code 订阅可用，1M 上下文、强制思考"
       }
     ],
