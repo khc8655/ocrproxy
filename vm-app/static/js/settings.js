@@ -157,8 +157,8 @@ function updateRoutingSettingsState(){
   }
 }
 
-function restoreDefaultSettings(){
-  if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
+async function restoreDefaultSettings(){
+  if(!(await UI.confirm({title:'恢复默认参数', desc:'确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）', confirmText:'恢复'}))) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
   const isKb = document.getElementById('s_runMode')?.value === 'kb';
   set('s_chatTimeout', isKb ? 60 : 90);
@@ -198,7 +198,7 @@ function copyProxyKey() {
 }
 
 async function restartService(){
-  if (!confirm('确定要平滑重启 OCRProxy 服务守护进程吗？（重启耗时约 2-3 秒）')) return;
+  if (!(await UI.confirm({title:'平滑重启服务', desc:'确定要平滑重启 OCRProxy 服务守护进程吗？（重启耗时约 2-3 秒）', danger:true, confirmText:'重启'}))) return;
   try {
     const r = await fetch('/api/admin/restart', { method: 'POST', headers: headers() });
     if (!r.ok) throw new Error('发送重启请求失败');
@@ -304,7 +304,7 @@ async function checkSystemUpdate(manual=true){
 }
 
 async function upgradeSystem(targetVer, currVer){
-  if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在后台自动完成重载生效')) return;
+  if (!(await UI.confirm({title:'在线平滑升级', desc:'确定要一键在线平滑升级 OCRProxy 系统程序吗？\n\n• 系统将拉取 GitHub 最新版本制品就地更新\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\n• 服务将在后台自动完成重载生效', confirmText:'升级'}))) return;
   
   const oldVer = currVer || document.getElementById('topVersionBadge')?.textContent?.trim() || '';
 

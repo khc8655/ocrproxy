@@ -639,7 +639,7 @@
       }
 
       const msg = `模型 ID「${existingModelName}」已存在！\n\n点击【确定】将勾选的 ${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\n点击【取消】返回修改模型名称。`;
-      if (!confirm(msg)) {
+      if (!(await UI.confirm({title:'模型已存在', desc: msg, confirmText:'追加合并'}))) {
         document.getElementById('a_name')?.focus();
         return;
       }
@@ -686,7 +686,7 @@
   }
 
   async function deleteAgentModel(name) {
-    if (!confirm(`确定要删除 Agent 模型 "${name}" 吗？`)) return;
+    if (!(await UI.confirm({title:'删除 Agent 模型', desc:`确定要删除 Agent 模型 "${name}" 吗？`, danger:true, confirmText:'删除'}))) return;
     const { cfg } = getCtx();
     const targetModel = cfg.agent_models?.[name];
     const usedProviders = new Set((targetModel?.keys || []).map(k => k.provider).filter(Boolean));
@@ -722,7 +722,7 @@
     let extraMsg = '';
     if (orphanedProviders.length > 0) {
       const provListStr = orphanedProviders.join(', ');
-      if (confirm(`删除模型「${name}」后，供应商 [${provListStr}] 本地已无任何模型引用。\n是否同时从本地清理该供应商及其凭据？`)) {
+      if (await UI.confirm({title:'清理孤立供应商', desc:`删除模型「${name}」后，供应商 [${provListStr}] 本地已无任何模型引用。\n是否同时从本地清理该供应商及其凭据？`, danger:true, confirmText:'清理'})) {
         for (const p of orphanedProviders) {
           delete cfg.providers[p];
           if (typeof state !== 'undefined' && state.ruleUpdatesMap && state.ruleUpdatesMap[p]) {

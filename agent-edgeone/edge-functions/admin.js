@@ -921,6 +921,23 @@ function pageHtml() {
     .settings-card .settings-row-ctrl { justify-content: flex-end; flex-wrap: wrap; }
     .settings-card .settings-row-ctrl .btn { margin-left: 2px; }
 
+    /* §4 Unified custom dialogs (replaces native alert/confirm) */
+    .ui-dialog-overlay { position: fixed; inset: 0; z-index: 5000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,23,42,.48); backdrop-filter: blur(6px); }
+    .ui-dialog { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); box-shadow: var(--sh-modal); animation: uiDialogIn .16s ease-out; }
+    @keyframes uiDialogIn { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: none; } }
+    .ui-dialog__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--c-border); }
+    .ui-dialog__title { font-size: 15px; font-weight: 700; color: var(--c-text); }
+    .ui-dialog__close { border: 0; background: transparent; color: var(--c-text-subtle); font-size: 20px; line-height: 1; width: 28px; height: 28px; border-radius: var(--r-sm); cursor: pointer; }
+    .ui-dialog__close:hover { background: var(--c-surface-muted); color: var(--c-text); }
+    .ui-dialog__body { padding: 20px; color: var(--c-text-muted); font-size: 13px; line-height: 1.65; }
+    .ui-dialog__desc { margin: 0; white-space: pre-wrap; }
+    .ui-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--c-border); background: var(--c-surface-muted); }
+    .oauth-device-code { font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--c-text); background: var(--c-surface-muted); border: 1px dashed var(--c-border-strong); border-radius: var(--r-md); padding: 14px; margin: 10px 0; user-select: all; }
+    .oauth-device-link { display: flex; gap: 6px; align-items: center; }
+    .oauth-device-link input { flex: 1; min-width: 0; }
+    .oauth-device-step { margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--c-text-muted); }
+    .oauth-device-status { margin-top: 14px; font-size: 12px; color: var(--c-text-subtle); }
+
 </style>
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
@@ -947,7 +964,7 @@ function pageHtml() {
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-09</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261028-10</span>
       <span class="brand-badge badge-edgeone" id="topModeBadge">EdgeOne 边缘版</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -2382,11 +2399,11 @@ async function persistConfig(msg='配置已保存并立即生效'){
         // Token，把刚输入的值暂存后重新回填，用户点一下即可再次保存（Token 不回显、不能丢）。
         const tokenEl = document.getElementById('cfg_vault_token');
         const pendingToken = (tokenEl?.value || '').trim();
-        alert('本次保存未写入（配置已被其他窗口或进程更新）\\n\\n' +
+        await UI.alert({title:'保存未写入', desc:'本次保存未写入（配置已被其他窗口或进程更新）\\n\\n' +
               '为防止覆盖对方的改动，系统拦截了这次的整包保存；你之前已保存过的修改不受影响。\\n\\n' +
               (pendingToken ? '你刚输入的 Token 没有丢，页面刷新后会回填，请点击「保存中枢配置」再存一次。\\n\\n' : '') +
               '提示：修改中枢地址/Token 请用「保存中枢配置」按钮，它单独保存、不参与整包版本锁，基本不会再冲突。\\n\\n' +
-              '页面将自动重新拉取最新配置。');
+              '页面将自动重新拉取最新配置。'});
         await loadData();
         if (pendingToken) {
           const again = document.getElementById('cfg_vault_token');
@@ -2890,7 +2907,7 @@ function renderDashboard(){
 }
 
 async function clearErrorLogs(){
-  if(!confirm('确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\\n如需清零全部统计，请到「系统运维」重启服务。')) return;
+  if(!(await UI.confirm({title:'清空错误日志', desc:'确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\\n如需清零全部统计，请到「系统运维」重启服务。', confirmText:'清空'}))) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'clear_logs'})});
   const resetData=await r.json().catch(()=>({}));
   state.stats=(resetData && resetData.stats) || resetData || {};
@@ -4369,7 +4386,7 @@ async function saveProvider(){
 }
 
 async function deleteProvider(name){ 
-  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？\\n\\n本地规则、配置与历史备份会一并清理（删除后不可恢复）。\\n注意：本地删除不会移除中枢里的 Key；如需彻底删除，请在中枢操作。')) return; 
+  if(!(await UI.confirm({title:'删除供应商', desc:'确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？\\n\\n本地规则、配置与历史备份会一并清理（删除后不可恢复）。\\n注意：本地删除不会移除中枢里的 Key；如需彻底删除，请在中枢操作。', danger:true, confirmText:'删除'}))) return; 
   delete state.config.providers[name]; 
   if(state.ruleUpdatesMap && state.ruleUpdatesMap[name]) delete state.ruleUpdatesMap[name];
   KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
@@ -4693,7 +4710,7 @@ function editKey(prov, label){
 }
 
 async function deleteKey(prov,label){ 
-  if(!confirm('确定要删除 Key "'+label+'" 吗？\\n\\n本地历史备份会一并清理（删除后不可恢复）。\\n注意：本地删除不会移除中枢中的 Key；如需彻底删除，请在中枢操作。')) return; 
+  if(!(await UI.confirm({title:'删除 Key', desc:'确定要删除 Key "'+label+'" 吗？\\n\\n本地历史备份会一并清理（删除后不可恢复）。\\n注意：本地删除不会移除中枢中的 Key；如需彻底删除，请在中枢操作。', danger:true, confirmText:'删除'}))) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
     delete state.config.providers[prov].keys[label]; 
   }
@@ -4731,12 +4748,35 @@ async function startOAuthLogin(provOverride){
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || '该供应商未配置官方 OAuth 登录');
     if (!d.session) throw new Error('未获得登录会话');
-    const tip = \`请在浏览器打开：\${d.verification_url || '(见厂商页面)'}\\n输入代码：\${d.user_code}\\n\\n完成后等待自动确认。\`;
-    if (hint) hint.textContent = \`验证码 \${d.user_code} · \${d.verification_url || ''}\`;
-    alert(tip);
+    if (hint) hint.textContent = '';
+
+    const url = d.verification_url || '';
+    const code = d.user_code || '';
+    let closed = false;
+    let timer = null;
+    const dialog = UI.dialog({
+      title: \`\${prov} 账号登录\`,
+      bodyHtml: \`
+        <div class="oauth-device-step">1. 验证码</div>
+        <div class="oauth-device-code" id="oauthDeviceCode">\${esc(code)}</div>
+        <div style="display:flex;justify-content:center;margin-bottom:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceCode').textContent, '验证码已复制')">复制验证码</button>
+        </div>
+        <div class="oauth-device-step">2. 打开授权页</div>
+        <div class="oauth-device-link">
+          <input type="text" class="form-control mono" readonly value="\${esc(url)}" id="oauthDeviceUrl">
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').value, '授权链接已复制')">复制链接</button>
+          <a class="btn btn--primary btn--sm" href="\${esc(url)}" target="_blank" rel="noopener noreferrer">打开</a>
+        </div>
+        <div class="oauth-device-status" id="oauthDeviceStatus">等待你在浏览器完成授权…</div>\`,
+      buttons: [{ label: '关闭', variant: 'secondary' }],
+      onClose: () => { closed = true; if (timer) clearInterval(timer); }
+    });
+    const statusEl = dialog.bodyEl.querySelector('#oauthDeviceStatus');
     const session = d.session;
     const interval = Math.max(2, Number(d.interval) || 5) * 1000;
-    const timer = setInterval(async () => {
+    timer = setInterval(async () => {
+      if (closed) { clearInterval(timer); return; }
       try {
         const pr = await fetch('/api/admin/oauth/poll', {
           method: 'POST', headers: headers(), body: JSON.stringify({ session })
@@ -4744,19 +4784,20 @@ async function startOAuthLogin(provOverride){
         const pd = await pr.json().catch(() => ({}));
         if (pd.status === 'done') {
           clearInterval(timer);
+          if (statusEl) statusEl.textContent = \`登录成功：\${pd.account || pd.label || ''}\`;
           toast(\`OAuth 登录成功：\${pd.account || pd.label || ''}\`, 'ok');
           closeModal('keyModal');
-          setTimeout(() => location.reload(), 400);
+          setTimeout(() => { dialog.close(); location.reload(); }, 800);
         } else if (pr.ok === false || pd.error) {
           clearInterval(timer);
-          if (hint) hint.textContent = pd.error || '登录失败';
+          if (statusEl) statusEl.textContent = pd.error || '登录失败';
           toast(pd.error || 'OAuth 登录失败', 'err');
-        } else if (pd.message && hint) {
-          hint.textContent = pd.message;
+        } else if (pd.message && statusEl) {
+          statusEl.textContent = pd.message;
         }
       } catch (e) {
         clearInterval(timer);
-        if (hint) hint.textContent = '轮询失败：' + e.message;
+        if (statusEl) statusEl.textContent = '轮询失败：' + e.message;
       }
     }, interval);
   } catch (e) {
@@ -4764,6 +4805,7 @@ async function startOAuthLogin(provOverride){
     toast(e.message, 'err');
   }
 }
+
 
 async function saveKey(){
   const prov = document.getElementById('k_provider').value;
@@ -5603,7 +5645,7 @@ function commitKey(prov, label, val){
       }
 
       const msg = \`模型 ID「\${existingModelName}」已存在！\\n\\n点击【确定】将勾选的 \${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\\n点击【取消】返回修改模型名称。\`;
-      if (!confirm(msg)) {
+      if (!(await UI.confirm({title:'模型已存在', desc: msg, confirmText:'追加合并'}))) {
         document.getElementById('a_name')?.focus();
         return;
       }
@@ -5650,7 +5692,7 @@ function commitKey(prov, label, val){
   }
 
   async function deleteAgentModel(name) {
-    if (!confirm(\`确定要删除 Agent 模型 "\${name}" 吗？\`)) return;
+    if (!(await UI.confirm({title:'删除 Agent 模型', desc:\`确定要删除 Agent 模型 "\${name}" 吗？\`, danger:true, confirmText:'删除'}))) return;
     const { cfg } = getCtx();
     const targetModel = cfg.agent_models?.[name];
     const usedProviders = new Set((targetModel?.keys || []).map(k => k.provider).filter(Boolean));
@@ -5686,7 +5728,7 @@ function commitKey(prov, label, val){
     let extraMsg = '';
     if (orphanedProviders.length > 0) {
       const provListStr = orphanedProviders.join(', ');
-      if (confirm(\`删除模型「\${name}」后，供应商 [\${provListStr}] 本地已无任何模型引用。\\n是否同时从本地清理该供应商及其凭据？\`)) {
+      if (await UI.confirm({title:'清理孤立供应商', desc:\`删除模型「\${name}」后，供应商 [\${provListStr}] 本地已无任何模型引用。\\n是否同时从本地清理该供应商及其凭据？\`, danger:true, confirmText:'清理'})) {
         for (const p of orphanedProviders) {
           delete cfg.providers[p];
           if (typeof state !== 'undefined' && state.ruleUpdatesMap && state.ruleUpdatesMap[p]) {
@@ -6367,7 +6409,7 @@ function moveCandidate(type,i,dir){
   renderKbModels(); 
 }
 async function deleteCandidate(type,i){ 
-  if(!confirm('确定要删除该候选节点吗？')) return; 
+  if(!(await UI.confirm({title:'删除候选节点', desc:'确定要删除该候选节点吗？', danger:true, confirmText:'删除'}))) return; 
   state.config.candidates[type].splice(i,1); 
   await persistConfig('候选节点已删除并立即生效'); 
   renderKbModels(); 
@@ -6574,8 +6616,8 @@ function updateRoutingSettingsState(){
   }
 }
 
-function restoreDefaultSettings(){
-  if(!confirm('确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）')) return;
+async function restoreDefaultSettings(){
+  if(!(await UI.confirm({title:'恢复默认参数', desc:'确定要恢复推荐默认参数吗？（不会影响已配置的模型和 Key）', confirmText:'恢复'}))) return;
   const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
   const isKb = document.getElementById('s_runMode')?.value === 'kb';
   set('s_chatTimeout', isKb ? 60 : 90);
@@ -6615,7 +6657,7 @@ function copyProxyKey() {
 }
 
 async function restartService(){
-  if (!confirm('确定要平滑重启 OCRProxy 服务守护进程吗？（重启耗时约 2-3 秒）')) return;
+  if (!(await UI.confirm({title:'平滑重启服务', desc:'确定要平滑重启 OCRProxy 服务守护进程吗？（重启耗时约 2-3 秒）', danger:true, confirmText:'重启'}))) return;
   try {
     const r = await fetch('/api/admin/restart', { method: 'POST', headers: headers() });
     if (!r.ok) throw new Error('发送重启请求失败');
@@ -6721,7 +6763,7 @@ async function checkSystemUpdate(manual=true){
 }
 
 async function upgradeSystem(targetVer, currVer){
-  if (!confirm('确定要一键在线平滑升级 OCRProxy 系统程序吗？\\n\\n• 系统将拉取 GitHub 最新版本制品就地更新\\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\\n• 服务将在后台自动完成重载生效')) return;
+  if (!(await UI.confirm({title:'在线平滑升级', desc:'确定要一键在线平滑升级 OCRProxy 系统程序吗？\\n\\n• 系统将拉取 GitHub 最新版本制品就地更新\\n• 所有已配置的 Key、模型和环境变量 100% 保留无损\\n• 服务将在后台自动完成重载生效', confirmText:'升级'}))) return;
   
   const oldVer = currVer || document.getElementById('topVersionBadge')?.textContent?.trim() || '';
 

@@ -126,6 +126,7 @@ def _session_public(session: dict) -> dict:
         "session": session["id"],
         "user_code": session.get("user_code", ""),
         "verification_url": session.get("verification_url", ""),
+        "verification_uri": session.get("verification_uri", ""),
         "expires_in": max(0, int((session["expires_at"] - now) / 1000)),
         "interval": max(1, int(session.get("interval", 5))),
         "label": session.get("label", ""),
@@ -192,6 +193,14 @@ async def start_device(provider_id: str, provider: dict, label: str = "") -> dic
         interval = 5.0
     interval = max(1, min(60, int(interval)))
 
+    user_code = str(body.get("user_code") or "")
+    verification_uri = str(body.get("verification_uri") or body.get("verification_url") or "")
+    verification_complete = str(body.get("verification_uri_complete") or "")
+    if not verification_complete and verification_uri and user_code:
+        from urllib.parse import quote
+        sep = "&" if "?" in verification_uri else "?"
+        verification_complete = f"{verification_uri}{sep}user_code={quote(user_code)}"
+
     session_id = secrets.token_urlsafe(24)
     session = {
         "id": session_id,
@@ -199,8 +208,9 @@ async def start_device(provider_id: str, provider: dict, label: str = "") -> dic
         "label": label,
         "client_id": client_id,
         "device_code": str(body.get("device_code") or ""),
-        "user_code": str(body.get("user_code") or ""),
-        "verification_url": str(body.get("verification_uri") or body.get("verification_url") or ""),
+        "user_code": user_code,
+        "verification_url": verification_complete or verification_uri,
+        "verification_uri": verification_uri,
         "code_verifier": verifier if auth.get("pkce") == "S256" else "",
         "token_endpoint": str(auth.get("token_endpoint") or ""),
         "auth": dict(auth),

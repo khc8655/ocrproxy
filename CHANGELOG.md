@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [v20261028-10] - 2026-10-28
+
+### OAuth 设备码完整链接
+- 设备码登录优先使用厂商返回的 `verification_uri_complete`；缺失时自动追加 `user_code` 参数，不再只展示裸授权页。
+- OAuth 登录不再使用 `alert`，改为可复制验证码/授权链接、可直接打开的自定义弹窗。
+
+### 统一弹窗
+- 全站确认/提示统一为 `UI.confirm` / `UI.alert` / `UI.dialog`，替换原生 `alert/confirm`。
+
 ## [v20261028-09] - 2026-10-28
 
 ### OAuth 入口缓存刷新

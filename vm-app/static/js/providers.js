@@ -887,7 +887,7 @@ async function saveProvider(){
 }
 
 async function deleteProvider(name){ 
-  if(!confirm('确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？\n\n本地规则、配置与历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢里的 Key；如需彻底删除，请在中枢操作。')) return; 
+  if(!(await UI.confirm({title:'删除供应商', desc:'确定要删除供应商 "'+name+'" 及其名下的所有 Key 吗？\n\n本地规则、配置与历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢里的 Key；如需彻底删除，请在中枢操作。', danger:true, confirmText:'删除'}))) return; 
   delete state.config.providers[name]; 
   if(state.ruleUpdatesMap && state.ruleUpdatesMap[name]) delete state.ruleUpdatesMap[name];
   KB_TYPES.forEach(t=>{ if(state.config.candidates&&state.config.candidates[t]) state.config.candidates[t]=state.config.candidates[t].filter(x=>x.provider!==name); }); 
@@ -1211,7 +1211,7 @@ function editKey(prov, label){
 }
 
 async function deleteKey(prov,label){ 
-  if(!confirm('确定要删除 Key "'+label+'" 吗？\n\n本地历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢中的 Key；如需彻底删除，请在中枢操作。')) return; 
+  if(!(await UI.confirm({title:'删除 Key', desc:'确定要删除 Key "'+label+'" 吗？\n\n本地历史备份会一并清理（删除后不可恢复）。\n注意：本地删除不会移除中枢中的 Key；如需彻底删除，请在中枢操作。', danger:true, confirmText:'删除'}))) return; 
   if(state.config.providers&&state.config.providers[prov]&&state.config.providers[prov].keys) {
     delete state.config.providers[prov].keys[label]; 
   }
@@ -1249,12 +1249,35 @@ async function startOAuthLogin(provOverride){
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || '该供应商未配置官方 OAuth 登录');
     if (!d.session) throw new Error('未获得登录会话');
-    const tip = `请在浏览器打开：${d.verification_url || '(见厂商页面)'}\n输入代码：${d.user_code}\n\n完成后等待自动确认。`;
-    if (hint) hint.textContent = `验证码 ${d.user_code} · ${d.verification_url || ''}`;
-    alert(tip);
+    if (hint) hint.textContent = '';
+
+    const url = d.verification_url || '';
+    const code = d.user_code || '';
+    let closed = false;
+    let timer = null;
+    const dialog = UI.dialog({
+      title: `${prov} 账号登录`,
+      bodyHtml: `
+        <div class="oauth-device-step">1. 验证码</div>
+        <div class="oauth-device-code" id="oauthDeviceCode">${esc(code)}</div>
+        <div style="display:flex;justify-content:center;margin-bottom:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceCode').textContent, '验证码已复制')">复制验证码</button>
+        </div>
+        <div class="oauth-device-step">2. 打开授权页</div>
+        <div class="oauth-device-link">
+          <input type="text" class="form-control mono" readonly value="${esc(url)}" id="oauthDeviceUrl">
+          <button type="button" class="btn btn--secondary btn--sm" onclick="copyText(document.getElementById('oauthDeviceUrl').value, '授权链接已复制')">复制链接</button>
+          <a class="btn btn--primary btn--sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">打开</a>
+        </div>
+        <div class="oauth-device-status" id="oauthDeviceStatus">等待你在浏览器完成授权…</div>`,
+      buttons: [{ label: '关闭', variant: 'secondary' }],
+      onClose: () => { closed = true; if (timer) clearInterval(timer); }
+    });
+    const statusEl = dialog.bodyEl.querySelector('#oauthDeviceStatus');
     const session = d.session;
     const interval = Math.max(2, Number(d.interval) || 5) * 1000;
-    const timer = setInterval(async () => {
+    timer = setInterval(async () => {
+      if (closed) { clearInterval(timer); return; }
       try {
         const pr = await fetch('/api/admin/oauth/poll', {
           method: 'POST', headers: headers(), body: JSON.stringify({ session })
@@ -1262,19 +1285,20 @@ async function startOAuthLogin(provOverride){
         const pd = await pr.json().catch(() => ({}));
         if (pd.status === 'done') {
           clearInterval(timer);
+          if (statusEl) statusEl.textContent = `登录成功：${pd.account || pd.label || ''}`;
           toast(`OAuth 登录成功：${pd.account || pd.label || ''}`, 'ok');
           closeModal('keyModal');
-          setTimeout(() => location.reload(), 400);
+          setTimeout(() => { dialog.close(); location.reload(); }, 800);
         } else if (pr.ok === false || pd.error) {
           clearInterval(timer);
-          if (hint) hint.textContent = pd.error || '登录失败';
+          if (statusEl) statusEl.textContent = pd.error || '登录失败';
           toast(pd.error || 'OAuth 登录失败', 'err');
-        } else if (pd.message && hint) {
-          hint.textContent = pd.message;
+        } else if (pd.message && statusEl) {
+          statusEl.textContent = pd.message;
         }
       } catch (e) {
         clearInterval(timer);
-        if (hint) hint.textContent = '轮询失败：' + e.message;
+        if (statusEl) statusEl.textContent = '轮询失败：' + e.message;
       }
     }, interval);
   } catch (e) {
@@ -1282,6 +1306,7 @@ async function startOAuthLogin(provOverride){
     toast(e.message, 'err');
   }
 }
+
 
 async function saveKey(){
   const prov = document.getElementById('k_provider').value;

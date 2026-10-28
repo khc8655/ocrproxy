@@ -385,11 +385,11 @@ async function persistConfig(msg='配置已保存并立即生效'){
         // Token，把刚输入的值暂存后重新回填，用户点一下即可再次保存（Token 不回显、不能丢）。
         const tokenEl = document.getElementById('cfg_vault_token');
         const pendingToken = (tokenEl?.value || '').trim();
-        alert('本次保存未写入（配置已被其他窗口或进程更新）\n\n' +
+        await UI.alert({title:'保存未写入', desc:'本次保存未写入（配置已被其他窗口或进程更新）\n\n' +
               '为防止覆盖对方的改动，系统拦截了这次的整包保存；你之前已保存过的修改不受影响。\n\n' +
               (pendingToken ? '你刚输入的 Token 没有丢，页面刷新后会回填，请点击「保存中枢配置」再存一次。\n\n' : '') +
               '提示：修改中枢地址/Token 请用「保存中枢配置」按钮，它单独保存、不参与整包版本锁，基本不会再冲突。\n\n' +
-              '页面将自动重新拉取最新配置。');
+              '页面将自动重新拉取最新配置。'});
         await loadData();
         if (pendingToken) {
           const again = document.getElementById('cfg_vault_token');
@@ -893,7 +893,7 @@ function renderDashboard(){
 }
 
 async function clearErrorLogs(){
-  if(!confirm('确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\n如需清零全部统计，请到「系统运维」重启服务。')) return;
+  if(!(await UI.confirm({title:'清空错误日志', desc:'确定要清空最近错误日志吗？请求统计、成功率和今日汇总会保留。\n如需清零全部统计，请到「系统运维」重启服务。', confirmText:'清空'}))) return;
   const r=await fetch('/api/admin/stats',{method:'POST',headers:headers(),body:JSON.stringify({action:'clear_logs'})});
   const resetData=await r.json().catch(()=>({}));
   state.stats=(resetData && resetData.stats) || resetData || {};

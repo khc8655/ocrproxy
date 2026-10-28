@@ -904,3 +904,20 @@
     .settings-card .settings-row-full:first-of-type { border-top: 0; margin-top: 0; }
     .settings-card .settings-row-ctrl { justify-content: flex-end; flex-wrap: wrap; }
     .settings-card .settings-row-ctrl .btn { margin-left: 2px; }
+
+    /* §4 Unified custom dialogs (replaces native alert/confirm) */
+    .ui-dialog-overlay { position: fixed; inset: 0; z-index: 5000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,23,42,.48); backdrop-filter: blur(6px); }
+    .ui-dialog { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); box-shadow: var(--sh-modal); animation: uiDialogIn .16s ease-out; }
+    @keyframes uiDialogIn { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: none; } }
+    .ui-dialog__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--c-border); }
+    .ui-dialog__title { font-size: 15px; font-weight: 700; color: var(--c-text); }
+    .ui-dialog__close { border: 0; background: transparent; color: var(--c-text-subtle); font-size: 20px; line-height: 1; width: 28px; height: 28px; border-radius: var(--r-sm); cursor: pointer; }
+    .ui-dialog__close:hover { background: var(--c-surface-muted); color: var(--c-text); }
+    .ui-dialog__body { padding: 20px; color: var(--c-text-muted); font-size: 13px; line-height: 1.65; }
+    .ui-dialog__desc { margin: 0; white-space: pre-wrap; }
+    .ui-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--c-border); background: var(--c-surface-muted); }
+    .oauth-device-code { font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--c-text); background: var(--c-surface-muted); border: 1px dashed var(--c-border-strong); border-radius: var(--r-md); padding: 14px; margin: 10px 0; user-select: all; }
+    .oauth-device-link { display: flex; gap: 6px; align-items: center; }
+    .oauth-device-link input { flex: 1; min-width: 0; }
+    .oauth-device-step { margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--c-text-muted); }
+    .oauth-device-status { margin-top: 14px; font-size: 12px; color: var(--c-text-subtle); }

@@ -355,7 +355,7 @@ function moveCandidate(type,i,dir){
   renderKbModels(); 
 }
 async function deleteCandidate(type,i){ 
-  if(!confirm('确定要删除该候选节点吗？')) return; 
+  if(!(await UI.confirm({title:'删除候选节点', desc:'确定要删除该候选节点吗？', danger:true, confirmText:'删除'}))) return; 
   state.config.candidates[type].splice(i,1); 
   await persistConfig('候选节点已删除并立即生效'); 
   renderKbModels(); 

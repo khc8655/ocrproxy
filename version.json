@@ -1,11 +1,12 @@
 {
-  "version": "v20261028-09",
+  "version": "v20261028-10",
   "release_date": "2026-10-28",
   "commit": "HEAD",
-  "title": "OAuth 入口缓存刷新 (v20261028-09)",
+  "title": "OAuth 设备码完整链接 + 统一自定义弹窗 (v20261028-10)",
   "changelog": [
-    "新增/删除供应商后自动失效 OAuth 入口缓存，无需刷新页面即可看到「账号登录」；",
-    "保留 v08 的显性入口和 v07 的 UI/OTA 修复；",
+    "设备码登录优先使用厂商返回的 verification_uri_complete，缺失时自动追加 user_code 参数；",
+    "OAuth 登录不再使用 alert，改为可复制验证码/授权链接、可直接打开的自定义弹窗；",
+    "全站确认/提示统一为自定义 UI.confirm / UI.alert / UI.dialog，不再使用原生 alert/confirm；",
     "全量测试与 G1~G6 通过。"
   ]
 }

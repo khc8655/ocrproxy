@@ -154,15 +154,81 @@
   function openModal(id) { if (typeof global.openModal === 'function') return global.openModal(id); }
   function closeModal(id) { if (typeof global.closeModal === 'function') return global.closeModal(id); }
 
+  function dialog(opts) {
+    const o = opts || {};
+    const overlay = document.createElement('div');
+    overlay.className = 'ui-dialog-overlay';
+    const buttons = Array.isArray(o.buttons) ? o.buttons : [];
+    overlay.innerHTML = `<div class="ui-dialog" role="dialog" aria-modal="true" aria-label="${esc(o.title || '对话框')}">
+      <div class="ui-dialog__head"><div class="ui-dialog__title">${esc(o.title || '')}</div><button type="button" class="ui-dialog__close" aria-label="关闭">×</button></div>
+      <div class="ui-dialog__body">${o.bodyHtml || ''}</div>
+      <div class="ui-dialog__foot"></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const close = (value) => {
+      overlay.remove();
+      if (typeof o.onClose === 'function') o.onClose(value);
+    };
+    overlay.querySelector('.ui-dialog__close').addEventListener('click', () => close(undefined));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(undefined); });
+    const foot = overlay.querySelector('.ui-dialog__foot');
+    let controller = {
+      overlay,
+      el: overlay.querySelector('.ui-dialog'),
+      bodyEl: overlay.querySelector('.ui-dialog__body'),
+      close,
+      setBody(html) { controller.bodyEl.innerHTML = html; },
+      setButtons(list) {
+        foot.innerHTML = '';
+        (list || []).forEach(b => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `btn btn--${b.variant || 'secondary'}${b.size === 'sm' ? ' btn--sm' : ''}`;
+          btn.textContent = b.label || '';
+          btn.addEventListener('click', async () => {
+            if (typeof b.onClick === 'function') await b.onClick(controller);
+            if (b.close !== false) close(b.value);
+          });
+          foot.appendChild(btn);
+        });
+      }
+    };
+    controller.setButtons(buttons);
+    return controller;
+  }
+
   function confirm(opts) {
     const o = typeof opts === 'string' ? { title: opts } : (opts || {});
-    const text = [o.title, o.desc].filter(Boolean).join('\n\n');
-    return Promise.resolve(typeof global.confirm === 'function' ? global.confirm(text) : false);
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+      const d = dialog({
+        title: o.title || '请确认',
+        bodyHtml: o.desc ? `<p class="ui-dialog__desc">${esc(o.desc)}</p>` : '',
+        onClose: () => done(false),
+        buttons: [
+          { label: o.cancelText || '取消', variant: 'secondary', onClick: () => done(false) },
+          { label: o.confirmText || '确定', variant: o.danger ? 'danger' : 'primary', onClick: () => done(true) }
+        ]
+      });
+    });
+  }
+
+  function alert(opts) {
+    const o = typeof opts === 'string' ? { title: '提示', desc: opts } : (opts || {});
+    return new Promise((resolve) => {
+      dialog({
+        title: o.title || '提示',
+        bodyHtml: `<p class="ui-dialog__desc">${esc(o.desc || '')}</p>`,
+        onClose: () => resolve(true),
+        buttons: [{ label: o.confirmText || '知道了', variant: 'primary', onClick: () => resolve(true) }]
+      });
+    });
   }
 
   global.UI = {
     esc, icon, button, badge, dot, capsule, card, pageHeader, field, input, select, textarea, switch: switchControl, segmented, table, empty,
-    toneOf, toast, openModal, closeModal, confirm,
+    toneOf, toast, openModal, closeModal, confirm, alert, dialog,
     TONE: TONES
   };
 })(window);
