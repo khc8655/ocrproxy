@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [v20261029-01] - 2026-10-29
+
+### 控制台前端结构治理
+- 修复批量样式迁移造成的 HTML 结构破损：`rawjson-wrap`/中枢提示缺 `>`、provider 弹窗多余闭合、重复 `class`、文件导入 input 裸露、字母导航 `hidden` 冲突。
+- 内联 `style` 迁移为语义 class，修复空属性/残留标签；供应商字母索引恢复正常。
+- 新增 `tests/test_html_structure.py`（重复/空属性、标签未闭合/嵌套、内联 style 棘轮），接入 `build:assets` 与测试 runner。
+- 未改后端调度/API 语义。
+
 ## [v20261028-13] - 2026-10-28
 
 ### 移除 minimax-code 适配
