@@ -23,7 +23,7 @@
   </form>
 </div>
 
-<input type="file" id="configFileImportInput" accept=".json,application/json" style="display:none;" onchange="handleImportFile(event)">
+<input type="file" id="configFileImportInput" accept=".json,application/json" onchange="handleImportFile(event)">
 
 <!-- App -->
 <div id="app" class="app">
@@ -58,18 +58,18 @@
           <div class="section-title">接入网关与可用模型</div>
         </div>
         <div class="gateway-card">
-          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding-bottom:10px;">
+          <div class="gateway-row gateway-row--border-bottom">
             <span class="gateway-label">Base URL (网关地址)</span>
             <span class="gateway-val mono" id="dbBaseUrl">—</span>
-            <button class="btn btn-secondary btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
+            <button class="btn btn--secondary btn--xs ml-auto" onclick="copyDbBaseUrl()" title="复制 Base URL">复制 URL</button>
           </div>
-          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding:10px 0;">
+          <div class="gateway-row gateway-row--pad-vertical">
             <span class="gateway-label">客户端凭据 (Key)</span>
             <span class="gateway-val mono" id="gwClientKeyVal">—</span>
-            <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
+            <button class="btn btn--secondary btn--xs ml-auto" onclick="copyDbClientKey()" title="复制 Client Key">复制 Key</button>
           </div>
-          <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
-            <span class="gateway-label" style="padding-top:2px;">可用模型</span>
+          <div class="gateway-row gateway-row--pad-top-start">
+            <span class="gateway-label gateway-label--aligned">可用模型</span>
             <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
           </div>
         </div>
@@ -99,13 +99,13 @@
         <div class="section-head">
           <div style="display:flex;align-items:center;gap:14px;">
             <div class="section-title">最近错误日志</div>
-            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;">
-              <button class="btn btn-sm btn-ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
-              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
-              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
+            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;" hidden>
+              <button class="btn btn--sm btn--ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
+              <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
+              <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
             </div>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="clearErrorLogs()">清空错误日志</button>
+          <button class="btn btn--danger btn--sm" onclick="clearErrorLogs()">清空错误日志</button>
         </div>
         <div class="card table-wrap">
           <table>
@@ -125,7 +125,7 @@
       <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
         <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
         <!-- Alphabet Nav Rail -->
-        <div id="alphabetNavRail" class="alphabet-nav-rail" style="display:none;">
+        <div id="alphabetNavRail" hidden class="alphabet-nav-rail">
           <div class="alpha-rail-inner" id="alphaRailInner"></div>
         </div>
       </div>
@@ -176,7 +176,7 @@
               </div>
               <div class="settings-row-ctrl">
                 <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-..." style="flex:1;">
-                <button class="btn btn-secondary btn-sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
+                <button class="btn btn--secondary btn--sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
               </div>
             </div>
 
@@ -233,7 +233,7 @@
               <div class="settings-row-label">
                 <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
                 <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
-                <div id="manual-routing-tip" class="hint-box mt-1" hidden style="color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
+                <div id="manual-routing-tip" class="hint-box hint-box--routing-tip mt-1" hidden>
                   <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
@@ -410,7 +410,7 @@
               </div>
               <div class="settings-row-ctrl" style="position:relative;">
                 <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:32px;">
-                <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
+                <button type="button" class="btn--ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
                   <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
@@ -423,7 +423,7 @@
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
-                <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
+                <button type="button" class="btn btn--primary btn--sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
               </div>
             </div>
 
@@ -433,8 +433,8 @@
                 <span class="settings-row-hint" title="测试与中枢的连通性，或增量同步供应商规则（不覆盖本地 Key）">先测试连通性，再按需增量同步规则；不会修改本地 Key。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
+                <button type="button" class="btn btn--secondary btn--sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
+                <button type="button" class="btn btn--secondary btn--sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
             </div>
             <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
@@ -451,7 +451,7 @@
                 <span class="settings-row-hint" title="检查官方发行版本；发现新版本后在此处一键在线平滑升级">检查是否有新版本；确认后再升级，不会自动改配置。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
+                <button class="btn btn--secondary btn--sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
               </div>
             </div>
             <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
@@ -463,8 +463,8 @@
                 <span class="settings-row-hint" title="解除所有 Key 冷却，或平滑重启网关守护进程">解除所有冷却、平滑重启；升级与重启分开操作。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
-                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
+                <button class="btn btn--secondary btn--sm" onclick="reloadRuntimeState()">解除所有冷却</button>
+                <button class="btn btn--warn btn--sm" onclick="restartService()">平滑重启服务</button>
               </div>
             </div>
           </div>
@@ -480,8 +480,8 @@
                 <span class="settings-row-hint">导出带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" onclick="exportConfig()">导出配置备份</button>
-                <button class="btn btn-primary btn-sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
+                <button class="btn btn--secondary btn--sm" onclick="exportConfig()">导出配置备份</button>
+                <button class="btn btn--primary btn--sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
                 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
               </div>
             </div>
@@ -494,8 +494,8 @@
             </summary>
             <div style="margin-top:12px;">
               <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-secondary btn-xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
-                <button class="btn btn-primary btn-xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
+                <button class="btn btn--secondary btn--xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
+                <button class="btn btn--primary btn--xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
               </div>
               <textarea id="rawJsonText" class="form-control mono" spellcheck="false" style="min-height:360px;font-family:var(--font-mono);font-size:12px;width:100%;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;border:1px solid #1e293b;"></textarea>
               <div id="rawJsonErr" style="display:none;margin-top:8px;color:var(--error);font-size:12px;"></div>
@@ -505,8 +505,8 @@
 
         <!-- Settings Bottom Sticky Action Bar -->
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
-          <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn-primary btn-sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
+          <button class="btn btn--secondary btn--sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+          <button class="btn btn--primary btn--sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
             <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span>保存设置并生效</span>
           </button>
@@ -570,8 +570,8 @@
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" id="p_saveBtn" onclick="saveProvider()">保存并生效</button>
+      <button class="btn btn--secondary" onclick="closeModal('providerModal')">取消</button>
+      <button class="btn btn--primary" id="p_saveBtn" onclick="saveProvider()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -590,7 +590,7 @@
       <div id="k_vault_section" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">从中枢添加</div>
         <div id="k_vault_list" style="font-size:12px;"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn-primary btn-sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn--primary btn--sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
         <div class="text-secondary" style="font-size:11px;margin-top:6px;">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
       </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
@@ -613,17 +613,17 @@
       </div>
       <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
-        <button type="button" class="btn btn-primary btn-sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
+        <button type="button" class="btn btn--primary btn--sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
         <div id="k_oauth_hint" class="hint mt-1" style="font-size:11px;margin-top:6px;"></div>
       </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
-      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
+      <div id="k_spinner" class="hint mt-2"><span class="spinner"></span> 正在校验各协议连通性...</div>
       <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKey()">保存并生效</button>
+      <button class="btn btn--secondary" onclick="closeModal('keyModal')">取消</button>
+      <button class="btn btn--primary" onclick="saveKey()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -661,7 +661,7 @@
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn-secondary btn-sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" style="display:inline-flex;align-items:center;gap:4px;">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -682,7 +682,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
+      <button class="btn btn--primary" onclick="saveAgentModel()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -722,7 +722,7 @@
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn-secondary btn-sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -739,7 +739,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('candidateModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveCandidate()">保存并生效</button>
+      <button class="btn btn--primary" onclick="saveCandidate()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -762,7 +762,7 @@
     </div>
     <div class="modal-foot" style="display:flex;justify-content:space-between;align-items:center;">
       <span class="text-secondary text-sm" id="probedCountHint">共 0 个模型</span>
-      <button class="btn btn-secondary btn-sm" onclick="closeModal('probedListModal')">关闭</button>
+      <button class="btn btn--secondary btn--sm" onclick="closeModal('probedListModal')">关闭</button>
     </div>
   </div>
 </div>
@@ -791,7 +791,7 @@
         </div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn-primary" onclick="confirmImport()">确认导入</button></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn--primary" onclick="confirmImport()">确认导入</button></div>
   </div>
 </div>
 

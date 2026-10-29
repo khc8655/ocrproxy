@@ -14,128 +14,197 @@ function pageHtml() {
   <title>OCRProxy EdgeOne 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
   <style>
-/* OCRProxy Unified Design System & Admin Stylesheet */
-    :root {
-      /* KHC Admin Design System Tokens */
-      --khc-primary-50: #E6EEFF;
-      --khc-primary-100: #C5D7FF;
-      --khc-primary-200: #98B8FF;
-      --khc-primary-300: #6B99FF;
-      --khc-primary-400: #3F7AFF;
-      --khc-primary-500: #1664FF;
-      --khc-primary-600: #0F54E0;
-      --khc-primary-700: #0B43B8;
-      --khc-primary-800: #083185;
-      --khc-primary-900: #06205C;
+/* OCRProxy Design System — Single Token Source
+ *
+ * 主色：#1664FF（brand blue）— 唯一 canonical primary color。
+ * 所有语义别名从 --khc-* 调色板派生，禁止在 CSS 其他地方硬编码色值。
+ *
+ * DEPRECATED aliases below map to their canonical names for backward
+ * compatibility with existing rules; new code MUST use the --color-* vocabulary.
+ */
+:root {
+  /* ── Palette (底层调色板，只读，不改) ────────────────────── */
+  --khc-primary-50:   #E6EEFF;
+  --khc-primary-100:  #C5D7FF;
+  --khc-primary-200:  #98B8FF;
+  --khc-primary-300:  #6B99FF;
+  --khc-primary-400:  #3F7AFF;
+  --khc-primary-500:  #1664FF;  /* canonical brand blue */
+  --khc-primary-600:  #0F54E0;
+  --khc-primary-700:  #0B43B8;
+  --khc-primary-800:  #083185;
+  --khc-primary-900:  #06205C;
 
-      --khc-neutral-50: #F8FAFC;
-      --khc-neutral-100: #F1F5F9;
-      --khc-neutral-200: #E2E8F0;
-      --khc-neutral-300: #CBD5E1;
-      --khc-neutral-400: #94A3B8;
-      --khc-neutral-500: #64748B;
-      --khc-neutral-600: #475569;
-      --khc-neutral-700: #334155;
-      --khc-neutral-800: #1E293B;
-      --khc-neutral-900: #0F172A;
+  --khc-neutral-50:   #F8FAFC;
+  --khc-neutral-100:  #F1F5F9;
+  --khc-neutral-200:  #E2E8F0;
+  --khc-neutral-300:  #CBD5E1;
+  --khc-neutral-400:  #94A3B8;
+  --khc-neutral-500:  #64748B;
+  --khc-neutral-600:  #475569;
+  --khc-neutral-700:  #334155;
+  --khc-neutral-800:  #1E293B;
+  --khc-neutral-900:  #0F172A;
 
-      --khc-success-50: #ECFDF5;
-      --khc-success-500: #10B981;
-      --khc-success-600: #059669;
+  --khc-success-50:   #ECFDF5;
+  --khc-success-500:  #10B981;
+  --khc-success-600:  #059669;
+  --khc-success-soft: var(--khc-success-50);
 
-      --khc-warning-50: #FFFBEB;
-      --khc-warning-500: #F59E0B;
-      --khc-warning-600: #D97706;
+  --khc-warning-50:   #FFFBEB;
+  --khc-warning-500:  #F59E0B;
+  --khc-warning-600:  #D97706;
+  --khc-warning-soft: var(--khc-warning-50);
 
-      --khc-danger-50: #FEF2F2;
-      --khc-danger-500: #EF4444;
-      --khc-danger-600: #DC2626;
+  --khc-danger-50:    #FEF2F2;
+  --khc-danger-500:   #EF4444;
+  --khc-danger-600:   #DC2626;
+  --khc-danger-soft:  var(--khc-danger-50);
 
-      --bg: #FFFFFF;
-      --bg-subtle: #F5F8FF;
-      --bg-card: #FFFFFF;
-      --text: #0F172A;
-      --text-secondary: #475569;
-      --text-tertiary: #64748B;
-      --border: #D6DEE8;
-      --border-subtle: #E3E9F2;
-      --border-strong: #B8C4D6;
-      --primary: #2563EB;
-      --primary-hover: #1D4ED8;
-      --primary-soft: #EFF6FF;
-      --primary-border: #BFDBFE;
-      --success: #15803D;
-      --success-soft: #F0FDF4;
-      --success-border: #BBF7D0;
-      --warn: #B45309;
-      --warn-soft: #FFFBEB;
-      --warn-border: #FDE68A;
-      --error: #DC2626;
-      --error-soft: #FEF2F2;
-      --error-border: #FECACA;
+  /* protocol semantic hues */
+  --khc-violet-soft:  #F3E8FF;
+  --khc-violet-500:   #8B5CF6;
+  --khc-violet-600:   #7E22CE;
+  --khc-teal-soft:    #F0FDFA;
+  --khc-teal-600:     #0F766E;
+  --khc-sky-soft:     #F0F9FF;
+  --khc-sky-700:      #0369A1;
 
-      --radius-sm: 6px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --radius-xl: 16px;
+  /* ── Semantic aliases (唯一对外消费入口) ────────────────── */
+  --color-primary:        var(--khc-primary-500);
+  --color-primary-hover:  var(--khc-primary-600);
+  --color-primary-soft:   var(--khc-primary-50);
+  --color-primary-border: var(--khc-primary-100);
 
-      /* Spacing Scale (4px base) */
-      --space-1: 4px;
-      --space-2: 8px;
-      --space-3: 12px;
-      --space-4: 16px;
-      --space-5: 20px;
-      --space-6: 24px;
-      --space-8: 32px;
+  --color-success:        var(--khc-success-600);
+  --color-success-soft:   var(--khc-success-soft);
+  --color-success-border: #BBF7D0;
 
-      /* Component Sizing Tokens */
-      --ctrl-height-sm: 28px;
-      --ctrl-height-md: 32px;
-      --row-height: 52px;
+  --color-warning:        var(--khc-warning-600);
+  --color-warning-soft:   var(--khc-warning-soft);
+  --color-warning-border: #FDE68A;
 
-      --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-      --shadow: 0 2px 8px rgba(16, 24, 40, 0.07);
-      --shadow-md: 0 8px 22px rgba(16, 24, 40, 0.09);
-      --shadow-lg: 0 20px 52px rgba(16, 24, 40, 0.13);
+  --color-danger:         var(--khc-danger-600);
+  --color-danger-soft:    var(--khc-danger-soft);
+  --color-danger-border:  #FECACA;
 
-      --font: 'PingFang SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-mono: 'SF Mono', 'Roboto Mono', Menlo, Monaco, Consolas, monospace;
-      --font-size-body: 14px;
-      --font-size-h3: 16px;
+  --color-violet:         var(--khc-violet-600);
+  --color-violet-soft:    var(--khc-violet-soft);
+  --color-teal:           var(--khc-teal-600);
+  --color-teal-soft:      var(--khc-teal-soft);
+  --color-sky:            var(--khc-sky-700);
+  --color-sky-soft:       var(--khc-sky-soft);
 
-      /* Console v2 semantic aliases (single vocabulary; old --khc-* kept for legacy pages) */
-      --c-bg: #F5F8FF;
-      --c-surface: #FFFFFF;
-      --c-surface-muted: #F5F8FF;
-      --c-border: #D6DEE8;
-      --c-border-strong: #B8C4D6;
-      --c-text: var(--text);
-      --c-text-muted: var(--text-secondary);
-      --c-text-subtle: var(--text-tertiary);
-      --c-primary: #2563EB;
-      --c-primary-hover: #1D4ED8;
-      --c-primary-soft: #EFF6FF;
-      --c-success: var(--success);
-      --c-success-soft: var(--success-soft);
-      --c-warning: var(--warn);
-      --c-warning-soft: var(--warn-soft);
-      --c-danger: var(--error);
-      --c-danger-soft: var(--error-soft);
-      --c-info: #2563eb;
-      --c-info-soft: #eff6ff;
-      --c-violet: #7e22ce;
-      --c-violet-soft: #f3e8ff;
-      --c-teal: #0f766e;
-      --c-teal-soft: #f0fdfa;
-      --c-sky: #0369a1;
-      --c-sky-soft: #f0f9ff;
-      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
-      --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
-      --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
-      --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
-      --sh-sm: var(--shadow-sm); --sh-md: var(--shadow-md); --sh-modal: var(--shadow-lg);
-      --dur-fast: 120ms; --dur-base: 180ms;
-    }
+  /* 基础 surface */
+  --bg: var(--surface);              /* alias for body bg */
+  --bg-subtle: var(--surface-muted);
+  --bg-card: var(--surface);
+  --surface:          #FFFFFF;
+  --surface-muted:     #F5F8FF;
+  --surface-inverse:   var(--khc-neutral-900);
+
+  /* 文本 */
+  --text:              var(--khc-neutral-900);
+  --text-secondary:    var(--khc-neutral-600);
+  --text-tertiary:     var(--khc-neutral-500);
+  --text-muted:        var(--khc-neutral-500);
+
+  /* 边框 */
+  --border:            #D6DEE8;
+  --border-subtle:     #E3E9F2;
+  --border-strong:     #B8C4D6;
+
+  /* ── Shape & Layout ─────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-pill: 999px;
+
+  /* 4px base spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Component sizing */
+  --ctrl-height-sm: 28px;
+  --ctrl-height-md: 32px;
+  --row-height:     52px;
+
+  /* ── Shadows ────────────────────────────────────────────── */
+  --shadow-sm:  0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow:     0 2px 8px rgba(16, 24, 40, 0.07);
+  --shadow-md:  0 8px 22px rgba(16, 24, 40, 0.09);
+  --shadow-lg:  0 20px 52px rgba(16, 24, 40, 0.13);
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --font:           'PingFang SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:      'SF Mono', 'Roboto Mono', Menlo, Monaco, Consolas, monospace;
+  --text-xs:        12px;
+  --text-sm:        13px;
+  --text-md:        14px;
+  --text-lg:        16px;
+  --text-xl:        20px;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DEPRECATED aliases — 映射到 canonical 名，用于渐进迁移 */
+  /* ═══════════════════════════════════════════════════════ */
+  --primary:          var(--color-primary);
+  --primary-hover:    var(--color-primary-hover);
+  --primary-soft:     var(--color-primary-soft);
+  --primary-border:   var(--color-primary-border);
+  --success:          var(--color-success);
+  --success-soft:     var(--color-success-soft);
+  --success-border:   var(--color-success-border);
+  --warn:             var(--color-warning);
+  --warn-soft:        var(--color-warning-soft);
+  --warn-border:      var(--color-warning-border);
+  --error:            var(--color-danger);
+  --error-soft:       var(--color-danger-soft);
+  --error-border:     var(--color-danger-border);
+
+  --c-bg:             var(--bg-subtle);
+  --c-surface:        var(--surface);
+  --c-surface-muted:  var(--surface-muted);
+  --c-border:         var(--border);
+  --c-border-strong:  var(--border-strong);
+  --c-text:           var(--text);
+  --c-text-muted:     var(--text-secondary);
+  --c-text-subtle:    var(--text-tertiary);
+  --c-primary:        var(--color-primary);
+  --c-primary-hover:  var(--color-primary-hover);
+  --c-primary-soft:   var(--color-primary-soft);
+  --c-success:        var(--color-success);
+  --c-success-soft:   var(--color-success-soft);
+  --c-warning:        var(--color-warning);
+  --c-warning-soft:   var(--color-warning-soft);
+  --c-danger:         var(--color-danger);
+  --c-danger-soft:    var(--color-danger-soft);
+  --c-info:           var(--color-primary);
+  --c-info-soft:      var(--color-primary-soft);
+  --c-violet:         var(--color-violet);
+  --c-violet-soft:    var(--color-violet-soft);
+  --c-teal:           var(--color-teal);
+  --c-teal-soft:      var(--color-teal-soft);
+  --c-sky:            var(--color-sky);
+  --c-sky-soft:       var(--color-sky-soft);
+
+  --sp-1: var(--space-1); --sp-2: var(--space-2); --sp-3: var(--space-3); --sp-4: var(--space-4);
+  --sp-5: var(--space-5); --sp-6: var(--space-6); --sp-8: var(--space-8); --sp-10: var(--space-10); --sp-12: var(--space-12);
+  --r-sm: var(--radius-sm); --r-md: var(--radius-md); --r-lg: var(--radius-lg); --r-pill: var(--radius-pill);
+  --fs-xs: var(--text-xs); --fs-sm: var(--text-sm); --fs-md: var(--text-md); --fs-lg: var(--text-lg); --fs-xl: var(--text-xl);
+  --sh-sm: var(--shadow-sm); --sh-md: var(--shadow-md); --sh-modal: var(--shadow-lg);
+}
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: var(--bg-subtle); -webkit-font-smoothing: antialiased; }
     button, input, select, textarea { font: inherit; color: inherit; }
@@ -193,17 +262,6 @@ function pageHtml() {
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); font-size: 13px; font-weight: 500; color: var(--text); box-shadow: var(--shadow-sm); transition: all .15s; user-select: none; }
     .btn:hover:not(:disabled) { background: var(--khc-neutral-100); border-color: var(--border-strong); }
     .btn:active:not(:disabled) { transform: scale(0.98); }
-    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
-    .btn-secondary { background: #fff; color: var(--text-secondary); border-color: var(--border); }
-    .btn-secondary:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); color: var(--text); }
-    .btn-danger { color: var(--error); border-color: var(--error-border); background: var(--error-soft); }
-    .btn-danger:hover:not(:disabled) { background: var(--error); color: #fff; border-color: var(--error); }
-    .btn-ghost { white-space: nowrap; border-color: transparent; background: transparent; box-shadow: none; padding: 4px 8px; color: var(--text-secondary); }
-    .btn-ghost:hover:not(:disabled) { background: var(--khc-neutral-100); color: var(--text); }
-    .btn-sm { padding: 4px 10px; font-size: 12px; height: 28px; }
-    .btn-xs { padding: 2px 7px; font-size: 11px; height: 22px; line-height: 1; border-radius: var(--radius-sm); }
-    .btn-icon { width: 32px; height: 32px; padding: 0; font-size: 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: #fff; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
     .khc-icon { display: inline-block; vertical-align: -0.15em; stroke: currentColor; flex-shrink: 0; }
 
@@ -304,17 +362,12 @@ function pageHtml() {
 
     /* Settings grid & grouped cards */
     .settings-group { margin-bottom: 24px; }
-    .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 20px; }
     .setting-item { display: flex; flex-direction: column; gap: 4px; }
     .setting-item .hint { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
     .toggle-card { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); }
     .toggle-card-info h4 { font-size: 13px; font-weight: 600; color: var(--text); }
     .toggle-card-info p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-    /* Code block */
-    .code-block { background: var(--khc-neutral-900); color: #E2E8F0; border-radius: var(--radius-md); padding: 16px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; overflow-x: auto; position: relative; border: 1px solid #1e293b; }
-    .code-block pre { white-space: pre-wrap; word-break: break-all; margin: 0; }
-    .copy-btn { position: absolute; top: 10px; right: 10px; padding: 3px 8px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: var(--radius-sm); color: #fff; font-size: 11px; font-weight: 500; cursor: pointer; transition: all .15s; }
     /* Modal */
     body.modal-open { overflow: hidden !important; }
     .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; overscroll-behavior: contain; }
@@ -341,8 +394,6 @@ function pageHtml() {
     .subtabs button { padding: 8px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
     .subtabs button:hover { color: var(--text); }
     .subtabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
-    .model-subtab { display: none; }
-    .model-subtab.active { display: block; }
 
     /* Alphabet Nav Rail & Group Dividers */
     .alphabet-nav-rail {
@@ -497,6 +548,9 @@ function pageHtml() {
       gap: 12px;
       padding: 6px 0;
     }
+    .gateway-row--border-bottom { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .gateway-row--pad-vertical  { border-bottom: 1px solid var(--border); padding: 10px 0; }
+    .gateway-row--pad-top-start { padding-top: 10px; align-items: flex-start; }
     .gateway-label {
       font-size: 12px;
       font-weight: 600;
@@ -504,6 +558,7 @@ function pageHtml() {
       width: 120px;
       flex-shrink: 0;
     }
+    .gateway-label--aligned { padding-top: 2px; }
     .gateway-val {
       font-family: var(--font-mono, monospace);
       font-size: 12px;
@@ -528,11 +583,11 @@ function pageHtml() {
     }
 
     /* Compact Settings Styles */
-    .form-control-compact {
-      height: 32px !important;
-      padding: 4px 10px !important;
-      font-size: 13px !important;
-      line-height: 1.4 !important;
+    .form-control.form-control-compact {
+      height: 32px;
+      padding: 4px 10px;
+      font-size: 13px;
+      line-height: 1.4;
     }
     .settings-card {
       padding: 18px 20px;
@@ -653,11 +708,11 @@ function pageHtml() {
       color: var(--text);
       outline: none;
     }
-    .settings-row-ctrl input[type="number"] {
-      width: 80px !important;
+    .settings-row .settings-row-ctrl input[type="number"] {
+      width: 80px;
       height: 32px;
       text-align: right;
-      padding: 4px 8px !important;
+      padding: 4px 8px;
       font-family: var(--font-mono);
       font-size: 13px;
       border: 1px solid var(--border-strong, #CBD5E1);
@@ -700,10 +755,10 @@ function pageHtml() {
         text-overflow: clip;
       }
       .settings-row-ctrl {
-        flex: 1 1 100% !important;
+        flex: 1 1 100%;
         justify-content: flex-start;
         flex-wrap: wrap;
-        max-width: none !important;
+        max-width: none;
       }
       .settings-row-ctrl select,
       .settings-row-ctrl input[type="text"],
@@ -726,41 +781,9 @@ function pageHtml() {
       }
       .provider-actions {
         justify-content: flex-start;
-        margin-left: 0 !important;
+        margin-left: 0;
       }
     }
-
-    /* Fixed Dark Code Block Theme */
-    .code-block {
-      background: #0f172a !important;
-      color: #E2E8F0 !important;
-      border-radius: var(--radius-md, 8px);
-      padding: 14px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      line-height: 1.6;
-      overflow-x: auto;
-      position: relative;
-      border: 1px solid #1e293b !important;
-    }
-    .code-block pre {
-      background: #0f172a !important;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin: 0;
-      color: #E2E8F0 !important;
-      font-family: var(--font-mono);
-    }
-    .code-block .btn {
-      background: rgba(255, 255, 255, 0.15) !important;
-      color: #ffffff !important;
-      border: 1px solid rgba(255, 255, 255, 0.25) !important;
-    }
-    .code-block .btn:hover {
-      background: rgba(255, 255, 255, 0.25) !important;
-    }
-
-
 
     /* §4 Console v2 component layer (ui.js) */
     .btn--primary { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
@@ -771,7 +794,10 @@ function pageHtml() {
     .btn--ghost:hover:not(:disabled) { background: var(--c-bg); color: var(--c-text); }
     .btn--danger { background: var(--c-danger-soft); color: var(--c-danger); border-color: var(--c-danger-soft); }
     .btn--danger:hover:not(:disabled) { background: var(--c-danger); color: #fff; }
+    .btn--warn { background: var(--c-warning-soft); color: var(--c-warning); border-color: var(--c-warning-border); }
+    .btn--warn:hover:not(:disabled) { background: var(--c-warning); color: #fff; }
     .btn--sm { padding: 4px 10px; font-size: var(--fs-xs); height: 28px; }
+    .btn--xs { padding: 2px 7px; font-size: 11px; height: 22px; line-height: 1; border-radius: var(--r-sm); }
     .btn--icon { padding: 0; width: 28px; height: 28px; justify-content: center; }
     .badge--neutral { background: var(--c-bg); color: var(--c-text-subtle); }
     .badge--primary { background: var(--c-primary-soft); color: var(--c-primary); }
@@ -811,6 +837,10 @@ function pageHtml() {
     .empty__title { font-size: var(--fs-md); color: var(--c-text-muted); }
     .empty__desc { font-size: var(--fs-xs); }
 
+    /* Gateway hint / runtime tip variants */
+    .hint-box--routing-tip { color: var(--text); background: var(--bg-subtle); border: 1px dashed var(--primary); padding: 6px 10px; font-size: 11px; }
+    .hint-box--preview { line-height: 1.7; }
+
 
     /* §5 P1 shell / shared visual overrides */
     body { background: var(--c-bg); color: var(--c-text); }
@@ -833,8 +863,8 @@ function pageHtml() {
     .form-control { border-radius: var(--r-sm); border-color: var(--c-border); background: var(--c-surface); }
     .form-control:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); outline: none; }
     .btn { border-radius: var(--r-sm); font-weight: 600; letter-spacing: -0.01em; }
-    .btn-primary, .btn--primary { box-shadow: 0 1px 2px rgba(37,99,235,.22); }
-    .btn-sm, .btn--sm { border-radius: var(--r-sm); }
+    .btn--primary { box-shadow: 0 1px 2px rgba(22,100,255,.28); }
+    .btn--sm { border-radius: var(--r-sm); }
     .badge { border-radius: var(--r-pill); font-weight: 600; }
     .key-chip, .key-capsule { border-radius: var(--r-pill); background: var(--c-surface-muted); border-color: var(--c-border); }
     .modal-box { border-radius: var(--r-lg); border-color: var(--c-border); box-shadow: var(--sh-modal); }
@@ -888,14 +918,14 @@ function pageHtml() {
     .model-card .card-head { padding: 13px 20px; }
     .model-card .card-head h3, .model-card .card-head .section-title { font-size: 15px; }
     .model-card .model-id > span:first-child { font-size: 14px; }
-    .model-card .btn-sm, .model-card .btn--sm { height: 30px; padding: 4px 10px; font-size: 12.5px; }
+    .model-card .btn--sm { height: 30px; padding: 4px 10px; font-size: 12.5px; }
     .model-card .key-chip { padding: 4px 10px; font-size: 12.5px; }
     .model-card .badge { font-size: 11.5px; }
     .model-card .table-wrap { border-top: 1px solid var(--c-border); }
 
     select.form-control, select.form-control-compact {
       cursor: pointer;
-      padding-right: 42px !important;
+      padding-right: 42px;
       min-height: 38px;
       appearance: none;
       -webkit-appearance: none;
@@ -910,7 +940,7 @@ function pageHtml() {
     select.form-control:hover, select.form-control-compact:hover { border-color: var(--c-primary); }
     select.form-control:focus, select.form-control-compact:focus { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
     .settings-row-ctrl select { min-height: 38px; }
-    select.form-control-compact { height: 38px !important; background-color: var(--c-surface-muted); }
+    select.form-control-compact { height: 38px; background-color: var(--c-surface-muted); }
 
     /* Settings: card separation + calmer action rows */
     .settings-card + .settings-card { margin-top: 20px; }
@@ -956,7 +986,7 @@ function pageHtml() {
   </form>
 </div>
 
-<input type="file" id="configFileImportInput" accept=".json,application/json" style="display:none;" onchange="handleImportFile(event)">
+<input type="file" id="configFileImportInput" accept=".json,application/json" onchange="handleImportFile(event)">
 
 <!-- App -->
 <div id="app" class="app">
@@ -991,18 +1021,18 @@ function pageHtml() {
           <div class="section-title">接入网关与可用模型</div>
         </div>
         <div class="gateway-card">
-          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding-bottom:10px;">
+          <div class="gateway-row gateway-row--border-bottom">
             <span class="gateway-label">Base URL (网关地址)</span>
             <span class="gateway-val mono" id="dbBaseUrl">—</span>
-            <button class="btn btn-secondary btn-xs" onclick="copyDbBaseUrl()" title="复制 Base URL" style="margin-left:auto;">复制 URL</button>
+            <button class="btn btn--secondary btn--xs ml-auto" onclick="copyDbBaseUrl()" title="复制 Base URL">复制 URL</button>
           </div>
-          <div class="gateway-row" style="border-bottom:1px solid var(--border);padding:10px 0;">
+          <div class="gateway-row gateway-row--pad-vertical">
             <span class="gateway-label">客户端凭据 (Key)</span>
             <span class="gateway-val mono" id="gwClientKeyVal">—</span>
-            <button class="btn btn-secondary btn-xs" onclick="copyDbClientKey()" title="复制 Client Key" style="margin-left:auto;">复制 Key</button>
+            <button class="btn btn--secondary btn--xs ml-auto" onclick="copyDbClientKey()" title="复制 Client Key">复制 Key</button>
           </div>
-          <div class="gateway-row" style="padding-top:10px;align-items:flex-start;">
-            <span class="gateway-label" style="padding-top:2px;">可用模型</span>
+          <div class="gateway-row gateway-row--pad-top-start">
+            <span class="gateway-label gateway-label--aligned">可用模型</span>
             <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
           </div>
         </div>
@@ -1032,13 +1062,13 @@ function pageHtml() {
         <div class="section-head">
           <div style="display:flex;align-items:center;gap:14px;">
             <div class="section-title">最近错误日志</div>
-            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;">
-              <button class="btn btn-sm btn-ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
-              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
-              <button class="btn btn-sm btn-ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
+            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;" hidden>
+              <button class="btn btn--sm btn--ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
+              <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
+              <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
             </div>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="clearErrorLogs()">清空错误日志</button>
+          <button class="btn btn--danger btn--sm" onclick="clearErrorLogs()">清空错误日志</button>
         </div>
         <div class="card table-wrap">
           <table>
@@ -1058,7 +1088,7 @@ function pageHtml() {
       <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
         <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
         <!-- Alphabet Nav Rail -->
-        <div id="alphabetNavRail" class="alphabet-nav-rail" style="display:none;">
+        <div id="alphabetNavRail" hidden class="alphabet-nav-rail">
           <div class="alpha-rail-inner" id="alphaRailInner"></div>
         </div>
       </div>
@@ -1109,7 +1139,7 @@ function pageHtml() {
               </div>
               <div class="settings-row-ctrl">
                 <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-..." style="flex:1;">
-                <button class="btn btn-secondary btn-sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
+                <button class="btn btn--secondary btn--sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
               </div>
             </div>
 
@@ -1166,7 +1196,7 @@ function pageHtml() {
               <div class="settings-row-label">
                 <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
                 <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
-                <div id="manual-routing-tip" class="hint-box mt-1" hidden style="color:var(--text);background:var(--bg-subtle);border:1px dashed var(--primary);padding:6px 10px;font-size:11px;">
+                <div id="manual-routing-tip" class="hint-box hint-box--routing-tip mt-1" hidden>
                   <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
@@ -1343,7 +1373,7 @@ function pageHtml() {
               </div>
               <div class="settings-row-ctrl" style="position:relative;">
                 <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:32px;">
-                <button type="button" class="btn-ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
+                <button type="button" class="btn--ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
                   <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
@@ -1356,7 +1386,7 @@ function pageHtml() {
               </div>
               <div class="settings-row-ctrl">
                 <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
-                <button type="button" class="btn btn-primary btn-sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
+                <button type="button" class="btn btn--primary btn--sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
               </div>
             </div>
 
@@ -1366,8 +1396,8 @@ function pageHtml() {
                 <span class="settings-row-hint" title="测试与中枢的连通性，或增量同步供应商规则（不覆盖本地 Key）">先测试连通性，再按需增量同步规则；不会修改本地 Key。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
+                <button type="button" class="btn btn--secondary btn--sm" id="btnTestVault" onclick="testVaultConnection()">测试中枢连通性</button>
+                <button type="button" class="btn btn--secondary btn--sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
             </div>
             <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
@@ -1384,7 +1414,7 @@ function pageHtml() {
                 <span class="settings-row-hint" title="检查官方发行版本；发现新版本后在此处一键在线平滑升级">检查是否有新版本；确认后再升级，不会自动改配置。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
+                <button class="btn btn--secondary btn--sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
               </div>
             </div>
             <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
@@ -1396,8 +1426,8 @@ function pageHtml() {
                 <span class="settings-row-hint" title="解除所有 Key 冷却，或平滑重启网关守护进程">解除所有冷却、平滑重启；升级与重启分开操作。</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" onclick="reloadRuntimeState()">解除所有冷却</button>
-                <button class="btn btn-warn btn-sm" onclick="restartService()">平滑重启服务</button>
+                <button class="btn btn--secondary btn--sm" onclick="reloadRuntimeState()">解除所有冷却</button>
+                <button class="btn btn--warn btn--sm" onclick="restartService()">平滑重启服务</button>
               </div>
             </div>
           </div>
@@ -1413,8 +1443,8 @@ function pageHtml() {
                 <span class="settings-row-hint">导出带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</span>
               </div>
               <div class="settings-row-ctrl">
-                <button class="btn btn-secondary btn-sm" onclick="exportConfig()">导出配置备份</button>
-                <button class="btn btn-primary btn-sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
+                <button class="btn btn--secondary btn--sm" onclick="exportConfig()">导出配置备份</button>
+                <button class="btn btn--primary btn--sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
                 <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
               </div>
             </div>
@@ -1427,8 +1457,8 @@ function pageHtml() {
             </summary>
             <div style="margin-top:12px;">
               <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-secondary btn-xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
-                <button class="btn btn-primary btn-xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
+                <button class="btn btn--secondary btn--xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
+                <button class="btn btn--primary btn--xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
               </div>
               <textarea id="rawJsonText" class="form-control mono" spellcheck="false" style="min-height:360px;font-family:var(--font-mono);font-size:12px;width:100%;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;border:1px solid #1e293b;"></textarea>
               <div id="rawJsonErr" style="display:none;margin-top:8px;color:var(--error);font-size:12px;"></div>
@@ -1438,8 +1468,8 @@ function pageHtml() {
 
         <!-- Settings Bottom Sticky Action Bar -->
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
-          <button class="btn btn-secondary btn-sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn-primary btn-sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
+          <button class="btn btn--secondary btn--sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
+          <button class="btn btn--primary btn--sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
             <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span>保存设置并生效</span>
           </button>
@@ -1503,8 +1533,8 @@ function pageHtml() {
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('providerModal')">取消</button>
-      <button class="btn btn-primary" id="p_saveBtn" onclick="saveProvider()">保存并生效</button>
+      <button class="btn btn--secondary" onclick="closeModal('providerModal')">取消</button>
+      <button class="btn btn--primary" id="p_saveBtn" onclick="saveProvider()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1523,7 +1553,7 @@ function pageHtml() {
       <div id="k_vault_section" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">从中枢添加</div>
         <div id="k_vault_list" style="font-size:12px;"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn-primary btn-sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn--primary btn--sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
         <div class="text-secondary" style="font-size:11px;margin-top:6px;">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
       </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
@@ -1546,17 +1576,17 @@ function pageHtml() {
       </div>
       <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
         <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
-        <button type="button" class="btn btn-primary btn-sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
+        <button type="button" class="btn btn--primary btn--sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
         <div id="k_oauth_hint" class="hint mt-1" style="font-size:11px;margin-top:6px;"></div>
       </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
-      <div id="k_spinner" class="hint mt-2" style="display:none;"><span class="spinner"></span> 正在校验各协议连通性...</div>
+      <div id="k_spinner" class="hint mt-2"><span class="spinner"></span> 正在校验各协议连通性...</div>
       <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('keyModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveKey()">保存并生效</button>
+      <button class="btn btn--secondary" onclick="closeModal('keyModal')">取消</button>
+      <button class="btn btn--primary" onclick="saveKey()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1594,7 +1624,7 @@ function pageHtml() {
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn-secondary btn-sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" style="display:inline-flex;align-items:center;gap:4px;">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -1615,7 +1645,7 @@ function pageHtml() {
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('agentModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAgentModel()">保存并生效</button>
+      <button class="btn btn--primary" onclick="saveAgentModel()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1655,7 +1685,7 @@ function pageHtml() {
       <div class="form-group mb-3">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn-secondary btn-sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -1672,7 +1702,7 @@ function pageHtml() {
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('candidateModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveCandidate()">保存并生效</button>
+      <button class="btn btn--primary" onclick="saveCandidate()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -1695,7 +1725,7 @@ function pageHtml() {
     </div>
     <div class="modal-foot" style="display:flex;justify-content:space-between;align-items:center;">
       <span class="text-secondary text-sm" id="probedCountHint">共 0 个模型</span>
-      <button class="btn btn-secondary btn-sm" onclick="closeModal('probedListModal')">关闭</button>
+      <button class="btn btn--secondary btn--sm" onclick="closeModal('probedListModal')">关闭</button>
     </div>
   </div>
 </div>
@@ -1724,7 +1754,7 @@ function pageHtml() {
         </div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn-primary" onclick="confirmImport()">确认导入</button></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('importModal')">取消</button><button class="btn btn--primary" onclick="confirmImport()">确认导入</button></div>
   </div>
 </div>
 
