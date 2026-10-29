@@ -968,6 +968,136 @@ function pageHtml() {
     .oauth-device-step { margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--c-text-muted); }
     .oauth-device-status { margin-top: 14px; font-size: 12px; color: var(--c-text-subtle); }
 
+/* ════════════════════════════════════════════════════════════════
+ * Inline-style migration classes (consolidate old style="..." attrs)
+ * 所有旧 HTML 里的内联 style 迁移目标。新代码应该直接用这些类。
+ * ════════════════════════════════════════════════════════════════ */
+
+/* Modal body sizing variants (替代 modal-box 上的 max-width/max-height 内联) */
+.modal-box--560  { max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.modal-box--540  { max-width: 540px; max-height: 85vh; overflow-y: auto; }
+.modal-box--520  { max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.modal-box--660  { max-width: 660px; max-height: 92vh; overflow-y: auto; }
+.modal-box--probe{ max-width: 540px; max-height: 85vh; display: flex; flex-direction: column; }
+
+/* 3-step Wizard row — ①②③ 每步统一用这个包裹 */
+.wizard-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.wizard-row--last { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.wizard-row__title { font-weight: 700; margin-bottom: 0; }
+.wizard-row__sub   { font-weight: normal; }
+.wizard-proto-info { margin: 8px 0 12px; min-height: 24px; display: flex; align-items: center; gap: 6px; }
+.wizard-capsule-row { padding: 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); min-height: 46px; }
+.wizard-box { background: var(--bg); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.wizard-box__label { font-size: 12px; margin-bottom: 4px; }
+
+/* Runtime control boxes — Vault / Vertex / OAuth / KHCS diag 统一形态 */
+.runtime-box { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.runtime-box--vault    { display: none; margin-bottom: 12px; }
+.runtime-box--vertex   { display: none; margin-top: 12px; margin-bottom: 12px; padding: 12px 14px; }
+.runtime-box--oauth    { display: none; }
+.runtime-box--diag     { display: none; margin-top: 10px; }
+.runtime-box__title    { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.runtime-box__title--gap { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.runtime-box__desc     { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+.runtime-box__hint     { font-size: 11px; margin-top: 6px; }
+
+/* Row hint box — 用于 manual timeout/cooldown */
+.row-hint-box { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+
+/* grid-column full-span hidden sections */
+.grid-span-hidden { grid-column: 1 / -1; display: none; }
+.grid-span-hidden--diag { grid-column: 1 / -1; display: none; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-subtle); font-size: 12px; line-height: 1.6; }
+
+/* raw JSON details block */
+.rawjson-details { border: 1px dashed var(--border); background: var(--bg-subtle); padding: 10px 14px; }
+.rawjson-summary { font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.rawjson-summary__main { display: inline-flex; align-items: center; gap: 6px; }
+.rawjson-summary__sub  { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.rawjson-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+.rawjson-editor { min-height: 360px; font-family: var(--font-mono); font-size: 12px; width: 100%; background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 12px; border: 1px solid #1e293b; }
+.rawjson-err { display: none; margin-top: 8px; color: var(--error); font-size: 12px; }
+.rawjson-wrap { margin-top: 12px; }
+
+/* Probed Model modal */
+.probed-modal__head { display: flex; align-items: center; gap: 8px; }
+.probed-modal__title { margin: 0; font-size: 15px; }
+.probed-modal__panel-head { padding: 12px 16px 8px; border-bottom: 1px solid var(--border); background: var(--bg-subtle); }
+.probed-modal__body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+.probed-modal__list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Import confirm modal */
+.import-preview { line-height: 1.7; }
+.import-modes { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.import-mode__label { font-weight: 600; color: var(--text); }
+
+/* Dashboard / overview layout */
+.list-models-wrap { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.agent-strip { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; min-height: 74px; }
+
+/* Providers box / agents panel */
+.providers-layout { position: relative; display: flex; gap: 14px; align-items: flex-start; }
+.providers-box { flex: 1; min-width: 0; padding: 12px 16px; }
+.agents-panel { display: contents; }
+
+/* Log filter bar override */
+.log-filter-bar { border-bottom: none; margin-bottom: 0; gap: 4px; }
+
+/* Settings form helpers */
+.settings-key-row { display: flex; align-items: center; gap: 14px; }
+.settings-vault-row { position: relative; }
+.settings-vault-token-input { padding-right: 32px; }
+.settings-vault-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 2px; color: var(--text-secondary); }
+.settings-vault-badge { font-size: 10px; padding: 2px 6px; display: none; }
+.settings-schedule-checkbox { font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.settings-schedule-checkbox__input { width: 16px; height: 16px; cursor: pointer; }
+.settings-schedule-checkbox__label { font-weight: 600; }
+.settings-readonly-input { width: 100%; background: var(--bg-subtle); color: var(--text-secondary); cursor: not-allowed; }
+
+/* OAuth hint inline */
+.oauth-provider-hint { margin-top: 8px; font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+.oauth-desc { display: none; margin-top: 6px; font-size: 12px; color: var(--text-secondary); padding: 8px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); line-height: 1.5; }
+
+/* Provider / Key modal hints */
+.form-group--mt-14 { margin-top: 14px; }
+.form-label--fs-12  { font-size: 12px; font-weight: 600; }
+.form-label--error  { color: var(--error); font-weight: bold; }
+.form-label--sub    { font-size: 11px; }
+.form-hint--fs-11   { font-size: 11px; margin-top: 6px; }
+.form-hint--inline  { font-size: 11px; margin-top: 6px; line-height: 1.4; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.form-hint--proto   { font-size: 11px; margin-top: 6px; min-height: 14px; }
+.form-hint--pb-6    { font-size: 12px; padding: 6px 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* Vertex inline group helpers */
+.vertex-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.vertex-title__inner { display: inline-flex; align-items: center; gap: 6px; }
+.vertex-url { word-break: break-all; }
+
+/* End-of-form action bars */
+.form-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 20px; padding: 16px 0; border-top: 1px solid var(--border); }
+.form-actions__probe { display: inline-flex; align-items: center; gap: 4px; }
+.form-actions__save  { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Settings misc */
+.manual-routing-tip { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+.settings-row--grid-full { grid-column: 1 / -1; }
+.probe-btn-icon { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Misc tiny helpers */
+.span-nowrap { white-space: nowrap; }
+.span-fs-600 { font-weight: 600; }
+.span-warn-mr-4 { margin-right: 4px; }
+.span-inline-flex-6 { display: inline-flex; align-items: center; gap: 6px; }
+.span-inline-flex-4 { display: inline-flex; align-items: center; gap: 4px; }
+.mt-12 { margin-top: 12px; }
+.mt-14 { margin-top: 14px; }
+.mt-8  { margin-top: 8px; }
+
+/* Lightweight layout utilities */
+.flex { display: flex; }
+.flex-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+
+
 </style>
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
@@ -1033,7 +1163,7 @@ function pageHtml() {
           </div>
           <div class="gateway-row gateway-row--pad-top-start">
             <span class="gateway-label gateway-label--aligned">可用模型</span>
-            <div id="listAvailableModels" style="display:flex;flex-wrap:wrap;gap:8px;flex:1;"></div>
+            <div id="listAvailableModels" class="list-models-wrap"></div>
           </div>
         </div>
       </div>
@@ -1045,7 +1175,7 @@ function pageHtml() {
           <span class="badge badge-success" id="agentStatsMode">真实路由</span>
         </div>
         <div class="stats-grid" id="agentStatsGrid"></div>
-        <div id="agentTopModelsStrip" class="stat" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;min-height:74px;"></div>
+        <div id="agentTopModelsStrip" class="stat agent-strip"></div>
       </div>
 
       <!-- Section 2: KB Metrics Overview -->
@@ -1060,9 +1190,9 @@ function pageHtml() {
       <!-- Section 3: Categorized Error Logs -->
       <div class="section">
         <div class="section-head">
-          <div style="display:flex;align-items:center;gap:14px;">
+          <div class="settings-key-row">
             <div class="section-title">最近错误日志</div>
-            <div id="logFilterBar" class="subtabs" style="border-bottom:none;margin-bottom:0;gap:4px;" hidden>
+            <div id="logFilterBar" class="subtabs log-filter-bar" hidden>
               <button class="btn btn--sm btn--ghost filter-pill active" onclick="filterLogs('all')" id="lp-all">全部</button>
               <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('agent')" id="lp-agent">仅 Agent</button>
               <button class="btn btn--sm btn--ghost filter-pill" onclick="filterLogs('kb')" id="lp-kb">仅 KB</button>
@@ -1085,8 +1215,8 @@ function pageHtml() {
         <div><h1 class="page-header__title section-title">供应商</h1><p class="page-header__desc">本地独立加密存储各上游 Base URL 与 API 密钥 · 支持从 EdgeOne 中枢拉取与自主增删改查</p></div>
         <div class="page-header__actions"><button class="btn btn--primary btn--sm" onclick="openProviderModal()"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 新增供应商</button></div>
       </div>
-      <div style="position:relative; display:flex; gap:14px; align-items:flex-start;">
-        <div class="card" id="providersBox" style="flex:1; min-width:0; padding:12px 16px;"></div>
+      <div class="providers-layout">
+        <div class="card providers-box" id="providersBox"></div>
         <!-- Alphabet Nav Rail -->
         <div id="alphabetNavRail" hidden class="alphabet-nav-rail">
           <div class="alpha-rail-inner" id="alphaRailInner"></div>
@@ -1096,7 +1226,7 @@ function pageHtml() {
 
     <!-- Panel: Models -->
     <div id="panel-models" class="panel">
-      <div id="panel-agents" style="display:contents;">
+      <div id="panel-agents" class="agents-panel">
       <!-- Sub-tab: Agent Models -->
       <div id="mtab-agents" class="model-subtab panel-agents active">
         <div class="page-header">
@@ -1138,8 +1268,8 @@ function pageHtml() {
                 <span class="settings-row-hint" title="Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥">Cursor / Cline / Dify 调用 /v1/* 接口的 Authorization: Bearer 密钥</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-..." style="flex:1;">
-                <button class="btn btn--secondary btn--sm" onclick="generateRandomKey()" style="white-space:nowrap;">随机生成</button>
+                <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-...">
+                <button class="btn btn--secondary btn--sm" onclick="generateRandomKey()" class="span-nowrap">随机生成</button>
               </div>
             </div>
 
@@ -1150,7 +1280,7 @@ function pageHtml() {
                 <span class="settings-row-hint" title="EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效">EdgeOne 运行时严格从控制台环境变量注入，此处保持只读以防覆盖失效</span>
               </div>
               <div class="settings-row-ctrl">
-                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled style="width:100%;background:var(--bg-subtle);color:var(--text-secondary);cursor:not-allowed;">
+                <input type="text" id="set_proxy_api_key" class="form-control form-control-compact mono settings-readonly-input" placeholder="由 EdgeOne 控制台环境变量注入 (env.PROXY_API_KEY 只读)" disabled>
               </div>
             </div>
 
@@ -1175,9 +1305,9 @@ function pageHtml() {
                 <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；切回 Agent 最多等 1 小时，切入 KB 最多等 15 分钟">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段；切回 Agent 最多等 1 小时</span>
               </div>
               <div class="settings-row-ctrl mode-schedule-ctrl">
-                <label class="checkbox" style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-                  <input type="checkbox" id="s_modeScheduleEnabled" style="width:16px;height:16px;cursor:pointer;">
-                  <span style="font-weight:600;">启用</span>
+                <label class="checkbox" class="settings-schedule-checkbox">
+                  <input type="checkbox" id="s_modeScheduleEnabled" class="settings-schedule-checkbox__input">
+                  <span >启用</span>
                 </label>
                 <span>KB</span>
                 <input type="time" id="s_modeScheduleKbStart" class="form-control form-control-compact" value="22:00" step="60">
@@ -1197,7 +1327,7 @@ function pageHtml() {
                 <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
                 <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
                 <div id="manual-routing-tip" class="hint-box hint-box--routing-tip mt-1" hidden>
-                  <span class="badge badge-warning" style="margin-right:4px;">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
+                  <span class="badge badge-warning" >纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
               <div class="settings-row-ctrl">
@@ -1288,7 +1418,7 @@ function pageHtml() {
               </div>
             </div>
           </div>
-          <div id="manual-timeout-tip" hidden style="padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+          <div id="manual-timeout-tip" class="row-hint-box" hidden>
             纯手动直通：固定使用当前 Key，整单 300s 超时，无其他参数。
           </div>
         </div>
@@ -1348,7 +1478,7 @@ function pageHtml() {
               </div>
             </div>
           </div>
-          <div id="manual-cooldown-tip" hidden style="padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+          <div id="manual-cooldown-tip" class="row-hint-box" hidden>
             纯手动直通模式：所有请求 100% 直连目标上游，不进行失败重试、熔断与冷却避让。
           </div>
         </div>
@@ -1371,9 +1501,9 @@ function pageHtml() {
                 <span class="settings-row-title" title="中枢访问 Token">中枢访问 Token</span>
                 <span class="settings-row-hint" title="用于同步与拉取凭据的安全金钥">用于同步与拉取凭据的安全金钥</span>
               </div>
-              <div class="settings-row-ctrl" style="position:relative;">
-                <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono" placeholder="输入中枢访问 Token" autocomplete="new-password" style="padding-right:32px;">
-                <button type="button" class="btn--ghost" onclick="toggleVaultTokenVisibility()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-secondary);" title="显示/隐藏 Token">
+              <div class="settings-row-ctrl settings-vault-row">
+                <input type="password" id="cfg_vault_token" class="form-control form-control-compact mono settings-vault-token-input" placeholder="输入中枢访问 Token" autocomplete="new-password">
+                <button type="button" class="btn--ghost settings-vault-toggle" onclick="toggleVaultTokenVisibility()" title="显示/隐藏 Token">
                   <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
@@ -1385,7 +1515,7 @@ function pageHtml() {
                 <span class="settings-row-hint" title="单独保存，不参与其它设置的整包版本锁">地址或 Token 改动后先保存；不会影响其它设置。</span>
               </div>
               <div class="settings-row-ctrl">
-                <span id="vaultTokenStatusBadge" class="badge badge-success" style="font-size:10px;padding:2px 6px;display:none;">已配置凭证</span>
+                <span id="vaultTokenStatusBadge" class="badge badge-success settings-vault-badge">已配置凭证</span>
                 <button type="button" class="btn btn--primary btn--sm" id="btnSaveVaultConfig" onclick="saveVaultConfig()" title="单独保存中枢地址/Token（不参与整包配置保存，避免多窗口版本冲突）">保存中枢配置</button>
               </div>
             </div>
@@ -1400,7 +1530,7 @@ function pageHtml() {
                 <button type="button" class="btn btn--secondary btn--sm" id="btnSyncVaultFromSettings" onclick="syncVaultFromSettings()">增量同步中枢规则</button>
               </div>
             </div>
-            <div id="vault_diag_box" style="grid-column:1 / -1;display:none;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);font-size:12px;line-height:1.6;"></div>
+            <div id="vault_diag_box" class="grid-span-hidden--diag"></div>
           </div>
         </div>
 
@@ -1417,8 +1547,8 @@ function pageHtml() {
                 <button class="btn btn--secondary btn--sm" id="btnCheckAppUpdate" onclick="checkSystemUpdate(true)">检查程序更新</button>
               </div>
             </div>
-            <div id="appUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
-            <div id="presetsUpdateInfoBox" style="grid-column:1 / -1;display:none;"></div>
+            <div id="appUpdateInfoBox" class="grid-span-hidden"></div>
+            <div id="presetsUpdateInfoBox" class="grid-span-hidden"></div>
 
             <div class="settings-row settings-row-full">
               <div class="settings-row-label">
@@ -1437,7 +1567,7 @@ function pageHtml() {
         <div class="card settings-card mb-3">
           <div class="settings-group-title">7. 底层配置管理与高级编辑 (Data & Raw JSON Config)</div>
           <div class="settings-grid mb-3">
-            <div class="settings-row" style="grid-column: 1 / -1;">
+            <div class="settings-row settings-row--grid-full">
               <div class="settings-row-label">
                 <span class="settings-row-title">系统配置导出与导入</span>
                 <span class="settings-row-hint">导出带有时间戳的加密 JSON 备份文件，或在不同环境间无缝迁移恢复</span>
@@ -1445,31 +1575,31 @@ function pageHtml() {
               <div class="settings-row-ctrl">
                 <button class="btn btn--secondary btn--sm" onclick="exportConfig()">导出配置备份</button>
                 <button class="btn btn--primary btn--sm" onclick="document.getElementById('importFile').click()">导入配置文件</button>
-                <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportFile(event)">
+                <input type="file" id="importFile" accept=".json" hidden onchange="handleImportFile(event)">
               </div>
             </div>
           </div>
 
-          <details id="rawJsonDetails" class="card card-pad mb-1" style="border:1px dashed var(--border);background:var(--bg-subtle);padding:10px 14px;" ontoggle="if(this.open && typeof renderRawJsonPanel === 'function') renderRawJsonPanel();">
-            <summary style="font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
-              <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
-              <span style="font-size:11px;font-weight:400;color:var(--text-secondary);">点击展开/收起</span>
+          <details id="rawJsonDetails" class="card card-pad mb-1 rawjson-details" ontoggle="if(this.open && typeof renderRawJsonPanel === 'function') renderRawJsonPanel();">
+            <summary class="rawjson-summary">
+              <span ><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
+              <span class="rawjson-summary__sub">点击展开/收起</span>
             </summary>
-            <div style="margin-top:12px;">
-              <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+            <div class="rawjson-wrap"
+              <div class="rawjson-actions">
                 <button class="btn btn--secondary btn--xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
                 <button class="btn btn--primary btn--xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
               </div>
-              <textarea id="rawJsonText" class="form-control mono" spellcheck="false" style="min-height:360px;font-family:var(--font-mono);font-size:12px;width:100%;background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;border:1px solid #1e293b;"></textarea>
-              <div id="rawJsonErr" style="display:none;margin-top:8px;color:var(--error);font-size:12px;"></div>
+              <textarea id="rawJsonText" class="form-control mono rawjson-editor" spellcheck="false"></textarea>
+              <div id="rawJsonErr" class="rawjson-err"></div>
             </div>
           </details>
         </div>
 
         <!-- Settings Bottom Sticky Action Bar -->
-        <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:20px;padding:16px 0;border-top:1px solid var(--border);">
+        <div class="form-actions">
           <button class="btn btn--secondary btn--sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn--primary btn--sm" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:6px;">
+          <button class="btn btn--primary btn--sm" onclick="saveSettings()" >
             <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span>保存设置并生效</span>
           </button>
@@ -1481,7 +1611,7 @@ function pageHtml() {
 
 <!-- Modals -->
 <div class="modal" id="providerModal">
-  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+  <div class="modal-box modal-box--560">
     <div class="modal-head">
       <h3 id="providerModalTitle">供应商</h3>
       <button class="modal-close" onclick="closeModal('providerModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -1492,14 +1622,14 @@ function pageHtml() {
         <select id="p_preset" class="form-control" onchange="onProviderPresetChange()">
           <option value="">-- 自定义供应商 (手动填写) --</option>
         </select>
-        <div id="p_desc" style="display:none;margin-top:6px;font-size:12px;color:var(--text-secondary);padding:8px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);line-height:1.5;"></div>
-        <div class="hint" style="margin-top:8px;font-size:11px;color:var(--text-secondary);line-height:1.55;">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div></div>
+        <div id="p_desc" class="oauth-desc"></div>
+        <div class="hint oauth-provider-hint">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div></div>
       </div>
       <div class="form-group">
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
         <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova" oninput="applyPresetForProviderName()">
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group form-group--mt-14">
         <label class="form-label">协议与端点（按需开启；模型继承所选协议）</label>
         <div class="proto-list">
           <div class="proto-row">
@@ -1524,12 +1654,12 @@ function pageHtml() {
             <span class="text-secondary text-xs">复用 OpenAI Base URL</span>
           </div>
         </div>
-        <div id="p_proto_hint" class="text-secondary" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
+        <div id="p_proto_hint" class="text-secondary" ></div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group form-group--mt-14">
         <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
         <input type="number" id="p_rpm" class="form-control" min="0" step="1" placeholder="留空或 0 = 不限制" onwheel="this.blur()">
-        <div class="text-secondary text-xs mt-1" style="font-size:11px;">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过，不再请求上游；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
+        <div class="text-secondary text-xs mt-1 form-hint--fs-11">免费 Key 有每分钟请求次数限制时填写（例如 2）。达到上限的 Key 会被暂时跳过，不再请求上游；所有 Key 都满时直接返回 429 + Retry-After。留空则不限制且完全零开销。</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -1540,7 +1670,7 @@ function pageHtml() {
 </div>
 
 <div class="modal" id="keyModal">
-  <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+  <div class="modal-box modal-box--520">
     <div class="modal-head">
       <h3 id="keyModalTitle">Key 凭证</h3>
       <button class="modal-close" onclick="closeModal('keyModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -1548,41 +1678,41 @@ function pageHtml() {
     <div class="modal-body">
       <input type="hidden" id="k_provider">
       <input type="hidden" id="k_oldLabel">
-      <div id="k_proto_hint" class="mb-2" style="font-size:12px;padding:6px 10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);"></div>
+      <div id="k_proto_hint" class="mb-2 form-hint--pb-6"></div>
       <!-- 从中枢添加 Key：仅「能从中枢拉取」的部署 (HOST.capabilities.vaultClient) 且供应商来自中枢时由 providers.js 显示 -->
-      <div id="k_vault_section" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">从中枢添加</div>
-        <div id="k_vault_list" style="font-size:12px;"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button type="button" class="btn btn--primary btn--sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
-        <div class="text-secondary" style="font-size:11px;margin-top:6px;">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
+      <div id="k_vault_section" class="runtime-box runtime-box--vault">
+        <div class="runtime-box__title">从中枢添加</div>
+        <div id="k_vault_list"></div>
+        <div class="mt-8 flex justify-end"><button type="button" class="btn btn--primary btn--sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
+        <div class="text-secondary runtime-box__hint"只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
       </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
-      <div id="k_vertex_section" style="display:none;margin-top:12px;margin-bottom:12px;padding:12px 14px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span style="display:inline-flex;align-items:center;gap:6px;"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
+      <div id="k_vertex_section" class="runtime-box runtime-box--vertex">
+        <div class="vertex-title">
+          <span ><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
-          <label class="form-label" style="font-size:12px;font-weight:600;">GCP 项目 ID (Project ID) <span style="color:var(--error);font-weight:bold;">*</span></label>
+          <label class="form-label form-label--fs-12">GCP 项目 ID (Project ID) <span class="form-label--error">*</span></label>
           <input type="text" id="k_vertex_project" class="form-control" placeholder="例如 my-gcp-project-123456" oninput="onKeyVertexParamChange()">
         </div>
         <div class="form-group mb-1">
-          <label class="form-label" style="font-size:12px;font-weight:600;">服务区域 (Location) <span class="text-secondary" style="font-size:11px;">(默认 global，或填 us-central1、asia-east1 等)</span></label>
+          <label class="form-label form-label--fs-12">服务区域 (Location) <span class="text-secondary form-label--sub">(默认 global，或填 us-central1、asia-east1 等)</span></label>
           <input type="text" id="k_vertex_location" class="form-control" placeholder="global" value="global" oninput="onKeyVertexParamChange()">
         </div>
-        <div class="text-secondary text-sm mt-1" style="font-size:11px;margin-top:6px;line-height:1.4;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="display:inline-flex;align-items:center;gap:4px;"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold" style="word-break:break-all;">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+        <div class="text-secondary text-sm mt-1 form-hint--inline">
+          <span ><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold vertex-url">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
-      <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" style="display:none;padding:10px 12px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);">
-        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
+      <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" class="runtime-box runtime-box--oauth">
+        <div class="runtime-box__desc">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
         <button type="button" class="btn btn--primary btn--sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
-        <div id="k_oauth_hint" class="hint mt-1" style="font-size:11px;margin-top:6px;"></div>
+        <div id="k_oauth_hint" class="hint mt-1 form-hint--fs-11"></div>
       </div>
       <div class="form-group"><label class="form-label">API Key 密钥值</label><input type="text" id="k_value" class="form-control" placeholder="sk-..."></div>
       <label class="checkbox"><input type="checkbox" id="k_skip"> <span>跳过连通性在线校验</span></label>
       <div id="k_spinner" class="hint mt-2"><span class="spinner"></span> 正在校验各协议连通性...</div>
-      <div id="k_diag_box" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-subtle);"></div>
+      <div id="k_diag_box" class="runtime-box runtime-box--diag"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn--secondary" onclick="closeModal('keyModal')">取消</button>
@@ -1592,7 +1722,7 @@ function pageHtml() {
 </div>
 
 <div class="modal" id="agentModal">
-  <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
+  <div class="modal-box modal-box--660">
     <div class="modal-head">
       <h3 id="agentModalTitle">Agent 模型配置</h3>
       <button class="modal-close" onclick="closeModal('agentModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -1603,28 +1733,28 @@ function pageHtml() {
 
       <!-- Step 1: 供应商下拉选择 -->
       <div class="form-group mb-3">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
+        <div class="wizard-row">
+          <label class="form-label wizard-row__title">① 选择提供商</label>
         </div>
         <select id="a_providerSelect" class="form-control" onchange="onAgentProviderSelectChange(this.value)">
           <optgroup label="本地已配置供应商" id="a_optgroup_local"></optgroup>
         </select>
-        <div id="a_model_proto_info" class="text-secondary text-sm" style="margin: 8px 0 12px 0; min-height: 24px; display: flex; align-items: center; gap: 6px;"></div>
+        <div id="a_model_proto_info" class="text-secondary text-sm wizard-proto-info"></div>
       </div>
 
       <!-- Step 2: Key 绑定选择 -->
       <div class="form-group mb-3" id="a_keyArea">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
+        <div class="wizard-row">
+          <label class="form-label wizard-row__title">② 绑定 Key <span class="text-secondary text-sm wizard-row__sub">(默认已勾选首位，可切换或多选)</span></label>
         </div>
-        <div id="a_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
+        <div id="a_keyList" class="capsule-row wizard-capsule-row"></div>
       </div>
 
       <!-- Step 3: 模型快捷标签与探测 -->
       <div class="form-group mb-3">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" style="display:inline-flex;align-items:center;gap:4px;">
+        <div class="wizard-row--last">
+          <label class="form-label wizard-row__title">③ 选择模型</label>
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" >
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -1632,13 +1762,13 @@ function pageHtml() {
       </div>
 
       <!-- 详细参数 (由标签或探测弹窗点选自动填充) -->
-      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+      <div class="wizard-box">
         <div class="form-group mb-2">
-          <label class="form-label" style="font-size:12px;margin-bottom:4px;">对外暴露模型名 (客户端调用的 model 参数)</label>
+          <label class="form-label wizard-box__label">对外暴露模型名 (客户端调用的 model 参数)</label>
           <input type="text" id="a_name" class="form-control" placeholder="点击探测弹窗选择或手动输入，例如 deepseek-v4-flash">
         </div>
         <div class="form-group mb-0">
-          <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (留空默认与暴露名相同)</label>
+          <label class="form-label wizard-box__label">上游实际模型 ID (留空默认与暴露名相同)</label>
           <input type="text" id="a_upstream" class="form-control" placeholder="例如 deepseek-ai/DeepSeek-V3">
         </div>
       </div>
@@ -1651,7 +1781,7 @@ function pageHtml() {
 </div>
 
 <div class="modal" id="candidateModal">
-  <div class="modal-box" style="max-width:660px;max-height:92vh;overflow-y:auto;">
+  <div class="modal-box modal-box--660">
     <div class="modal-head">
       <h3 id="candidateModalTitle">挂载候选节点</h3>
       <button class="modal-close" onclick="closeModal('candidateModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
@@ -1664,28 +1794,28 @@ function pageHtml() {
 
       <!-- Step 1: 供应商下拉选择 -->
       <div class="form-group mb-3">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="font-weight:700;margin-bottom:0;">① 选择提供商</label>
+        <div class="wizard-row">
+          <label class="form-label wizard-row__title">① 选择提供商</label>
         </div>
         <select id="c_providerSelect" class="form-control" onchange="onCandidateProviderSelectChange(this.value)">
           <optgroup label="本地已配置供应商" id="c_optgroup_local"></optgroup>
         </select>
-        <div id="c_model_proto_info" class="text-secondary text-sm" style="margin: 8px 0 12px 0; min-height: 24px; display: flex; align-items: center; gap: 6px;"></div>
+        <div id="c_model_proto_info" class="text-secondary text-sm wizard-proto-info"></div>
       </div>
 
       <!-- Step 2: Key 绑定 -->
       <div class="form-group mb-3" id="c_keyArea">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <label class="form-label" style="font-weight:700;margin-bottom:0;">② 绑定 Key <span class="text-secondary text-sm" style="font-weight:normal;">(默认已勾选首位，可切换或多选)</span></label>
+        <div class="wizard-row">
+          <label class="form-label wizard-row__title">② 绑定 Key <span class="text-secondary text-sm wizard-row__sub">(默认已勾选首位，可切换或多选)</span></label>
         </div>
-        <div id="c_keyList" class="capsule-row" style="padding:10px;background:var(--bg-subtle);border-radius:var(--radius-sm);border:1px solid var(--border);min-height:46px;"></div>
+        <div id="c_keyList" class="capsule-row wizard-capsule-row"></div>
       </div>
 
       <!-- Step 3: 模型选择与探测 -->
       <div class="form-group mb-3">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <label class="form-label" style="margin-bottom:0;font-weight:700;">③ 选择模型</label>
-          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" style="display:inline-flex;align-items:center;gap:4px;">
+        <div class="wizard-row--last">
+          <label class="form-label wizard-row__title">③ 选择模型</label>
+          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" >
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -1693,9 +1823,9 @@ function pageHtml() {
       </div>
 
       <!-- 上游实际模型 ID -->
-      <div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+      <div class="wizard-box">
         <div class="form-group mb-0">
-          <label class="form-label" style="font-size:12px;margin-bottom:4px;">上游实际模型 ID (例如 Qwen/Qwen2.5-72B-Instruct)</label>
+          <label class="form-label wizard-box__label">上游实际模型 ID (例如 Qwen/Qwen2.5-72B-Instruct)</label>
           <input type="text" id="c_model" class="form-control" placeholder="点击探测弹窗选择或手动输入实际模型 ID">
         </div>
       </div>
@@ -1709,21 +1839,21 @@ function pageHtml() {
 
 <!-- Modal: Probed Models Selection -->
 <div class="modal" id="probedListModal">
-  <div class="modal-box" style="max-width:540px;max-height:85vh;display:flex;flex-direction:column;">
+  <div class="modal-box modal-box--probe">
     <div class="modal-head">
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div class="probed-modal__head">
         <svg class="khc-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <h3 id="probedModalTitle" style="margin:0;font-size:15px;">选择上游可用模型</h3>
+        <h3 id="probedModalTitle" class="probed-modal__title">选择上游可用模型</h3>
       </div>
       <button class="modal-close" onclick="closeModal('probedListModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
-    <div style="padding:12px 16px 8px 16px;border-bottom:1px solid var(--border);background:var(--bg-subtle);">
+    <div class="probed-modal__panel-head">
       <input type="text" id="probedSearchInput" class="form-control" placeholder="输入关键字模糊过滤模型 (如 deepseek, qwen)..." oninput="filterProbedModels(this.value)">
     </div>
-    <div class="modal-body" style="flex:1;overflow-y:auto;padding:12px 16px;">
-      <div id="probedModelsList" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div class="modal-body probed-modal__body">
+      <div id="probedModelsList" class="probed-modal__list"></div>
     </div>
-    <div class="modal-foot" style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="modal-foot form-actions">
       <span class="text-secondary text-sm" id="probedCountHint">共 0 个模型</span>
       <button class="btn btn--secondary btn--sm" onclick="closeModal('probedListModal')">关闭</button>
     </div>
@@ -1734,20 +1864,20 @@ function pageHtml() {
   <div class="modal-box">
     <div class="modal-head"><h3>导入配置确认</h3><button class="modal-close" onclick="closeModal('importModal')"><svg class="khc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="modal-body">
-      <div id="importPreview" class="hint-box mb-3" style="line-height:1.7;"></div>
+      <div id="importPreview" class="hint-box mb-3 import-preview"></div>
       <div class="form-group"><label class="form-label">选择导入合并策略</label>
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+        <div class="import-modes">
           <label class="checkbox">
             <input type="radio" name="importMode" value="overwrite" checked>
             <div>
-              <div style="font-weight:600;color:var(--text);">完全覆盖 (Overwrite)</div>
+              <div class="import-mode__label">完全覆盖 (Overwrite)</div>
               <div class="text-secondary text-sm">使用导入文件的配置完全替换当前系统（导入前服务端自动生成快照备份）</div>
             </div>
           </label>
           <label class="checkbox">
             <input type="radio" name="importMode" value="merge">
             <div>
-              <div style="font-weight:600;color:var(--text);">增量合并 (Merge)</div>
+              <div class="import-mode__label">增量合并 (Merge)</div>
               <div class="text-secondary text-sm">保留现有供应商与 Key，仅追加新节点与新模型</div>
             </div>
           </label>

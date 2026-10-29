@@ -951,3 +951,133 @@
     .oauth-device-url { flex: 1 1 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--r-sm); background: var(--c-surface-muted); font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; user-select: all; color: var(--c-text); }
     .oauth-device-step { margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--c-text-muted); }
     .oauth-device-status { margin-top: 14px; font-size: 12px; color: var(--c-text-subtle); }
+
+/* ════════════════════════════════════════════════════════════════
+ * Inline-style migration classes (consolidate old style="..." attrs)
+ * 所有旧 HTML 里的内联 style 迁移目标。新代码应该直接用这些类。
+ * ════════════════════════════════════════════════════════════════ */
+
+/* Modal body sizing variants (替代 modal-box 上的 max-width/max-height 内联) */
+.modal-box--560  { max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.modal-box--540  { max-width: 540px; max-height: 85vh; overflow-y: auto; }
+.modal-box--520  { max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.modal-box--660  { max-width: 660px; max-height: 92vh; overflow-y: auto; }
+.modal-box--probe{ max-width: 540px; max-height: 85vh; display: flex; flex-direction: column; }
+
+/* 3-step Wizard row — ①②③ 每步统一用这个包裹 */
+.wizard-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.wizard-row--last { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.wizard-row__title { font-weight: 700; margin-bottom: 0; }
+.wizard-row__sub   { font-weight: normal; }
+.wizard-proto-info { margin: 8px 0 12px; min-height: 24px; display: flex; align-items: center; gap: 6px; }
+.wizard-capsule-row { padding: 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); min-height: 46px; }
+.wizard-box { background: var(--bg); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.wizard-box__label { font-size: 12px; margin-bottom: 4px; }
+
+/* Runtime control boxes — Vault / Vertex / OAuth / KHCS diag 统一形态 */
+.runtime-box { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.runtime-box--vault    { display: none; margin-bottom: 12px; }
+.runtime-box--vertex   { display: none; margin-top: 12px; margin-bottom: 12px; padding: 12px 14px; }
+.runtime-box--oauth    { display: none; }
+.runtime-box--diag     { display: none; margin-top: 10px; }
+.runtime-box__title    { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.runtime-box__title--gap { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.runtime-box__desc     { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+.runtime-box__hint     { font-size: 11px; margin-top: 6px; }
+
+/* Row hint box — 用于 manual timeout/cooldown */
+.row-hint-box { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+
+/* grid-column full-span hidden sections */
+.grid-span-hidden { grid-column: 1 / -1; display: none; }
+.grid-span-hidden--diag { grid-column: 1 / -1; display: none; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-subtle); font-size: 12px; line-height: 1.6; }
+
+/* raw JSON details block */
+.rawjson-details { border: 1px dashed var(--border); background: var(--bg-subtle); padding: 10px 14px; }
+.rawjson-summary { font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.rawjson-summary__main { display: inline-flex; align-items: center; gap: 6px; }
+.rawjson-summary__sub  { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.rawjson-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+.rawjson-editor { min-height: 360px; font-family: var(--font-mono); font-size: 12px; width: 100%; background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 12px; border: 1px solid #1e293b; }
+.rawjson-err { display: none; margin-top: 8px; color: var(--error); font-size: 12px; }
+.rawjson-wrap { margin-top: 12px; }
+
+/* Probed Model modal */
+.probed-modal__head { display: flex; align-items: center; gap: 8px; }
+.probed-modal__title { margin: 0; font-size: 15px; }
+.probed-modal__panel-head { padding: 12px 16px 8px; border-bottom: 1px solid var(--border); background: var(--bg-subtle); }
+.probed-modal__body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+.probed-modal__list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Import confirm modal */
+.import-preview { line-height: 1.7; }
+.import-modes { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.import-mode__label { font-weight: 600; color: var(--text); }
+
+/* Dashboard / overview layout */
+.list-models-wrap { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.agent-strip { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; min-height: 74px; }
+
+/* Providers box / agents panel */
+.providers-layout { position: relative; display: flex; gap: 14px; align-items: flex-start; }
+.providers-box { flex: 1; min-width: 0; padding: 12px 16px; }
+.agents-panel { display: contents; }
+
+/* Log filter bar override */
+.log-filter-bar { border-bottom: none; margin-bottom: 0; gap: 4px; }
+
+/* Settings form helpers */
+.settings-key-row { display: flex; align-items: center; gap: 14px; }
+.settings-vault-row { position: relative; }
+.settings-vault-token-input { padding-right: 32px; }
+.settings-vault-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 2px; color: var(--text-secondary); }
+.settings-vault-badge { font-size: 10px; padding: 2px 6px; display: none; }
+.settings-schedule-checkbox { font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.settings-schedule-checkbox__input { width: 16px; height: 16px; cursor: pointer; }
+.settings-schedule-checkbox__label { font-weight: 600; }
+.settings-readonly-input { width: 100%; background: var(--bg-subtle); color: var(--text-secondary); cursor: not-allowed; }
+
+/* OAuth hint inline */
+.oauth-provider-hint { margin-top: 8px; font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+.oauth-desc { display: none; margin-top: 6px; font-size: 12px; color: var(--text-secondary); padding: 8px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); line-height: 1.5; }
+
+/* Provider / Key modal hints */
+.form-group--mt-14 { margin-top: 14px; }
+.form-label--fs-12  { font-size: 12px; font-weight: 600; }
+.form-label--error  { color: var(--error); font-weight: bold; }
+.form-label--sub    { font-size: 11px; }
+.form-hint--fs-11   { font-size: 11px; margin-top: 6px; }
+.form-hint--inline  { font-size: 11px; margin-top: 6px; line-height: 1.4; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.form-hint--proto   { font-size: 11px; margin-top: 6px; min-height: 14px; }
+.form-hint--pb-6    { font-size: 12px; padding: 6px 10px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* Vertex inline group helpers */
+.vertex-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.vertex-title__inner { display: inline-flex; align-items: center; gap: 6px; }
+.vertex-url { word-break: break-all; }
+
+/* End-of-form action bars */
+.form-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 20px; padding: 16px 0; border-top: 1px solid var(--border); }
+.form-actions__probe { display: inline-flex; align-items: center; gap: 4px; }
+.form-actions__save  { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Settings misc */
+.manual-routing-tip { padding: 10px 12px; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
+.settings-row--grid-full { grid-column: 1 / -1; }
+.probe-btn-icon { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Misc tiny helpers */
+.span-nowrap { white-space: nowrap; }
+.span-fs-600 { font-weight: 600; }
+.span-warn-mr-4 { margin-right: 4px; }
+.span-inline-flex-6 { display: inline-flex; align-items: center; gap: 6px; }
+.span-inline-flex-4 { display: inline-flex; align-items: center; gap: 4px; }
+.mt-12 { margin-top: 12px; }
+.mt-14 { margin-top: 14px; }
+.mt-8  { margin-top: 8px; }
+
+/* Lightweight layout utilities */
+.flex { display: flex; }
+.flex-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+
