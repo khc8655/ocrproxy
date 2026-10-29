@@ -17,6 +17,6 @@
     "test:auto": "${PYTHON:-python3} tests/run_tests.py --layer=auto --parallel",
     "test": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && node agent-edgeone/scripts/test-ui-smoke.mjs && ${PYTHON:-python3} tests/run_tests.py --layer=all --parallel",
     "test:e2e:vm": "python3 tests/test_vm_full_matrix_e2e.py",
-    "build:assets": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs"
+    "build:assets": "node agent-edgeone/scripts/verify-frontend-symbols.mjs && cd agent-edgeone && node scripts/build-presets.mjs && node scripts/build-admin.mjs && node scripts/test-ui-smoke.mjs && cd .. && ${PYTHON:-python3} tests/test_html_structure.py"
   }
 }

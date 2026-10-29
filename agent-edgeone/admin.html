@@ -23,7 +23,7 @@
   </form>
 </div>
 
-<input type="file" id="configFileImportInput" accept=".json,application/json" onchange="handleImportFile(event)">
+<input type="file" id="configFileImportInput" accept=".json,application/json" hidden onchange="handleImportFile(event)">
 
 <!-- App -->
 <div id="app" class="app">
@@ -125,7 +125,7 @@
       <div class="providers-layout">
         <div class="card providers-box" id="providersBox"></div>
         <!-- Alphabet Nav Rail -->
-        <div id="alphabetNavRail" hidden class="alphabet-nav-rail">
+        <div id="alphabetNavRail" class="alphabet-nav-rail">
           <div class="alpha-rail-inner" id="alphaRailInner"></div>
         </div>
       </div>
@@ -176,7 +176,7 @@
               </div>
               <div class="settings-row-ctrl">
                 <input type="text" id="s_proxyApiKey" class="form-control form-control-compact mono" placeholder="sk-...">
-                <button class="btn btn--secondary btn--sm" onclick="generateRandomKey()" class="span-nowrap">随机生成</button>
+                <button class="btn btn--secondary btn--sm span-nowrap" onclick="generateRandomKey()">随机生成</button>
               </div>
             </div>
 
@@ -212,9 +212,9 @@
                 <span class="settings-row-hint" title="北京时间。时段内为 KB，其余为 Agent；每个时段只切一次，手动切换会保留；切回 Agent 最多等 1 小时，切入 KB 最多等 15 分钟">北京时间。KB 时段内切 KB，其余切 Agent；手动切换保留到下个时段；切回 Agent 最多等 1 小时</span>
               </div>
               <div class="settings-row-ctrl mode-schedule-ctrl">
-                <label class="checkbox" class="settings-schedule-checkbox">
+                <label class="checkbox settings-schedule-checkbox">
                   <input type="checkbox" id="s_modeScheduleEnabled" class="settings-schedule-checkbox__input">
-                  <span >启用</span>
+                  <span class="settings-schedule-checkbox__label">启用</span>
                 </label>
                 <span>KB</span>
                 <input type="time" id="s_modeScheduleKbStart" class="form-control form-control-compact" value="22:00" step="60">
@@ -234,7 +234,7 @@
                 <span class="settings-row-title" title="Agent 模式分流策略 (agent_routing_strategy)">Agent 模式分流策略 (agent_routing_strategy)</span>
                 <span class="settings-row-hint" id="agent-routing-hint" title="智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性">智能体编程推荐「粘性故障转移」，保持会话连接与 KV Cache 稳定性</span>
                 <div id="manual-routing-tip" class="hint-box hint-box--routing-tip mt-1" hidden>
-                  <span class="badge badge-warning" >纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
+                  <span class="badge badge-warning span-warn-mr-4">纯手动直通生效</span> 系统直接使用各模型指定的当前激活 Key，禁用自动切换与熔断避让，上游响应 100% 原始透传。
                 </div>
               </div>
               <div class="settings-row-ctrl">
@@ -489,10 +489,10 @@
 
           <details id="rawJsonDetails" class="card card-pad mb-1 rawjson-details" ontoggle="if(this.open && typeof renderRawJsonPanel === 'function') renderRawJsonPanel();">
             <summary class="rawjson-summary">
-              <span ><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
+              <span class="rawjson-summary__main"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 展开底层 JSON 直接编辑 (专家排错调试模式)</span>
               <span class="rawjson-summary__sub">点击展开/收起</span>
             </summary>
-            <div class="rawjson-wrap"
+            <div class="rawjson-wrap">
               <div class="rawjson-actions">
                 <button class="btn btn--secondary btn--xs" id="btnFormatRaw" onclick="formatRawJson()">格式化 JSON</button>
                 <button class="btn btn--primary btn--xs" id="btnApplyRaw" onclick="saveRawJson()"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存底层配置生效</button>
@@ -506,7 +506,7 @@
         <!-- Settings Bottom Sticky Action Bar -->
         <div class="form-actions">
           <button class="btn btn--secondary btn--sm" onclick="restoreDefaultSettings()">恢复推荐默认值</button>
-          <button class="btn btn--primary btn--sm" onclick="saveSettings()" >
+          <button class="btn btn--primary btn--sm form-actions__save" onclick="saveSettings()">
             <svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span>保存设置并生效</span>
           </button>
@@ -530,7 +530,7 @@
           <option value="">-- 自定义供应商 (手动填写) --</option>
         </select>
         <div id="p_desc" class="oauth-desc"></div>
-        <div class="hint oauth-provider-hint">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div></div>
+        <div class="hint oauth-provider-hint">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div>
       </div>
       <div class="form-group">
         <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
@@ -561,7 +561,7 @@
             <span class="text-secondary text-xs">复用 OpenAI Base URL</span>
           </div>
         </div>
-        <div id="p_proto_hint" class="text-secondary" ></div>
+        <div id="p_proto_hint" class="text-secondary form-hint--proto"></div>
       </div>
       <div class="form-group form-group--mt-14">
         <label class="form-label">每 Key 每分钟请求上限 (RPM，可选)</label>
@@ -591,13 +591,13 @@
         <div class="runtime-box__title">从中枢添加</div>
         <div id="k_vault_list"></div>
         <div class="mt-8 flex justify-end"><button type="button" class="btn btn--primary btn--sm" id="k_vault_btn" onclick="addKeysFromVault()">拉取选中 Key</button></div>
-        <div class="text-secondary runtime-box__hint"只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
+        <div class="text-secondary runtime-box__hint">只新增、不覆盖；拉下来的 Key 只读可删。下面也可以手动录入本地 Key。</div>
       </div>
       <div class="form-group"><label class="form-label">Key 标签别名</label><input type="text" id="k_label" class="form-control" placeholder="例如 自己, 测试, 小号"></div>
       <!-- Vertex AI 专属配置 (为 Vertex AI 添加 Key 时展开，凭证与项目强绑定) -->
       <div id="k_vertex_section" class="runtime-box runtime-box--vertex">
         <div class="vertex-title">
-          <span ><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
+          <span class="vertex-title__inner"><svg class="khc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Google Cloud Vertex AI 专属参数 (手动填写)</span>
         </div>
         <div class="form-group mb-2">
           <label class="form-label form-label--fs-12">GCP 项目 ID (Project ID) <span class="form-label--error">*</span></label>
@@ -608,10 +608,10 @@
           <input type="text" id="k_vertex_location" class="form-control" placeholder="global" value="global" oninput="onKeyVertexParamChange()">
         </div>
         <div class="text-secondary text-sm mt-1 form-hint--inline">
-          <span ><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold vertex-url">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
+          <span class="span-inline-flex-4"><svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 动态计算 Base URL:</span> <span id="k_vertex_computed_url" class="mono text-primary font-bold vertex-url">https://aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/global/endpoints/openapi</span>
         </div>
       </div>
-      <div class="form-group" id="k_oauth_section" data-cap="oauthLogin" class="runtime-box runtime-box--oauth">
+      <div class="form-group runtime-box runtime-box--oauth" id="k_oauth_section" data-cap="oauthLogin">
         <div class="runtime-box__desc">该供应商支持官方 OAuth 登录（仅 VM）；登录凭据只保存在本机，不会下发中枢。</div>
         <button type="button" class="btn btn--primary btn--sm" onclick="startOAuthLogin()">账号登录（OAuth）</button>
         <div id="k_oauth_hint" class="hint mt-1 form-hint--fs-11"></div>
@@ -661,7 +661,7 @@
       <div class="form-group mb-3">
         <div class="wizard-row--last">
           <label class="form-label wizard-row__title">③ 选择模型</label>
-          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeAgentModels" onclick="executeProbe('agent')" >
+          <button type="button" class="btn btn--secondary btn--sm form-actions__probe" id="btnProbeAgentModels" onclick="executeProbe('agent')">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>
@@ -722,7 +722,7 @@
       <div class="form-group mb-3">
         <div class="wizard-row--last">
           <label class="form-label wizard-row__title">③ 选择模型</label>
-          <button type="button" class="btn btn--secondary btn--sm" id="btnProbeCandidateModels" onclick="executeProbe('candidate')" >
+          <button type="button" class="btn btn--secondary btn--sm form-actions__probe" id="btnProbeCandidateModels" onclick="executeProbe('candidate')">
             <svg class="khc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span>探测上游可用模型</span>
           </button>

@@ -381,6 +381,8 @@
 
     /* Alphabet Nav Rail & Group Dividers */
     .alphabet-nav-rail {
+      /* 默认隐藏；providers.js 在分组数 >1 时显式置为 display:block */
+      display: none;
       position: sticky;
       top: 72px;
       width: 36px;
