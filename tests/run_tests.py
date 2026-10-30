@@ -90,6 +90,11 @@ CHECKS = {
         "desc": "Admin HTML structure/nesting guard (dup attrs, unclosed tags, inline style ratchet)",
         "cmd": [PYTHON_EXE, "tests/test_html_structure.py"],
     },
+    "cline_adapter": {
+        "tier": "T1",
+        "desc": "Cline adapter (non-stream data envelope unwrap + preset declaration)",
+        "cmd": [PYTHON_EXE, "tests/test_cline_adapter.py"],
+    },
     "oauth_credentials": {
         "tier": "T1",
         "desc": "OAuth credentials (MiniMax device flow, refresh, needs_relogin, local-only)",
@@ -162,14 +167,14 @@ CHECKS = {
 # every check uses free ports and its own temp CONFIG_DIR.
 LAYERS = {
     "core": ["units", "security"],
-    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "oauth_credentials", "ui_standard", "html_structure", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static"],
+    "logic": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "oauth_credentials", "cline_adapter", "ui_standard", "html_structure", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static"],
     "api": ["api_layer", "contract_ui"],
     "contract_api": ["contract_api"],
     "contract": ["contract_ui", "key_capsules", "vault_ui"],
     "ui": ["security", "overflow"],
     "matrix": ["overflow", "e2e"],
     "e2e": ["e2e"],
-    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "oauth_credentials", "ui_standard", "html_structure", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static",
+    "all": ["units", "security", "agent_metrics", "runtime_profiles", "mode_scheduler", "param_simplify", "failure_logging", "oauth_credentials", "cline_adapter", "ui_standard", "html_structure", "settings_binding", "settings_resolution", "api_layer", "static_sync", "admin_static",
             "key_capsules", "contract_ui", "vault_ui", "overflow", "e2e"],
 }
 

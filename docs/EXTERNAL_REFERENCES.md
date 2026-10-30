@@ -45,10 +45,11 @@
 | 商汤 SenseNova | https://platform.sensenova.cn/doc | `shared/presets/sensenova.json` |
 | NVIDIA NIM | https://docs.api.nvidia.com/nim/ | `shared/presets/nvidia.json` |
 | OpenRouter | https://openrouter.ai/docs | `shared/presets/openrouter.json` |
+| Cline | https://docs.cline.bot/api/overview | `shared/presets/cline.json` |
 
 以下预设为项目内部/聚合入口，无统一公开 API 文档，后续补充官方链接时在此登记：
 
-`agnes`、`amd`、`bai`、`cline`、`opencode`、`tokenrhythm`。
+`agnes`、`amd`、`bai`、`opencode`、`tokenrhythm`。
 
 ## 三、项目内部权威文档
 
