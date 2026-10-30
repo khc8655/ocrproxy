@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [v20261030-01] - 2026-10-30
+
+### Cline 非流式响应信封解包
+- Cline 官方 API 非流式返回 `{"data":{...}}` 信封，网关按 preset `response.unwrap_root` 自动解包为标准 OpenAI ChatCompletion。
+- scheduler 在 provider 未显式保存 `adapter_rules` 时按 `preset_id` 读取 response 规则，避免客户端看到无 choices 的响应。
+- `cline` preset 升级到 1.1.1。
+
 ## [v20261029-01] - 2026-10-29
 
 ### 控制台前端结构治理

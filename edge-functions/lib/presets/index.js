@@ -4,8 +4,8 @@
  */
 
 export const CATALOG = {
-  "version": "2026.10.29",
-  "updated_at": "2026-10-29T00:00:00.000Z",
+  "version": "2026.10.30",
+  "updated_at": "2026-10-30T00:00:00.000Z",
   "providers": [
     {
       "id": "agnes",
@@ -69,10 +69,10 @@ export const CATALOG = {
     {
       "id": "cline",
       "name": "Cline",
-      "version": "1.1.0",
-      "updated_at": "2026-10-18",
-      "update_notes": "Cline 编程助手自适应中转配置，支持 Claude 3.7 / 3.5 Sonnet 与 Thinking 深度思考",
-      "rule_hash": "287adac94c15",
+      "version": "1.1.1",
+      "updated_at": "2026-10-30",
+      "update_notes": "Cline 官方 API 非流式响应为 {\"data\":{...}} 信封；网关自动解包为 OpenAI ChatCompletion",
+      "rule_hash": "7d965b5484ab",
       "protocol": "openai",
       "base_url": "https://api.cline.bot/api/v1",
       "anthropic_base_url": null,
@@ -510,9 +510,9 @@ export const PRESETS = [
   {
     "id": "cline",
     "name": "Cline",
-    "version": "1.1.0",
-    "updated_at": "2026-10-18",
-    "update_notes": "Cline 编程助手自适应中转配置，支持 Claude 3.7 / 3.5 Sonnet 与 Thinking 深度思考",
+    "version": "1.1.1",
+    "updated_at": "2026-10-30",
+    "update_notes": "Cline 官方 API 非流式响应为 {\"data\":{...}} 信封；网关自动解包为 OpenAI ChatCompletion",
     "protocol": "openai",
     "base_url": "https://api.cline.bot/api/v1",
     "doc_url": "https://docs.cline.bot/api/overview",
@@ -598,7 +598,10 @@ export const PRESETS = [
           "cooldown_sec": 60,
           "failover": true
         }
-      ]
+      ],
+      "response": {
+        "unwrap_root": "data"
+      }
     }
   },
   {

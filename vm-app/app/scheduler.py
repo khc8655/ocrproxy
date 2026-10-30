@@ -20,6 +20,7 @@ from . import stats
 from . import agent_metrics
 from . import oauth_credentials
 from .config_store import get_config_version
+from .presets import load_preset
 from .logger_utils import clean_upstream_error_text
 
 logger = logging.getLogger("scheduler")
@@ -522,6 +523,43 @@ class ConcurrencyLease:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.release()
+
+
+def _response_rules_for(provider_name: str, provider: dict, cand: dict) -> dict:
+    rules = cand.get("adapter_rules") or provider.get("adapter_rules") or {}
+    if isinstance(rules, dict) and rules.get("response"):
+        return rules
+    try:
+        preset = load_preset(provider.get("preset_id") or provider_name) or {}
+        preset_rules = preset.get("adapter_rules")
+        if isinstance(preset_rules, dict) and preset_rules.get("response"):
+            return preset_rules
+    except Exception:
+        pass
+    return rules if isinstance(rules, dict) else {}
+
+
+def _unwrap_response_payload(raw_content, rules) -> bytes:
+    """Unwrap provider-specific non-stream JSON envelopes (e.g. Cline's {"data": {...}})."""
+    if not isinstance(raw_content, (bytes, bytearray)):
+        return raw_content
+    resp_rules = (rules or {}).get("response") if isinstance(rules, dict) else {}
+    root = resp_rules.get("unwrap_root") if isinstance(resp_rules, dict) else None
+    if not root:
+        return raw_content
+    try:
+        payload = json.loads(raw_content.decode("utf-8"))
+    except Exception:
+        return raw_content
+    if not isinstance(payload, dict):
+        return raw_content
+    inner = payload.get(root)
+    if not isinstance(inner, dict):
+        return raw_content
+    # 只在确实拿到 OpenAI 兼容响应体时替换，避免误吞普通 provider 字段。
+    if "choices" not in inner and "object" not in inner:
+        return raw_content
+    return json.dumps(inner, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 class ScheduleResult:
@@ -1992,7 +2030,7 @@ async def schedule(
                                 trail="; ".join(trail),
                             )
                         else:
-                            raw_content = resp.content
+                            raw_content = _unwrap_response_payload(resp.content, _response_rules_for(provider_name, provider, cand))
                             # Always close the upstream response to return the
                             # connection to the pool immediately. For OCR / KB
                             # (large responses) also reclaim heap pages.
