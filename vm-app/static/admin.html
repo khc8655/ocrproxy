@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCRProxy 控制台</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231664FF'/><text x='16' y='22' font-family='sans-serif' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>O</text></svg>">
-  <link rel="stylesheet" href="/static/admin.css?v=20261030-01">
+  <link rel="stylesheet" href="/static/admin.css?v=20261101-01">
   <style>#app{display:none;}.modal{display:none;}</style>
 </head>
 <body>
@@ -31,7 +31,7 @@
     <div class="brand-title">
       <span class="brand-logo">O</span>
       <span>OCRProxy</span>
-      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261030-01</span>
+      <span class="brand-badge badge-neutral" id="topVersionBadge" title="系统发行版本">v20261101-01</span>
       <span class="brand-badge" id="topModeBadge">Agent 模式</span>
     </div>
     <nav id="topNav" aria-label="主导航">
@@ -533,8 +533,8 @@
         <div class="hint oauth-provider-hint">OAuth 供应商由适配文件的 <code>auth</code> 声明提供；保存后供应商卡片会出现「账号登录」，也可在「+ Key」中使用「账号登录（OAuth）」。</div>
       </div>
       <div class="form-group">
-        <label class="form-label">供应商标识 (英文字符，如 google, sensenova)</label>
-        <input type="text" id="p_name" class="form-control" placeholder="例如 siliconflow, sensenova" oninput="applyPresetForProviderName()">
+        <label class="form-label">供应商名称 (支持中文，如 Cline、阶跃星辰、siliconflow)</label>
+        <input type="text" id="p_name" class="form-control" placeholder="例如 Cline、阶跃星辰、siliconflow" oninput="applyPresetForProviderName()">
       </div>
       <div class="form-group form-group--mt-14">
         <label class="form-label">协议与端点（按需开启；模型继承所选协议）</label>
@@ -799,15 +799,15 @@
 
 
   <!-- Modular Scripts with Cache-Busting -->
-  <script src="/static/js/host.js?v=20261030-01"></script>
-  <script src="/static/js/ui.js?v=20261030-01"></script>
-  <script src="/static/js/settings-form.js?v=20261030-01"></script>
-  <script src="/static/js/core.js?v=20261030-01"></script>
-  <script src="/static/js/vault.js?v=20261030-01"></script>
-  <script src="/static/js/providers.js?v=20261030-01"></script>
-  <script src="/static/js/agent-models-ui.js?v=20261030-01"></script>
-  <script src="/static/js/models.js?v=20261030-01"></script>
-  <script src="/static/js/settings.js?v=20261030-01"></script>
-  <script src="/static/js/app.js?v=20261030-01"></script>
+  <script src="/static/js/host.js?v=20261101-01"></script>
+  <script src="/static/js/ui.js?v=20261101-01"></script>
+  <script src="/static/js/settings-form.js?v=20261101-01"></script>
+  <script src="/static/js/core.js?v=20261101-01"></script>
+  <script src="/static/js/vault.js?v=20261101-01"></script>
+  <script src="/static/js/providers.js?v=20261101-01"></script>
+  <script src="/static/js/agent-models-ui.js?v=20261101-01"></script>
+  <script src="/static/js/models.js?v=20261101-01"></script>
+  <script src="/static/js/settings.js?v=20261101-01"></script>
+  <script src="/static/js/app.js?v=20261101-01"></script>
 </body>
 </html>

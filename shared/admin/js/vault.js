@@ -86,10 +86,13 @@ function getAllAvailableProviders(){
     const protos = getProviderProtocols(name, p);
     const protoStr = formatProtocolsDisplay(protos);
     const isVault = (p.origin === 'vault');
+    const meta = (typeof getProviderPresetMeta === 'function') ? getProviderPresetMeta(name, p) : {};
     list.push({
       id: name,
       label: cleanProviderLabel(p.name || rp?.name || name),
       protoStr: protoStr,
+      presetVersion: meta.version || p.preset_version || '',
+      hasPreset: Boolean(p.preset_id || meta.isPreset),
       isConfigured: true,
       isVault: isVault,
       isCached: true,
@@ -112,6 +115,8 @@ function getAllAvailableProviders(){
       id: pId,
       label: cleanProviderLabel(rp.name || pId),
       protoStr: protoStr,
+      presetVersion: rp.preset_version || rp.version || '',
+      hasPreset: Boolean(rp.preset_id || rp.version),
       isConfigured: false,
       isVault: true,
       isCached: false,
@@ -134,7 +139,10 @@ function populateLocalProviderSelect(selectId, optgroupId, selectedId){
   const emptyHtml = '<option value="" disabled selected>-- 暂无已配置供应商 (请前往「供应商」界面添加) --</option>';
   const html = configuredList.length
     ? configuredList.map(p => {
-        const label = `${p.label || p.name || p.id} (${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})`;
+        const proto = formatProtocolLabel(p.protoStr || p.protocols || ['chat']);
+        const ver = p.presetVersion ? ` · 规则 v${p.presetVersion}` : (p.isConfigured ? ' · 自定义规则' : '');
+        const origin = p.isVault ? ' · 中枢' : ' · 本地';
+        const label = `${p.label || p.name || p.id} (${proto}${ver}${origin})`;
         return `<option value="${esc(p.id)}">${esc(label)}</option>`;
       }).join('')
     : emptyHtml;

@@ -1,11 +1,14 @@
 {
-  "version": "v20261030-01",
-  "release_date": "2026-10-30",
+  "version": "v20261101-01",
+  "release_date": "2026-11-01",
   "commit": "HEAD",
-  "title": "Cline 非流式响应信封解包 (v20261030-01)",
+  "title": "控制台供应商/模型交互修复 (v20261101-01)",
   "changelog": [
-    "Cline 官方 API 非流式返回 {\"data\":{...}} 信封，网关现按 preset response.unwrap_root 自动解包为标准 OpenAI ChatCompletion；",
-    "scheduler 在 provider 未显式保存 adapter_rules 时按 preset_id 读取 response 规则，避免客户端看到无 choices 的响应；",
-    "cline preset 升级到 1.1.1；全量测试与 G1~G6 通过。"
+    "删除 Agent 模型不再自动删除供应商，避免 EdgeOne 中枢供应商被连带清理；",
+    "主力 Key 使用 provider:key 精确定位，不同供应商同名 Key 不再同时显示“使用中”；",
+    "重复模型 ID / 上游模型 ID 增加明确追加确认，VM/EdgeOne 共用；",
+    "供应商名称改为单字段并允许中文，不再维护英文标识+别名双字段；",
+    "供应商下拉统一显示协议、规则版本与本地/中枢来源；",
+    "补充 VM E2E：中文供应商、同名 Key、重复模型、版本来源标签。"
   ]
 }

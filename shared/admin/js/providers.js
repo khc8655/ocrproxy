@@ -543,7 +543,7 @@ function _renderProviderSourceDesc(title, keyCount, preset){
 }
 
 // 预设适配规则按「本地配置后的供应商名称」自动匹配：预设不进入下拉，
-// 但输入与官方预设同名/同 id 的供应商标识时，自动带入 URL、协议、RPM 与规则说明。
+// 但输入与官方预设同名/同 id 的供应商名称时，自动带入 URL、协议、RPM 与规则说明。
 function applyPresetForProviderName(){
   if (state.providerEditName || state.currentSelectedVaultProvider) return;
   const nameEl = document.getElementById('p_name');
@@ -663,7 +663,7 @@ async function onProviderPresetChange(){
   }
 
   // 下拉只剩两种来源：自定义（本地）与从中枢按需拉取；官方预设不再作为选项，
-  // 适配规则由用户在「供应商标识」中输入名称后自动匹配（见 applyPresetForProviderName）。
+  // 适配规则由用户在「供应商名称」中输入名称后自动匹配（见 applyPresetForProviderName）。
   state.currentSelectedVaultProvider = null;
   state.currentSelectedPreset = null;
   nameInput.disabled = false;
@@ -753,7 +753,7 @@ function editProvider(name){
 async function saveProvider(){
   const name = document.getElementById('p_name').value.trim();
   const url = document.getElementById('p_url').value.trim();
-  if(!name || !url){ toast('供应商标识和 URL 不能为空', 'err'); return; }
+  if(!name || !url){ toast('供应商名称和 URL 不能为空', 'err'); return; }
 
   const isHostEdgeOne = Boolean(typeof HOST !== 'undefined' && HOST && HOST.isEdgeOne);
   // Never infer create/edit from `p_name.disabled`: the vault-preset branch disables the
@@ -857,7 +857,9 @@ async function saveProvider(){
   }
 
   // Attach preset metadata and rules if created from preset or matches preset
-  const matchedPreset = state.currentSelectedPreset || FALLBACK_PRESETS[name.toLowerCase()] || (state.presetCatalog && state.presetCatalog.find(x => x.id && x.id.toLowerCase() === name.toLowerCase()));
+  const matchedPreset = state.currentSelectedPreset
+    || (typeof findPresetForProvider === 'function' ? findPresetForProvider(name) : null)
+    || FALLBACK_PRESETS[name.toLowerCase()];
   if(matchedPreset && (matchedPreset.id === name.toLowerCase() || !state.config.providers[name].preset_id)){
     state.config.providers[name].preset_id = matchedPreset.id;
     state.config.providers[name].preset_version = matchedPreset.version || '1.1.0';

@@ -215,6 +215,23 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
 
         prov_actions_shrink = await page.eval_on_selector(".provider-actions", "el => window.getComputedStyle(el).flexShrink")
         check(prov_actions_shrink == "0", f"供应商操作按钮组规范设置 flex-shrink: 0 防挤压: {prov_actions_shrink}")
+
+        # 供应商名称单字段：中文直接作为名称/配置键，不再额外要求英文标识
+        await page.click("button:has-text('新增供应商')")
+        await page.wait_for_selector("#providerModal", state="visible")
+        await page.fill("#p_name", "中文供应商")
+        await page.fill("#p_url", f"{mock_url}/v1")
+        await page.click("#p_saveBtn")
+        await page.wait_for_timeout(700)
+        check(await page.locator(".provider-row", has_text="中文供应商").count() > 0,
+              "中文供应商名称可直接保存并显示")
+        cn_card = page.locator(".provider-row", has_text="中文供应商")
+        await cn_card.locator("button:has-text('删除')").click()
+        if await page.locator(".ui-dialog").count():
+            await page.click(".ui-dialog__foot button:has-text('删除')")
+        await page.wait_for_timeout(500)
+        check(await page.locator(".provider-row", has_text="中文供应商").count() == 0,
+              "中文供应商可正常删除")
         await page.screenshot(path=str(ROOT / "scratch" / "e2e_vm_providers.png"))
 
         # ==========================================
@@ -272,10 +289,51 @@ async def run_matrix_tests(base_url, admin_pw, mock_url):
             active_badge = page.locator("span.badge-success:has-text('使用中')")
             check(await active_badge.count() > 0, "点击「设为主力」后目标 Key 状态切换为「使用中」")
 
+        # 同名 Key 跨供应商：只能有一个「使用中」
+        dup_card = page.locator(".model-card", has_text="test-agent-dup")
+        dup_btns = dup_card.locator("button[data-action='set-active-key']")
+        dup_badges = dup_card.locator("span.badge-success:has-text('使用中')")
+        check(await dup_badges.count() == 1, f"默认只显示一个「使用中」: count={await dup_badges.count()}")
+        check(await dup_btns.count() >= 1, f"同名 Key 双供应商模型具备可切换按钮: count={await dup_btns.count()}")
+        if await dup_btns.count() >= 1:
+            await dup_btns.first.click()
+            await page.wait_for_timeout(400)
+            dup_active = await dup_badges.count()
+            check(dup_active == 1, f"切换后不同供应商同名 Key 仍只显示一个「使用中」: count={dup_active}")
+
         # 验证添加模型弹窗彻底移除「添加本地 Key」按钮
         await page.click("button:has-text('+ 新增 Agent 模型')")
         await page.wait_for_selector("#agentModal", state="visible")
         check(await page.locator("#a_keyArea button:has-text('添加本地 Key')").count() == 0, "Agent 模型弹窗中彻底移除「添加本地 Key」重复按钮")
+        await page.click("#agentModal .modal-close")
+        await page.wait_for_selector("#agentModal", state="hidden")
+
+        # 重复模型 ID 必须弹确认，不能被静默拦截
+        await page.click("button:has-text('+ 新增 Agent 模型')")
+        await page.wait_for_selector("#agentModal", state="visible")
+        await page.fill("#a_name", "test-agent-dup")
+        if await page.locator("#a_providerSelect option[value='vault_mock']").count():
+            await page.select_option("#a_providerSelect", "vault_mock")
+            await page.wait_for_timeout(250)
+        await page.click("#agentModal button:has-text('保存并生效')")
+        try:
+            await page.wait_for_selector(".ui-dialog", state="visible", timeout=4000)
+            dialog_text = await page.locator(".ui-dialog").inner_text()
+            check("已存在" in dialog_text, "重复模型 ID 弹出追加确认，而不是静默失败")
+            await page.click(".ui-dialog__foot button:has-text('取消')")
+        except Exception as e:
+            check(False, "重复模型 ID 弹出追加确认，而不是静默失败", str(e)[:120])
+        # 取消追加后按设计仍停留在新增弹窗，方便修改模型名；手动关闭再继续。
+        if await page.locator("#agentModal").is_visible():
+            await page.click("#agentModal .modal-close")
+        await page.wait_for_selector("#agentModal", state="hidden")
+
+        # 供应商下拉同时显示规则版本与来源
+        await page.click("button:has-text('+ 新增 Agent 模型')")
+        await page.wait_for_selector("#agentModal", state="visible")
+        first_option = await page.locator("#a_providerSelect option").first.inner_text()
+        check(("规则 v" in first_option) or ("自定义规则" in first_option), f"供应商下拉显示规则版本: {first_option}")
+        check(("本地" in first_option) or ("中枢" in first_option), f"供应商下拉显示来源: {first_option}")
         await page.click("#agentModal .modal-close")
         await page.wait_for_selector("#agentModal", state="hidden")
 
@@ -491,6 +549,11 @@ def main():
                     "base_url": f"http://127.0.0.1:{mock_port}/v1",
                     "origin": "local",
                     "keys": {"lk1": "sk-local-secret-1"}
+                },
+                "dup_prov": {
+                    "base_url": f"http://127.0.0.1:{mock_port}/v1",
+                    "origin": "local",
+                    "keys": {"lk1": "sk-dup-secret-1"}
                 }
             },
             "agent_models": {
@@ -505,6 +568,13 @@ def main():
                     "upstream_model": "mock-deepseek-v3",
                     "keys": [
                         {"provider": "local_prov", "key": "lk1", "source": "local"}
+                    ]
+                },
+                "test-agent-dup": {
+                    "upstream_model": "mock-deepseek-v3",
+                    "keys": [
+                        {"provider": "local_prov", "key": "lk1", "source": "local"},
+                        {"provider": "dup_prov", "key": "lk1", "source": "local"}
                     ]
                 }
             }

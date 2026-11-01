@@ -36,7 +36,7 @@
         deleteAgentModel(model);
       } else if (action === 'set-active-key') {
         const key = btn.dataset.key;
-        setActiveAgentKey(model, key);
+        setActiveAgentKey(model, key, btn.dataset.provider);
       } else if (action === 'probe-key') {
         const idx = parseInt(btn.dataset.index, 10);
         testAgentKey(model, idx);
@@ -411,6 +411,28 @@
     }
   }
 
+  async function _confirmModelCollision(title, desc, confirmText) {
+    try {
+      if (typeof UI !== 'undefined' && UI && typeof UI.confirm === 'function') {
+        return await UI.confirm({ title, desc, confirmText });
+      }
+    } catch (e) {
+      _toast('模型重复确认弹窗加载失败，请刷新页面后重试', 'err');
+      return false;
+    }
+    // 极端兜底：旧构建/弹窗脚本缺失时不能让重复模型静默失败。
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      return window.confirm(`${title}\n\n${desc}`);
+    }
+    _toast(`${title}：${desc}`, 'err');
+    return false;
+  }
+
+  function _activeKeyMatches(ref, binding) {
+    if (!ref || !binding) return false;
+    return ref === binding.key || ref === `${binding.provider}:${binding.key}`;
+  }
+
   function _formatProviderOptionLabel(p) {
     const name = p.label || p.name || p.id;
     return `${name} (${formatProtocolLabel(p.protoStr || p.protocols || ['chat'])})`;
@@ -622,9 +644,19 @@
     const { cfg } = getCtx();
     if (!cfg.agent_models) cfg.agent_models = {};
 
-    const existingModelName = (!oldName && cfg.agent_models)
+    let existingModelName = (!oldName && cfg.agent_models)
       ? Object.keys(cfg.agent_models).find(k => k.toLowerCase() === name.toLowerCase())
       : null;
+    let collisionKind = 'model';
+    // 同名模型之外，也拦截“同一上游模型 ID 被重复创建”的静默覆盖/无法保存。
+    if (!oldName && !existingModelName && upstream && cfg.agent_models) {
+      const upstreamKey = upstream.toLowerCase();
+      existingModelName = Object.keys(cfg.agent_models).find(k => {
+        const m = cfg.agent_models[k] || {};
+        return String(m.upstream_model || k).toLowerCase() === upstreamKey;
+      }) || null;
+      if (existingModelName) collisionKind = 'upstream';
+    }
 
     // Collision check 1: Adding keys to an existing model during creation
     if (!oldName && existingModelName) {
@@ -638,8 +670,12 @@
         return;
       }
 
-      const msg = `模型 ID「${existingModelName}」已存在！\n\n点击【确定】将勾选的 ${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\n点击【取消】返回修改模型名称。`;
-      if (!(await UI.confirm({title:'模型已存在', desc: msg, confirmText:'追加合并'}))) {
+      const title = collisionKind === 'upstream' ? '上游模型已存在' : '模型已存在';
+      const msg = collisionKind === 'upstream'
+        ? `上游模型 ID「${existingModelName}」已被现有 Agent 模型「${existingModelName}」使用！\n\n点击【确定】将勾选的 ${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\n点击【取消】返回修改模型名称。`
+        : `模型 ID「${existingModelName}」已存在！\n\n点击【确定】将勾选的 ${newKeysToAdd.length} 个新 Key 追加合并至该已有模型；\n点击【取消】返回修改模型名称。`;
+      _toast(`${title}：${existingModelName}，请确认是否追加`, 'info');
+      if (!(await _confirmModelCollision(title, msg, '追加合并'))) {
         document.getElementById('a_name')?.focus();
         return;
       }
@@ -674,7 +710,7 @@
       } else {
         delete entry.upstream_model;
       }
-      if (entry.active_key && !dedupedBindings.some(b => b.key === entry.active_key)) {
+      if (entry.active_key && !dedupedBindings.some(b => _activeKeyMatches(entry.active_key, b))) {
         delete entry.active_key;
       }
       cfg.agent_models[name] = entry;
@@ -688,52 +724,11 @@
   async function deleteAgentModel(name) {
     if (!(await UI.confirm({title:'删除 Agent 模型', desc:`确定要删除 Agent 模型 "${name}" 吗？`, danger:true, confirmText:'删除'}))) return;
     const { cfg } = getCtx();
-    const targetModel = cfg.agent_models?.[name];
-    const usedProviders = new Set((targetModel?.keys || []).map(k => k.provider).filter(Boolean));
-
     delete cfg.agent_models[name];
 
-    // 检查是否有供应商变成孤立供应商（本地已无任何模型或候选模型引用）
-    const orphanedProviders = [];
-    for (const provId of usedProviders) {
-      if (!cfg.providers?.[provId]) continue;
-      let stillUsed = false;
-      // 检查其他 Agent 模型
-      for (const mName of Object.keys(cfg.agent_models || {})) {
-        if ((cfg.agent_models[mName]?.keys || []).some(k => k.provider === provId)) {
-          stillUsed = true;
-          break;
-        }
-      }
-      // 检查 candidates 候选模型
-      if (!stillUsed && cfg.candidates) {
-        for (const t of Object.keys(cfg.candidates)) {
-          if (Array.isArray(cfg.candidates[t]) && cfg.candidates[t].some(x => x.provider === provId)) {
-            stillUsed = true;
-            break;
-          }
-        }
-      }
-      if (!stillUsed) {
-        orphanedProviders.push(provId);
-      }
-    }
-
-    let extraMsg = '';
-    if (orphanedProviders.length > 0) {
-      const provListStr = orphanedProviders.join(', ');
-      if (await UI.confirm({title:'清理孤立供应商', desc:`删除模型「${name}」后，供应商 [${provListStr}] 本地已无任何模型引用。\n是否同时从本地清理该供应商及其凭据？`, danger:true, confirmText:'清理'})) {
-        for (const p of orphanedProviders) {
-          delete cfg.providers[p];
-          if (typeof state !== 'undefined' && state.ruleUpdatesMap && state.ruleUpdatesMap[p]) {
-            delete state.ruleUpdatesMap[p];
-          }
-        }
-        extraMsg = `，并已同步清理孤立供应商 [${provListStr}]`;
-      }
-    }
-
-    await _persist(`Agent 模型「${name}」已删除${extraMsg}并立即生效`);
+    // 删除模型绝不自动删除供应商：EdgeOne 的供应商可能是中枢母本，
+    // 自动清理会把中枢供应商及其 Key 一并删掉。供应商只能由用户手动删除。
+    await _persist(`Agent 模型「${name}」已删除并立即生效`);
     renderAgentModels();
     if (typeof renderProviders === 'function') renderProviders();
   }
@@ -759,15 +754,19 @@
     renderAgentModels();
   }
 
-  function setActiveAgentKey(name, keyLabel) {
+  function setActiveAgentKey(name, keyLabel, provider) {
     const { cfg, stats } = getCtx();
     if (!cfg.agent_models || !cfg.agent_models[name]) return;
-    cfg.agent_models[name].active_key = keyLabel;
+    const bindings = cfg.agent_models[name].keys || [];
+    const matched = bindings.find(b => b.key === keyLabel && (!provider || b.provider === provider))
+      || bindings.find(b => b.key === keyLabel);
+    const activeRef = matched ? `${matched.provider}:${matched.key}` : keyLabel;
+    cfg.agent_models[name].active_key = activeRef;
     if (stats && stats.agent) {
       if (!stats.agent.active_keys) stats.agent.active_keys = {};
-      stats.agent.active_keys[name] = keyLabel;
+      stats.agent.active_keys[name] = activeRef;
     }
-    _persist(`模型「${name}」已设置主力 Key: [${keyLabel}] 并立即生效`);
+    _persist(`模型「${name}」已设置主力 Key: [${activeRef}] 并立即生效`);
     renderAgentModels();
   }
 
@@ -900,12 +899,24 @@
     const { cfg, stats: fullStats } = getCtx();
     const list = cfg.agent_models?.[modelName]?.keys || [];
     const runtimeActiveKey = (fullStats && fullStats.agent && fullStats.agent.active_keys) ? fullStats.agent.active_keys[modelName] : null;
-    const activeKey = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? list[0].key : '');
-    const isActive = (key === activeKey || `${prov}:${key}` === activeKey);
+    const activeRef = cfg.agent_models?.[modelName]?.active_key || runtimeActiveKey || (list[0] ? `${list[0].provider}:${list[0].key}` : '');
+    const activeProvider = cfg.agent_models?.[modelName]?.active_provider || '';
+    const firstMatchIdx = list.findIndex(b => b && b.key === activeRef);
+    let isActive = false;
+    if (activeRef) {
+      if (String(activeRef).includes(':')) {
+        isActive = `${prov}:${key}` === activeRef;
+      } else if (activeProvider) {
+        isActive = key === activeRef && prov === activeProvider;
+      } else {
+        // 旧数据 active_key 只有 Key 别名：同名 Key 只让第一条显示“使用中”
+        isActive = key === activeRef && i === firstMatchIdx;
+      }
+    }
 
     const setActiveBtn = isActive
       ? `<span class="badge badge-success" style="font-size:11px;padding:3px 8px;font-weight:600;">使用中</span>`
-      : `<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="${_esc(modelName)}" data-key="${_esc(key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>`;
+      : `<button class="btn btn-sm btn-secondary" data-action="set-active-key" data-model="${_esc(modelName)}" data-provider="${_esc(prov)}" data-key="${_esc(key)}" title="设为主力 Key" style="font-size:11px;padding:2px 8px;font-weight:500;">设为主力</button>`;
 
     const actions = `
       ${setActiveBtn}

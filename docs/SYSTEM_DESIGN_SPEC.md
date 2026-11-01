@@ -418,7 +418,7 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 - **选项/分组规范**：
   - `<option value="">-- 自定义供应商 (手动填写) --</option>`：双端恒有。EdgeOne 保存为中枢母本；VM 保存为本地自建资产。
   - `<optgroup label="EdgeOne 凭据中枢托管 (按需拉取)">`：仅 **VM** 且中枢存在「本地尚未导入」的供应商时出现。选中保存 = 一次性整体拉取该供应商规则 + 全部 Key，落地后即本地资产（`origin=vault`）。
-- **预设规则自动匹配（不进入 UI）**：「官方预设」是本地适配规则模板。用户在「供应商标识」中输入与预设同 `id`/同名称的值时，前端自动带入 Base URL、协议、RPM 与规则说明，保存时写入 `preset_id` / `preset_version` / `preset_updated_at` 并落地 `adapter_rules`；预设规则只在供应商**配置到本地之后**才生效，不会作为可选项列出。
+- **预设规则自动匹配（不进入 UI）**：「官方预设」是本地适配规则模板。用户在「供应商名称」中输入与预设同 `id`/同名称的值时，前端自动带入 Base URL、协议、RPM 与规则说明，保存时写入 `preset_id` / `preset_version` / `preset_updated_at` 并落地 `adapter_rules`；预设规则只在供应商**配置到本地之后**才生效，不会作为可选项列出。供应商名称为单字段，允许中文，直接作为 `providers.<name>` 键；不再维护英文 ID + 别名。供应商下拉统一显示 `名称 (协议 · 规则 vX · 本地/中枢)`，与供应商卡片使用同一 preset 版本/来源语义。
 - **文案格式**：仍统一为 `${name} (${protoStr})`，例如 `MiniMax (openai+message)`、`DeepSeek 官方开放平台 (openai)`；严禁在下拉文本中塞入版本号、更新日期等杂质。
 - **本地读取保障**：
   - 前端编译管线（`build-presets.mjs`）自动导出并注入全量 `catalog.json` 预设（仅用于名称自动匹配与规则落地，不渲染为选项）；
@@ -428,7 +428,7 @@ EdgeOne 作为 **Vault Hub (金库中枢)** 时，对外暴露 3 大安全资产
 - **只保留两条判断**：中枢托管供应商的说明区**禁止长段落**，只展示：
   1. `中枢 N 个 Key`（中枢清单里的 Key 数量，来自 manifest）；
   2. `适配脚本 v{version} · {updated_at}` 或 `无适配脚本`（本地预设文件是否存在及其版本，反正适配文件需要从 GitHub 同步）。
-- **协议默认值来自适配脚本**：选中中枢供应商或输入命中的供应商标识后，按本地适配脚本声明（`features.anthropic_messages` / `features.openai_responses` / `protocol`）**自动勾选**支持的协议；无适配脚本时回退中枢 manifest 的 `protocols`。
+- **协议默认值来自适配脚本**：选中中枢供应商或输入命中的供应商名称后，按本地适配脚本声明（`features.anthropic_messages` / `features.openai_responses` / `protocol`）**自动勾选**支持的协议；无适配脚本时回退中枢 manifest 的 `protocols`。
 - **协议区提示**：勾选结果下方给出 `已按适配脚本预选：OpenAI Chat + Anthropic Messages（可手动调整）`（无适配脚本时为 `已按中枢返回预选`），避免用户误以为协议要手工决定。
 - **长说明只放 Tooltip**：拉取语义（一次性整体拉取、重新拉取需先删除、中枢 Key 只读可删）收敛到 `#p_desc` 的 `title` 悬浮提示，不再占用正文。
 
