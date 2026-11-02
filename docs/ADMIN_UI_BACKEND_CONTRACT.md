@@ -160,3 +160,39 @@ $$\mathbf{key} = \texttt{agent:\{agent\_model\}:\{provider\}:\{key\_label\}}$$
    - 已删除的 `request_total_budget_sec` / `max_retries` / `max_attempts_per_provider` 不得回到 schema/UI/runtime；
    - `agent_first_byte_timeout_sec` 必须被 VM 与 EdgeOne 同时读取；
    - schema 中 `hosts` 含 edgeone 的字段必须在 EdgeOne 代码中有读取点。
+
+## Key 弹窗状态机与 EdgeOne 资源装配契约（v20261102-01）
+
+> 2026-11-02 事故：EdgeOne 构建清单漏掉 `ui.js`，`deleteKey()` 调用 `UI.confirm` 抛 `ReferenceError`，删除 Key 按钮看似失效；同时 Key 在线校验最长可达 20~30s，前端 15s 超时后容易留下“正在校验”的旋转状态。
+
+### 1. 资源装配
+
+- `shared/admin/admin.html` 的每个 `<script src="/static/js/*.js">` 必须出现在 `agent-edgeone/scripts/build-admin.mjs` 的 `jsModuleOrder` 中，并由构建直接阻断缺失模块。
+- `agent-edgeone/admin.bundled.html` 必须包含 `global.UI`；`ui.js` 是 EdgeOne 与 VM 共用的确认框/弹窗基础，不是可选增强。
+- 由 `tests/test_edgeone_bundle_contract.py` 锁定：脚本清单、UI 全局、`deleteKey` 均在 EdgeOne bundle 内。
+
+### 2. Key 弹窗状态
+
+```
+打开 Key 弹窗
+  → 填写别名/密钥（skip=false）
+  → 点击保存：进入 verifying，保存按钮禁用，显示 spinner
+  → 成功：保存并关闭
+  → 校验失败：展示 per-protocol 诊断，保持弹窗
+  → 超时/网络异常：8s 内结束 verifying，展示“可跳过校验保存”，spinner 必须收起
+  → skip=true：跳过在线校验，直接保存
+```
+
+强制要求：
+
+- 前端校验硬超时 **8s**，`finally` 必须恢复 spinner 与保存按钮；
+- 服务端单个协议探测硬超时 **≤4s**，不得让管理端等待 15s 以上；
+- 校验失败**不得静默关闭**弹窗；删除 Key 必须经过 `UI.confirm`，保存失败要提示并保留原 Key（不得先删后无回滚地丢数据）；
+- EdgeOne 与 VM 的 Key 删除权限遵循现有 `origin` 规则；中枢只读 Key 由后端拒绝时，UI 显示明确原因。
+
+### 3. 回归要求
+
+- EdgeOne bundle 构建：缺任何共享模块必须失败；
+- EdgeOne 浏览器实测：删除 Key → 确认弹窗 → 保存 → Key 消失；
+- VM 浏览器实测：Key 校验超时 → spinner 收起 → 勾选跳过后可保存；
+- 纯静态 grep 不能替代上述两条真实浏览器路径。

@@ -95,6 +95,7 @@ const css = readFileSync(sharedCssPath, 'utf8');
 // 3. Assemble EdgeOne JS Bundle from shared/admin/js/ modules
 const jsModuleOrder = [
   'host.js',
+  'ui.js',
   'settings-form.js',
   'core.js',
   'vault.js',
@@ -104,6 +105,15 @@ const jsModuleOrder = [
   'settings.js',
   'app.js'
 ];
+
+// Guard: every shared script referenced by admin.html must be in the bundle list.
+// This prevents a new shared module from existing for VM but silently missing on EdgeOne.
+const htmlModules = [...html.matchAll(/<script[^>]+src=["'][^"']*\/js\/([^"'?]+)/g)].map(m => m[1]);
+const missingModules = htmlModules.filter(m => !jsModuleOrder.includes(m));
+if (missingModules.length) {
+  console.error(`FATAL BUILD ERROR: admin.html references modules not bundled for EdgeOne: ${missingModules.join(', ')}`);
+  process.exit(1);
+}
 
 let bundledJs = "window.__HOST_KIND__ = 'edgeone';\n\n";
 

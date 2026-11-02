@@ -13,6 +13,16 @@ function checkAuth(request, env) {
   return checkAdminAuth(request, env);
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function joinUpstream(base, path) {
   const b = String(base || '').replace(/\/+$/, '');
   const p = String(path || '').replace(/^\/+/, '');
@@ -97,7 +107,7 @@ export async function onRequestPost(context) {
     const startT = Date.now();
     try {
       const url = joinUpstream(baseUrl, 'models');
-      const resp = await fetch(url, {
+      const resp = await fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'authorization': `Bearer ${apiKey}`,
@@ -107,9 +117,9 @@ export async function onRequestPost(context) {
         redirect: 'manual',
         eo: {
           timeoutSetting: {
-            connectTimeout: 5_000,
-            readTimeout: 10_000,
-            writeTimeout: 5_000,
+            connectTimeout: 2_000,
+            readTimeout: 4_000,
+            writeTimeout: 2_000,
           },
         },
       });
@@ -131,7 +141,7 @@ export async function onRequestPost(context) {
       } else if (resp.status === 404 || resp.status === 405) {
         // Fallback: send minimal chat completion probe
         const chatUrl = joinUpstream(baseUrl, 'chat/completions');
-        const chatResp = await fetch(chatUrl, {
+        const chatResp = await fetchWithTimeout(chatUrl, {
           method: 'POST',
           headers: {
             'authorization': `Bearer ${apiKey}`,
@@ -209,7 +219,7 @@ export async function onRequestPost(context) {
       else if (pClean === 'bai') probeModel = 'qwen3.8-flash';
       else if (pClean === 'amd') probeModel = 'DeepSeek-V4-Flash';
 
-      const resp = await fetch(msgUrl, {
+      const resp = await fetchWithTimeout(msgUrl, {
         method: 'POST',
         headers: {
           'authorization': `Bearer ${apiKey}`,
@@ -226,9 +236,9 @@ export async function onRequestPost(context) {
         redirect: 'manual',
         eo: {
           timeoutSetting: {
-            connectTimeout: 5_000,
-            readTimeout: 10_000,
-            writeTimeout: 5_000,
+            connectTimeout: 2_000,
+            readTimeout: 4_000,
+            writeTimeout: 2_000,
           },
         },
       });

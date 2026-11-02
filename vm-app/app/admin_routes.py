@@ -1515,7 +1515,7 @@ async def verify_key_endpoint(request: Request):
         try:
             url = join_upstream(base_url, "models")
             t0 = time.monotonic()
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
                 resp = await client.get(url, headers={
                     "Authorization": f"Bearer {api_key}",
                     "User-Agent": "ocrproxy-verifier/1.0"
@@ -1533,7 +1533,7 @@ async def verify_key_endpoint(request: Request):
                 error_msgs.append(f"OpenAI Chat: {err}")
             elif status_code in (404, 405):
                 chat_url = join_upstream(base_url, "chat/completions")
-                async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+                async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
                     resp_chat = await client.post(chat_url, headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
@@ -1602,7 +1602,7 @@ async def verify_key_endpoint(request: Request):
                 "Content-Type": "application/json",
                 "User-Agent": "ocrproxy-verifier/1.0"
             }
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
                 resp = await client.post(msg_url, headers=headers, json=probe_body)
                 lat_ms = max(1, int((time.monotonic() - t0) * 1000))
                 status_code = resp.status_code

@@ -1381,10 +1381,13 @@ async function saveKey(){
   const protos = getProviderProtocols(prov, pObj);
   const testBaseUrl = vertexKeyMeta ? vertexKeyMeta.base_url : pObj.base_url;
 
-  document.getElementById('k_spinner').style.display='block';
+  const spinnerEl = document.getElementById('k_spinner');
+  const saveBtn = document.getElementById('k_saveBtn');
+  if (spinnerEl) spinnerEl.style.display='block';
+  if (saveBtn) saveBtn.disabled = true;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), 8000);
     const r = await fetch('/api/admin/verify-key', {
       method: 'POST',
       headers: headers(),
@@ -1443,13 +1446,15 @@ async function saveKey(){
       toast('协议校验存在失败项，已阻止保存', 'err');
     }
   } catch(e){ 
+    const timeoutMsg = (e && e.name === 'AbortError') ? '校验超时（8 秒）' : (e.message || '网络异常');
     if(diagBox){
-      diagBox.innerHTML = `<div style="display:flex;align-items:center;gap:6px;color:var(--danger);font-size:12px;">${icon('xCircle', 14)} 验证请求失败: ${esc(e.message)}。<br>如网络受限，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
+      diagBox.innerHTML = `<div style="display:flex;align-items:center;gap:6px;color:var(--danger);font-size:12px;">${icon('xCircle', 14)} 验证请求失败: ${esc(timeoutMsg)}。<br>如网络受限或上游较慢，可勾选上方「跳过连通性在线校验」后强制保存。</div>`;
       diagBox.style.display = 'block';
     }
-    toast('网络请求异常: ' + e.message, 'err');
+    toast('网络请求异常: ' + timeoutMsg, 'err');
   } finally {
-    document.getElementById('k_spinner').style.display='none';
+    if (spinnerEl) spinnerEl.style.display='none';
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
